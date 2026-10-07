@@ -24,7 +24,7 @@ use axioval_engine::{
 };
 use axioval_ir::{Evidence, ObjectId, Severity};
 
-use crate::clash::{Class, Outcome};
+use crate::clash::Class;
 use crate::support::table::Row;
 use crate::support::{Parameters, PropertyRef, Unavailable, display, invalid, resolve, value_key};
 
@@ -68,7 +68,8 @@ pub(crate) fn parse_severity(text: &str) -> Result<Severity, Unavailable> {
     }
 }
 
-fn label(severity: &Severity) -> &'static str {
+#[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
+pub(crate) fn label(severity: &Severity) -> &'static str {
     match severity {
         Severity::Error => "error",
         Severity::Warning => "warning",
@@ -78,13 +79,14 @@ fn label(severity: &Severity) -> &'static str {
 
 /// What intersections are graded by.
 #[derive(Clone, Copy)]
-enum Measure {
+pub(crate) enum Measure {
     SmallestExtent,
     Volume,
 }
 
 impl Measure {
-    fn name(self) -> &'static str {
+    #[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
+    pub(crate) fn name(self) -> &'static str {
         match self {
             Self::SmallestExtent => "smallest extent",
             Self::Volume => "shared volume",
@@ -92,7 +94,8 @@ impl Measure {
     }
 
     /// The measure's interval; `None` when it was not measured.
-    fn interval(self, measured: &ProximityEvidence) -> Option<(f64, f64)> {
+    #[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
+    pub(crate) fn interval(self, measured: &ProximityEvidence) -> Option<(f64, f64)> {
         match self {
             Self::SmallestExtent => measured.overlap_extents().map(|extents| {
                 let axes: [LengthInterval; 3] = [extents.x(), extents.y(), extents.z()];
@@ -111,7 +114,7 @@ impl Measure {
         }
     }
 
-    fn describe(self, (lower, upper): (f64, f64)) -> String {
+    pub(crate) fn describe(self, (lower, upper): (f64, f64)) -> String {
         let (digits, unit) = match self {
             Self::SmallestExtent => (4, "m"),
             Self::Volume => (6, "m³"),
@@ -132,9 +135,11 @@ struct Quantity {
 
 /// The declared severities and duplicate comparisons.
 pub(crate) struct Severities {
-    by_class: Vec<(Class, Severity)>,
+    #[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
+    pub(crate) by_class: Vec<(Class, Severity)>,
     /// What intersections are graded by, and the grades by rising bound.
-    grades: Option<(Measure, Vec<(f64, Severity)>)>,
+    #[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
+    pub(crate) grades: Option<(Measure, Vec<(f64, Severity)>)>,
     quantities: Vec<Quantity>,
 }
 
@@ -230,106 +235,6 @@ fn row_severity(row: Row<'_>) -> Result<Severity, Unavailable> {
 }
 
 impl Severities {
-    /// A finding's severity, and a note for its message.
-    ///
-    /// An intersection's grade comes first, then `cell` (a clash matrix
-    /// cell's own severity), then the class's, then `rule`'s.
-    pub(crate) fn assign(
-        &self,
-        class: Class,
-        measured: Option<&ProximityEvidence>,
-        cell: Option<Severity>,
-        rule: Severity,
-    ) -> (Severity, String) {
-        let fixed = cell
-            .or_else(|| {
-                self.by_class
-                    .iter()
-                    .find(|(known, _)| *known == class)
-                    .map(|(_, severity)| severity.clone())
-            })
-            .unwrap_or(rule);
-        let Some((measure, grades)) = &self.grades else {
-            return (fixed, String::new());
-        };
-        if class != Class::Intersection {
-            return (fixed, String::new());
-        }
-        let grade_of = |value: f64| {
-            grades
-                .iter()
-                .rev()
-                .find(|(above, _)| value > *above)
-                .map_or_else(|| fixed.clone(), |(_, severity)| severity.clone())
-        };
-        let Some((lower, upper)) = measured.and_then(|measured| measure.interval(measured)) else {
-            // Unmeasured: it may fall in any grade.
-            let worst = grades
-                .iter()
-                .map(|(_, severity)| severity.clone())
-                .chain([fixed])
-                .min()
-                .unwrap_or(Severity::Error);
-            return (
-                worst.clone(),
-                format!(
-                    ", graded {}: its {} is unmeasured, so the most severe grade it may reach",
-                    label(&worst),
-                    measure.name()
-                ),
-            );
-        };
-        // The grade of the lower bound, and of every bound the interval
-        // reaches past: the grades a value in it may take.
-        let worst = grades
-            .iter()
-            .filter(|(above, _)| *above >= lower && *above < upper)
-            .map(|(_, severity)| severity.clone())
-            .chain([grade_of(lower)])
-            .min()
-            .unwrap_or_else(|| grade_of(lower));
-        let described = measure.describe((lower, upper));
-        let note = if worst == grade_of(upper) && worst == grade_of(lower) {
-            format!(
-                ", graded {} by its {} of {described}",
-                label(&worst),
-                measure.name()
-            )
-        } else {
-            format!(
-                ", graded {}: the most severe grade its {} of {described} may reach",
-                label(&worst),
-                measure.name()
-            )
-        };
-        (worst, note)
-    }
-
-    /// A reported pair's outcome, graded and, for a duplicate, with what
-    /// the copies differ in: the outcome, its severity and the evidence of
-    /// the quantities read.
-    pub(crate) fn report(
-        &self,
-        context: &RuleContext<'_>,
-        measured: &ProximityEvidence,
-        pair: (&ObjectId, &ObjectId),
-        outcome: Outcome,
-        (cell, rule): (Option<Severity>, Severity),
-    ) -> (Outcome, Severity, Vec<Evidence>) {
-        let Outcome::Finding(class, mut message) = outcome else {
-            return (outcome, rule, Vec::new());
-        };
-        let (severity, note) = self.assign(class, Some(measured), cell, rule);
-        message.push_str(&note);
-        let mut evidence = Vec::new();
-        if class == Class::Duplicate {
-            let (suffix, read) = self.differences(context, measured, pair);
-            message.push_str(&suffix);
-            evidence = read;
-        }
-        (Outcome::Finding(class, message), severity, evidence)
-    }
-
     /// What two duplicates differ in, as a message suffix, with the
     /// evidence of every quantity read.
     pub(crate) fn differences(

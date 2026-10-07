@@ -299,6 +299,16 @@ const PAIRS: &[Pair] = &[
         case: "spaces",
         reference: |registry| registry.replace(axioval::rules::reference::HorizontalGuard),
     },
+    Pair {
+        capability: "axioval:capability.clash",
+        case: "clashes",
+        reference: |registry| registry.replace(axioval::rules::reference::Clash),
+    },
+    Pair {
+        capability: "axioval:capability.clash-matrix",
+        case: "clashes",
+        reference: |registry| registry.replace(axioval::rules::reference::ClashMatrix),
+    },
 ];
 
 /// Warm-up runs per side before measuring.

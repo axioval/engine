@@ -51,7 +51,9 @@ the first leading one measurement to outcomes at source and at object
 level ([#291](https://github.com/axioval/engine/issues/291)): every
 capability of #282 now runs as a template; `space-boundary-coverage` is
 the first wording everything one object leaves open in one outcome
-([#284](https://github.com/axioval/engine/issues/284)).
+([#284](https://github.com/axioval/engine/issues/284)); `clash` and
+`clash-matrix` are the first judging pairs, each put in a class
+([#285](https://github.com/axioval/engine/issues/285)).
 
 ## The outside contract
 
@@ -1760,6 +1762,54 @@ capability's order and words; the tolerance defaults to 0 m². The finding
 reads `host is empty: its openings ({voided:cited_ids}) void {voided:m2} of
 its {face:m2} face` and relates the counted openings.
 
+### `clash`
+
+One form, `Decision::Pairs` over the measured list
+`clash_pairs;subjects=@selection;counterparts=@counterparts;…`, every
+parameter of the rule named as the rule names it (unstated ones dropped).
+The list is the capability's broad phase and measurement
+(`clash/measured.rs`): the pairs the broad phase proposes within the
+clearance, each surely excluded one left out and every other measured once
+by the proximity service, listed with its separation, certified separation,
+penetration, containment, Hausdorff distance, overlap extents and shared
+volume beside the rule's tolerances and switches, what two duplicates
+differ in (`copies`), whether a tolerance case along the elements' own
+axes excuses an intersection (`excused`, `case`, measured only for a pair
+penetrating past its tolerance), the words a finding needs (`note`,
+`reach`) and its group key (`group`, `sides`, `on`). An object whose
+extent cannot be read, and a pair that cannot be measured, are open items.
+
+| Class | Holds where | Reported by |
+| --- | --- | --- |
+| `duplicate` | `hausdorff` at most `duplicate_tolerance` | `report_duplicates` |
+| `containment` | `inside`, then `contains` (two classes) | `report_containment` |
+| `intersection` | `penetration` above its tolerance, `horizontal`, `vertical` and `shared_volume` above theirs (a zero tolerance holding), unless `excused` | `report_intersections` |
+| `meeting` | no `penetration` and no `separation`: open, the bodies' touching undecidable | always |
+| `clearance` | the `certified` separation below the `clearance`, else the measured `separation` | always |
+
+Findings are graded by `severity_by_class` and, for intersections, by
+`severity_grades` over the `smallest_extent` or `shared_volume` that
+`grade_by` chooses; they are grouped by `group` (`type_pair`, `subject`,
+or `similar` keyed by class too) and relate the counterpart. The
+declaration is the list's argument check (`Check::Arguments`, the
+capability's own reading of every parameter, in its order and words),
+refused per selected object (`objects`); without the proximity service
+each selected object is open. A target property declared without an
+exclusion path is refused by the list, once the broad phase has run, as
+the capability refused it.
+
+### `clash-matrix`
+
+The same classes, grades and groups over
+`clash_matrix_pairs;subjects=@selection;counterparts=@counterparts;cells=@cells;…`:
+the list picks each pair's most specific cell (`match_rows` over the
+cells' disciplines, keys and selectors, a search) and measures the pair
+beside that cell's tolerances, with its `severity` and words (`cell`, `
+(clash matrix cell 0 `walls`)`, after every finding). A pair no cell
+covers is listed `unmatched` where `report_unmatched` holds, the first
+class, at the rule's severity; a pair whose cell is undecided, or tied, is
+an open item; a cell with every class off and no clearance lists nothing.
+
 ### `keyed-limit`
 
 One form, judged by its checks (`Holds` over the literal `judged`). The
@@ -2465,6 +2515,21 @@ stated, unreadable and overall widths under random deductions and
 bounds, and generated windows beside random spaces, some unmeasured, some
 tessellated; and by the `keyed-limit` rules of the case `openings`,
 recorded before the switch. It is never forked.
+
+`clash` and `clash-matrix` are held to `clash/reference.rs`
+(`axioval_rules::reference::Clash`, `ClashMatrix`, which share the
+broad phase, the measurement, the exclusions, the cells, the tolerance
+cases and the group keys with the lists) through `common::clash_held` on
+every fixture of `tests/clash.rs`, `tests/clash_cases.rs`,
+`tests/clash_groups.rs`, `tests/clash_matrix.rs` and
+`tests/clash_severity.rs` under `Parity::contract()`, the proximity stubs
+answering only the pairs the reference measures; by generated pairs of
+every measurement the service may answer or refuse (tessellated or exact)
+against random tolerances, switches, clearances and groupings, and
+generated matrices of cells keyed by trade, pattern and selector over
+trades stated, unread or absent; and by the rules of the case `clashes`,
+recorded before the switch. A class of one's own (`a_class_of_its_own_is_tried_first`)
+is a class added to the data. They are never forked (D38).
 
 The reference is kept, rather than deleted, because generated inputs need
 a live implementation to compare with; recorded outcomes outlive it on the

@@ -60,6 +60,11 @@ const COVERED: &[(&str, &str, &str)] = &[
         "a_separation_measured_approximately_is_inexact",
     ),
     (
+        "clash_pairs",
+        "tests/clash.rs",
+        "pairs_measured_on_tessellated_geometry_are_inexact",
+    ),
+    (
         "sight_view",
         "tests/component_visibility.rs",
         "a_view_measured_approximately_is_inexact",

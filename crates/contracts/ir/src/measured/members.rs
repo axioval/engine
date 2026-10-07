@@ -18,6 +18,7 @@ use super::{
 };
 use crate::QuantityDimension;
 
+mod clash;
 mod walking;
 
 /// One list of measured members.
@@ -748,6 +749,8 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             ),
         ],
     },
+    clash::CLASH_MATRIX_PAIRS,
+    clash::CLASH_PAIRS,
     walking::CLEAR_WIDTHS,
     walking::CLEARANCES,
     MemberDescriptor {

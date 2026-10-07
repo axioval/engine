@@ -23,10 +23,9 @@
 use std::collections::BTreeMap;
 
 use axioval_engine::{
-    CompiledRule, LengthInterval, ParameterDescriptor, ParameterType, ProximityEvidence,
-    RuleContext,
+    LengthInterval, ParameterDescriptor, ParameterType, ProximityEvidence, RuleContext,
 };
-use axioval_ir::{Evidence, Finding, Object, ObjectId, Scope, Severity};
+use axioval_ir::{Object, ObjectId};
 
 use crate::clash::Class;
 use crate::support::{
@@ -35,7 +34,7 @@ use crate::support::{
 
 /// How reported pairs are grouped.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum GroupBy {
+pub(crate) enum GroupBy {
     TypePair,
     Subject,
     Similar,
@@ -43,7 +42,7 @@ enum GroupBy {
 
 /// A declared grouping.
 pub(crate) struct Grouping<'a> {
-    by: GroupBy,
+    pub(crate) by: GroupBy,
     /// The relationship path from an object to its storey, with `per_storey`.
     storey_path: Option<Vec<String>>,
     /// A property whose values `similar` pairs must share.
@@ -137,36 +136,6 @@ pub(crate) fn grouping<'a>(
     }))
 }
 
-/// One reported pair, before grouping.
-pub(crate) struct Reported {
-    pub(crate) subject: ObjectId,
-    pub(crate) counterpart: ObjectId,
-    pub(crate) class: Class,
-    pub(crate) message: String,
-    pub(crate) severity: Severity,
-    pub(crate) evidence: Vec<Evidence>,
-}
-
-impl Reported {
-    /// The pair's own finding: on its subject, relating its counterpart.
-    pub(crate) fn finding(self, rule: &CompiledRule) -> Finding {
-        Finding {
-            explanation: None,
-            id: None,
-            decision: None,
-            rule_id: rule.id.clone(),
-            scope: Scope::Object(self.subject),
-            severity: self.severity,
-            message: self.message,
-            related: Vec::new(),
-            evidence: self.evidence,
-            location: None,
-            categories: Vec::new(),
-        }
-        .with_related([self.counterpart])
-    }
-}
-
 /// What groups a pair, beyond the pair itself.
 pub(crate) struct Context<'a> {
     /// The measurement, when the pair was measured.
@@ -176,34 +145,70 @@ pub(crate) struct Context<'a> {
 }
 
 /// A group's key. Fields a grouping does not use stay `None`.
-#[derive(PartialEq, Eq, PartialOrd, Ord)]
-struct Key {
-    cell: Option<usize>,
-    class: Option<Class>,
-    subject: Option<ObjectId>,
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct Key {
+    pub(crate) cell: Option<usize>,
+    /// The class of a `similar` group's pairs, set by who judged them.
+    pub(crate) class: Option<Class>,
+    pub(crate) subject: Option<ObjectId>,
     /// The two sides' types (and property values), in order.
-    sides: Option<(String, String)>,
+    pub(crate) sides: Option<(String, String)>,
     /// Extents in rounding steps: the narrower and the wider plan axis,
     /// then the vertical.
-    extents: Option<[i64; 3]>,
-    storeys: Option<Vec<ObjectId>>,
+    pub(crate) extents: Option<[i64; 3]>,
+    pub(crate) storeys: Option<Vec<ObjectId>>,
+}
+
+impl Key {
+    /// The two sides as a group's finding names them: `A with B`.
+    pub(crate) fn sides_words(&self) -> String {
+        self.sides
+            .as_ref()
+            .map(|(a, b)| format!("{a} with {b}"))
+            .unwrap_or_default()
+    }
+
+    /// Where a group lies, as its finding names it: ` on s1, s2`, ` on no
+    /// storey`, or nothing without `per_storey`.
+    pub(crate) fn on_words(&self) -> String {
+        match self.storeys.as_deref() {
+            None => String::new(),
+            Some([]) => " on no storey".to_owned(),
+            Some(storeys) => format!(
+                " on {}",
+                storeys
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        }
+    }
+
+    /// The key as one text, its class left out: two keys are equal
+    /// exactly where their texts are.
+    pub(crate) fn encoded(&self) -> String {
+        format!(
+            "{:?}\u{1f}{:?}\u{1f}{:?}\u{1f}{:?}\u{1f}{:?}",
+            self.cell, self.subject, self.sides, self.extents, self.storeys
+        )
+    }
 }
 
 type Storeys = Result<Vec<ObjectId>, Unavailable>;
 
-/// Collects reported pairs into groups.
-pub(crate) struct Groups<'r> {
+/// Reads the keys of pairs, every storey walk and property read cached per
+/// object.
+pub(crate) struct GroupKeys<'r> {
     context: &'r RuleContext<'r>,
-    grouping: &'r Grouping<'r>,
+    pub(crate) grouping: &'r Grouping<'r>,
     storey: Option<Traversal>,
     everything: Vec<&'r Object>,
     storeys: BTreeMap<ObjectId, Storeys>,
     values: BTreeMap<ObjectId, Result<String, Unavailable>>,
-    grouped: BTreeMap<Key, Vec<Reported>>,
-    alone: Vec<Reported>,
 }
 
-impl<'r> Groups<'r> {
+impl<'r> GroupKeys<'r> {
     pub(crate) fn new(
         context: &'r RuleContext<'r>,
         grouping: &'r Grouping<'r>,
@@ -219,21 +224,7 @@ impl<'r> Groups<'r> {
             everything: context.project.objects().collect(),
             storeys: BTreeMap::new(),
             values: BTreeMap::new(),
-            grouped: BTreeMap::new(),
-            alone: Vec::new(),
         })
-    }
-
-    /// Adds a reported pair to its group, or on its own when its key
-    /// cannot be read.
-    pub(crate) fn add(&mut self, pair: &Context<'_>, mut reported: Reported) {
-        match self.key(pair, &reported) {
-            Ok(key) => self.grouped.entry(key).or_default().push(reported),
-            Err(why) => {
-                reported.message = format!("{} (not grouped: {why})", reported.message);
-                self.alone.push(reported);
-            }
-        }
     }
 
     fn storeys_of(&mut self, object: &ObjectId) -> Storeys {
@@ -283,7 +274,15 @@ impl<'r> Groups<'r> {
             .map_err(|(_, message)| format!("{property} of {object} cannot be read: {message}"))
     }
 
-    fn key(&mut self, pair: &Context<'_>, reported: &Reported) -> Result<Key, String> {
+    /// The key of the pair `(subject, counterpart)`, its class unset; an
+    /// `unmatched` pair (no matrix cell covers it) needs no extents. Why it
+    /// cannot be read, where it cannot.
+    pub(crate) fn key(
+        &mut self,
+        pair: &Context<'_>,
+        (subject, counterpart): (&ObjectId, &ObjectId),
+        unmatched: bool,
+    ) -> Result<Key, String> {
         let mut key = Key {
             cell: pair.cell,
             class: None,
@@ -293,41 +292,35 @@ impl<'r> Groups<'r> {
             storeys: None,
         };
         match self.grouping.by {
-            GroupBy::Subject => key.subject = Some(reported.subject.clone()),
+            GroupBy::Subject => key.subject = Some(subject.clone()),
             GroupBy::TypePair | GroupBy::Similar => {
-                let (a, b) = (
-                    self.side(&reported.subject)?,
-                    self.side(&reported.counterpart)?,
-                );
+                let (a, b) = (self.side(subject)?, self.side(counterpart)?);
                 key.sides = Some(if a <= b { (a, b) } else { (b, a) });
             }
         }
-        if self.grouping.by == GroupBy::Similar {
-            key.class = Some(reported.class);
-            if reported.class != Class::Unmatched {
-                let extents = pair
-                    .measured
-                    .and_then(ProximityEvidence::overlap_extents)
-                    .ok_or("its intersection extents were not measured")?;
-                let step = |interval: LengthInterval| -> Result<i64, String> {
-                    #[allow(clippy::cast_possible_truncation)]
-                    let [lower, upper] =
-                        [interval.lower_metres(), interval.upper_metres()].map(|value| {
-                            (value / self.grouping.step).round().clamp(-9.0e15, 9.0e15) as i64
-                        });
-                    if lower == upper {
-                        Ok(lower)
-                    } else {
-                        Err("its intersection extents straddle a rounding step".to_owned())
-                    }
-                };
-                let (x, y) = (step(extents.x())?, step(extents.y())?);
-                key.extents = Some([x.min(y), x.max(y), step(extents.z())?]);
-            }
+        if self.grouping.by == GroupBy::Similar && !unmatched {
+            let extents = pair
+                .measured
+                .and_then(ProximityEvidence::overlap_extents)
+                .ok_or("its intersection extents were not measured")?;
+            let step = |interval: LengthInterval| -> Result<i64, String> {
+                #[allow(clippy::cast_possible_truncation)]
+                let [lower, upper] =
+                    [interval.lower_metres(), interval.upper_metres()].map(|value| {
+                        (value / self.grouping.step).round().clamp(-9.0e15, 9.0e15) as i64
+                    });
+                if lower == upper {
+                    Ok(lower)
+                } else {
+                    Err("its intersection extents straddle a rounding step".to_owned())
+                }
+            };
+            let (x, y) = (step(extents.x())?, step(extents.y())?);
+            key.extents = Some([x.min(y), x.max(y), step(extents.z())?]);
         }
         if self.storey.is_some() {
             let mut storeys = Vec::new();
-            for member in [&reported.subject, &reported.counterpart] {
+            for member in [subject, counterpart] {
                 match self.storeys_of(member) {
                     Ok(found) => storeys.extend(found),
                     Err((_, message)) => {
@@ -341,87 +334,4 @@ impl<'r> Groups<'r> {
         }
         Ok(key)
     }
-
-    /// The group findings, then the pairs reported on their own.
-    pub(crate) fn finish(self, rule: &CompiledRule) -> Vec<Finding> {
-        let by = self.grouping.by;
-        let mut findings = Vec::new();
-        for (key, mut members) in self.grouped {
-            if members.len() == 1 {
-                findings.extend(members.pop().map(|member| member.finding(rule)));
-                continue;
-            }
-            findings.push(group_finding(rule, by, &key, members));
-        }
-        findings.extend(self.alone.into_iter().map(|member| member.finding(rule)));
-        findings
-    }
-}
-
-/// One finding for a group of pairs: on the object most of them involve,
-/// relating every other, at the most severe of their severities.
-fn group_finding(rule: &CompiledRule, by: GroupBy, key: &Key, members: Vec<Reported>) -> Finding {
-    let mut counts: BTreeMap<&ObjectId, usize> = BTreeMap::new();
-    for member in &members {
-        *counts.entry(&member.subject).or_default() += 1;
-        *counts.entry(&member.counterpart).or_default() += 1;
-    }
-    // The first of the most involved objects, in identity order.
-    let most = counts.values().copied().max().unwrap_or(0);
-    let hub = counts
-        .iter()
-        .find_map(|(object, count)| (*count == most).then(|| (*object).clone()))
-        .unwrap_or_else(|| unreachable!("a group has members"));
-    let severity = members
-        .iter()
-        .map(|member| member.severity.clone())
-        .min()
-        .unwrap_or_else(|| unreachable!("a group has members"));
-    let related: Vec<ObjectId> = counts.keys().map(|object| (*object).clone()).collect();
-
-    let count = members.len();
-    let what = match (by, &key.sides) {
-        (GroupBy::Similar, Some((a, b))) => format!(
-            "{count} similar {} clashes of {a} with {b}",
-            key.class.map_or("", Class::name)
-        ),
-        (GroupBy::TypePair, Some((a, b))) => format!("{count} clashes of {a} with {b}"),
-        _ => format!("{count} clashes"),
-    };
-    let on = match key.storeys.as_deref() {
-        None => String::new(),
-        Some([]) => " on no storey".to_owned(),
-        Some(storeys) => format!(
-            " on {}",
-            storeys
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-                .join(", ")
-        ),
-    };
-    let mut evidence: Vec<Evidence> = Vec::new();
-    let mut parts = Vec::with_capacity(count);
-    for member in members {
-        parts.push(format!("[{}] {}", member.subject, member.message));
-        for entry in member.evidence {
-            if !evidence.contains(&entry) {
-                evidence.push(entry);
-            }
-        }
-    }
-    Finding {
-        explanation: None,
-        id: None,
-        decision: None,
-        rule_id: rule.id.clone(),
-        scope: Scope::Object(hub),
-        severity,
-        message: format!("{what}{on}: {}", parts.join("; ")),
-        related: Vec::new(),
-        evidence,
-        location: None,
-        categories: Vec::new(),
-    }
-    .with_related(related)
 }

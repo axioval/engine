@@ -80,7 +80,7 @@ INLINE_ONLY_KINDS = frozenset({"derivation"})
 MIN_REASON_WORDS = 4
 # Known measurements still to be registered as values. Lower it as each is
 # registered; it never rises.
-UNREGISTERED_BUDGET = 2
+UNREGISTERED_BUDGET = 1
 ISSUE_REFERENCE = re.compile(r"#\d+\b")
 
 PROVIDER_IMPL = re.compile(r"\bimpl\s+MeasuredProvider\s+for\s+(\w+)")

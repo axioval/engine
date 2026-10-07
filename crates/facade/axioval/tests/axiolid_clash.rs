@@ -144,13 +144,29 @@ impl Scene {
         services
             .register(RelationshipSelectionServiceHandle::new(semantic))
             .unwrap();
-        Clash.evaluate(
-            &RuleContext {
-                project: &project,
-                services: &services,
-            },
-            &rule,
-        )
+        // A template reads its measured lists as a run does, and is held to the
+        // implementation it replaced on the same geometry.
+        axioval::rules::register_builtins(axioval::engine::CapabilityRegistry::new())
+            .unwrap()
+            .install_measured(&mut services, &project);
+        let context = RuleContext {
+            project: &project,
+            services: &services,
+        };
+        let evaluated = Clash.evaluate(&context, &rule);
+        let replaced = axioval_rules::reference::Clash.evaluate(&context, &rule);
+        let parity = axioval::rules::parity::Parity::contract().compare(
+            (
+                "clash",
+                &axioval::rules::parity::Observations::of_evaluation(&replaced),
+            ),
+            (
+                "template",
+                &axioval::rules::parity::Observations::of_evaluation(&evaluated),
+            ),
+        );
+        assert!(parity.holds(), "{}", parity.diff());
+        evaluated
     }
 }
 

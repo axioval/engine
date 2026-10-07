@@ -528,6 +528,15 @@ length is an upper bound, so it widens by the deviation instead of refusing.
 
 ## Capabilities
 
+`clash` and `clash-matrix` run as [templates](./templates.md#clash): the
+broad phase, the exclusions, a matrix's cell search and each pair's one
+proximity measurement are the measured member lists `clash_pairs` and
+`clash_matrix_pairs`, which list every candidate pair with its
+separation, penetration, containment, overlap extents and shared volume
+beside the tolerances that judge it; the classes below, the switches,
+severities, grades and groups are the template's data
+(`Decision::Pairs`). An expression rule may read the same lists.
+
 `axioval:capability.clash` checks the rule's selected subjects against a
 `counterparts` selector. It takes these parameters:
 

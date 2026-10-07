@@ -35,21 +35,6 @@
         "body_extent"
       ]
     },
-    "clash::measure::measure_proximity": {
-      "count": 1,
-      "searchOnly": "unregistered",
-      "reason": "a pair's penetration depth and containment are measured but no value exposes them yet (#225)"
-    },
-    "clash_cases::frame::object_frame": {
-      "count": 1,
-      "searchOnly": "description",
-      "reason": "reads the clashing objects' frames to place a found clash's viewpoint, never to decide it"
-    },
-    "clash_cases::measure::measure_overlap_along": {
-      "count": 1,
-      "searchOnly": "description",
-      "reason": "measures a found clash's overlap to describe it, never to decide it"
-    },
     "comparison::facets::bounds::bounds": {
       "count": 2,
       "searchOnly": "revision-comparison",

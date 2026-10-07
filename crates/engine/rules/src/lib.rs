@@ -188,6 +188,7 @@ pub mod reference {
     pub use crate::area_ratio::reference::AreaRatio;
     pub use crate::body_extent::reference::BodyExtent;
     pub use crate::centre_line_distance::reference::CentreLineDistance;
+    pub use crate::clash::reference::{Clash, ClashMatrix};
     pub use crate::component_visibility::reference::ComponentVisibility;
     pub use crate::conformance::reference::SelectorConformance;
     pub use crate::consistent_value::reference::ConsistentValue;
@@ -319,6 +320,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(distance::DistanceMeasures))
         .and_then(|registry| registry.register_measured(distance::DistanceItems))
         .and_then(|registry| registry.register_measured(containment::ContainmentItems))
+        .and_then(|registry| registry.register_measured(clash::ClashPairs))
         .and_then(|registry| registry.register_measured(measured_openings::OpeningMeasures))
         .and_then(|registry| registry.register_measured(keyed_limit::DoorMeasures))
         .and_then(|registry| registry.register_measured(door_swing_direction::SwingMeasures))

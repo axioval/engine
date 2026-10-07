@@ -8,10 +8,10 @@
 use std::{collections::BTreeMap, sync::Arc};
 
 use axioval_engine::{
-    BodyContainment, Bounds3, CapabilityEvaluation, CompiledRule, GeometryFidelity,
-    IntersectionVolume, LengthInterval, NotEvaluatedReason, ObjectBounds, OverlapExtents,
-    ProximityError, ProximityEvidence, ProximityRequest, ProximityService, ProximityServiceHandle,
-    RuleCapability, RuleContext, ServiceRegistry, VolumeInterval,
+    BodyContainment, Bounds3, CapabilityEvaluation, CapabilityRegistry, CompiledRule,
+    GeometryFidelity, IntersectionVolume, LengthInterval, NotEvaluatedReason, ObjectBounds,
+    OverlapExtents, ProximityError, ProximityEvidence, ProximityRequest, ProximityService,
+    ProximityServiceHandle, RuleCapability, RuleContext, ServiceRegistry, VolumeInterval,
 };
 use axioval_ir::contract::{ParameterValue, Selector, Severity as RuleSeverity};
 use axioval_ir::{Evidence, Object, ObjectId, Project, RuleId, SourceId};
@@ -24,7 +24,7 @@ fn oid(local: &str) -> ObjectId {
     ObjectId::new(source(), local).unwrap()
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 struct Pair {
     separation: f64,
     penetration: Option<f64>,
@@ -259,6 +259,9 @@ fn project(objects: &[(&str, &str)]) -> Project {
     .unwrap()
 }
 
+/// `capability`'s evaluation of `rule`, its measured values installed as a
+/// run installs them; `clash`, which runs as a template, held to the
+/// implementation it replaced under the whole outside contract.
 fn run(
     capability: &dyn RuleCapability,
     project: &Project,
@@ -269,17 +272,8 @@ fn run(
     services
         .register(ProximityServiceHandle::new(Arc::new(stub)))
         .unwrap();
-    if capability.id() != "axioval:capability.distance" {
-        return capability.evaluate(
-            &RuleContext {
-                project,
-                services: &services,
-            },
-            rule,
-        );
-    }
-    // `distance` runs as a template over measured lists, held to the
-    // implementation it replaced under the parity contract.
+    // `clash` and `distance` run as templates over measured lists, each
+    // held to the implementation it replaced under the parity contract.
     let registry =
         axioval_rules::register_builtins(axioval_engine::CapabilityRegistry::new()).unwrap();
     let mut inner = services.clone();
@@ -292,10 +286,15 @@ fn run(
         services: &services,
     };
     let template = capability.evaluate(&context, rule);
-    let reference = axioval_rules::reference::Distance.evaluate(&context, rule);
+    let reference: &dyn RuleCapability = match capability.id() {
+        "axioval:capability.distance" => &axioval_rules::reference::Distance,
+        "axioval:capability.clash" => &axioval_rules::reference::Clash,
+        _ => return template,
+    };
+    let reference = reference.evaluate(&context, rule);
     let parity = axioval_rules::parity::Parity::contract().compare(
         (
-            "distance",
+            capability.id(),
             &axioval_rules::parity::Observations::of_evaluation(&reference),
         ),
         (
@@ -513,6 +512,52 @@ fn tessellated_clashes_are_reported_as_approximate() {
         finding.message.contains("approximate"),
         "{}",
         finding.message
+    );
+}
+
+/// A pair the proximity service measured on tessellated geometry is never
+/// exact, however its numbers look; one measured exactly is.
+#[test]
+fn pairs_measured_on_tessellated_geometry_are_inexact() {
+    let stub = Stub::default()
+        .tessellated("pipe", 0.0)
+        .object("wall", 0.5)
+        .object("far-wall", 50.0)
+        .object("duct", 49.5)
+        .pair("pipe", "wall", overlapping(0.1))
+        .pair("duct", "far-wall", overlapping(0.1));
+    let project = project(&[
+        ("pipe", "pipe"),
+        ("duct", "pipe"),
+        ("wall", "wall"),
+        ("far-wall", "wall"),
+    ]);
+    let mut services = ServiceRegistry::new();
+    services
+        .register(ProximityServiceHandle::new(Arc::new(stub)))
+        .unwrap();
+    axioval_rules::register_builtins(CapabilityRegistry::new())
+        .unwrap()
+        .install_measured(&mut services, &project);
+    let pairs = axioval_engine::measured_members(
+        &services,
+        &oid("pipe"),
+        "clash_pairs;subjects=pipe;counterparts=wall;penetration_tolerance_metres=0.01",
+    )
+    .unwrap();
+    let exactness: Vec<(String, bool)> = pairs
+        .iter()
+        .map(|pair| {
+            let Some(axioval_engine::MemberValue::Objects { objects }) = pair.fields.get("subject")
+            else {
+                panic!("a pair names its subject");
+            };
+            (objects[0].local_id.clone(), pair.exact)
+        })
+        .collect();
+    assert_eq!(
+        exactness,
+        [("duct".to_owned(), true), ("pipe".to_owned(), false)]
     );
 }
 
@@ -1029,6 +1074,198 @@ fn containment_has_its_own_switch() {
     );
     assert!(outcome.findings().is_empty());
     assert!(outcome.not_evaluated_outcomes().is_empty());
+}
+
+/// The classes are data: a template whose first class is a clash of its
+/// own (a penetration past a fixed depth) reports it before the built-in
+/// classes are tried, over the same measured pairs.
+#[test]
+fn a_class_of_its_own_is_tried_first() {
+    use axioval_engine::template::{Bound, Decision, PairClass, PairOrder, PairTest};
+    let mut template = Clash.template().expect("clash runs as a template").clone();
+    let Decision::Pairs(pairs) = &mut template.forms[0].decision else {
+        panic!("clash judges pairs");
+    };
+    pairs.classes.insert(
+        0,
+        PairClass {
+            name: "deep",
+            holds: vec![PairTest::Compare {
+                value: "penetration",
+                order: PairOrder::Above,
+                bound: Bound::Literal(0.05),
+                zero: false,
+            }],
+            excused: None,
+            reported: None,
+            opens: false,
+            fail: "deep clash with {counterpart}: {penetration:fixed4} m",
+            undecided: "",
+        },
+    );
+    let deep = axioval_rules::templates::Templated::new(template);
+    let messages = |depth: f64| {
+        let stub = Stub::default()
+            .object("pipe", 0.0)
+            .object("wall", 0.5)
+            .object("far-wall", 50.0)
+            .pair("pipe", "wall", overlapping(depth));
+        let mut services = ServiceRegistry::new();
+        services
+            .register(ProximityServiceHandle::new(Arc::new(stub)))
+            .unwrap();
+        let project = pipes_and_walls();
+        axioval_rules::register_builtins(CapabilityRegistry::new())
+            .unwrap()
+            .install_measured(&mut services, &project);
+        deep.evaluate(
+            &RuleContext {
+                project: &project,
+                services: &services,
+            },
+            &clash(&[("penetration_tolerance_metres", 0.01)]),
+        )
+        .findings()
+        .iter()
+        .map(|finding| finding.message.clone())
+        .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        messages(0.1),
+        ["deep clash with cad:model/wall: 0.1000 m".to_owned()]
+    );
+    assert_eq!(
+        messages(0.03),
+        [
+            "hard clash with cad:model/wall: penetration 0.0300 m exceeds tolerance 0.0100 m"
+                .to_owned()
+        ]
+    );
+}
+
+/// Generated pairs and declarations: every measurement the proximity
+/// service may answer (or refuse) against every tolerance, switch,
+/// clearance and grouping, the template held to the implementation it
+/// replaced by `run`.
+mod generated {
+    use super::*;
+    use proptest::prelude::*;
+
+    fn interval(low: f64, wide: f64) -> (f64, f64) {
+        (low, low + wide)
+    }
+
+    fn pair() -> impl Strategy<Value = Pair> {
+        (
+            prop_oneof![Just(0.0), 0.0..0.15f64],
+            proptest::option::of(0.0..0.2f64),
+            prop_oneof![
+                6 => Just(None),
+                1 => Just(Some(BodyContainment::SubjectInsideCounterpart)),
+                1 => Just(Some(BodyContainment::CounterpartInsideSubject)),
+            ],
+            proptest::option::of((0.0..0.02f64, 0.0..0.05f64)),
+            proptest::option::of([
+                (0.0..0.3f64, 0.0..0.1f64),
+                (0.0..0.3f64, 0.0..0.1f64),
+                (0.0..0.3f64, 0.0..0.1f64),
+            ]),
+            proptest::option::of((0.0..0.002f64, 0.0..0.001f64)),
+            proptest::option::of((0.0..0.1f64, 0.0..0.02f64)),
+        )
+            .prop_map(
+                |(separation, penetration, containment, hausdorff, extents, volume, certified)| {
+                    Pair {
+                        separation,
+                        penetration,
+                        containment,
+                        hausdorff: hausdorff.map(|(low, wide)| interval(separation + low, wide)),
+                        extents: extents.map(|axes| axes.map(|(low, wide)| interval(low, wide))),
+                        volume: volume.map(|(low, wide)| interval(low, wide)),
+                        certified: certified.map(|(low, wide)| interval(low, wide)),
+                    }
+                },
+            )
+    }
+
+    fn tolerance() -> impl Strategy<Value = Option<f64>> {
+        proptest::option::of(prop_oneof![Just(0.0), Just(0.01), 0.0..0.1f64])
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(160))]
+
+        #[test]
+        fn generated_pairs_hold_parity(
+            pairs in proptest::collection::vec(proptest::option::of(pair()), 4),
+            tessellated in [any::<bool>(), any::<bool>()],
+            penetration in prop_oneof![Just(0.0), Just(0.01), 0.0..0.1f64],
+            clearance in proptest::option::of(prop_oneof![Just(0.02), 0.01..0.2f64]),
+            duplicate in tolerance(),
+            horizontal in tolerance(),
+            vertical in tolerance(),
+            volume in proptest::option::of(prop_oneof![Just(0.0), 0.0..0.002f64]),
+            switches in [proptest::option::of(any::<bool>()), proptest::option::of(any::<bool>()), proptest::option::of(any::<bool>())],
+            group in 0..5usize,
+        ) {
+            // Two pipes against two walls, every box overlapping.
+            let mut stub = Stub::default();
+            for (local, fidelity) in [("pipe", tessellated[0]), ("pipe-2", tessellated[1])] {
+                stub = if fidelity { stub.tessellated(local, 0.0) } else { stub.object(local, 0.0) };
+            }
+            stub = stub.object("wall", 0.5).object("wall-2", 0.2);
+            for ((subject, counterpart), pair) in
+                [("pipe", "wall"), ("pipe", "wall-2"), ("pipe-2", "wall"), ("pipe-2", "wall-2")]
+                    .into_iter()
+                    .zip(pairs)
+            {
+                stub = match pair {
+                    Some(pair) => stub.pair(subject, counterpart, pair),
+                    None => stub.failing(subject, counterpart),
+                };
+            }
+            let project = project(&[
+                ("pipe", "pipe"),
+                ("pipe-2", "pipe"),
+                ("wall", "wall"),
+                ("wall-2", "wall"),
+            ]);
+            let mut rule = clash(&[("penetration_tolerance_metres", penetration)]);
+            for (name, value) in [
+                ("clearance_metres", clearance),
+                ("duplicate_tolerance_metres", duplicate),
+                ("horizontal_tolerance_metres", horizontal),
+                ("vertical_tolerance_metres", vertical),
+                ("volume_tolerance_cubic_metres", volume),
+            ] {
+                if let Some(value) = value {
+                    rule.parameters.insert(name.into(), ParameterValue::Number { value });
+                }
+            }
+            for (name, value) in ["report_duplicates", "report_containment", "report_intersections"]
+                .into_iter()
+                .zip(switches)
+            {
+                if let Some(value) = value {
+                    rule.parameters.insert(name.into(), ParameterValue::Boolean { value });
+                }
+            }
+            let by = ["type_pair", "subject", "similar"];
+            if let Some(by) = by.get(group) {
+                rule.parameters.insert(
+                    "group_by".into(),
+                    ParameterValue::String { value: (*by).into() },
+                );
+                if *by == "similar" {
+                    rule.parameters.insert(
+                        "group_tolerance_metres".into(),
+                        ParameterValue::Number { value: 0.05 },
+                    );
+                }
+            }
+            run(&Clash, &project, stub, &rule);
+        }
+    }
 }
 
 #[test]

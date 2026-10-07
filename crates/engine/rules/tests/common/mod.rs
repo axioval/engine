@@ -88,6 +88,24 @@ impl RuleCapability for Held {
     }
 }
 
+/// Evaluates `rule` with `clash` or `clash-matrix`, which run as templates,
+/// holding each to the implementation it replaced on `model` with the
+/// services `extra` registers (`Model::holding_contract`); any other
+/// capability is evaluated as it is.
+pub fn clash_held(
+    model: Model,
+    capability: &dyn RuleCapability,
+    rule: &CompiledRule,
+    extra: impl Fn(&mut ServiceRegistry),
+) -> CapabilityEvaluation {
+    let reference: &dyn RuleCapability = match capability.id() {
+        "axioval:capability.clash" => &axioval_rules::reference::Clash,
+        "axioval:capability.clash-matrix" => &axioval_rules::reference::ClashMatrix,
+        _ => return model.evaluate_with(capability, rule, extra),
+    };
+    model.holding_contract(capability, reference, rule, extra, &[], 0.0)
+}
+
 /// Evaluates `rule` with `property-predicate`, which runs as a template,
 /// holding it to the implementation it replaced (`hold_to_reference`).
 pub fn predicate(model: Model, rule: &CompiledRule) -> CapabilityEvaluation {

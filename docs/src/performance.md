@@ -431,3 +431,17 @@ time on the public models above the floor and 1.03 to 1.38× its peak
 heap; on the generated walls it is 1.38× and 1.65×, its count items one
 per wall, and on the two models under the floor 1.40×. Both are over the
 budget there and are the open part of #283.
+
+`clash` and `clash-matrix` run the `clashes` case's rules (four and two):
+1.00 to 1.11× their reference's run time on every input above the floor
+and 1.03 to 1.29× its peak heap, the generated walls and the infra road
+the highest. The list measures each pair once, as the capability did; it
+states only what a pair states (a text without words, a false truth, a
+switched-on class and a `null` are left out, and `clash`'s tolerances are
+the rule's parameters rather than fields of every pair), lists each
+object's open outcome once, and the judge lets each pair go once judged:
+before that, the infra road held 2.0× the reference's peak heap. On the
+one model under the floor (three objects, no pair) the template runs
+1.72× (`clash`) and 1.29× (`clash-matrix`): about 9 µs per rule of the
+runner's fixed cost (selecting, binding the list's two selections and
+references, finding its provider), which no pair outweighs there.

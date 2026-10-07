@@ -175,9 +175,10 @@ fn run_with(
     frames: bool,
     rule: &CompiledRule,
 ) -> CapabilityEvaluation {
-    model().evaluate_with(capability, rule, |services| {
+    let stub = Arc::new(stub);
+    common::clash_held(model(), capability, rule, |services| {
         services
-            .register(ProximityServiceHandle::new(Arc::new(stub)))
+            .register(ProximityServiceHandle::new(stub.clone()))
             .unwrap();
         if frames {
             services

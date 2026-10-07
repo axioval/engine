@@ -7,28 +7,42 @@
 //! handling, exclusions, measurement) is `clash`'s, shared through
 //! [`crate::clash`], so a cell means exactly what a `clash` rule with the
 //! same values means.
+//!
+//! It runs as a template: the measured list `clash_matrix_pairs` picks each
+//! pair's cell (a search over the cells' categories) and measures the pair
+//! beside that cell's tolerances, and the template judges it as `clash`'s
+//! does, by the cell's severity.
 
 use std::collections::BTreeMap;
+use std::sync::LazyLock;
 
+use axioval_engine::template::Template;
 use axioval_engine::{
-    CapabilityEvaluation, ColumnKind, CompiledRule, NotEvaluatedReason, ParameterDescriptor,
-    ParameterType, ProximityProjection, RuleCapability, RuleContext, TableColumn,
+    CapabilityEvaluation, ColumnKind, CompiledRule, ParameterDescriptor, ParameterType,
+    RuleCapability, RuleContext, TableColumn,
 };
-use axioval_ir::contract::Selector;
+use axioval_ir::contract::{ParameterValue, Selector};
 use axioval_ir::{Evidence, Object, ObjectId, Severity};
 
 use crate::clash::{
-    Class, Exclusions, Outcome, PROFILE_NUMBERS, PROFILE_SWITCHES, Profile, Recorder,
-    exclusion_paths, exclusion_property, judge_with_cases, measure, unless_excluded,
+    PROFILE_NUMBERS, PROFILE_SWITCHES, Profile, exclusion_paths, exclusion_property,
 };
-use crate::clash_cases::{CaseJudge, Cases, case_parameter, cases};
-use crate::clash_groups::{Context, Grouping, Groups, grouping, grouping_parameters};
+use crate::clash_cases::{Cases, case_parameter, cases};
+use crate::clash_groups::{Grouping, grouping, grouping_parameters};
 use crate::clash_severity::{Severities, parse_severity, severities, severity_parameters};
-use crate::pairs::{prepare, refuse_declaration, severity};
 use crate::selection::{Selection, discipline_of, selector_matches};
-use crate::support::table::{Matched, Row, RowSelection, RowTest, TextPattern, match_rows};
+use crate::support::table::{Row, RowTest, TextPattern};
 use crate::support::{Parameters, PropertyRef, Traversal, Unavailable, invalid};
 use crate::table_allocation::{KEY_COUNT, KEYS, Key, KeyProperties, key_properties, read_keys};
+
+/// The declaration the capability refused, in its order and words: what
+/// the template's `Check::Arguments` refuses once per rule. `stated` holds
+/// the rule's parameters the list names, by their own names.
+pub(crate) fn check_arguments(
+    stated: &BTreeMap<String, ParameterValue>,
+) -> Result<(), Unavailable> {
+    declaration(&crate::clash::synthesised(stated.clone())).map(|_| ())
+}
 
 /// The two sides of a pair, as the cell columns name them.
 const SIDES: [&str; 2] = ["subject", "counterpart"];
@@ -97,7 +111,7 @@ const COLUMNS: &[TableColumn] = &[
 pub struct ClashMatrix;
 
 /// One side's categories in a cell.
-struct Side<'a> {
+pub(crate) struct Side<'a> {
     discipline: Option<TextPattern>,
     selector: Option<&'a Selector>,
     keys: [Option<TextPattern>; KEY_COUNT],
@@ -129,31 +143,35 @@ impl Side<'_> {
 }
 
 /// One cell of the matrix.
-struct Cell<'a> {
+pub(crate) struct Cell<'a> {
     label: Option<&'a str>,
     sides: [Side<'a>; 2],
-    profile: Profile,
-    severity: Option<Severity>,
+    pub(crate) profile: Profile,
+    pub(crate) severity: Option<Severity>,
 }
 
-struct Declaration<'a> {
-    cells: Vec<Cell<'a>>,
+/// A `clash-matrix` rule's declaration, read as the capability reads it.
+pub(crate) struct Declaration<'a> {
+    pub(crate) cells: Vec<Cell<'a>>,
     properties: KeyProperties<'a>,
     symmetric: bool,
-    report_unmatched: bool,
-    exclude_paths: Vec<Vec<String>>,
-    exclude_target_property: Option<PropertyRef<'a>>,
-    exclude_same_layer: bool,
-    grouping: Option<Grouping<'a>>,
-    severities: Severities,
-    cases: Cases<'a>,
+    pub(crate) report_unmatched: bool,
+    pub(crate) exclude_paths: Vec<Vec<String>>,
+    pub(crate) exclude_target_property: Option<PropertyRef<'a>>,
+    pub(crate) exclude_same_layer: bool,
+    pub(crate) grouping: Option<Grouping<'a>>,
+    #[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
+    pub(crate) severities: Severities,
+    pub(crate) cases: Cases<'a>,
 }
 
 fn row_severity(row: Row<'_>) -> Result<Option<Severity>, Unavailable> {
     row.text("severity")?.map(parse_severity).transpose()
 }
 
-fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
+/// Reads a `clash-matrix` rule's declaration, refusing it in the
+/// capability's order and words.
+pub(crate) fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
     let parameters = Parameters(rule);
     let properties = key_properties(&parameters)?;
     let case_sensitive = parameters.boolean("case_sensitive")?.unwrap_or(true);
@@ -229,14 +247,14 @@ fn either(forward: RowTest, backward: RowTest) -> RowTest {
 }
 
 /// An object's categories, read once and only where a cell tests them.
-struct Category {
+pub(crate) struct Category {
     discipline: Option<Result<String, Unavailable>>,
     keys: [Option<Key>; KEY_COUNT],
-    evidence: Vec<Evidence>,
+    pub(crate) evidence: Vec<Evidence>,
 }
 
 /// Reads and caches categories, and tests cells against pairs.
-struct Categories<'r, 'd> {
+pub(crate) struct Categories<'r, 'd> {
     context: &'r RuleContext<'r>,
     declared: &'d Declaration<'d>,
     /// Which key properties any cell tests.
@@ -247,7 +265,7 @@ struct Categories<'r, 'd> {
 }
 
 impl<'r, 'd> Categories<'r, 'd> {
-    fn new(context: &'r RuleContext<'r>, declared: &'d Declaration<'d>) -> Self {
+    pub(crate) fn new(context: &'r RuleContext<'r>, declared: &'d Declaration<'d>) -> Self {
         let sides = || declared.cells.iter().flat_map(|cell| &cell.sides);
         let mut keys_used = [false; KEY_COUNT];
         for side in sides() {
@@ -265,7 +283,7 @@ impl<'r, 'd> Categories<'r, 'd> {
         }
     }
 
-    fn category(&mut self, object: &Object) -> &Category {
+    pub(crate) fn category(&mut self, object: &Object) -> &Category {
         let Self {
             context,
             declared,
@@ -347,7 +365,7 @@ impl<'r, 'd> Categories<'r, 'd> {
     }
 
     /// Whether cell `cell` covers the pair, and how specifically.
-    fn test_pair(
+    pub(crate) fn test_pair(
         &mut self,
         cell: usize,
         subject: &Object,
@@ -370,7 +388,7 @@ impl<'r, 'd> Categories<'r, 'd> {
     }
 
     /// An object's categories as a reviewer reads them.
-    fn describe(&mut self, object: &Object) -> String {
+    pub(crate) fn describe(&mut self, object: &Object) -> String {
         let properties = self.declared.properties;
         let category = self.category(object);
         let mut shown = Vec::new();
@@ -396,7 +414,7 @@ impl<'r, 'd> Categories<'r, 'd> {
 }
 
 impl Cell<'_> {
-    fn name(&self, index: usize) -> String {
+    pub(crate) fn name(&self, index: usize) -> String {
         match self.label {
             Some(label) => format!("cell {index} `{label}`"),
             None => format!("cell {index}"),
@@ -406,237 +424,59 @@ impl Cell<'_> {
 
 impl RuleCapability for ClashMatrix {
     fn id(&self) -> &'static str {
-        "axioval:capability.clash-matrix"
+        crate::clash::template::CLASH_MATRIX
     }
 
     fn parameters(&self) -> Vec<ParameterDescriptor> {
-        debug_assert!(
-            PROFILE_NUMBERS
-                .iter()
-                .chain(&PROFILE_SWITCHES)
-                .all(|name| COLUMNS.iter().any(|column| column.id == *name)),
-            "every profile value is a cell column"
-        );
-        let mut parameters = vec![
-            ParameterDescriptor::required("counterparts", ParameterType::Selector),
-            ParameterDescriptor::required("cells", ParameterType::Table(COLUMNS)),
-        ];
-        // The matrix keys three properties; `key_4` is not among them.
-        for key in KEYS.into_iter().take(3) {
-            parameters.push(ParameterDescriptor::optional(
-                key,
-                ParameterType::PropertyReference,
-            ));
-        }
-        parameters.extend([
-            ParameterDescriptor::optional("case_sensitive", ParameterType::Boolean),
-            ParameterDescriptor::optional("symmetric", ParameterType::Boolean),
-            ParameterDescriptor::optional("report_unmatched", ParameterType::Boolean),
-            ParameterDescriptor::optional("exclude_same_system", ParameterType::Boolean),
-            ParameterDescriptor::optional("system_path", ParameterType::String),
-            ParameterDescriptor::optional("exclude_paths", ParameterType::StringList),
-            ParameterDescriptor::optional(
-                "exclude_target_property",
-                ParameterType::PropertyReference,
-            ),
-            ParameterDescriptor::optional("exclude_same_layer", ParameterType::Boolean),
-        ]);
-        parameters.extend(grouping_parameters());
-        parameters.extend(severity_parameters());
-        parameters.push(case_parameter());
-        parameters
+        TEMPLATE.parameters.clone()
     }
 
-    #[allow(clippy::too_many_lines)]
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
-        let declared = match declaration(rule) {
-            Ok(declared) => declared,
-            Err((_, message)) => return refuse_declaration(context, rule, &message),
-        };
-        let margin = declared
-            .cells
-            .iter()
-            .map(|cell| cell.profile.margin())
-            .fold(0.0, f64::max);
-        let prepared = match prepare(context, rule, Some(margin), ProximityProjection::Minimum3d) {
-            Ok(prepared) => prepared,
-            Err(refused) => return refused,
-        };
-        let mut exclusions = match Exclusions::new(
-            context,
-            &declared.exclude_paths,
-            declared.exclude_target_property,
-            declared.exclude_same_layer,
-        ) {
-            Ok(exclusions) => exclusions,
-            Err((_, message)) => return refuse_declaration(context, rule, &message),
-        };
-        let groups = match declared
-            .grouping
-            .as_ref()
-            .map(|grouping| Groups::new(context, grouping))
-            .transpose()
-        {
-            Ok(groups) => groups,
-            Err((_, message)) => return refuse_declaration(context, rule, &message),
-        };
-        let mut categories = Categories::new(context, &declared);
-        let mut recorder = Recorder {
-            rule,
-            evaluation: CapabilityEvaluation::default(),
-            unevaluated: prepared.unevaluated,
-            groups,
-        };
-        let indices: Vec<usize> = (0..declared.cells.len()).collect();
-        let mut cases = CaseJudge::new(context, &declared.cases);
-
-        for pair in &prepared.pairs {
-            let (subject, counterpart) = (pair.subject(), pair.counterpart());
-            let (Some(subject_object), Some(counterpart_object)) = (
-                context.project.object(subject),
-                context.project.object(counterpart),
-            ) else {
-                recorder.unevaluated.push(
-                    subject.clone(),
-                    NotEvaluatedReason::InvalidEvidence,
-                    format!("the pair with {counterpart} names an object outside the project"),
-                );
-                continue;
-            };
-            let exclusion = exclusions.excluded(subject, counterpart);
-            if matches!(exclusion, Ok(Some(_))) {
-                continue;
-            }
-            let mut unknown = Vec::new();
-            let matched = match_rows(&indices, RowSelection::MostSpecific, |&cell| {
-                categories.test_pair(cell, subject_object, counterpart_object, &mut unknown)
-            });
-            let (index, cell) = match matched {
-                Matched::Rows(rows) if rows.is_empty() => {
-                    if declared.report_unmatched {
-                        let mut evidence = categories.category(subject_object).evidence.clone();
-                        evidence.extend(
-                            categories
-                                .category(counterpart_object)
-                                .evidence
-                                .iter()
-                                .cloned(),
-                        );
-                        let outcome = Outcome::Finding(
-                            Class::Unmatched,
-                            format!(
-                                "no clash matrix cell covers {} against {}",
-                                categories.describe(subject_object),
-                                categories.describe(counterpart_object),
-                            ),
-                        );
-                        recorder.record(
-                            (subject, counterpart),
-                            &Context {
-                                measured: None,
-                                cell: None,
-                            },
-                            unless_excluded(outcome, exclusion, counterpart),
-                            severity(rule),
-                            evidence,
-                        );
-                    }
-                    continue;
-                }
-                Matched::Rows(rows) => {
-                    let (_, &index) = rows[0];
-                    (index, &declared.cells[index])
-                }
-                Matched::Undecided => {
-                    let (reason, message) = unknown.into_iter().next().unwrap_or((
-                        NotEvaluatedReason::IncompleteEvidence,
-                        "a category cannot be read".into(),
-                    ));
-                    // A fact the source records for nothing is about the
-                    // source: keep the message free of object names, so the
-                    // runtime reports it once per source.
-                    let message = if reason == NotEvaluatedReason::NotRecorded {
-                        format!("the clash matrix cell cannot be chosen: {message}")
-                    } else {
-                        format!(
-                            "the clash matrix cell for the pair with {counterpart} cannot be chosen: {message}"
-                        )
-                    };
-                    recorder.unevaluated.push(subject.clone(), reason, message);
-                    continue;
-                }
-                Matched::Ambiguous(tied) => {
-                    let names: Vec<String> = tied
-                        .iter()
-                        .map(|&index| declared.cells[index].name(index))
-                        .collect();
-                    recorder.unevaluated.push(
-                        subject.clone(),
-                        NotEvaluatedReason::InvalidDeclaration,
-                        format!(
-                            "clash matrix {} cover the pair with {counterpart} equally",
-                            names.join(" and ")
-                        ),
-                    );
-                    continue;
-                }
-            };
-            if !cell.profile.checks_anything() {
-                continue;
-            }
-            let measured = match measure(prepared.service, subject, counterpart) {
-                Ok(measured) => measured,
-                Err((reason, message)) => {
-                    recorder.unevaluated.push(subject.clone(), reason, message);
-                    continue;
-                }
-            };
-            let (judged, excuse) = judge_with_cases(
-                &cell.profile,
-                &declared.cases,
-                &mut cases,
-                (prepared.service, &measured),
-            );
-            let (outcome, severity, mut read) = declared.severities.report(
-                context,
-                &measured,
-                (subject, counterpart),
-                judged,
-                (cell.severity.clone(), severity(rule)),
-            );
-            if matches!(outcome, Outcome::Finding(..)) {
-                read.extend(excuse.evidence);
-            }
-            let outcome = match outcome {
-                Outcome::Finding(class, message) => Outcome::Finding(
-                    class,
-                    format!("{message} (clash matrix {})", cell.name(index)),
-                ),
-                other => other,
-            };
-            let mut evidence = vec![measured.evidence().clone()];
-            evidence.extend(categories.category(subject_object).evidence.iter().cloned());
-            evidence.extend(
-                categories
-                    .category(counterpart_object)
-                    .evidence
-                    .iter()
-                    .cloned(),
-            );
-            evidence.extend(read);
-            evidence.sort_by(|a, b| (&a.source, &a.locator).cmp(&(&b.source, &b.locator)));
-            evidence.dedup();
-            recorder.record(
-                (subject, counterpart),
-                &Context {
-                    measured: Some(&measured),
-                    cell: Some(index),
-                },
-                unless_excluded(outcome, exclusion, counterpart),
-                severity,
-                evidence,
-            );
-        }
-        recorder.finish()
+        crate::templates::run((&TEMPLATE, &PLANS), context, rule)
     }
+
+    fn template(&self) -> Option<&Template> {
+        Some(&TEMPLATE)
+    }
+}
+
+static TEMPLATE: LazyLock<Template> = LazyLock::new(crate::clash::template::clash_matrix);
+
+/// The plans of the rules bound to it, kept across runs.
+static PLANS: crate::templates::Plans = crate::templates::Plans::new();
+
+/// The descriptor `clash-matrix` keeps.
+pub(crate) fn parameters() -> Vec<ParameterDescriptor> {
+    debug_assert!(
+        PROFILE_NUMBERS
+            .iter()
+            .chain(&PROFILE_SWITCHES)
+            .all(|name| COLUMNS.iter().any(|column| column.id == *name)),
+        "every profile value is a cell column"
+    );
+    let mut parameters = vec![
+        ParameterDescriptor::required("counterparts", ParameterType::Selector),
+        ParameterDescriptor::required("cells", ParameterType::Table(COLUMNS)),
+    ];
+    // The matrix keys three properties; `key_4` is not among them.
+    for key in KEYS.into_iter().take(3) {
+        parameters.push(ParameterDescriptor::optional(
+            key,
+            ParameterType::PropertyReference,
+        ));
+    }
+    parameters.extend([
+        ParameterDescriptor::optional("case_sensitive", ParameterType::Boolean),
+        ParameterDescriptor::optional("symmetric", ParameterType::Boolean),
+        ParameterDescriptor::optional("report_unmatched", ParameterType::Boolean),
+        ParameterDescriptor::optional("exclude_same_system", ParameterType::Boolean),
+        ParameterDescriptor::optional("system_path", ParameterType::String),
+        ParameterDescriptor::optional("exclude_paths", ParameterType::StringList),
+        ParameterDescriptor::optional("exclude_target_property", ParameterType::PropertyReference),
+        ParameterDescriptor::optional("exclude_same_layer", ParameterType::Boolean),
+    ]);
+    parameters.extend(grouping_parameters());
+    parameters.extend(severity_parameters());
+    parameters.push(case_parameter());
+    parameters
 }

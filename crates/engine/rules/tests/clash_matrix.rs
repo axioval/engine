@@ -142,10 +142,12 @@ fn matrix(
     rule(ID, Selector::All, parameters)
 }
 
+/// The template's evaluation, held to the implementation it replaced.
 fn run(model: Model, stub: Stub, rule: &axioval_engine::CompiledRule) -> CapabilityEvaluation {
-    model.evaluate_with(&ClashMatrix, rule, |services| {
+    let stub = Arc::new(stub);
+    common::clash_held(model, &ClashMatrix, rule, |services| {
         services
-            .register(ProximityServiceHandle::new(Arc::new(stub)))
+            .register(ProximityServiceHandle::new(stub.clone()))
             .unwrap();
     })
 }
@@ -660,4 +662,109 @@ fn a_shared_layer_excludes_only_within_one_model() {
 
     let evaluation = run(layered(common::id("duct")), duct_through_pipe(), &rule);
     assert!(evaluation.findings().is_empty() && evaluation.not_evaluated_outcomes().is_empty());
+}
+
+/// Generated matrices: cells keyed by trade, pattern and selector, of random
+/// tolerances and severities, over objects stating a trade, another one,
+/// none, or one that cannot be read; the template held to the
+/// implementation it replaced by `run`.
+mod generated {
+    use super::*;
+    use proptest::prelude::*;
+
+    fn trade() -> impl Strategy<Value = Option<&'static str>> {
+        prop_oneof![
+            Just(Some("HVAC")),
+            Just(Some("Plumbing")),
+            Just(Some("unreadable")),
+            Just(None)
+        ]
+    }
+
+    fn cell_row() -> impl Strategy<Value = TableRow> {
+        (
+            proptest::option::of(prop_oneof![
+                Just("HVAC"),
+                Just("Plumbing"),
+                Just("*"),
+                Just("H*")
+            ]),
+            proptest::option::of(prop_oneof![Just("beam"), Just("duct"), Just("pipe")]),
+            prop_oneof![Just(0.0), Just(0.01), Just(0.03), Just(0.05)],
+            proptest::option::of(prop_oneof![Just("error"), Just("warning"), Just("info")]),
+            proptest::option::of(any::<bool>()),
+            any::<bool>(),
+        )
+            .prop_map(
+                |(key, counterpart, tolerance, severity, intersections, labelled)| {
+                    let mut cells = vec![("penetration_tolerance_metres", number(tolerance))];
+                    if let Some(key) = key {
+                        cells.push(("subject_key_1", string(key)));
+                    }
+                    if let Some(counterpart) = counterpart {
+                        cells.push(("counterpart_selector", selector(kind(counterpart))));
+                    }
+                    if let Some(severity) = severity {
+                        cells.push(("severity", string(severity)));
+                    }
+                    if let Some(intersections) = intersections {
+                        cells.push(("report_intersections", boolean(intersections)));
+                    }
+                    if labelled {
+                        cells.push(("label", string("generated")));
+                    }
+                    cell(&cells)
+                },
+            )
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(96))]
+
+        #[test]
+        fn generated_matrices_hold_parity(
+            trades in [trade(), trade(), trade()],
+            rows in proptest::collection::vec(cell_row(), 1..4),
+            depths in [0.0..0.08f64, 0.0..0.08f64],
+            unmatched in any::<bool>(),
+            symmetric in proptest::option::of(any::<bool>()),
+            insensitive in any::<bool>(),
+            group in 0..4usize,
+        ) {
+            let mut model = Model::default()
+                .object("beam", "beam")
+                .object("duct", "duct")
+                .object("pipe", "pipe");
+            for (local, trade) in ["beam", "duct", "pipe"].into_iter().zip(trades) {
+                model = match trade {
+                    Some("unreadable") => model.unreadable_value(local, "Pset", "Trade", "IFCLABEL"),
+                    Some(trade) => model.text(local, "Pset", "Trade", trade),
+                    None => model,
+                };
+            }
+            let stub = Stub::default()
+                .object("beam", 0.5)
+                .object("duct", 0.0)
+                .object("pipe", 1.2)
+                .overlap("beam", "duct", depths[0])
+                .overlap("beam", "pipe", depths[1]);
+            let mut extra = vec![("report_unmatched", boolean(unmatched))];
+            if let Some(symmetric) = symmetric {
+                extra.push(("symmetric", boolean(symmetric)));
+            }
+            if insensitive {
+                extra.push(("case_sensitive", boolean(false)));
+            }
+            match group {
+                1 => extra.push(("group_by", string("type_pair"))),
+                2 => extra.push(("group_by", string("subject"))),
+                3 => {
+                    extra.push(("group_by", string("similar")));
+                    extra.push(("group_tolerance_metres", number(0.05)));
+                }
+                _ => {}
+            }
+            run(model, stub, &matrix(rows, extra));
+        }
+    }
 }

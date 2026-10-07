@@ -6903,7 +6903,891 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "clash",
+        "refusals": "objects",
+        "defaults": [
+          {
+            "parameter": "duplicate_tolerance_metres",
+            "value": {
+              "type": "number",
+              "value": 0.0
+            }
+          },
+          {
+            "parameter": "horizontal_tolerance_metres",
+            "value": {
+              "type": "number",
+              "value": 0.0
+            }
+          },
+          {
+            "parameter": "vertical_tolerance_metres",
+            "value": {
+              "type": "number",
+              "value": 0.0
+            }
+          },
+          {
+            "parameter": "volume_tolerance_cubic_metres",
+            "value": {
+              "type": "number",
+              "value": 0.0
+            }
+          }
+        ],
+        "declaration": [
+          {
+            "kind": "arguments",
+            "when": [],
+            "value": "clash_pairs;subjects=@selection;counterparts=@counterparts;penetration_tolerance_metres=@penetration_tolerance_metres;clearance_metres=@clearance_metres;duplicate_tolerance_metres=@duplicate_tolerance_metres;horizontal_tolerance_metres=@horizontal_tolerance_metres;vertical_tolerance_metres=@vertical_tolerance_metres;volume_tolerance_cubic_metres=@volume_tolerance_cubic_metres;report_duplicates=@report_duplicates;report_containment=@report_containment;report_intersections=@report_intersections;exclude_paths=@exclude_paths;exclude_target_property=@exclude_target_property;exclude_same_layer=@exclude_same_layer;group_by=@group_by;per_storey=@per_storey;storey_path=@storey_path;group_property=@group_property;group_tolerance_metres=@group_tolerance_metres;duplicate_quantities=@duplicate_quantities;tolerance_cases=@tolerance_cases;severity_by_class=@severity_by_class;grade_by=@grade_by;severity_grades=@severity_grades"
+          }
+        ],
+        "services": {
+          "needs": [
+            "proximity"
+          ],
+          "message": "proximity service is not registered"
+        },
+        "forms": [
+          {
+            "when": [],
+            "values": [],
+            "decision": {
+              "kind": "pairs",
+              "list": "clash_pairs;subjects=@selection;counterparts=@counterparts;penetration_tolerance_metres=@penetration_tolerance_metres;clearance_metres=@clearance_metres;duplicate_tolerance_metres=@duplicate_tolerance_metres;horizontal_tolerance_metres=@horizontal_tolerance_metres;vertical_tolerance_metres=@vertical_tolerance_metres;volume_tolerance_cubic_metres=@volume_tolerance_cubic_metres;report_duplicates=@report_duplicates;report_containment=@report_containment;report_intersections=@report_intersections;exclude_paths=@exclude_paths;exclude_target_property=@exclude_target_property;exclude_same_layer=@exclude_same_layer;group_by=@group_by;per_storey=@per_storey;storey_path=@storey_path;group_property=@group_property;group_tolerance_metres=@group_tolerance_metres;duplicate_quantities=@duplicate_quantities;tolerance_cases=@tolerance_cases",
+              "selections": [
+                "counterparts"
+              ],
+              "subject": "subject",
+              "related": "counterpart",
+              "open": {
+                "message": "open",
+                "reason": "reason"
+              },
+              "classes": [
+                {
+                  "name": "duplicate",
+                  "holds": [
+                    {
+                      "kind": "compare",
+                      "value": "hausdorff",
+                      "order": "atMost",
+                      "bound": {
+                        "kind": "operand",
+                        "value": {
+                          "kind": "parameter",
+                          "name": "duplicate_tolerance_metres"
+                        }
+                      }
+                    }
+                  ],
+                  "reported": "report_duplicates",
+                  "fail": "duplicate of {counterpart}: the surfaces lie within {hausdorff:upper4} m of each other, tolerance {duplicate_tolerance_words} m{note}{copies}",
+                  "undecided": "whether {counterpart} is a duplicate cannot be decided: the surfaces lie between {hausdorff:lower4} m and {upper} of each other, tolerance {duplicate_tolerance_words} m{note}"
+                },
+                {
+                  "name": "containment",
+                  "holds": [
+                    {
+                      "kind": "truth",
+                      "field": "inside",
+                      "value": true
+                    }
+                  ],
+                  "reported": "report_containment",
+                  "fail": "lies wholly inside {counterpart}{note}",
+                  "undecided": ""
+                },
+                {
+                  "name": "containment",
+                  "holds": [
+                    {
+                      "kind": "truth",
+                      "field": "contains",
+                      "value": true
+                    }
+                  ],
+                  "reported": "report_containment",
+                  "fail": "wholly contains {counterpart}{note}",
+                  "undecided": ""
+                },
+                {
+                  "name": "intersection",
+                  "holds": [
+                    {
+                      "kind": "compare",
+                      "value": "penetration",
+                      "order": "above",
+                      "bound": {
+                        "kind": "operand",
+                        "value": {
+                          "kind": "parameter",
+                          "name": "penetration_tolerance_metres"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "compare",
+                      "value": "horizontal",
+                      "order": "above",
+                      "bound": {
+                        "kind": "operand",
+                        "value": {
+                          "kind": "parameter",
+                          "name": "horizontal_tolerance_metres"
+                        }
+                      },
+                      "zero": true
+                    },
+                    {
+                      "kind": "compare",
+                      "value": "vertical",
+                      "order": "above",
+                      "bound": {
+                        "kind": "operand",
+                        "value": {
+                          "kind": "parameter",
+                          "name": "vertical_tolerance_metres"
+                        }
+                      },
+                      "zero": true
+                    },
+                    {
+                      "kind": "compare",
+                      "value": "shared_volume",
+                      "order": "above",
+                      "bound": {
+                        "kind": "operand",
+                        "value": {
+                          "kind": "parameter",
+                          "name": "volume_tolerance_cubic_metres"
+                        }
+                      },
+                      "zero": true
+                    }
+                  ],
+                  "excused": {
+                    "kind": "truth",
+                    "field": "excused",
+                    "value": true
+                  },
+                  "reported": "report_intersections",
+                  "fail": "hard clash with {counterpart}: penetration {penetration:fixed4} m exceeds tolerance {penetration_tolerance_words} m{reach}{note}",
+                  "undecided": "whether the intersection with {counterpart} exceeds the horizontal tolerance {horizontal_tolerance_words} m, the vertical tolerance {vertical_tolerance_words} m and the volume tolerance {volume_tolerance_words} m³{excuse} cannot be decided{reach}{note}"
+                },
+                {
+                  "name": "meeting",
+                  "holds": [
+                    {
+                      "kind": "stated",
+                      "field": "penetration",
+                      "stated": false
+                    },
+                    {
+                      "kind": "compare",
+                      "value": "separation",
+                      "order": "atMost",
+                      "bound": {
+                        "kind": "literal",
+                        "value": 0.0
+                      }
+                    }
+                  ],
+                  "opens": true,
+                  "fail": "surfaces meet {counterpart}, but neither body is a closed solid, so touching cannot be told from crossing",
+                  "undecided": ""
+                },
+                {
+                  "name": "clearance",
+                  "holds": [
+                    {
+                      "kind": "compare",
+                      "value": "certified",
+                      "order": "below",
+                      "bound": {
+                        "kind": "operand",
+                        "value": {
+                          "kind": "parameter",
+                          "name": "clearance_metres"
+                        }
+                      }
+                    }
+                  ],
+                  "fail": "clearance clash with {counterpart}: separation certified within [{certified:lower6}, {certified:upper6}] m, below required {clearance_words} m{note}",
+                  "undecided": "whether {counterpart} keeps the clearance {clearance_words} m cannot be decided: separation certified within [{certified:lower6}, {certified:upper6}] m{note}"
+                },
+                {
+                  "name": "clearance",
+                  "holds": [
+                    {
+                      "kind": "stated",
+                      "field": "certified",
+                      "stated": false
+                    },
+                    {
+                      "kind": "compare",
+                      "value": "separation",
+                      "order": "below",
+                      "bound": {
+                        "kind": "operand",
+                        "value": {
+                          "kind": "parameter",
+                          "name": "clearance_metres"
+                        }
+                      }
+                    }
+                  ],
+                  "fail": "clearance clash with {counterpart}: separation {separation:fixed4} m below required {clearance_words} m{note}",
+                  "undecided": ""
+                }
+              ],
+              "unless": {
+                "message": "excluded",
+                "reason": "excluded_reason"
+              },
+              "severity": {
+                "byClass": {
+                  "table": "severity_by_class",
+                  "class": "class",
+                  "severity": "severity"
+                },
+                "grades": {
+                  "class": "intersection",
+                  "by": "grade_by",
+                  "measures": [
+                    {
+                      "option": "smallest_extent",
+                      "field": "smallest_extent",
+                      "words": "smallest extent",
+                      "digits": 4,
+                      "unit": "m"
+                    },
+                    {
+                      "option": "volume",
+                      "field": "shared_volume",
+                      "words": "shared volume",
+                      "digits": 6,
+                      "unit": "m³"
+                    }
+                  ],
+                  "table": "severity_grades",
+                  "above": "above",
+                  "severity": "severity",
+                  "graded": ", graded {severity} by its {measure} of {value}",
+                  "reaches": ", graded {severity}: the most severe grade its {measure} of {value} may reach",
+                  "unmeasured": ", graded {severity}: its {measure} is unmeasured, so the most severe grade it may reach"
+                }
+              },
+              "texts": [
+                {
+                  "name": "excuse",
+                  "when": [
+                    {
+                      "kind": "field",
+                      "field": "report_intersections",
+                      "value": false
+                    }
+                  ],
+                  "text": ""
+                },
+                {
+                  "name": "excuse",
+                  "text": "{case}"
+                },
+                {
+                  "name": "title",
+                  "when": [
+                    {
+                      "kind": "equals",
+                      "parameter": "group_by",
+                      "value": "similar"
+                    }
+                  ],
+                  "text": "{count} similar {class} clashes of {sides}"
+                },
+                {
+                  "name": "title",
+                  "when": [
+                    {
+                      "kind": "equals",
+                      "parameter": "group_by",
+                      "value": "type_pair"
+                    }
+                  ],
+                  "text": "{count} clashes of {sides}"
+                },
+                {
+                  "name": "title",
+                  "text": "{count} clashes"
+                },
+                {
+                  "name": "upper",
+                  "when": [
+                    {
+                      "kind": "stated",
+                      "field": "hausdorff_upper"
+                    }
+                  ],
+                  "text": "{hausdorff_upper}"
+                },
+                {
+                  "name": "upper",
+                  "text": "{hausdorff:upper4} m"
+                },
+                {
+                  "name": "penetration_tolerance_words",
+                  "text": "{penetration_tolerance_metres:fixed4}"
+                },
+                {
+                  "name": "duplicate_tolerance_words",
+                  "text": "{duplicate_tolerance_metres:fixed4}"
+                },
+                {
+                  "name": "horizontal_tolerance_words",
+                  "text": "{horizontal_tolerance_metres:fixed4}"
+                },
+                {
+                  "name": "vertical_tolerance_words",
+                  "text": "{vertical_tolerance_metres:fixed4}"
+                },
+                {
+                  "name": "volume_tolerance_words",
+                  "text": "{volume_tolerance_cubic_metres:fixed6}"
+                },
+                {
+                  "name": "clearance_words",
+                  "text": "{clearance_metres:fixed4}"
+                }
+              ],
+              "groups": {
+                "applies": {
+                  "when": [
+                    "group_by"
+                  ]
+                },
+                "key": "group",
+                "classed": [
+                  {
+                    "kind": "equals",
+                    "parameter": "group_by",
+                    "value": "similar"
+                  }
+                ],
+                "message": "{title}{on}: {parts}",
+                "part": "[{subject}] {message}",
+                "alone": " (not grouped: {why})"
+              }
+            },
+            "fail": "",
+            "undecided": ""
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "aggregate",
+              "function": "none",
+              "over": {
+                "kind": "measured",
+                "name": "clash_pairs;subjects=@selection;counterparts=@counterparts;penetration_tolerance_metres=@penetration_tolerance_metres;clearance_metres=@clearance_metres;duplicate_tolerance_metres=@duplicate_tolerance_metres;horizontal_tolerance_metres=@horizontal_tolerance_metres;vertical_tolerance_metres=@vertical_tolerance_metres;volume_tolerance_cubic_metres=@volume_tolerance_cubic_metres;report_duplicates=@report_duplicates;report_containment=@report_containment;report_intersections=@report_intersections;exclude_paths=@exclude_paths;exclude_target_property=@exclude_target_property;exclude_same_layer=@exclude_same_layer;group_by=@group_by;per_storey=@per_storey;storey_path=@storey_path;group_property=@group_property;group_tolerance_metres=@group_tolerance_metres;duplicate_quantities=@duplicate_quantities;tolerance_cases=@tolerance_cases"
+              },
+              "value": {
+                "kind": "or",
+                "operands": [
+                  {
+                    "kind": "and",
+                    "operands": [
+                      {
+                        "kind": "compare",
+                        "operator": "lessThanOrEquals",
+                        "left": {
+                          "kind": "property",
+                          "propertySet": "axioval:member",
+                          "property": "hausdorff"
+                        },
+                        "right": {
+                          "kind": "parameter",
+                          "name": "duplicate_tolerance_metres"
+                        }
+                      },
+                      {
+                        "kind": "property",
+                        "propertySet": "axioval:member",
+                        "property": "report_duplicates"
+                      }
+                    ],
+                    "label": "duplicate"
+                  },
+                  {
+                    "kind": "and",
+                    "operands": [
+                      {
+                        "kind": "property",
+                        "propertySet": "axioval:member",
+                        "property": "inside"
+                      },
+                      {
+                        "kind": "property",
+                        "propertySet": "axioval:member",
+                        "property": "report_containment"
+                      }
+                    ],
+                    "label": "containment"
+                  },
+                  {
+                    "kind": "and",
+                    "operands": [
+                      {
+                        "kind": "property",
+                        "propertySet": "axioval:member",
+                        "property": "contains"
+                      },
+                      {
+                        "kind": "property",
+                        "propertySet": "axioval:member",
+                        "property": "report_containment"
+                      }
+                    ],
+                    "label": "containment"
+                  },
+                  {
+                    "kind": "and",
+                    "operands": [
+                      {
+                        "kind": "compare",
+                        "operator": "greaterThan",
+                        "left": {
+                          "kind": "property",
+                          "propertySet": "axioval:member",
+                          "property": "penetration"
+                        },
+                        "right": {
+                          "kind": "parameter",
+                          "name": "penetration_tolerance_metres"
+                        }
+                      },
+                      {
+                        "kind": "compare",
+                        "operator": "greaterThan",
+                        "left": {
+                          "kind": "property",
+                          "propertySet": "axioval:member",
+                          "property": "horizontal"
+                        },
+                        "right": {
+                          "kind": "parameter",
+                          "name": "horizontal_tolerance_metres"
+                        }
+                      },
+                      {
+                        "kind": "compare",
+                        "operator": "greaterThan",
+                        "left": {
+                          "kind": "property",
+                          "propertySet": "axioval:member",
+                          "property": "vertical"
+                        },
+                        "right": {
+                          "kind": "parameter",
+                          "name": "vertical_tolerance_metres"
+                        }
+                      },
+                      {
+                        "kind": "compare",
+                        "operator": "greaterThan",
+                        "left": {
+                          "kind": "property",
+                          "propertySet": "axioval:member",
+                          "property": "shared_volume"
+                        },
+                        "right": {
+                          "kind": "parameter",
+                          "name": "volume_tolerance_cubic_metres"
+                        }
+                      },
+                      {
+                        "kind": "property",
+                        "propertySet": "axioval:member",
+                        "property": "report_intersections"
+                      }
+                    ],
+                    "label": "intersection"
+                  },
+                  {
+                    "kind": "and",
+                    "operands": [
+                      {
+                        "kind": "compare",
+                        "operator": "lessThan",
+                        "left": {
+                          "kind": "property",
+                          "propertySet": "axioval:member",
+                          "property": "certified"
+                        },
+                        "right": {
+                          "kind": "parameter",
+                          "name": "clearance_metres"
+                        }
+                      }
+                    ],
+                    "label": "clearance"
+                  },
+                  {
+                    "kind": "and",
+                    "operands": [
+                      {
+                        "kind": "isUndefined",
+                        "operand": {
+                          "kind": "property",
+                          "propertySet": "axioval:member",
+                          "property": "certified"
+                        }
+                      },
+                      {
+                        "kind": "compare",
+                        "operator": "lessThan",
+                        "left": {
+                          "kind": "property",
+                          "propertySet": "axioval:member",
+                          "property": "separation"
+                        },
+                        "right": {
+                          "kind": "parameter",
+                          "name": "clearance_metres"
+                        }
+                      }
+                    ],
+                    "label": "clearance"
+                  }
+                ]
+              },
+              "label": "no pair is reported"
+            },
+            "blocks": {
+              "type": "expression.aggregate",
+              "label": "no pair is reported",
+              "fields": {
+                "function": "none"
+              },
+              "inputs": {
+                "over": {
+                  "block": {
+                    "type": "source.measured",
+                    "fields": {
+                      "name": "clash_pairs;subjects=@selection;counterparts=@counterparts;penetration_tolerance_metres=@penetration_tolerance_metres;clearance_metres=@clearance_metres;duplicate_tolerance_metres=@duplicate_tolerance_metres;horizontal_tolerance_metres=@horizontal_tolerance_metres;vertical_tolerance_metres=@vertical_tolerance_metres;volume_tolerance_cubic_metres=@volume_tolerance_cubic_metres;report_duplicates=@report_duplicates;report_containment=@report_containment;report_intersections=@report_intersections;exclude_paths=@exclude_paths;exclude_target_property=@exclude_target_property;exclude_same_layer=@exclude_same_layer;group_by=@group_by;per_storey=@per_storey;storey_path=@storey_path;group_property=@group_property;group_tolerance_metres=@group_tolerance_metres;duplicate_quantities=@duplicate_quantities;tolerance_cases=@tolerance_cases"
+                    }
+                  }
+                },
+                "value": {
+                  "block": {
+                    "type": "expression.or",
+                    "inputs": {
+                      "operands": {
+                        "blocks": [
+                          {
+                            "type": "expression.and",
+                            "label": "duplicate",
+                            "inputs": {
+                              "operands": {
+                                "blocks": [
+                                  {
+                                    "type": "expression.compare",
+                                    "fields": {
+                                      "operator": "lessThanOrEquals"
+                                    },
+                                    "inputs": {
+                                      "left": {
+                                        "block": {
+                                          "type": "expression.property",
+                                          "fields": {
+                                            "property": "hausdorff",
+                                            "propertySet": "axioval:member"
+                                          }
+                                        }
+                                      },
+                                      "right": {
+                                        "block": {
+                                          "type": "expression.parameter",
+                                          "fields": {
+                                            "name": "duplicate_tolerance_metres"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  },
+                                  {
+                                    "type": "expression.property",
+                                    "fields": {
+                                      "property": "report_duplicates",
+                                      "propertySet": "axioval:member"
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          },
+                          {
+                            "type": "expression.and",
+                            "label": "containment",
+                            "inputs": {
+                              "operands": {
+                                "blocks": [
+                                  {
+                                    "type": "expression.property",
+                                    "fields": {
+                                      "property": "inside",
+                                      "propertySet": "axioval:member"
+                                    }
+                                  },
+                                  {
+                                    "type": "expression.property",
+                                    "fields": {
+                                      "property": "report_containment",
+                                      "propertySet": "axioval:member"
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          },
+                          {
+                            "type": "expression.and",
+                            "label": "containment",
+                            "inputs": {
+                              "operands": {
+                                "blocks": [
+                                  {
+                                    "type": "expression.property",
+                                    "fields": {
+                                      "property": "contains",
+                                      "propertySet": "axioval:member"
+                                    }
+                                  },
+                                  {
+                                    "type": "expression.property",
+                                    "fields": {
+                                      "property": "report_containment",
+                                      "propertySet": "axioval:member"
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          },
+                          {
+                            "type": "expression.and",
+                            "label": "intersection",
+                            "inputs": {
+                              "operands": {
+                                "blocks": [
+                                  {
+                                    "type": "expression.compare",
+                                    "fields": {
+                                      "operator": "greaterThan"
+                                    },
+                                    "inputs": {
+                                      "left": {
+                                        "block": {
+                                          "type": "expression.property",
+                                          "fields": {
+                                            "property": "penetration",
+                                            "propertySet": "axioval:member"
+                                          }
+                                        }
+                                      },
+                                      "right": {
+                                        "block": {
+                                          "type": "expression.parameter",
+                                          "fields": {
+                                            "name": "penetration_tolerance_metres"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  },
+                                  {
+                                    "type": "expression.compare",
+                                    "fields": {
+                                      "operator": "greaterThan"
+                                    },
+                                    "inputs": {
+                                      "left": {
+                                        "block": {
+                                          "type": "expression.property",
+                                          "fields": {
+                                            "property": "horizontal",
+                                            "propertySet": "axioval:member"
+                                          }
+                                        }
+                                      },
+                                      "right": {
+                                        "block": {
+                                          "type": "expression.parameter",
+                                          "fields": {
+                                            "name": "horizontal_tolerance_metres"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  },
+                                  {
+                                    "type": "expression.compare",
+                                    "fields": {
+                                      "operator": "greaterThan"
+                                    },
+                                    "inputs": {
+                                      "left": {
+                                        "block": {
+                                          "type": "expression.property",
+                                          "fields": {
+                                            "property": "vertical",
+                                            "propertySet": "axioval:member"
+                                          }
+                                        }
+                                      },
+                                      "right": {
+                                        "block": {
+                                          "type": "expression.parameter",
+                                          "fields": {
+                                            "name": "vertical_tolerance_metres"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  },
+                                  {
+                                    "type": "expression.compare",
+                                    "fields": {
+                                      "operator": "greaterThan"
+                                    },
+                                    "inputs": {
+                                      "left": {
+                                        "block": {
+                                          "type": "expression.property",
+                                          "fields": {
+                                            "property": "shared_volume",
+                                            "propertySet": "axioval:member"
+                                          }
+                                        }
+                                      },
+                                      "right": {
+                                        "block": {
+                                          "type": "expression.parameter",
+                                          "fields": {
+                                            "name": "volume_tolerance_cubic_metres"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  },
+                                  {
+                                    "type": "expression.property",
+                                    "fields": {
+                                      "property": "report_intersections",
+                                      "propertySet": "axioval:member"
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          },
+                          {
+                            "type": "expression.and",
+                            "label": "clearance",
+                            "inputs": {
+                              "operands": {
+                                "blocks": [
+                                  {
+                                    "type": "expression.compare",
+                                    "fields": {
+                                      "operator": "lessThan"
+                                    },
+                                    "inputs": {
+                                      "left": {
+                                        "block": {
+                                          "type": "expression.property",
+                                          "fields": {
+                                            "property": "certified",
+                                            "propertySet": "axioval:member"
+                                          }
+                                        }
+                                      },
+                                      "right": {
+                                        "block": {
+                                          "type": "expression.parameter",
+                                          "fields": {
+                                            "name": "clearance_metres"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          },
+                          {
+                            "type": "expression.and",
+                            "label": "clearance",
+                            "inputs": {
+                              "operands": {
+                                "blocks": [
+                                  {
+                                    "type": "expression.isUndefined",
+                                    "inputs": {
+                                      "operand": {
+                                        "block": {
+                                          "type": "expression.property",
+                                          "fields": {
+                                            "property": "certified",
+                                            "propertySet": "axioval:member"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  },
+                                  {
+                                    "type": "expression.compare",
+                                    "fields": {
+                                      "operator": "lessThan"
+                                    },
+                                    "inputs": {
+                                      "left": {
+                                        "block": {
+                                          "type": "expression.property",
+                                          "fields": {
+                                            "property": "separation",
+                                            "propertySet": "axioval:member"
+                                          }
+                                        }
+                                      },
+                                      "right": {
+                                        "block": {
+                                          "type": "expression.parameter",
+                                          "fields": {
+                                            "name": "clearance_metres"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.clash-matrix",
@@ -7486,7 +8370,917 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "clash-matrix",
+        "refusals": "objects",
+        "declaration": [
+          {
+            "kind": "arguments",
+            "when": [],
+            "value": "clash_matrix_pairs;subjects=@selection;counterparts=@counterparts;cells=@cells;key_1=@key_1;key_2=@key_2;key_3=@key_3;case_sensitive=@case_sensitive;symmetric=@symmetric;report_unmatched=@report_unmatched;exclude_same_system=@exclude_same_system;system_path=@system_path;exclude_paths=@exclude_paths;exclude_target_property=@exclude_target_property;exclude_same_layer=@exclude_same_layer;group_by=@group_by;per_storey=@per_storey;storey_path=@storey_path;group_property=@group_property;group_tolerance_metres=@group_tolerance_metres;duplicate_quantities=@duplicate_quantities;tolerance_cases=@tolerance_cases;severity_by_class=@severity_by_class;grade_by=@grade_by;severity_grades=@severity_grades"
+          }
+        ],
+        "services": {
+          "needs": [
+            "proximity"
+          ],
+          "message": "proximity service is not registered"
+        },
+        "forms": [
+          {
+            "when": [],
+            "values": [],
+            "decision": {
+              "kind": "pairs",
+              "list": "clash_matrix_pairs;subjects=@selection;counterparts=@counterparts;cells=@cells;key_1=@key_1;key_2=@key_2;key_3=@key_3;case_sensitive=@case_sensitive;symmetric=@symmetric;report_unmatched=@report_unmatched;exclude_same_system=@exclude_same_system;system_path=@system_path;exclude_paths=@exclude_paths;exclude_target_property=@exclude_target_property;exclude_same_layer=@exclude_same_layer;group_by=@group_by;per_storey=@per_storey;storey_path=@storey_path;group_property=@group_property;group_tolerance_metres=@group_tolerance_metres;duplicate_quantities=@duplicate_quantities;tolerance_cases=@tolerance_cases",
+              "selections": [
+                "counterparts"
+              ],
+              "subject": "subject",
+              "related": "counterpart",
+              "open": {
+                "message": "open",
+                "reason": "reason"
+              },
+              "classes": [
+                {
+                  "name": "unmatched",
+                  "holds": [
+                    {
+                      "kind": "truth",
+                      "field": "unmatched",
+                      "value": true
+                    }
+                  ],
+                  "fail": "no clash matrix cell covers {subject_category} against {counterpart_category}",
+                  "undecided": ""
+                },
+                {
+                  "name": "duplicate",
+                  "holds": [
+                    {
+                      "kind": "compare",
+                      "value": "hausdorff",
+                      "order": "atMost",
+                      "bound": {
+                        "kind": "operand",
+                        "value": {
+                          "kind": "value",
+                          "name": "duplicate_tolerance"
+                        }
+                      }
+                    }
+                  ],
+                  "reported": "report_duplicates",
+                  "fail": "duplicate of {counterpart}: the surfaces lie within {hausdorff:upper4} m of each other, tolerance {duplicate_tolerance_words} m{note}{copies}",
+                  "undecided": "whether {counterpart} is a duplicate cannot be decided: the surfaces lie between {hausdorff:lower4} m and {upper} of each other, tolerance {duplicate_tolerance_words} m{note}"
+                },
+                {
+                  "name": "containment",
+                  "holds": [
+                    {
+                      "kind": "truth",
+                      "field": "inside",
+                      "value": true
+                    }
+                  ],
+                  "reported": "report_containment",
+                  "fail": "lies wholly inside {counterpart}{note}",
+                  "undecided": ""
+                },
+                {
+                  "name": "containment",
+                  "holds": [
+                    {
+                      "kind": "truth",
+                      "field": "contains",
+                      "value": true
+                    }
+                  ],
+                  "reported": "report_containment",
+                  "fail": "wholly contains {counterpart}{note}",
+                  "undecided": ""
+                },
+                {
+                  "name": "intersection",
+                  "holds": [
+                    {
+                      "kind": "compare",
+                      "value": "penetration",
+                      "order": "above",
+                      "bound": {
+                        "kind": "operand",
+                        "value": {
+                          "kind": "value",
+                          "name": "penetration_tolerance"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "compare",
+                      "value": "horizontal",
+                      "order": "above",
+                      "bound": {
+                        "kind": "operand",
+                        "value": {
+                          "kind": "value",
+                          "name": "horizontal_tolerance"
+                        }
+                      },
+                      "zero": true
+                    },
+                    {
+                      "kind": "compare",
+                      "value": "vertical",
+                      "order": "above",
+                      "bound": {
+                        "kind": "operand",
+                        "value": {
+                          "kind": "value",
+                          "name": "vertical_tolerance"
+                        }
+                      },
+                      "zero": true
+                    },
+                    {
+                      "kind": "compare",
+                      "value": "shared_volume",
+                      "order": "above",
+                      "bound": {
+                        "kind": "operand",
+                        "value": {
+                          "kind": "value",
+                          "name": "volume_tolerance"
+                        }
+                      },
+                      "zero": true
+                    }
+                  ],
+                  "excused": {
+                    "kind": "truth",
+                    "field": "excused",
+                    "value": true
+                  },
+                  "reported": "report_intersections",
+                  "fail": "hard clash with {counterpart}: penetration {penetration:fixed4} m exceeds tolerance {penetration_tolerance_words} m{reach}{note}",
+                  "undecided": "whether the intersection with {counterpart} exceeds the horizontal tolerance {horizontal_tolerance_words} m, the vertical tolerance {vertical_tolerance_words} m and the volume tolerance {volume_tolerance_words} m³{excuse} cannot be decided{reach}{note}"
+                },
+                {
+                  "name": "meeting",
+                  "holds": [
+                    {
+                      "kind": "stated",
+                      "field": "penetration",
+                      "stated": false
+                    },
+                    {
+                      "kind": "compare",
+                      "value": "separation",
+                      "order": "atMost",
+                      "bound": {
+                        "kind": "literal",
+                        "value": 0.0
+                      }
+                    }
+                  ],
+                  "opens": true,
+                  "fail": "surfaces meet {counterpart}, but neither body is a closed solid, so touching cannot be told from crossing",
+                  "undecided": ""
+                },
+                {
+                  "name": "clearance",
+                  "holds": [
+                    {
+                      "kind": "compare",
+                      "value": "certified",
+                      "order": "below",
+                      "bound": {
+                        "kind": "operand",
+                        "value": {
+                          "kind": "value",
+                          "name": "clearance"
+                        }
+                      }
+                    }
+                  ],
+                  "fail": "clearance clash with {counterpart}: separation certified within [{certified:lower6}, {certified:upper6}] m, below required {clearance_words} m{note}",
+                  "undecided": "whether {counterpart} keeps the clearance {clearance_words} m cannot be decided: separation certified within [{certified:lower6}, {certified:upper6}] m{note}"
+                },
+                {
+                  "name": "clearance",
+                  "holds": [
+                    {
+                      "kind": "stated",
+                      "field": "certified",
+                      "stated": false
+                    },
+                    {
+                      "kind": "compare",
+                      "value": "separation",
+                      "order": "below",
+                      "bound": {
+                        "kind": "operand",
+                        "value": {
+                          "kind": "value",
+                          "name": "clearance"
+                        }
+                      }
+                    }
+                  ],
+                  "fail": "clearance clash with {counterpart}: separation {separation:fixed4} m below required {clearance_words} m{note}",
+                  "undecided": ""
+                }
+              ],
+              "unless": {
+                "message": "excluded",
+                "reason": "excluded_reason"
+              },
+              "severity": {
+                "stated": "severity",
+                "byClass": {
+                  "table": "severity_by_class",
+                  "class": "class",
+                  "severity": "severity"
+                },
+                "grades": {
+                  "class": "intersection",
+                  "by": "grade_by",
+                  "measures": [
+                    {
+                      "option": "smallest_extent",
+                      "field": "smallest_extent",
+                      "words": "smallest extent",
+                      "digits": 4,
+                      "unit": "m"
+                    },
+                    {
+                      "option": "volume",
+                      "field": "shared_volume",
+                      "words": "shared volume",
+                      "digits": 6,
+                      "unit": "m³"
+                    }
+                  ],
+                  "table": "severity_grades",
+                  "above": "above",
+                  "severity": "severity",
+                  "graded": ", graded {severity} by its {measure} of {value}",
+                  "reaches": ", graded {severity}: the most severe grade its {measure} of {value} may reach",
+                  "unmeasured": ", graded {severity}: its {measure} is unmeasured, so the most severe grade it may reach"
+                }
+              },
+              "suffix": "{cell}",
+              "texts": [
+                {
+                  "name": "excuse",
+                  "when": [
+                    {
+                      "kind": "field",
+                      "field": "report_intersections",
+                      "value": false
+                    }
+                  ],
+                  "text": ""
+                },
+                {
+                  "name": "excuse",
+                  "text": "{case}"
+                },
+                {
+                  "name": "title",
+                  "when": [
+                    {
+                      "kind": "equals",
+                      "parameter": "group_by",
+                      "value": "similar"
+                    }
+                  ],
+                  "text": "{count} similar {class} clashes of {sides}"
+                },
+                {
+                  "name": "title",
+                  "when": [
+                    {
+                      "kind": "equals",
+                      "parameter": "group_by",
+                      "value": "type_pair"
+                    }
+                  ],
+                  "text": "{count} clashes of {sides}"
+                },
+                {
+                  "name": "title",
+                  "text": "{count} clashes"
+                },
+                {
+                  "name": "upper",
+                  "when": [
+                    {
+                      "kind": "stated",
+                      "field": "hausdorff_upper"
+                    }
+                  ],
+                  "text": "{hausdorff_upper}"
+                },
+                {
+                  "name": "upper",
+                  "text": "{hausdorff:upper4} m"
+                },
+                {
+                  "name": "penetration_tolerance_words",
+                  "text": "{penetration_tolerance:fixed4}"
+                },
+                {
+                  "name": "duplicate_tolerance_words",
+                  "text": "{duplicate_tolerance:fixed4}"
+                },
+                {
+                  "name": "horizontal_tolerance_words",
+                  "text": "{horizontal_tolerance:fixed4}"
+                },
+                {
+                  "name": "vertical_tolerance_words",
+                  "text": "{vertical_tolerance:fixed4}"
+                },
+                {
+                  "name": "volume_tolerance_words",
+                  "text": "{volume_tolerance:fixed6}"
+                },
+                {
+                  "name": "clearance_words",
+                  "text": "{clearance:fixed4}"
+                }
+              ],
+              "groups": {
+                "applies": {
+                  "when": [
+                    "group_by"
+                  ]
+                },
+                "key": "group",
+                "classed": [
+                  {
+                    "kind": "equals",
+                    "parameter": "group_by",
+                    "value": "similar"
+                  }
+                ],
+                "message": "{title}{on}: {parts}",
+                "part": "[{subject}] {message}",
+                "alone": " (not grouped: {why})"
+              }
+            },
+            "fail": "",
+            "undecided": ""
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "aggregate",
+              "function": "none",
+              "over": {
+                "kind": "measured",
+                "name": "clash_matrix_pairs;subjects=@selection;counterparts=@counterparts;cells=@cells;key_1=@key_1;key_2=@key_2;key_3=@key_3;case_sensitive=@case_sensitive;symmetric=@symmetric;report_unmatched=@report_unmatched;exclude_same_system=@exclude_same_system;system_path=@system_path;exclude_paths=@exclude_paths;exclude_target_property=@exclude_target_property;exclude_same_layer=@exclude_same_layer;group_by=@group_by;per_storey=@per_storey;storey_path=@storey_path;group_property=@group_property;group_tolerance_metres=@group_tolerance_metres;duplicate_quantities=@duplicate_quantities;tolerance_cases=@tolerance_cases"
+              },
+              "value": {
+                "kind": "or",
+                "operands": [
+                  {
+                    "kind": "and",
+                    "operands": [
+                      {
+                        "kind": "property",
+                        "propertySet": "axioval:member",
+                        "property": "unmatched"
+                      }
+                    ],
+                    "label": "unmatched"
+                  },
+                  {
+                    "kind": "and",
+                    "operands": [
+                      {
+                        "kind": "compare",
+                        "operator": "lessThanOrEquals",
+                        "left": {
+                          "kind": "property",
+                          "propertySet": "axioval:member",
+                          "property": "hausdorff"
+                        },
+                        "right": {
+                          "kind": "property",
+                          "propertySet": "axioval:member",
+                          "property": "duplicate_tolerance"
+                        }
+                      },
+                      {
+                        "kind": "property",
+                        "propertySet": "axioval:member",
+                        "property": "report_duplicates"
+                      }
+                    ],
+                    "label": "duplicate"
+                  },
+                  {
+                    "kind": "and",
+                    "operands": [
+                      {
+                        "kind": "property",
+                        "propertySet": "axioval:member",
+                        "property": "inside"
+                      },
+                      {
+                        "kind": "property",
+                        "propertySet": "axioval:member",
+                        "property": "report_containment"
+                      }
+                    ],
+                    "label": "containment"
+                  },
+                  {
+                    "kind": "and",
+                    "operands": [
+                      {
+                        "kind": "property",
+                        "propertySet": "axioval:member",
+                        "property": "contains"
+                      },
+                      {
+                        "kind": "property",
+                        "propertySet": "axioval:member",
+                        "property": "report_containment"
+                      }
+                    ],
+                    "label": "containment"
+                  },
+                  {
+                    "kind": "and",
+                    "operands": [
+                      {
+                        "kind": "compare",
+                        "operator": "greaterThan",
+                        "left": {
+                          "kind": "property",
+                          "propertySet": "axioval:member",
+                          "property": "penetration"
+                        },
+                        "right": {
+                          "kind": "property",
+                          "propertySet": "axioval:member",
+                          "property": "penetration_tolerance"
+                        }
+                      },
+                      {
+                        "kind": "compare",
+                        "operator": "greaterThan",
+                        "left": {
+                          "kind": "property",
+                          "propertySet": "axioval:member",
+                          "property": "horizontal"
+                        },
+                        "right": {
+                          "kind": "property",
+                          "propertySet": "axioval:member",
+                          "property": "horizontal_tolerance"
+                        }
+                      },
+                      {
+                        "kind": "compare",
+                        "operator": "greaterThan",
+                        "left": {
+                          "kind": "property",
+                          "propertySet": "axioval:member",
+                          "property": "vertical"
+                        },
+                        "right": {
+                          "kind": "property",
+                          "propertySet": "axioval:member",
+                          "property": "vertical_tolerance"
+                        }
+                      },
+                      {
+                        "kind": "compare",
+                        "operator": "greaterThan",
+                        "left": {
+                          "kind": "property",
+                          "propertySet": "axioval:member",
+                          "property": "shared_volume"
+                        },
+                        "right": {
+                          "kind": "property",
+                          "propertySet": "axioval:member",
+                          "property": "volume_tolerance"
+                        }
+                      },
+                      {
+                        "kind": "property",
+                        "propertySet": "axioval:member",
+                        "property": "report_intersections"
+                      }
+                    ],
+                    "label": "intersection"
+                  },
+                  {
+                    "kind": "and",
+                    "operands": [
+                      {
+                        "kind": "compare",
+                        "operator": "lessThan",
+                        "left": {
+                          "kind": "property",
+                          "propertySet": "axioval:member",
+                          "property": "certified"
+                        },
+                        "right": {
+                          "kind": "property",
+                          "propertySet": "axioval:member",
+                          "property": "clearance"
+                        }
+                      }
+                    ],
+                    "label": "clearance"
+                  },
+                  {
+                    "kind": "and",
+                    "operands": [
+                      {
+                        "kind": "isUndefined",
+                        "operand": {
+                          "kind": "property",
+                          "propertySet": "axioval:member",
+                          "property": "certified"
+                        }
+                      },
+                      {
+                        "kind": "compare",
+                        "operator": "lessThan",
+                        "left": {
+                          "kind": "property",
+                          "propertySet": "axioval:member",
+                          "property": "separation"
+                        },
+                        "right": {
+                          "kind": "property",
+                          "propertySet": "axioval:member",
+                          "property": "clearance"
+                        }
+                      }
+                    ],
+                    "label": "clearance"
+                  }
+                ]
+              },
+              "label": "no pair is reported"
+            },
+            "blocks": {
+              "type": "expression.aggregate",
+              "label": "no pair is reported",
+              "fields": {
+                "function": "none"
+              },
+              "inputs": {
+                "over": {
+                  "block": {
+                    "type": "source.measured",
+                    "fields": {
+                      "name": "clash_matrix_pairs;subjects=@selection;counterparts=@counterparts;cells=@cells;key_1=@key_1;key_2=@key_2;key_3=@key_3;case_sensitive=@case_sensitive;symmetric=@symmetric;report_unmatched=@report_unmatched;exclude_same_system=@exclude_same_system;system_path=@system_path;exclude_paths=@exclude_paths;exclude_target_property=@exclude_target_property;exclude_same_layer=@exclude_same_layer;group_by=@group_by;per_storey=@per_storey;storey_path=@storey_path;group_property=@group_property;group_tolerance_metres=@group_tolerance_metres;duplicate_quantities=@duplicate_quantities;tolerance_cases=@tolerance_cases"
+                    }
+                  }
+                },
+                "value": {
+                  "block": {
+                    "type": "expression.or",
+                    "inputs": {
+                      "operands": {
+                        "blocks": [
+                          {
+                            "type": "expression.and",
+                            "label": "unmatched",
+                            "inputs": {
+                              "operands": {
+                                "blocks": [
+                                  {
+                                    "type": "expression.property",
+                                    "fields": {
+                                      "property": "unmatched",
+                                      "propertySet": "axioval:member"
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          },
+                          {
+                            "type": "expression.and",
+                            "label": "duplicate",
+                            "inputs": {
+                              "operands": {
+                                "blocks": [
+                                  {
+                                    "type": "expression.compare",
+                                    "fields": {
+                                      "operator": "lessThanOrEquals"
+                                    },
+                                    "inputs": {
+                                      "left": {
+                                        "block": {
+                                          "type": "expression.property",
+                                          "fields": {
+                                            "property": "hausdorff",
+                                            "propertySet": "axioval:member"
+                                          }
+                                        }
+                                      },
+                                      "right": {
+                                        "block": {
+                                          "type": "expression.property",
+                                          "fields": {
+                                            "property": "duplicate_tolerance",
+                                            "propertySet": "axioval:member"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  },
+                                  {
+                                    "type": "expression.property",
+                                    "fields": {
+                                      "property": "report_duplicates",
+                                      "propertySet": "axioval:member"
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          },
+                          {
+                            "type": "expression.and",
+                            "label": "containment",
+                            "inputs": {
+                              "operands": {
+                                "blocks": [
+                                  {
+                                    "type": "expression.property",
+                                    "fields": {
+                                      "property": "inside",
+                                      "propertySet": "axioval:member"
+                                    }
+                                  },
+                                  {
+                                    "type": "expression.property",
+                                    "fields": {
+                                      "property": "report_containment",
+                                      "propertySet": "axioval:member"
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          },
+                          {
+                            "type": "expression.and",
+                            "label": "containment",
+                            "inputs": {
+                              "operands": {
+                                "blocks": [
+                                  {
+                                    "type": "expression.property",
+                                    "fields": {
+                                      "property": "contains",
+                                      "propertySet": "axioval:member"
+                                    }
+                                  },
+                                  {
+                                    "type": "expression.property",
+                                    "fields": {
+                                      "property": "report_containment",
+                                      "propertySet": "axioval:member"
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          },
+                          {
+                            "type": "expression.and",
+                            "label": "intersection",
+                            "inputs": {
+                              "operands": {
+                                "blocks": [
+                                  {
+                                    "type": "expression.compare",
+                                    "fields": {
+                                      "operator": "greaterThan"
+                                    },
+                                    "inputs": {
+                                      "left": {
+                                        "block": {
+                                          "type": "expression.property",
+                                          "fields": {
+                                            "property": "penetration",
+                                            "propertySet": "axioval:member"
+                                          }
+                                        }
+                                      },
+                                      "right": {
+                                        "block": {
+                                          "type": "expression.property",
+                                          "fields": {
+                                            "property": "penetration_tolerance",
+                                            "propertySet": "axioval:member"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  },
+                                  {
+                                    "type": "expression.compare",
+                                    "fields": {
+                                      "operator": "greaterThan"
+                                    },
+                                    "inputs": {
+                                      "left": {
+                                        "block": {
+                                          "type": "expression.property",
+                                          "fields": {
+                                            "property": "horizontal",
+                                            "propertySet": "axioval:member"
+                                          }
+                                        }
+                                      },
+                                      "right": {
+                                        "block": {
+                                          "type": "expression.property",
+                                          "fields": {
+                                            "property": "horizontal_tolerance",
+                                            "propertySet": "axioval:member"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  },
+                                  {
+                                    "type": "expression.compare",
+                                    "fields": {
+                                      "operator": "greaterThan"
+                                    },
+                                    "inputs": {
+                                      "left": {
+                                        "block": {
+                                          "type": "expression.property",
+                                          "fields": {
+                                            "property": "vertical",
+                                            "propertySet": "axioval:member"
+                                          }
+                                        }
+                                      },
+                                      "right": {
+                                        "block": {
+                                          "type": "expression.property",
+                                          "fields": {
+                                            "property": "vertical_tolerance",
+                                            "propertySet": "axioval:member"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  },
+                                  {
+                                    "type": "expression.compare",
+                                    "fields": {
+                                      "operator": "greaterThan"
+                                    },
+                                    "inputs": {
+                                      "left": {
+                                        "block": {
+                                          "type": "expression.property",
+                                          "fields": {
+                                            "property": "shared_volume",
+                                            "propertySet": "axioval:member"
+                                          }
+                                        }
+                                      },
+                                      "right": {
+                                        "block": {
+                                          "type": "expression.property",
+                                          "fields": {
+                                            "property": "volume_tolerance",
+                                            "propertySet": "axioval:member"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  },
+                                  {
+                                    "type": "expression.property",
+                                    "fields": {
+                                      "property": "report_intersections",
+                                      "propertySet": "axioval:member"
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          },
+                          {
+                            "type": "expression.and",
+                            "label": "clearance",
+                            "inputs": {
+                              "operands": {
+                                "blocks": [
+                                  {
+                                    "type": "expression.compare",
+                                    "fields": {
+                                      "operator": "lessThan"
+                                    },
+                                    "inputs": {
+                                      "left": {
+                                        "block": {
+                                          "type": "expression.property",
+                                          "fields": {
+                                            "property": "certified",
+                                            "propertySet": "axioval:member"
+                                          }
+                                        }
+                                      },
+                                      "right": {
+                                        "block": {
+                                          "type": "expression.property",
+                                          "fields": {
+                                            "property": "clearance",
+                                            "propertySet": "axioval:member"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          },
+                          {
+                            "type": "expression.and",
+                            "label": "clearance",
+                            "inputs": {
+                              "operands": {
+                                "blocks": [
+                                  {
+                                    "type": "expression.isUndefined",
+                                    "inputs": {
+                                      "operand": {
+                                        "block": {
+                                          "type": "expression.property",
+                                          "fields": {
+                                            "property": "certified",
+                                            "propertySet": "axioval:member"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  },
+                                  {
+                                    "type": "expression.compare",
+                                    "fields": {
+                                      "operator": "lessThan"
+                                    },
+                                    "inputs": {
+                                      "left": {
+                                        "block": {
+                                          "type": "expression.property",
+                                          "fields": {
+                                            "property": "separation",
+                                            "propertySet": "axioval:member"
+                                          }
+                                        }
+                                      },
+                                      "right": {
+                                        "block": {
+                                          "type": "expression.property",
+                                          "fields": {
+                                            "property": "clearance",
+                                            "propertySet": "axioval:member"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.classification",
@@ -78398,6 +80192,2903 @@
             {
               "language": "de",
               "text": "Die nächste Wand, die sicher neben der Seite liegt, falls eine."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
+      "name": "clash_matrix_pairs",
+      "parameters": [
+        {
+          "key": "counterparts",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects they are checked against, named as `subjects` are."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, gegen die sie geprüft werden, benannt wie bei `subjects`."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "subjects",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects checked: their source kinds, or `@` a selector parameter of the rule (`@selection`, in a template, the rule's own selection); only those surely picked form pairs."
+            },
+            {
+              "language": "de",
+              "text": "Die geprüften Objekte: ihre Quellarten oder mit `@` ein Selektorparameter der Regel (`@selection`, in einer Vorlage, die eigene Auswahl der Regel); nur sicher getroffene bilden Paare."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "cells",
+          "kind": {
+            "type": "table"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The matrix's cells, as the rule states them: each keys both sides of a pair and states its tolerances and severity."
+            },
+            {
+              "language": "de",
+              "text": "Die Zellen der Matrix, wie die Regel sie angibt: jede verschlüsselt beide Seiten eines Paars und gibt seine Toleranzen und seinen Schweregrad an."
+            }
+          ],
+          "references": "table"
+        },
+        {
+          "key": "key_1",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The property a cell's first key patterns test."
+            },
+            {
+              "language": "de",
+              "text": "Die Eigenschaft, die die ersten Schlüsselmuster einer Zelle prüfen."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "key_2",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The property a cell's second key patterns test."
+            },
+            {
+              "language": "de",
+              "text": "Die Eigenschaft, die die zweiten Schlüsselmuster einer Zelle prüfen."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "key_3",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The property a cell's third key patterns test."
+            },
+            {
+              "language": "de",
+              "text": "Die Eigenschaft, die die dritten Schlüsselmuster einer Zelle prüfen."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "case_sensitive",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the cells' patterns match case-sensitively; true without it."
+            },
+            {
+              "language": "de",
+              "text": "Ob die Muster der Zellen Groß- und Kleinschreibung beachten; ohne Angabe wahr."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "symmetric",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether a cell covers a pair either way round; true without it."
+            },
+            {
+              "language": "de",
+              "text": "Ob eine Zelle ein Paar in beiden Richtungen abdeckt; ohne Angabe wahr."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "report_unmatched",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether a pair no cell covers is listed (`unmatched`); false without it."
+            },
+            {
+              "language": "de",
+              "text": "Ob ein Paar ohne Zelle aufgeführt wird (`unmatched`); ohne Angabe falsch."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "exclude_same_system",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether pairs reaching a common system along `system_path` are left out; true without it."
+            },
+            {
+              "language": "de",
+              "text": "Ob Paare, die entlang `system_path` ein gemeinsames System erreichen, außen vor bleiben; ohne Angabe wahr."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "system_path",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship path from an object to its system, its steps separated by spaces."
+            },
+            {
+              "language": "de",
+              "text": "Der Beziehungspfad von einem Objekt zu seinem System, die Schritte durch Leerzeichen getrennt."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "exclude_paths",
+          "kind": {
+            "type": "paths"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Relationship paths: a pair whose objects reach a common target along one, or one the other, is left out."
+            },
+            {
+              "language": "de",
+              "text": "Beziehungspfade: ein Paar, dessen Objekte entlang eines davon ein gemeinsames Ziel oder einander erreichen, bleibt außen vor."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "exclude_target_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Targets reached along an exclusion path stating the same value of this property leave the pair out as well."
+            },
+            {
+              "language": "de",
+              "text": "Entlang eines Ausschlusspfads erreichte Ziele mit demselben Wert dieser Eigenschaft lassen das Paar ebenfalls außen vor."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "exclude_same_layer",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether a pair on a shared presentation layer of one source is left out."
+            },
+            {
+              "language": "de",
+              "text": "Ob ein Paar auf einer gemeinsamen Darstellungsebene einer Quelle außen vor bleibt."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "group_by",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "type_pair",
+              "subject",
+              "similar"
+            ]
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "How reported pairs are keyed into groups (`group`): by the pair of types, by subject, or as similar pairs whose extents round alike."
+            },
+            {
+              "language": "de",
+              "text": "Wie gemeldete Paare zu Gruppen verschlüsselt werden (`group`): nach dem Typpaar, nach Subjekt oder als ähnliche Paare mit gleich gerundeten Ausdehnungen."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "per_storey",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the storeys the pair reaches along `storey_path` are part of its key."
+            },
+            {
+              "language": "de",
+              "text": "Ob die Geschosse, die das Paar über `storey_path` erreicht, zu seinem Schlüssel gehören."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "storey_path",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship path from an object to its storey, its steps separated by spaces."
+            },
+            {
+              "language": "de",
+              "text": "Der Beziehungspfad von einem Objekt zu seinem Geschoss, die Schritte durch Leerzeichen getrennt."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "group_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "A property whose values similar pairs must share."
+            },
+            {
+              "language": "de",
+              "text": "Eine Eigenschaft, deren Werte ähnliche Paare teilen müssen."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "group_tolerance_metres",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rounding step of similar pairs' extents, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Der Rundungsschritt der Ausdehnungen ähnlicher Paare, in Metern."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "severity_by_class",
+          "kind": {
+            "type": "table"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The severity per class, as the rule states it: read by the template's grading, checked with the pairs."
+            },
+            {
+              "language": "de",
+              "text": "Der Schweregrad je Klasse, wie die Regel ihn angibt: von der Einstufung der Vorlage gelesen, mit den Paaren geprüft."
+            }
+          ],
+          "references": "table"
+        },
+        {
+          "key": "grade_by",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "smallest_extent",
+              "volume"
+            ]
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "What intersections are graded by: read by the template's grading, checked with the pairs."
+            },
+            {
+              "language": "de",
+              "text": "Wonach Durchdringungen eingestuft werden: von der Einstufung der Vorlage gelesen, mit den Paaren geprüft."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "severity_grades",
+          "kind": {
+            "type": "table"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The grades of intersections: read by the template's grading, checked with the pairs."
+            },
+            {
+              "language": "de",
+              "text": "Die Stufen der Durchdringungen: von der Einstufung der Vorlage gelesen, mit den Paaren geprüft."
+            }
+          ],
+          "references": "table"
+        },
+        {
+          "key": "duplicate_quantities",
+          "kind": {
+            "type": "table"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The properties duplicates are compared by (`copies`)."
+            },
+            {
+              "language": "de",
+              "text": "Die Eigenschaften, nach denen Duplikate verglichen werden (`copies`)."
+            }
+          ],
+          "references": "table"
+        },
+        {
+          "key": "tolerance_cases",
+          "kind": {
+            "type": "table"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Tolerances along the elements' own axes that may excuse an intersection (`excused`)."
+            },
+            {
+              "language": "de",
+              "text": "Toleranzen entlang der eigenen Achsen der Elemente, die eine Durchdringung entschuldigen können (`excused`)."
+            }
+          ],
+          "references": "table"
+        }
+      ],
+      "services": [
+        "proximity",
+        "object-frame",
+        "property-resolution",
+        "relationship-selection",
+        "source-disciplines"
+      ],
+      "exactness": "measured",
+      "subject": "project",
+      "notEvaluated": [
+        "the declaration is not realisable (a target property without an exclusion path)",
+        "the broad phase refuses the objects' extents"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Clash matrix pairs"
+        },
+        {
+          "language": "de",
+          "text": "Paare der Kollisionsmatrix"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The candidate pairs of the subjects and their counterparts, as `clash-matrix` measures them: each pair a cell covers, measured once beside that cell's tolerances, each pair no cell covers where `report_unmatched` lists it, and every object or pair that cannot be measured or whose cell cannot be chosen, open with why."
+        },
+        {
+          "language": "de",
+          "text": "Die Kandidatenpaare der Subjekte und ihrer Gegenstücke, wie `clash-matrix` sie misst: jedes von einer Zelle abgedeckte Paar, einmal neben den Toleranzen dieser Zelle gemessen, jedes Paar ohne Zelle, wo `report_unmatched` es aufführt, und jedes Objekt oder Paar, das nicht messbar ist oder dessen Zelle nicht wählbar ist, offen mit Grund."
+        }
+      ],
+      "fields": [
+        {
+          "name": "subject",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Subject"
+            },
+            {
+              "language": "de",
+              "text": "Subjekt"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The selected object of the pair, or the object an open item is about."
+            },
+            {
+              "language": "de",
+              "text": "Das ausgewählte Objekt des Paars oder das Objekt eines offenen Eintrags."
+            }
+          ]
+        },
+        {
+          "name": "counterpart",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Counterpart"
+            },
+            {
+              "language": "de",
+              "text": "Gegenstück"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The counterpart of the pair; none for an open item about one object."
+            },
+            {
+              "language": "de",
+              "text": "Das Gegenstück des Paars; keines bei einem offenen Eintrag zu einem Objekt."
+            }
+          ]
+        },
+        {
+          "name": "open",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Open"
+            },
+            {
+              "language": "de",
+              "text": "Offen"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Why the item is no pair to judge (a body that cannot be measured, a selection or cell that cannot be decided); empty for a pair."
+            },
+            {
+              "language": "de",
+              "text": "Warum der Eintrag kein zu beurteilendes Paar ist (ein nicht messbarer Körper, eine nicht entscheidbare Auswahl oder Zelle); leer bei einem Paar."
+            }
+          ]
+        },
+        {
+          "name": "reason",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Reason"
+            },
+            {
+              "language": "de",
+              "text": "Grund"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The not-evaluated reason of an open item, as reports spell it."
+            },
+            {
+              "language": "de",
+              "text": "Der Grund eines offenen Eintrags, wie Berichte ihn schreiben."
+            }
+          ]
+        },
+        {
+          "name": "excluded",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "May be excluded"
+            },
+            {
+              "language": "de",
+              "text": "Möglicherweise ausgeschlossen"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Why the pair may or may not be excluded, where an exclusion cannot be decided; empty where it is surely not excluded. A surely excluded pair is not listed."
+            },
+            {
+              "language": "de",
+              "text": "Warum das Paar ausgeschlossen sein kann, wo ein Ausschluss nicht entscheidbar ist; leer, wo es sicher nicht ausgeschlossen ist. Ein sicher ausgeschlossenes Paar wird nicht aufgeführt."
+            }
+          ]
+        },
+        {
+          "name": "excluded_reason",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Exclusion reason"
+            },
+            {
+              "language": "de",
+              "text": "Ausschlussgrund"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The not-evaluated reason of an undecided exclusion, as reports spell it."
+            },
+            {
+              "language": "de",
+              "text": "Der Grund eines nicht entscheidbaren Ausschlusses, wie Berichte ihn schreiben."
+            }
+          ]
+        },
+        {
+          "name": "separation",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Separation"
+            },
+            {
+              "language": "de",
+              "text": "Abstand"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The separation the proximity service measured, in metres; zero where the bodies meet or overlap."
+            },
+            {
+              "language": "de",
+              "text": "Der vom Näheservice gemessene Abstand in Metern; null, wo sich die Körper berühren oder überlappen."
+            }
+          ]
+        },
+        {
+          "name": "certified",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Certified separation"
+            },
+            {
+              "language": "de",
+              "text": "Zertifizierter Abstand"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The separation certified on exact boundaries, an interval; none where not certified."
+            },
+            {
+              "language": "de",
+              "text": "Der auf exakten Rändern zertifizierte Abstand, ein Intervall; keiner, wo nicht zertifiziert."
+            }
+          ]
+        },
+        {
+          "name": "penetration",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Penetration"
+            },
+            {
+              "language": "de",
+              "text": "Eindringtiefe"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "How deep one body surely reaches into the other; none where neither is a closed solid."
+            },
+            {
+              "language": "de",
+              "text": "Wie tief ein Körper sicher in den anderen reicht; keine, wo keiner ein geschlossener Volumenkörper ist."
+            }
+          ]
+        },
+        {
+          "name": "inside",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Inside"
+            },
+            {
+              "language": "de",
+              "text": "Innen"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the subject lies wholly inside the counterpart."
+            },
+            {
+              "language": "de",
+              "text": "Ob das Subjekt ganz im Gegenstück liegt."
+            }
+          ]
+        },
+        {
+          "name": "contains",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Contains"
+            },
+            {
+              "language": "de",
+              "text": "Enthält"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the subject wholly contains the counterpart."
+            },
+            {
+              "language": "de",
+              "text": "Ob das Subjekt das Gegenstück ganz enthält."
+            }
+          ]
+        },
+        {
+          "name": "hausdorff",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Surface distance"
+            },
+            {
+              "language": "de",
+              "text": "Flächenabstand"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The Hausdorff distance between the surfaces, at least the separation; without an upper end where not measured."
+            },
+            {
+              "language": "de",
+              "text": "Der Hausdorff-Abstand der Oberflächen, mindestens der Abstand; ohne oberes Ende, wo nicht gemessen."
+            }
+          ]
+        },
+        {
+          "name": "hausdorff_upper",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Surface distance, upper"
+            },
+            {
+              "language": "de",
+              "text": "Flächenabstand, oben"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The Hausdorff distance's upper end in words (`0.0100 m`, or `an unmeasured distance`)."
+            },
+            {
+              "language": "de",
+              "text": "Das obere Ende des Hausdorff-Abstands in Worten (`0.0100 m` oder `an unmeasured distance`)."
+            }
+          ]
+        },
+        {
+          "name": "horizontal",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Extent in plan"
+            },
+            {
+              "language": "de",
+              "text": "Ausdehnung im Grundriss"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The intersection's lesser extent along the plan axes; undecided where not measured."
+            },
+            {
+              "language": "de",
+              "text": "Die kleinere Ausdehnung der Durchdringung entlang der Grundrissachsen; unentschieden, wo nicht gemessen."
+            }
+          ]
+        },
+        {
+          "name": "vertical",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Extent in height"
+            },
+            {
+              "language": "de",
+              "text": "Ausdehnung in der Höhe"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The intersection's extent in height; undecided where not measured."
+            },
+            {
+              "language": "de",
+              "text": "Die Ausdehnung der Durchdringung in der Höhe; unentschieden, wo nicht gemessen."
+            }
+          ]
+        },
+        {
+          "name": "smallest_extent",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Smallest extent"
+            },
+            {
+              "language": "de",
+              "text": "Kleinste Ausdehnung"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The intersection's least extent along x, y and z; undecided where not measured."
+            },
+            {
+              "language": "de",
+              "text": "Die kleinste Ausdehnung der Durchdringung entlang x, y und z; unentschieden, wo nicht gemessen."
+            }
+          ]
+        },
+        {
+          "name": "shared_volume",
+          "kind": {
+            "type": "number",
+            "dimension": "volume"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Shared volume"
+            },
+            {
+              "language": "de",
+              "text": "Gemeinsames Volumen"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The certified volume the bodies share; undecided where not measured."
+            },
+            {
+              "language": "de",
+              "text": "Das zertifizierte gemeinsame Volumen der Körper; unentschieden, wo nicht gemessen."
+            }
+          ]
+        },
+        {
+          "name": "penetration_tolerance",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Penetration tolerance"
+            },
+            {
+              "language": "de",
+              "text": "Eindringtoleranz"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The penetration the pair is allowed: the rule's, or its cell's."
+            },
+            {
+              "language": "de",
+              "text": "Die dem Paar erlaubte Eindringtiefe: die der Regel oder seiner Zelle."
+            }
+          ]
+        },
+        {
+          "name": "clearance",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Clearance"
+            },
+            {
+              "language": "de",
+              "text": "Freiraum"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The clearance the pair must keep; none where none is declared."
+            },
+            {
+              "language": "de",
+              "text": "Der einzuhaltende Freiraum; keiner, wo keiner angegeben ist."
+            }
+          ]
+        },
+        {
+          "name": "duplicate_tolerance",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Duplicate tolerance"
+            },
+            {
+              "language": "de",
+              "text": "Duplikattoleranz"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "How far apart duplicate surfaces may lie; zero unless declared."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit Oberflächen von Duplikaten auseinanderliegen dürfen; null ohne Angabe."
+            }
+          ]
+        },
+        {
+          "name": "horizontal_tolerance",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Plan tolerance"
+            },
+            {
+              "language": "de",
+              "text": "Grundrisstoleranz"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The extent in plan an intersection must exceed; zero unless declared."
+            },
+            {
+              "language": "de",
+              "text": "Die Ausdehnung im Grundriss, die eine Durchdringung überschreiten muss; null ohne Angabe."
+            }
+          ]
+        },
+        {
+          "name": "vertical_tolerance",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Height tolerance"
+            },
+            {
+              "language": "de",
+              "text": "Höhentoleranz"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The extent in height an intersection must exceed; zero unless declared."
+            },
+            {
+              "language": "de",
+              "text": "Die Ausdehnung in der Höhe, die eine Durchdringung überschreiten muss; null ohne Angabe."
+            }
+          ]
+        },
+        {
+          "name": "volume_tolerance",
+          "kind": {
+            "type": "number",
+            "dimension": "volume"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Volume tolerance"
+            },
+            {
+              "language": "de",
+              "text": "Volumentoleranz"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The shared volume an intersection must exceed; zero unless declared."
+            },
+            {
+              "language": "de",
+              "text": "Das gemeinsame Volumen, das eine Durchdringung überschreiten muss; null ohne Angabe."
+            }
+          ]
+        },
+        {
+          "name": "report_duplicates",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Duplicates reported"
+            },
+            {
+              "language": "de",
+              "text": "Duplikate gemeldet"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether duplicates are reported; true unless switched off."
+            },
+            {
+              "language": "de",
+              "text": "Ob Duplikate gemeldet werden; wahr, wenn nicht abgeschaltet."
+            }
+          ]
+        },
+        {
+          "name": "report_containment",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Containment reported"
+            },
+            {
+              "language": "de",
+              "text": "Einschluss gemeldet"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether contained bodies are reported; true unless switched off."
+            },
+            {
+              "language": "de",
+              "text": "Ob eingeschlossene Körper gemeldet werden; wahr, wenn nicht abgeschaltet."
+            }
+          ]
+        },
+        {
+          "name": "report_intersections",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Intersections reported"
+            },
+            {
+              "language": "de",
+              "text": "Durchdringungen gemeldet"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether intersections are reported; true unless switched off."
+            },
+            {
+              "language": "de",
+              "text": "Ob Durchdringungen gemeldet werden; wahr, wenn nicht abgeschaltet."
+            }
+          ]
+        },
+        {
+          "name": "excused",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Excused"
+            },
+            {
+              "language": "de",
+              "text": "Entschuldigt"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether a tolerance case excuses the pair's intersection along the elements' own axes; undecided where a filter, a frame or an extent cannot decide it."
+            },
+            {
+              "language": "de",
+              "text": "Ob ein Toleranzfall die Durchdringung des Paars entlang der eigenen Achsen der Elemente entschuldigt; unentschieden, wo ein Filter, ein Achsensystem oder eine Ausdehnung es nicht entscheidet."
+            }
+          ]
+        },
+        {
+          "name": "case",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Tolerance cases"
+            },
+            {
+              "language": "de",
+              "text": "Toleranzfälle"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "What the tolerance cases that may apply found, in words; empty where none applies."
+            },
+            {
+              "language": "de",
+              "text": "Was die möglicherweise geltenden Toleranzfälle ergaben, in Worten; leer, wo keiner gilt."
+            }
+          ]
+        },
+        {
+          "name": "note",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Fidelity"
+            },
+            {
+              "language": "de",
+              "text": "Genauigkeit"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Words marking a measurement on tessellated geometry as approximate; empty for exact geometry."
+            },
+            {
+              "language": "de",
+              "text": "Worte, die eine Messung an tessellierter Geometrie als näherungsweise kennzeichnen; leer bei exakter Geometrie."
+            }
+          ]
+        },
+        {
+          "name": "reach",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Reach"
+            },
+            {
+              "language": "de",
+              "text": "Reichweite"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The intersection's extents and shared volume in words, where its tolerances declare them."
+            },
+            {
+              "language": "de",
+              "text": "Ausdehnungen und gemeinsames Volumen der Durchdringung in Worten, wo ihre Toleranzen sie angeben."
+            }
+          ]
+        },
+        {
+          "name": "copies",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Copies"
+            },
+            {
+              "language": "de",
+              "text": "Kopien"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "What two duplicates differ or agree in (type, volume, `duplicate_quantities`), in words."
+            },
+            {
+              "language": "de",
+              "text": "Worin zwei Duplikate sich unterscheiden oder übereinstimmen (Typ, Volumen, `duplicate_quantities`), in Worten."
+            }
+          ]
+        },
+        {
+          "name": "group",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Group"
+            },
+            {
+              "language": "de",
+              "text": "Gruppe"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The key grouping the pair's finding under `group_by`; undecided, with why, where it cannot be read."
+            },
+            {
+              "language": "de",
+              "text": "Der Schlüssel, der den Befund des Paars nach `group_by` gruppiert; unentschieden, mit Grund, wo er nicht lesbar ist."
+            }
+          ]
+        },
+        {
+          "name": "sides",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Types"
+            },
+            {
+              "language": "de",
+              "text": "Typen"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The pair's two types (and `group_property` values), in order: `A with B`."
+            },
+            {
+              "language": "de",
+              "text": "Die beiden Typen des Paars (und Werte von `group_property`), geordnet: `A with B`."
+            }
+          ]
+        },
+        {
+          "name": "on",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Storeys"
+            },
+            {
+              "language": "de",
+              "text": "Geschosse"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The storeys the pair reaches, in words (` on s1, s2`), with `per_storey`."
+            },
+            {
+              "language": "de",
+              "text": "Die Geschosse, die das Paar erreicht, in Worten (` on s1, s2`), mit `per_storey`."
+            }
+          ]
+        },
+        {
+          "name": "cell",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Cell"
+            },
+            {
+              "language": "de",
+              "text": "Zelle"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The cell judging the pair, in words (` (clash matrix cell 0 `walls`)`); empty for a pair no cell covers."
+            },
+            {
+              "language": "de",
+              "text": "Die Zelle, die das Paar beurteilt, in Worten (` (clash matrix cell 0 `walls`)`); leer bei einem Paar ohne Zelle."
+            }
+          ]
+        },
+        {
+          "name": "severity",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Cell severity"
+            },
+            {
+              "language": "de",
+              "text": "Schweregrad der Zelle"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The severity the cell states; empty where it states none."
+            },
+            {
+              "language": "de",
+              "text": "Der Schweregrad, den die Zelle angibt; leer, wo sie keinen angibt."
+            }
+          ]
+        },
+        {
+          "name": "unmatched",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Unmatched"
+            },
+            {
+              "language": "de",
+              "text": "Ohne Zelle"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether no cell covers the pair (listed with `report_unmatched` only)."
+            },
+            {
+              "language": "de",
+              "text": "Ob keine Zelle das Paar abdeckt (nur mit `report_unmatched` aufgeführt)."
+            }
+          ]
+        },
+        {
+          "name": "subject_category",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Subject's categories"
+            },
+            {
+              "language": "de",
+              "text": "Kategorien des Subjekts"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The subject and the categories the cells test, in words."
+            },
+            {
+              "language": "de",
+              "text": "Das Subjekt und die von den Zellen geprüften Kategorien, in Worten."
+            }
+          ]
+        },
+        {
+          "name": "counterpart_category",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Counterpart's categories"
+            },
+            {
+              "language": "de",
+              "text": "Kategorien des Gegenstücks"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The counterpart and the categories the cells test, in words."
+            },
+            {
+              "language": "de",
+              "text": "Das Gegenstück und die von den Zellen geprüften Kategorien, in Worten."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
+      "name": "clash_pairs",
+      "parameters": [
+        {
+          "key": "counterparts",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects they are checked against, named as `subjects` are."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, gegen die sie geprüft werden, benannt wie bei `subjects`."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "subjects",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects checked: their source kinds, or `@` a selector parameter of the rule (`@selection`, in a template, the rule's own selection); only those surely picked form pairs."
+            },
+            {
+              "language": "de",
+              "text": "Die geprüften Objekte: ihre Quellarten oder mit `@` ein Selektorparameter der Regel (`@selection`, in einer Vorlage, die eigene Auswahl der Regel); nur sicher getroffene bilden Paare."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "penetration_tolerance_metres",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "How deep a body may reach into another before it intersects it, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Wie tief ein Körper in einen anderen reichen darf, bevor er ihn durchdringt, in Metern."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "clearance_metres",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The clearance pairs must keep, in metres; none without it."
+            },
+            {
+              "language": "de",
+              "text": "Der Freiraum, den Paare einhalten müssen, in Metern; ohne Angabe keiner."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "duplicate_tolerance_metres",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "How far apart duplicate surfaces may lie, in metres; zero without it."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit Oberflächen von Duplikaten auseinanderliegen dürfen, in Metern; ohne Angabe null."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "horizontal_tolerance_metres",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The extent in plan an intersection must exceed, in metres; zero without it."
+            },
+            {
+              "language": "de",
+              "text": "Die Ausdehnung im Grundriss, die eine Durchdringung überschreiten muss, in Metern; ohne Angabe null."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "vertical_tolerance_metres",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The extent in height an intersection must exceed, in metres; zero without it."
+            },
+            {
+              "language": "de",
+              "text": "Die Ausdehnung in der Höhe, die eine Durchdringung überschreiten muss, in Metern; ohne Angabe null."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "volume_tolerance_cubic_metres",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The shared volume an intersection must exceed, in cubic metres; zero without it."
+            },
+            {
+              "language": "de",
+              "text": "Das gemeinsame Volumen, das eine Durchdringung überschreiten muss, in Kubikmetern; ohne Angabe null."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "report_duplicates",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether duplicates are reported; true without it."
+            },
+            {
+              "language": "de",
+              "text": "Ob Duplikate gemeldet werden; ohne Angabe wahr."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "report_containment",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether contained bodies are reported; true without it."
+            },
+            {
+              "language": "de",
+              "text": "Ob eingeschlossene Körper gemeldet werden; ohne Angabe wahr."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "report_intersections",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether intersections are reported; true without it."
+            },
+            {
+              "language": "de",
+              "text": "Ob Durchdringungen gemeldet werden; ohne Angabe wahr."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "exclude_paths",
+          "kind": {
+            "type": "paths"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Relationship paths: a pair whose objects reach a common target along one, or one the other, is left out."
+            },
+            {
+              "language": "de",
+              "text": "Beziehungspfade: ein Paar, dessen Objekte entlang eines davon ein gemeinsames Ziel oder einander erreichen, bleibt außen vor."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "exclude_target_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Targets reached along an exclusion path stating the same value of this property leave the pair out as well."
+            },
+            {
+              "language": "de",
+              "text": "Entlang eines Ausschlusspfads erreichte Ziele mit demselben Wert dieser Eigenschaft lassen das Paar ebenfalls außen vor."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "exclude_same_layer",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether a pair on a shared presentation layer of one source is left out."
+            },
+            {
+              "language": "de",
+              "text": "Ob ein Paar auf einer gemeinsamen Darstellungsebene einer Quelle außen vor bleibt."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "group_by",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "type_pair",
+              "subject",
+              "similar"
+            ]
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "How reported pairs are keyed into groups (`group`): by the pair of types, by subject, or as similar pairs whose extents round alike."
+            },
+            {
+              "language": "de",
+              "text": "Wie gemeldete Paare zu Gruppen verschlüsselt werden (`group`): nach dem Typpaar, nach Subjekt oder als ähnliche Paare mit gleich gerundeten Ausdehnungen."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "per_storey",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the storeys the pair reaches along `storey_path` are part of its key."
+            },
+            {
+              "language": "de",
+              "text": "Ob die Geschosse, die das Paar über `storey_path` erreicht, zu seinem Schlüssel gehören."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "storey_path",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship path from an object to its storey, its steps separated by spaces."
+            },
+            {
+              "language": "de",
+              "text": "Der Beziehungspfad von einem Objekt zu seinem Geschoss, die Schritte durch Leerzeichen getrennt."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "group_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "A property whose values similar pairs must share."
+            },
+            {
+              "language": "de",
+              "text": "Eine Eigenschaft, deren Werte ähnliche Paare teilen müssen."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "group_tolerance_metres",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rounding step of similar pairs' extents, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Der Rundungsschritt der Ausdehnungen ähnlicher Paare, in Metern."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "severity_by_class",
+          "kind": {
+            "type": "table"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The severity per class, as the rule states it: read by the template's grading, checked with the pairs."
+            },
+            {
+              "language": "de",
+              "text": "Der Schweregrad je Klasse, wie die Regel ihn angibt: von der Einstufung der Vorlage gelesen, mit den Paaren geprüft."
+            }
+          ],
+          "references": "table"
+        },
+        {
+          "key": "grade_by",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "smallest_extent",
+              "volume"
+            ]
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "What intersections are graded by: read by the template's grading, checked with the pairs."
+            },
+            {
+              "language": "de",
+              "text": "Wonach Durchdringungen eingestuft werden: von der Einstufung der Vorlage gelesen, mit den Paaren geprüft."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "severity_grades",
+          "kind": {
+            "type": "table"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The grades of intersections: read by the template's grading, checked with the pairs."
+            },
+            {
+              "language": "de",
+              "text": "Die Stufen der Durchdringungen: von der Einstufung der Vorlage gelesen, mit den Paaren geprüft."
+            }
+          ],
+          "references": "table"
+        },
+        {
+          "key": "duplicate_quantities",
+          "kind": {
+            "type": "table"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The properties duplicates are compared by (`copies`)."
+            },
+            {
+              "language": "de",
+              "text": "Die Eigenschaften, nach denen Duplikate verglichen werden (`copies`)."
+            }
+          ],
+          "references": "table"
+        },
+        {
+          "key": "tolerance_cases",
+          "kind": {
+            "type": "table"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Tolerances along the elements' own axes that may excuse an intersection (`excused`)."
+            },
+            {
+              "language": "de",
+              "text": "Toleranzen entlang der eigenen Achsen der Elemente, die eine Durchdringung entschuldigen können (`excused`)."
+            }
+          ],
+          "references": "table"
+        }
+      ],
+      "services": [
+        "proximity",
+        "object-frame",
+        "property-resolution",
+        "relationship-selection"
+      ],
+      "exactness": "measured",
+      "subject": "project",
+      "notEvaluated": [
+        "the declaration is not realisable (a target property without an exclusion path)",
+        "the broad phase refuses the objects' extents"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Clash pairs"
+        },
+        {
+          "language": "de",
+          "text": "Kollisionspaare"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The candidate pairs of the subjects and their counterparts the broad phase proposes within the clearance, as `clash` measures them: each pair measured once beside the rule's tolerances, and every object or pair that cannot be measured, open with why. A pair surely excluded is not listed."
+        },
+        {
+          "language": "de",
+          "text": "Die Kandidatenpaare der Subjekte und ihrer Gegenstücke, die die Grobphase innerhalb des Freiraums vorschlägt, wie `clash` sie misst: jedes Paar einmal neben den Toleranzen der Regel gemessen, und jedes nicht messbare Objekt oder Paar offen mit Grund. Ein sicher ausgeschlossenes Paar wird nicht aufgeführt."
+        }
+      ],
+      "fields": [
+        {
+          "name": "subject",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Subject"
+            },
+            {
+              "language": "de",
+              "text": "Subjekt"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The selected object of the pair, or the object an open item is about."
+            },
+            {
+              "language": "de",
+              "text": "Das ausgewählte Objekt des Paars oder das Objekt eines offenen Eintrags."
+            }
+          ]
+        },
+        {
+          "name": "counterpart",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Counterpart"
+            },
+            {
+              "language": "de",
+              "text": "Gegenstück"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The counterpart of the pair; none for an open item about one object."
+            },
+            {
+              "language": "de",
+              "text": "Das Gegenstück des Paars; keines bei einem offenen Eintrag zu einem Objekt."
+            }
+          ]
+        },
+        {
+          "name": "open",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Open"
+            },
+            {
+              "language": "de",
+              "text": "Offen"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Why the item is no pair to judge (a body that cannot be measured, a selection or cell that cannot be decided); empty for a pair."
+            },
+            {
+              "language": "de",
+              "text": "Warum der Eintrag kein zu beurteilendes Paar ist (ein nicht messbarer Körper, eine nicht entscheidbare Auswahl oder Zelle); leer bei einem Paar."
+            }
+          ]
+        },
+        {
+          "name": "reason",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Reason"
+            },
+            {
+              "language": "de",
+              "text": "Grund"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The not-evaluated reason of an open item, as reports spell it."
+            },
+            {
+              "language": "de",
+              "text": "Der Grund eines offenen Eintrags, wie Berichte ihn schreiben."
+            }
+          ]
+        },
+        {
+          "name": "excluded",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "May be excluded"
+            },
+            {
+              "language": "de",
+              "text": "Möglicherweise ausgeschlossen"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Why the pair may or may not be excluded, where an exclusion cannot be decided; empty where it is surely not excluded. A surely excluded pair is not listed."
+            },
+            {
+              "language": "de",
+              "text": "Warum das Paar ausgeschlossen sein kann, wo ein Ausschluss nicht entscheidbar ist; leer, wo es sicher nicht ausgeschlossen ist. Ein sicher ausgeschlossenes Paar wird nicht aufgeführt."
+            }
+          ]
+        },
+        {
+          "name": "excluded_reason",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Exclusion reason"
+            },
+            {
+              "language": "de",
+              "text": "Ausschlussgrund"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The not-evaluated reason of an undecided exclusion, as reports spell it."
+            },
+            {
+              "language": "de",
+              "text": "Der Grund eines nicht entscheidbaren Ausschlusses, wie Berichte ihn schreiben."
+            }
+          ]
+        },
+        {
+          "name": "separation",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Separation"
+            },
+            {
+              "language": "de",
+              "text": "Abstand"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The separation the proximity service measured, in metres; zero where the bodies meet or overlap."
+            },
+            {
+              "language": "de",
+              "text": "Der vom Näheservice gemessene Abstand in Metern; null, wo sich die Körper berühren oder überlappen."
+            }
+          ]
+        },
+        {
+          "name": "certified",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Certified separation"
+            },
+            {
+              "language": "de",
+              "text": "Zertifizierter Abstand"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The separation certified on exact boundaries, an interval; none where not certified."
+            },
+            {
+              "language": "de",
+              "text": "Der auf exakten Rändern zertifizierte Abstand, ein Intervall; keiner, wo nicht zertifiziert."
+            }
+          ]
+        },
+        {
+          "name": "penetration",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Penetration"
+            },
+            {
+              "language": "de",
+              "text": "Eindringtiefe"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "How deep one body surely reaches into the other; none where neither is a closed solid."
+            },
+            {
+              "language": "de",
+              "text": "Wie tief ein Körper sicher in den anderen reicht; keine, wo keiner ein geschlossener Volumenkörper ist."
+            }
+          ]
+        },
+        {
+          "name": "inside",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Inside"
+            },
+            {
+              "language": "de",
+              "text": "Innen"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the subject lies wholly inside the counterpart."
+            },
+            {
+              "language": "de",
+              "text": "Ob das Subjekt ganz im Gegenstück liegt."
+            }
+          ]
+        },
+        {
+          "name": "contains",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Contains"
+            },
+            {
+              "language": "de",
+              "text": "Enthält"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the subject wholly contains the counterpart."
+            },
+            {
+              "language": "de",
+              "text": "Ob das Subjekt das Gegenstück ganz enthält."
+            }
+          ]
+        },
+        {
+          "name": "hausdorff",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Surface distance"
+            },
+            {
+              "language": "de",
+              "text": "Flächenabstand"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The Hausdorff distance between the surfaces, at least the separation; without an upper end where not measured."
+            },
+            {
+              "language": "de",
+              "text": "Der Hausdorff-Abstand der Oberflächen, mindestens der Abstand; ohne oberes Ende, wo nicht gemessen."
+            }
+          ]
+        },
+        {
+          "name": "hausdorff_upper",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Surface distance, upper"
+            },
+            {
+              "language": "de",
+              "text": "Flächenabstand, oben"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The Hausdorff distance's upper end in words (`0.0100 m`, or `an unmeasured distance`)."
+            },
+            {
+              "language": "de",
+              "text": "Das obere Ende des Hausdorff-Abstands in Worten (`0.0100 m` oder `an unmeasured distance`)."
+            }
+          ]
+        },
+        {
+          "name": "horizontal",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Extent in plan"
+            },
+            {
+              "language": "de",
+              "text": "Ausdehnung im Grundriss"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The intersection's lesser extent along the plan axes; undecided where not measured."
+            },
+            {
+              "language": "de",
+              "text": "Die kleinere Ausdehnung der Durchdringung entlang der Grundrissachsen; unentschieden, wo nicht gemessen."
+            }
+          ]
+        },
+        {
+          "name": "vertical",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Extent in height"
+            },
+            {
+              "language": "de",
+              "text": "Ausdehnung in der Höhe"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The intersection's extent in height; undecided where not measured."
+            },
+            {
+              "language": "de",
+              "text": "Die Ausdehnung der Durchdringung in der Höhe; unentschieden, wo nicht gemessen."
+            }
+          ]
+        },
+        {
+          "name": "smallest_extent",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Smallest extent"
+            },
+            {
+              "language": "de",
+              "text": "Kleinste Ausdehnung"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The intersection's least extent along x, y and z; undecided where not measured."
+            },
+            {
+              "language": "de",
+              "text": "Die kleinste Ausdehnung der Durchdringung entlang x, y und z; unentschieden, wo nicht gemessen."
+            }
+          ]
+        },
+        {
+          "name": "shared_volume",
+          "kind": {
+            "type": "number",
+            "dimension": "volume"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Shared volume"
+            },
+            {
+              "language": "de",
+              "text": "Gemeinsames Volumen"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The certified volume the bodies share; undecided where not measured."
+            },
+            {
+              "language": "de",
+              "text": "Das zertifizierte gemeinsame Volumen der Körper; unentschieden, wo nicht gemessen."
+            }
+          ]
+        },
+        {
+          "name": "penetration_tolerance",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Penetration tolerance"
+            },
+            {
+              "language": "de",
+              "text": "Eindringtoleranz"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The penetration the pair is allowed: the rule's, or its cell's."
+            },
+            {
+              "language": "de",
+              "text": "Die dem Paar erlaubte Eindringtiefe: die der Regel oder seiner Zelle."
+            }
+          ]
+        },
+        {
+          "name": "clearance",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Clearance"
+            },
+            {
+              "language": "de",
+              "text": "Freiraum"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The clearance the pair must keep; none where none is declared."
+            },
+            {
+              "language": "de",
+              "text": "Der einzuhaltende Freiraum; keiner, wo keiner angegeben ist."
+            }
+          ]
+        },
+        {
+          "name": "duplicate_tolerance",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Duplicate tolerance"
+            },
+            {
+              "language": "de",
+              "text": "Duplikattoleranz"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "How far apart duplicate surfaces may lie; zero unless declared."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit Oberflächen von Duplikaten auseinanderliegen dürfen; null ohne Angabe."
+            }
+          ]
+        },
+        {
+          "name": "horizontal_tolerance",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Plan tolerance"
+            },
+            {
+              "language": "de",
+              "text": "Grundrisstoleranz"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The extent in plan an intersection must exceed; zero unless declared."
+            },
+            {
+              "language": "de",
+              "text": "Die Ausdehnung im Grundriss, die eine Durchdringung überschreiten muss; null ohne Angabe."
+            }
+          ]
+        },
+        {
+          "name": "vertical_tolerance",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Height tolerance"
+            },
+            {
+              "language": "de",
+              "text": "Höhentoleranz"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The extent in height an intersection must exceed; zero unless declared."
+            },
+            {
+              "language": "de",
+              "text": "Die Ausdehnung in der Höhe, die eine Durchdringung überschreiten muss; null ohne Angabe."
+            }
+          ]
+        },
+        {
+          "name": "volume_tolerance",
+          "kind": {
+            "type": "number",
+            "dimension": "volume"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Volume tolerance"
+            },
+            {
+              "language": "de",
+              "text": "Volumentoleranz"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The shared volume an intersection must exceed; zero unless declared."
+            },
+            {
+              "language": "de",
+              "text": "Das gemeinsame Volumen, das eine Durchdringung überschreiten muss; null ohne Angabe."
+            }
+          ]
+        },
+        {
+          "name": "report_duplicates",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Duplicates reported"
+            },
+            {
+              "language": "de",
+              "text": "Duplikate gemeldet"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether duplicates are reported; true unless switched off."
+            },
+            {
+              "language": "de",
+              "text": "Ob Duplikate gemeldet werden; wahr, wenn nicht abgeschaltet."
+            }
+          ]
+        },
+        {
+          "name": "report_containment",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Containment reported"
+            },
+            {
+              "language": "de",
+              "text": "Einschluss gemeldet"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether contained bodies are reported; true unless switched off."
+            },
+            {
+              "language": "de",
+              "text": "Ob eingeschlossene Körper gemeldet werden; wahr, wenn nicht abgeschaltet."
+            }
+          ]
+        },
+        {
+          "name": "report_intersections",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Intersections reported"
+            },
+            {
+              "language": "de",
+              "text": "Durchdringungen gemeldet"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether intersections are reported; true unless switched off."
+            },
+            {
+              "language": "de",
+              "text": "Ob Durchdringungen gemeldet werden; wahr, wenn nicht abgeschaltet."
+            }
+          ]
+        },
+        {
+          "name": "excused",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Excused"
+            },
+            {
+              "language": "de",
+              "text": "Entschuldigt"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether a tolerance case excuses the pair's intersection along the elements' own axes; undecided where a filter, a frame or an extent cannot decide it."
+            },
+            {
+              "language": "de",
+              "text": "Ob ein Toleranzfall die Durchdringung des Paars entlang der eigenen Achsen der Elemente entschuldigt; unentschieden, wo ein Filter, ein Achsensystem oder eine Ausdehnung es nicht entscheidet."
+            }
+          ]
+        },
+        {
+          "name": "case",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Tolerance cases"
+            },
+            {
+              "language": "de",
+              "text": "Toleranzfälle"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "What the tolerance cases that may apply found, in words; empty where none applies."
+            },
+            {
+              "language": "de",
+              "text": "Was die möglicherweise geltenden Toleranzfälle ergaben, in Worten; leer, wo keiner gilt."
+            }
+          ]
+        },
+        {
+          "name": "note",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Fidelity"
+            },
+            {
+              "language": "de",
+              "text": "Genauigkeit"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Words marking a measurement on tessellated geometry as approximate; empty for exact geometry."
+            },
+            {
+              "language": "de",
+              "text": "Worte, die eine Messung an tessellierter Geometrie als näherungsweise kennzeichnen; leer bei exakter Geometrie."
+            }
+          ]
+        },
+        {
+          "name": "reach",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Reach"
+            },
+            {
+              "language": "de",
+              "text": "Reichweite"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The intersection's extents and shared volume in words, where its tolerances declare them."
+            },
+            {
+              "language": "de",
+              "text": "Ausdehnungen und gemeinsames Volumen der Durchdringung in Worten, wo ihre Toleranzen sie angeben."
+            }
+          ]
+        },
+        {
+          "name": "copies",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Copies"
+            },
+            {
+              "language": "de",
+              "text": "Kopien"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "What two duplicates differ or agree in (type, volume, `duplicate_quantities`), in words."
+            },
+            {
+              "language": "de",
+              "text": "Worin zwei Duplikate sich unterscheiden oder übereinstimmen (Typ, Volumen, `duplicate_quantities`), in Worten."
+            }
+          ]
+        },
+        {
+          "name": "group",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Group"
+            },
+            {
+              "language": "de",
+              "text": "Gruppe"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The key grouping the pair's finding under `group_by`; undecided, with why, where it cannot be read."
+            },
+            {
+              "language": "de",
+              "text": "Der Schlüssel, der den Befund des Paars nach `group_by` gruppiert; unentschieden, mit Grund, wo er nicht lesbar ist."
+            }
+          ]
+        },
+        {
+          "name": "sides",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Types"
+            },
+            {
+              "language": "de",
+              "text": "Typen"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The pair's two types (and `group_property` values), in order: `A with B`."
+            },
+            {
+              "language": "de",
+              "text": "Die beiden Typen des Paars (und Werte von `group_property`), geordnet: `A with B`."
+            }
+          ]
+        },
+        {
+          "name": "on",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Storeys"
+            },
+            {
+              "language": "de",
+              "text": "Geschosse"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The storeys the pair reaches, in words (` on s1, s2`), with `per_storey`."
+            },
+            {
+              "language": "de",
+              "text": "Die Geschosse, die das Paar erreicht, in Worten (` on s1, s2`), mit `per_storey`."
             }
           ]
         }

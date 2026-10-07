@@ -128,10 +128,10 @@ fn clash(extra: Vec<(&str, ParameterValue)>) -> CompiledRule {
 }
 
 fn run(model: Model, pair: Pair, rule: &CompiledRule) -> CapabilityEvaluation {
-    let stub = Stub(BTreeMap::from([("b".to_owned(), pair)]));
-    model.evaluate_with(&Clash, rule, |services| {
+    let stub = Arc::new(Stub(BTreeMap::from([("b".to_owned(), pair)])));
+    common::clash_held(model, &Clash, rule, |services| {
         services
-            .register(ProximityServiceHandle::new(Arc::new(stub)))
+            .register(ProximityServiceHandle::new(stub.clone()))
             .unwrap();
     })
 }
@@ -341,10 +341,10 @@ fn a_matrix_cell_severity_wins_over_the_class() {
         )
     };
     let run_matrix = |rule: &CompiledRule, pair: Pair| {
-        let stub = Stub(BTreeMap::from([("b".to_owned(), pair)]));
-        model("wall").evaluate_with(&ClashMatrix, rule, |services| {
+        let stub = Arc::new(Stub(BTreeMap::from([("b".to_owned(), pair)])));
+        common::clash_held(model("wall"), &ClashMatrix, rule, |services| {
             services
-                .register(ProximityServiceHandle::new(Arc::new(stub)))
+                .register(ProximityServiceHandle::new(stub.clone()))
                 .unwrap();
         })
     };

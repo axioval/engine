@@ -1,8 +1,8 @@
 //! Source-neutral clash and clearance capability.
 //!
 //! ADR 0004: proximity is measured by a [`axioval_engine::ProximityServiceHandle`];
-//! whether a measured overlap is a clash is decided here, against declared
-//! tolerances.
+//! whether a measured overlap is a clash is decided by the template, against
+//! declared tolerances.
 //!
 //! Each pair falls into one class, tried in this order:
 //!
@@ -36,50 +36,87 @@
 //! surfaces that meet cannot be classified: the pair is reported not
 //! evaluated rather than passed. Measurements on tessellated geometry are
 //! reported, and marked approximate in both the message and the evidence.
+//!
+//! It runs as a template ([`axioval_engine::template`]): the broad phase,
+//! the exclusions and each pair's measurement are the measured list
+//! `clash_pairs` ([`measured`]), and the template puts each pair in its
+//! class, grades and groups it ([`axioval_engine::template::Pairs`]).
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::LazyLock;
 
+use axioval_engine::template::Template;
 use axioval_engine::{
-    BodyContainment, CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ParameterDescriptor,
-    ParameterType, PropertyRequest, PropertyResolution, PropertyResolutionServiceHandle,
-    ProximityError, ProximityEvidence, ProximityProjection, ProximityRequest,
-    ProximityServiceHandle, RuleCapability, RuleContext,
+    CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ParameterDescriptor, PropertyRequest,
+    PropertyResolution, PropertyResolutionServiceHandle, RuleCapability, RuleContext,
 };
-use axioval_ir::{
-    Evidence, Object, ObjectId, PRESENTATION_LAYER, PRESENTATION_SET, PropertyValue, Severity,
-};
+use axioval_ir::contract::ParameterValue;
+use axioval_ir::{Object, ObjectId, PRESENTATION_LAYER, PRESENTATION_SET, PropertyValue};
 
-use crate::clash_cases::{CaseJudge, Cases, Excuse, case_parameter, cases};
-use crate::clash_groups::{Context, Grouping, Groups, Reported, grouping, grouping_parameters};
-use crate::clash_severity::{Severities, severities, severity_parameters};
-use crate::pairs::{Unevaluated, fidelity_note, prepare, reason, refuse_declaration, severity};
+use crate::clash_cases::{Cases, cases};
+use crate::clash_groups::{Grouping, grouping};
+use crate::clash_severity::{Severities, severities};
 use crate::selection::property_error;
 use crate::support::{
     Parameters, PropertyRef, Traversal, Unavailable, display, invalid, resolve, undefined,
     value_key,
 };
 
+pub(crate) mod measured;
+#[cfg(feature = "parity-reference")]
+pub(crate) mod reference;
+pub(crate) mod template;
+
+pub(crate) use measured::{ClashPairs, measure};
+
 /// Reports duplicates, contained bodies, intersections and clearance
 /// shortfalls between bodies.
+///
+/// It runs as a template: the measured list `clash_pairs` lists every
+/// candidate pair measured once beside the rule's tolerances, and the
+/// template judges each by the first class that holds.
 pub struct Clash;
 
+static TEMPLATE: LazyLock<Template> = LazyLock::new(template::clash);
+
+/// The plans of the rules bound to it, kept across runs.
+static PLANS: crate::templates::Plans = crate::templates::Plans::new();
+
+impl RuleCapability for Clash {
+    fn id(&self) -> &'static str {
+        template::CLASH
+    }
+
+    fn parameters(&self) -> Vec<ParameterDescriptor> {
+        TEMPLATE.parameters.clone()
+    }
+
+    fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
+        crate::templates::run((&TEMPLATE, &PLANS), context, rule)
+    }
+
+    fn template(&self) -> Option<&Template> {
+        Some(&TEMPLATE)
+    }
+}
+
 /// Which classes are reported.
-struct Report {
-    duplicate: bool,
-    containment: bool,
-    intersection: bool,
+pub(crate) struct Report {
+    pub(crate) duplicate: bool,
+    pub(crate) containment: bool,
+    pub(crate) intersection: bool,
 }
 
 /// The tolerances a pair is judged against and the classes it reports: a
 /// rule's parameters for `clash`, one cell's for `clash-matrix`.
 pub(crate) struct Profile {
-    penetration_tolerance: f64,
-    clearance: Option<f64>,
-    duplicate_tolerance: f64,
-    horizontal_tolerance: f64,
-    vertical_tolerance: f64,
-    volume_tolerance: f64,
-    report: Report,
+    pub(crate) penetration_tolerance: f64,
+    pub(crate) clearance: Option<f64>,
+    pub(crate) duplicate_tolerance: f64,
+    pub(crate) horizontal_tolerance: f64,
+    pub(crate) vertical_tolerance: f64,
+    pub(crate) volume_tolerance: f64,
+    pub(crate) report: Report,
 }
 
 /// Reads one named value; absent is `None`, another type an error.
@@ -153,15 +190,19 @@ pub(crate) const PROFILE_SWITCHES: [&str; 3] = [
     "report_intersections",
 ];
 
-struct Declaration<'a> {
-    profile: Profile,
+/// A `clash` rule's declaration, read as the capability reads it: by the
+/// pairs' measured list and, refusing it, by the template's declaration
+/// check.
+pub(crate) struct Declaration<'a> {
+    pub(crate) profile: Profile,
     /// Relationship paths, each a list of steps.
-    exclude_paths: Vec<Vec<String>>,
-    exclude_target_property: Option<PropertyRef<'a>>,
-    exclude_same_layer: bool,
-    grouping: Option<Grouping<'a>>,
-    severities: Severities,
-    cases: Cases<'a>,
+    pub(crate) exclude_paths: Vec<Vec<String>>,
+    pub(crate) exclude_target_property: Option<PropertyRef<'a>>,
+    pub(crate) exclude_same_layer: bool,
+    pub(crate) grouping: Option<Grouping<'a>>,
+    #[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
+    pub(crate) severities: Severities,
+    pub(crate) cases: Cases<'a>,
 }
 
 /// The `exclude_paths` parameter, each entry split into its steps.
@@ -183,7 +224,9 @@ pub(crate) fn exclusion_paths(
     Ok(paths)
 }
 
-fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
+/// Reads a `clash` rule's declaration, refusing it in the capability's
+/// order and words.
+pub(crate) fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
     let parameters = Parameters(rule);
     let profile = Profile::read(&|name| parameters.number(name), &|name| {
         parameters.boolean(name)
@@ -212,6 +255,21 @@ pub(crate) fn exclusion_property<'a>(
     parameters.property("exclude_target_property")
 }
 
+/// The rule the parameters `stated` (keyed by their own names) declare,
+/// as a declaration reads them.
+pub(crate) fn synthesised(stated: BTreeMap<String, ParameterValue>) -> CompiledRule {
+    crate::light_area::synthesised(stated)
+}
+
+/// The declaration the capability refused, in its order and words: what
+/// the template's `Check::Arguments` refuses once per rule. `stated` holds
+/// the rule's parameters the list names, by their own names.
+pub(crate) fn check_arguments(
+    stated: &BTreeMap<String, ParameterValue>,
+) -> Result<(), Unavailable> {
+    declaration(&synthesised(stated.clone())).map(|_| ())
+}
+
 /// A three-valued judgement of an interval against a tolerance.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Holds {
@@ -235,7 +293,8 @@ impl Holds {
             _ => Self::Unknown,
         }
     }
-    fn not(self) -> Self {
+    #[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
+    pub(crate) fn not(self) -> Self {
         match self {
             Self::Yes => Self::No,
             Self::No => Self::Yes,
@@ -245,7 +304,7 @@ impl Holds {
 }
 
 /// A measured length as a message reads it.
-fn described(interval: Option<axioval_engine::LengthInterval>) -> String {
+pub(crate) fn described(interval: Option<axioval_engine::LengthInterval>) -> String {
     interval.map_or_else(
         || "unmeasured".to_owned(),
         |interval| {
@@ -263,7 +322,7 @@ fn described(interval: Option<axioval_engine::LengthInterval>) -> String {
 }
 
 /// A measured shared volume as a message reads it.
-fn described_volume(shared: Option<axioval_engine::VolumeInterval>) -> String {
+pub(crate) fn described_volume(shared: Option<axioval_engine::VolumeInterval>) -> String {
     shared.map_or_else(
         || "an unmeasured volume".to_owned(),
         |shared| {
@@ -280,10 +339,6 @@ fn described_volume(shared: Option<axioval_engine::VolumeInterval>) -> String {
     )
 }
 
-/// Whether a tolerance case excuses a pair's intersection, asked only when
-/// it can change the outcome, and why that is open when it is.
-pub(crate) type Excused<'a> = &'a mut dyn FnMut() -> (Holds, String);
-
 /// The class a reported pair falls into.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Class {
@@ -292,6 +347,7 @@ pub(crate) enum Class {
     Intersection,
     Clearance,
     /// A pair no clash matrix cell covers.
+    #[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
     Unmatched,
 }
 
@@ -303,247 +359,6 @@ impl Class {
             Self::Intersection => "intersection",
             Self::Clearance => "clearance",
             Self::Unmatched => "unmatched",
-        }
-    }
-}
-
-/// What a pair amounts to.
-pub(crate) enum Outcome {
-    Pass,
-    Finding(Class, String),
-    Open(NotEvaluatedReason, String),
-}
-
-impl Outcome {
-    /// The outcome when the measurement cannot tell `yes` from `no`: it
-    /// stands only where both agree. Two findings keep the one that holds
-    /// either way, `no`.
-    fn either(yes: Self, no: Self, undecided: String) -> Self {
-        match (yes, no) {
-            (Self::Pass, Self::Pass) => Self::Pass,
-            (Self::Finding(..), Self::Finding(class, message)) => Self::Finding(class, message),
-            (_, Self::Open(reason, message)) | (Self::Open(reason, message), _) => {
-                Self::Open(reason, message)
-            }
-            _ => Self::Open(NotEvaluatedReason::IncompleteEvidence, undecided),
-        }
-    }
-}
-
-impl Profile {
-    pub(crate) fn judge(
-        &self,
-        measured: &ProximityEvidence,
-        counterpart: &ObjectId,
-        excused: Excused<'_>,
-    ) -> Outcome {
-        let note = fidelity_note(measured.fidelity());
-        let tolerance = self.duplicate_tolerance;
-        let (lower, upper) = match measured.hausdorff_interval_metres() {
-            Some(interval) => (interval.lower_metres(), interval.upper_metres()),
-            None => (0.0, f64::INFINITY),
-        };
-        // No point of a surface lies nearer the other than the separation.
-        let lower = lower.max(measured.separation_interval_metres().0);
-        let duplicate = if upper <= tolerance {
-            Holds::Yes
-        } else if lower > tolerance {
-            Holds::No
-        } else {
-            Holds::Unknown
-        };
-        let reported = || {
-            if self.report.duplicate {
-                Outcome::Finding(
-                    Class::Duplicate,
-                    format!(
-                        "duplicate of {counterpart}: the surfaces lie within {upper:.4} m of each other, tolerance {tolerance:.4} m{note}"
-                    ),
-                )
-            } else {
-                Outcome::Pass
-            }
-        };
-        match duplicate {
-            Holds::Yes => reported(),
-            Holds::No => self.distinct(measured, counterpart, &note, excused),
-            Holds::Unknown => Outcome::either(
-                reported(),
-                self.distinct(measured, counterpart, &note, excused),
-                format!(
-                    "whether {counterpart} is a duplicate cannot be decided: the surfaces lie between {lower:.4} m and {} of each other, tolerance {tolerance:.4} m{note}",
-                    if upper.is_finite() {
-                        format!("{upper:.4} m")
-                    } else {
-                        "an unmeasured distance".to_owned()
-                    }
-                ),
-            ),
-        }
-    }
-
-    /// The outcome for a pair that is not a duplicate.
-    fn distinct(
-        &self,
-        measured: &ProximityEvidence,
-        counterpart: &ObjectId,
-        note: &str,
-        excused: Excused<'_>,
-    ) -> Outcome {
-        let containment = |message: String| {
-            if self.report.containment {
-                Outcome::Finding(Class::Containment, message)
-            } else {
-                Outcome::Pass
-            }
-        };
-        match (measured.containment(), measured.penetration_metres()) {
-            (Some(BodyContainment::SubjectInsideCounterpart), _) => {
-                containment(format!("lies wholly inside {counterpart}{note}"))
-            }
-            (Some(BodyContainment::CounterpartInsideSubject), _) => {
-                containment(format!("wholly contains {counterpart}{note}"))
-            }
-            (None, Some(depth)) if depth > self.penetration_tolerance => {
-                self.intersection(measured, counterpart, (depth, note), excused)
-            }
-            (None, None) if measured.separation_metres() == 0.0 => Outcome::Open(
-                NotEvaluatedReason::IncompleteEvidence,
-                format!(
-                    "surfaces meet {counterpart}, but neither body is a closed solid, so touching cannot be told from crossing"
-                ),
-            ),
-            (None, _) => self.clearance(measured, counterpart, note),
-        }
-    }
-
-    /// A penetration past the tolerance: an intersection when it also
-    /// reaches past the axis tolerances, shares more than the volume
-    /// tolerance, and no tolerance case excuses it.
-    fn intersection(
-        &self,
-        measured: &ProximityEvidence,
-        counterpart: &ObjectId,
-        (depth, note): (f64, &str),
-        excused: Excused<'_>,
-    ) -> Outcome {
-        let extents = measured.overlap_extents();
-        let exceeds = |tolerance: f64, interval: Option<axioval_engine::LengthInterval>| {
-            if tolerance == 0.0 {
-                return Holds::Yes;
-            }
-            match interval {
-                Some(interval) if interval.lower_metres() > tolerance => Holds::Yes,
-                Some(interval) if interval.upper_metres() <= tolerance => Holds::No,
-                _ => Holds::Unknown,
-            }
-        };
-        let holds = exceeds(
-            self.horizontal_tolerance,
-            extents.map(|extents| extents.horizontal()),
-        )
-        .and(exceeds(
-            self.vertical_tolerance,
-            extents.map(|extents| extents.vertical()),
-        ));
-        let shared = measured.intersection_volume().map(|volume| volume.shared());
-        let holds = holds.and(if self.volume_tolerance == 0.0 {
-            Holds::Yes
-        } else {
-            match shared {
-                Some(shared) if shared.lower_cubic_metres() > self.volume_tolerance => Holds::Yes,
-                Some(shared) if shared.upper_cubic_metres() <= self.volume_tolerance => Holds::No,
-                _ => Holds::Unknown,
-            }
-        });
-        // A case can only excuse what is reported and not already passed.
-        let (holds, case) = if holds == Holds::No || !self.report.intersection {
-            (holds, String::new())
-        } else {
-            let (excuse, case) = excused();
-            (holds.and(excuse.not()), case)
-        };
-        let axes = self.horizontal_tolerance > 0.0 || self.vertical_tolerance > 0.0;
-        let reach = if axes {
-            format!(
-                ", reaching {} in plan and {} vertically",
-                described(extents.map(|extents| extents.horizontal())),
-                described(extents.map(|extents| extents.vertical()))
-            )
-        } else {
-            String::new()
-        };
-        let reach = if self.volume_tolerance > 0.0 {
-            format!("{reach}, sharing {}", described_volume(shared))
-        } else {
-            reach
-        };
-        let reported = || {
-            if self.report.intersection {
-                Outcome::Finding(
-                    Class::Intersection,
-                    format!(
-                        "hard clash with {counterpart}: penetration {depth:.4} m exceeds tolerance {:.4} m{reach}{note}",
-                        self.penetration_tolerance
-                    ),
-                )
-            } else {
-                Outcome::Pass
-            }
-        };
-        match holds {
-            Holds::Yes => reported(),
-            Holds::No => self.clearance(measured, counterpart, note),
-            Holds::Unknown => Outcome::either(
-                reported(),
-                self.clearance(measured, counterpart, note),
-                format!(
-                    "whether the intersection with {counterpart} exceeds the horizontal tolerance {:.4} m, the vertical tolerance {:.4} m and the volume tolerance {:.6} m³{case} cannot be decided{reach}{note}",
-                    self.horizontal_tolerance, self.vertical_tolerance, self.volume_tolerance
-                ),
-            ),
-        }
-    }
-
-    fn clearance(
-        &self,
-        measured: &ProximityEvidence,
-        counterpart: &ObjectId,
-        note: &str,
-    ) -> Outcome {
-        // A certified separation is judged as an interval: below the
-        // clearance only when all of it is, open when it straddles.
-        if let (Some(clearance), Some(certified)) =
-            (self.clearance, measured.certified_separation())
-        {
-            let (lower, upper) = (certified.lower_metres(), certified.upper_metres());
-            return if upper < clearance {
-                Outcome::Finding(
-                    Class::Clearance,
-                    format!(
-                        "clearance clash with {counterpart}: separation certified within [{lower:.6}, {upper:.6}] m, below required {clearance:.4} m{note}"
-                    ),
-                )
-            } else if lower >= clearance {
-                Outcome::Pass
-            } else {
-                Outcome::Open(
-                    NotEvaluatedReason::IncompleteEvidence,
-                    format!(
-                        "whether {counterpart} keeps the clearance {clearance:.4} m cannot be decided: separation certified within [{lower:.6}, {upper:.6}] m{note}"
-                    ),
-                )
-            };
-        }
-        match self.clearance {
-            Some(clearance) if measured.separation_metres() < clearance => Outcome::Finding(
-                Class::Clearance,
-                format!(
-                    "clearance clash with {counterpart}: separation {:.4} m below required {clearance:.4} m{note}",
-                    measured.separation_metres()
-                ),
-            ),
-            _ => Outcome::Pass,
         }
     }
 }
@@ -812,133 +627,25 @@ impl<'r> Exclusions<'r> {
     }
 }
 
-/// Measures one pair, refusing a measurement that names another pair.
-pub(crate) fn measure(
-    service: &ProximityServiceHandle,
-    subject: &ObjectId,
+/// What an undecided exclusion leaves a pair that would be reported: open,
+/// with its reason and words. A fact the source records for nothing is
+/// about the source, not the pair: its words name no object, so the
+/// runtime reports it once per source.
+pub(crate) fn excluded_words(
+    (reason, message): &Unavailable,
     counterpart: &ObjectId,
-) -> Result<ProximityEvidence, Unavailable> {
-    ProximityRequest::try_new(subject.clone(), counterpart.clone())
-        .and_then(|request| service.measure_proximity(&request))
-        .and_then(|measured| {
-            // A measurement of another pair answers a different question.
-            if measured.request().subject() == subject
-                && measured.request().counterpart() == counterpart
-            {
-                Ok(measured)
-            } else {
-                Err(ProximityError::InvalidMeasurement)
-            }
-        })
-        .map_err(|error| {
-            (
-                reason(error),
-                format!("proximity to {counterpart} could not be measured: {error}"),
-            )
-        })
-}
-
-/// A pair's outcome once an undecided exclusion is taken into account: it
-/// never hides a finding and never reports one.
-pub(crate) fn unless_excluded(
-    outcome: Outcome,
-    exclusion: Result<Option<String>, Unavailable>,
-    counterpart: &ObjectId,
-) -> Outcome {
-    match (outcome, exclusion) {
-        (Outcome::Pass, _) => Outcome::Pass,
-        // A fact the source records for nothing is about the source, not
-        // the pair: keep its message free of object names, so the runtime
-        // reports it once per source.
-        (_, Err((NotEvaluatedReason::NotRecorded, message))) => Outcome::Open(
+) -> (NotEvaluatedReason, String) {
+    if *reason == NotEvaluatedReason::NotRecorded {
+        (
             NotEvaluatedReason::NotRecorded,
             format!("a clash may be excluded: {message}"),
-        ),
-        (_, Err((reason, message))) => Outcome::Open(
-            reason,
+        )
+    } else {
+        (
+            reason.clone(),
             format!("the pair with {counterpart} may be excluded: {message}"),
-        ),
-        (outcome, _) => outcome,
+        )
     }
-}
-
-/// Records a pair's outcome against its subject, or into its group.
-pub(crate) struct Recorder<'r> {
-    pub(crate) rule: &'r CompiledRule,
-    pub(crate) evaluation: CapabilityEvaluation,
-    pub(crate) unevaluated: Unevaluated,
-    pub(crate) groups: Option<Groups<'r>>,
-}
-
-impl Recorder<'_> {
-    pub(crate) fn record(
-        &mut self,
-        (subject, counterpart): (&ObjectId, &ObjectId),
-        pair: &Context<'_>,
-        outcome: Outcome,
-        severity: Severity,
-        evidence: Vec<Evidence>,
-    ) {
-        match outcome {
-            Outcome::Finding(class, message) => {
-                let reported = Reported {
-                    subject: subject.clone(),
-                    counterpart: counterpart.clone(),
-                    class,
-                    message,
-                    severity,
-                    evidence,
-                };
-                match &mut self.groups {
-                    Some(groups) => groups.add(pair, reported),
-                    None => self.evaluation.push_finding(reported.finding(self.rule)),
-                }
-            }
-            Outcome::Open(reason, message) => {
-                self.unevaluated.push(subject.clone(), reason, message);
-            }
-            Outcome::Pass => {}
-        }
-    }
-
-    pub(crate) fn finish(self) -> CapabilityEvaluation {
-        let Self {
-            rule,
-            mut evaluation,
-            unevaluated,
-            groups,
-        } = self;
-        for finding in groups.map(|groups| groups.finish(rule)).unwrap_or_default() {
-            evaluation.push_finding(finding);
-        }
-        unevaluated.drain_into(&mut evaluation);
-        evaluation
-    }
-}
-
-/// Judges a measured pair with its profile, asking the tolerance cases
-/// only when they can change the outcome, once at most; returns the
-/// outcome and what the cases found.
-pub(crate) fn judge_with_cases(
-    profile: &Profile,
-    declared: &Cases<'_>,
-    cases: &mut CaseJudge<'_>,
-    (service, measured): (&ProximityServiceHandle, &ProximityEvidence),
-) -> (Outcome, Excuse) {
-    let (subject, counterpart) = (
-        measured.request().subject(),
-        measured.request().counterpart(),
-    );
-    if declared.is_empty() {
-        let outcome = profile.judge(measured, counterpart, &mut || (Holds::No, String::new()));
-        return (outcome, Excuse::none());
-    }
-    let mut asked: Option<Excuse> = None;
-    let outcome = profile.judge(measured, counterpart, &mut || {
-        let excuse = asked.get_or_insert_with(|| cases.excuses(service, subject, counterpart));
-        (excuse.holds, excuse.note.clone())
-    });
-    (outcome, asked.unwrap_or_else(Excuse::none))
 }
 
 /// The parameters of a profile, in `clash`'s order.
@@ -947,122 +654,4 @@ pub(crate) fn profile_columns() -> impl Iterator<Item = (&'static str, bool)> {
         .iter()
         .map(|name| (*name, true))
         .chain(PROFILE_SWITCHES.iter().map(|name| (*name, false)))
-}
-
-impl RuleCapability for Clash {
-    fn id(&self) -> &'static str {
-        "axioval:capability.clash"
-    }
-
-    fn parameters(&self) -> Vec<ParameterDescriptor> {
-        let mut parameters = vec![ParameterDescriptor::required(
-            "counterparts",
-            ParameterType::Selector,
-        )];
-        for (name, number) in profile_columns() {
-            parameters.push(match (name, number) {
-                ("penetration_tolerance_metres", _) => {
-                    ParameterDescriptor::required(name, ParameterType::Number)
-                }
-                (_, true) => ParameterDescriptor::optional(name, ParameterType::Number),
-                (_, false) => ParameterDescriptor::optional(name, ParameterType::Boolean),
-            });
-        }
-        parameters.extend([
-            ParameterDescriptor::optional("exclude_paths", ParameterType::StringList),
-            ParameterDescriptor::optional(
-                "exclude_target_property",
-                ParameterType::PropertyReference,
-            ),
-            ParameterDescriptor::optional("exclude_same_layer", ParameterType::Boolean),
-        ]);
-        parameters.extend(grouping_parameters());
-        parameters.extend(severity_parameters());
-        parameters.push(case_parameter());
-        parameters
-    }
-
-    fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
-        let declared = match declaration(rule) {
-            Ok(declared) => declared,
-            Err((_, message)) => return refuse_declaration(context, rule, &message),
-        };
-        let prepared = match prepare(
-            context,
-            rule,
-            Some(declared.profile.margin()),
-            ProximityProjection::Minimum3d,
-        ) {
-            Ok(prepared) => prepared,
-            Err(refused) => return refused,
-        };
-        let mut exclusions = match Exclusions::new(
-            context,
-            &declared.exclude_paths,
-            declared.exclude_target_property,
-            declared.exclude_same_layer,
-        ) {
-            Ok(exclusions) => exclusions,
-            Err((_, message)) => return refuse_declaration(context, rule, &message),
-        };
-        let groups = match declared
-            .grouping
-            .as_ref()
-            .map(|grouping| Groups::new(context, grouping))
-            .transpose()
-        {
-            Ok(groups) => groups,
-            Err((_, message)) => return refuse_declaration(context, rule, &message),
-        };
-        let mut recorder = Recorder {
-            rule,
-            evaluation: CapabilityEvaluation::default(),
-            unevaluated: prepared.unevaluated,
-            groups,
-        };
-        let mut cases = CaseJudge::new(context, &declared.cases);
-        for pair in &prepared.pairs {
-            let (subject, counterpart) = (pair.subject(), pair.counterpart());
-            let exclusion = exclusions.excluded(subject, counterpart);
-            if matches!(exclusion, Ok(Some(_))) {
-                continue;
-            }
-            let measured = match measure(prepared.service, subject, counterpart) {
-                Ok(measured) => measured,
-                Err((reason, message)) => {
-                    recorder.unevaluated.push(subject.clone(), reason, message);
-                    continue;
-                }
-            };
-            let (judged, excuse) = judge_with_cases(
-                &declared.profile,
-                &declared.cases,
-                &mut cases,
-                (prepared.service, &measured),
-            );
-            let (outcome, severity, read) = declared.severities.report(
-                context,
-                &measured,
-                (subject, counterpart),
-                judged,
-                (None, severity(rule)),
-            );
-            let mut evidence = vec![measured.evidence().clone()];
-            evidence.extend(read);
-            if matches!(outcome, Outcome::Finding(..)) {
-                evidence.extend(excuse.evidence);
-            }
-            recorder.record(
-                (subject, counterpart),
-                &Context {
-                    measured: Some(&measured),
-                    cell: None,
-                },
-                unless_excluded(outcome, exclusion, counterpart),
-                severity,
-                evidence,
-            );
-        }
-        recorder.finish()
-    }
 }

@@ -35,6 +35,8 @@ pub(crate) fn argument_check(name: &str) -> Option<ArgumentCheck> {
         "parking_bay" => Some(crate::parking_bay::check_arguments),
         "distance_items" => Some(crate::distance::check_arguments),
         "containment_items" => Some(crate::containment::check_arguments),
+        "clash_pairs" => Some(crate::clash::check_arguments),
+        "clash_matrix_pairs" => Some(crate::clash_matrix::check_arguments),
         "well_requirements" => Some(crate::light_well::check_arguments),
         "opening_area" | "opening_count" => Some(crate::measured_openings::check_arguments),
         _ => None,

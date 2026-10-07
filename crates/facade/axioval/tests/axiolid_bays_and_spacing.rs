@@ -159,14 +159,36 @@ impl Scene {
                 .map(|(name, value)| (name.to_owned(), value))
                 .collect::<BTreeMap<_, _>>(),
         };
-        let (project, services) = self.services();
-        capability.evaluate(
-            &RuleContext {
-                project: &project,
-                services: &services,
-            },
-            &rule,
-        )
+        let (project, mut services) = self.services();
+        // A template reads its measured lists as a run does.
+        let registry =
+            axioval::rules::register_builtins(axioval::engine::CapabilityRegistry::new()).unwrap();
+        registry.install_measured(&mut services, &project);
+        let context = RuleContext {
+            project: &project,
+            services: &services,
+        };
+        let evaluated = capability.evaluate(&context, &rule);
+        // Held to the implementation it replaced, on the same scene.
+        let reference: Option<&dyn RuleCapability> = match capability.id() {
+            "axioval:capability.wall-spacing" => Some(&axioval_rules::reference::WallSpacing),
+            _ => None,
+        };
+        if let Some(reference) = reference {
+            let replaced = reference.evaluate(&context, &rule);
+            let parity = axioval::rules::parity::Parity::contract().compare(
+                (
+                    capability.id(),
+                    &axioval::rules::parity::Observations::of_evaluation(&replaced),
+                ),
+                (
+                    "template",
+                    &axioval::rules::parity::Observations::of_evaluation(&evaluated),
+                ),
+            );
+            assert!(parity.holds(), "{}", parity.diff());
+        }
+        evaluated
     }
 }
 
@@ -648,11 +670,9 @@ fn two_parallel_walls_too_close_are_found() {
     let found = findings(&outcome);
     assert_eq!(found.len(), 1, "{found:#?}");
     assert_eq!(found[0].0, "st");
-    assert!(
-        found[0]
-            .1
-            .starts_with("cad:model/m and cad:model/n are parallel and 0.4 m apart in plan"),
-        "{found:#?}"
+    assert_eq!(
+        found[0].1,
+        "cad:model/m and cad:model/n are parallel and 0.4 m apart in plan; at least 1 m required"
     );
     assert_eq!(found[0].2, ["m", "n"]);
     assert!(outcome.not_evaluated_outcomes().is_empty(), "{outcome:?}");
@@ -672,11 +692,10 @@ fn an_uncovered_strip_of_the_storey_is_found() {
     let outcome = storey().check(&WallSpacing, "storey", coverage(6.0));
     let found = findings(&outcome);
     assert_eq!(found.len(), 1, "{found:#?}");
-    assert!(
-        found[0]
-            .1
-            .starts_with("22 m² of cad:model/slab lies outside every band"),
-        "{found:#?}"
+    assert_eq!(
+        found[0].1,
+        "22 m² of cad:model/slab lies outside every band between parallel members at most 6 m \
+         apart; at most 1 m² allowed"
     );
     assert!(found[0].2.contains(&"slab".to_owned()), "{found:#?}");
     assert!(outcome.not_evaluated_outcomes().is_empty(), "{outcome:?}");
@@ -1419,4 +1438,110 @@ mod as_expressions {
             );
         }
     }
+}
+
+/// Declarations `wall-spacing` refuses, worded as the capability worded
+/// them, once for the rule.
+#[test]
+fn wall_spacing_refusals_keep_their_words() {
+    for (extra, words) in [
+        (vec![], "wall-spacing: declare `minimum`, `maximum` or both"),
+        (
+            vec![("maximum", metres(5.0))],
+            "wall-spacing: `maximum`, `footprints`, `footprint_path` and `uncovered_above` are \
+             declared together",
+        ),
+        (
+            vec![("minimum", metres(2.0)), ("maximum", metres(1.0))],
+            "wall-spacing: minimum exceeds maximum",
+        ),
+        (
+            vec![("minimum", quantity(1.0, "m2"))],
+            "wall-spacing: minimum must be a length",
+        ),
+    ] {
+        let outcome = storey().check(&WallSpacing, "storey", spacing(extra));
+        let open = outcome.not_evaluated_outcomes();
+        assert_eq!(open.len(), 1, "{outcome:?}");
+        assert_eq!(open[0].message(), words);
+    }
+}
+
+/// Generated storeys: walls at random offsets and turns, some short, some
+/// tessellated, against random minimums, maximums and areas allowed; each
+/// held to the implementation the template replaced (`Scene::check`).
+#[test]
+fn generated_storeys_hold_wall_spacing_parity() {
+    let mut judged = 0;
+    for pattern in 0..48_usize {
+        let mut scene = Scene::default().bodiless("st", "storey").body(
+            "slab",
+            "slab",
+            &rect(0.0, 0.0, 10.0, 8.0),
+            -0.3,
+            0.0,
+        );
+        let mut members = vec!["slab"];
+        let walls = ["w0", "w1", "w2", "w3"];
+        for (index, wall) in walls.iter().enumerate().take(2 + pattern % 3) {
+            #[allow(clippy::cast_precision_loss)]
+            let (offset, turn, length) = (
+                0.4 + 1.7 * ((pattern * 5 + index * 3) % 6) as f64,
+                [0.0, 0.0, 3.0, 8.0][(pattern + index) % 4],
+                [10.0, 6.0, 9.0][(pattern / 3 + index) % 3],
+            );
+            scene = scene.body(
+                wall,
+                "wall",
+                &turned([5.0, offset], length, 0.2, turn),
+                0.0,
+                3.0,
+            );
+            if (pattern + index) % 5 == 0 {
+                scene = scene.tessellated(wall);
+            }
+            members.push(wall);
+        }
+        scene = scene.contains("st", &members);
+        let mut extra = Vec::new();
+        if pattern % 3 != 1 {
+            extra.push(("minimum", metres([0.5, 1.2, 2.0][pattern % 3])));
+        }
+        if pattern % 3 != 0 {
+            extra.push(("maximum", metres([3.0, 6.0][pattern % 2])));
+            extra.push(("footprints", selector(kind("slab"))));
+            extra.push(("footprint_path", path(&[CONTAINS])));
+            extra.push((
+                "uncovered_above",
+                quantity([1.0, 20.0][pattern / 2 % 2], "m2"),
+            ));
+        }
+        let outcome = scene.check(&WallSpacing, "storey", spacing(extra));
+        judged += outcome.findings().len() + outcome.not_evaluated_outcomes().len();
+    }
+    assert!(judged > 0);
+}
+
+/// A footprint measured on a tessellation is cited as inexact, as the
+/// capability cited it.
+#[test]
+fn a_spacing_measured_on_a_tessellation_is_inexact() {
+    let outcome = storey().tessellated("slab").check(
+        &WallSpacing,
+        "storey",
+        spacing(vec![
+            ("maximum", metres(6.0)),
+            ("footprints", selector(kind("slab"))),
+            ("footprint_path", path(&[CONTAINS])),
+            ("uncovered_above", quantity(1.0, "m2")),
+        ]),
+    );
+    assert_eq!(outcome.findings().len(), 1, "{outcome:?}");
+    assert!(
+        outcome.findings()[0]
+            .evidence
+            .iter()
+            .any(|evidence| !evidence.exact),
+        "{outcome:?}"
+    );
 }

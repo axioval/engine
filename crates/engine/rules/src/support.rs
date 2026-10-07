@@ -431,21 +431,33 @@ impl Traversal {
         anchor: &ObjectId,
         universe: &[ObjectId],
     ) -> Result<(Vec<ObjectId>, Vec<Evidence>), Unavailable> {
-        let service = relationship_service(context)?;
         let everything: Vec<ObjectId> = context
             .project
             .objects()
             .map(|object| object.id.clone())
             .collect();
+        self.related_among(context, anchor, universe, &everything)
+    }
+
+    /// [`Self::related_ids`], every object of the project listed already
+    /// (`everything`, once per run: [`everything`]).
+    pub(crate) fn related_among(
+        &self,
+        context: &RuleContext<'_>,
+        anchor: &ObjectId,
+        universe: &[ObjectId],
+        everything: &[ObjectId],
+    ) -> Result<(Vec<ObjectId>, Vec<Evidence>), Unavailable> {
+        let service = relationship_service(context)?;
         let mut frontier = vec![anchor.clone()];
         let mut evidence = Vec::new();
         for (index, step) in self.steps.iter().enumerate() {
             let last = index + 1 == self.steps.len();
-            let scope: &[ObjectId] = if last { universe } else { &everything };
+            let scope: &[ObjectId] = if last { universe } else { everything };
             let mut reached = BTreeSet::new();
             for from in &frontier {
                 let chain = self.follow_chain || step.chain();
-                let (found, cited) = self.step(service, step, from, &everything, scope, chain)?;
+                let (found, cited) = self.step(service, step, from, everything, scope, chain)?;
                 reached.extend(found);
                 evidence.extend(cited);
             }
@@ -1482,4 +1494,22 @@ pub(crate) fn undecided_reason(values: &[&PropertyValue]) -> NotEvaluatedReason 
     } else {
         NotEvaluatedReason::InvalidEvidence
     }
+}
+
+/// The memo key of every object of the project.
+#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+struct Everything;
+
+/// Every object of the project by identity, in the project's order, listed
+/// once per run (`MeasuredMemo`): what a traversal walks through.
+pub(crate) fn everything(context: &RuleContext<'_>) -> std::sync::Arc<Vec<ObjectId>> {
+    axioval_engine::MeasuredMemo::of(context.services, Everything, || {
+        std::sync::Arc::new(
+            context
+                .project
+                .objects()
+                .map(|object| object.id.clone())
+                .collect(),
+        )
+    })
 }

@@ -3702,6 +3702,210 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
     walking::TACTILE_STRIPS,
     MemberDescriptor {
         list: MeasuredDescriptor {
+            name: "wall_spacing",
+            parameters: &[
+                MeasuredParameter {
+                    key: "members",
+                    kind: MeasuredParameterKind::Objects,
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The walls or beams paired: the objects a selector parameter of the rule picks, those it leaves undecided possible members.",
+                        "Die gepaarten Wände oder Träger: die Objekte, die ein Selektorparameter der Regel wählt, die unentschiedenen mögliche Mitglieder.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "member_path",
+                    kind: MeasuredParameterKind::Path,
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The relationship steps from the storey to its members.",
+                        "Die Beziehungsschritte vom Geschoss zu seinen Mitgliedern.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "angle_tolerance",
+                    kind: MeasuredParameterKind::Angle { below: 45.0 },
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "How far from parallel two members' long axes may lie, in degrees.",
+                        "Wie weit die Längsachsen zweier Mitglieder von parallel abweichen dürfen, in Grad.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "minimum",
+                    kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "How far apart parallel members must stand at least.",
+                        "Wie weit parallele Mitglieder mindestens auseinanderstehen müssen.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "maximum",
+                    kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "How far apart the members of a pair bounding a band stand at most.",
+                        "Wie weit die Mitglieder eines ein Band begrenzenden Paars höchstens auseinanderstehen.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "footprints",
+                    kind: MeasuredParameterKind::Objects,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The objects whose footprints the bands must cover.",
+                        "Die Objekte, deren Grundrisse die Bänder überdecken müssen.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "footprint_path",
+                    kind: MeasuredParameterKind::Path,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The relationship steps from the storey to its footprint objects.",
+                        "Die Beziehungsschritte vom Geschoss zu seinen Grundrissobjekten.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "uncovered_above",
+                    kind: MeasuredParameterKind::Area { minimum: 0.0 },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The area of a footprint outside every band allowed at most, in square metres.",
+                        "Die höchstens erlaubte Fläche eines Grundrisses außerhalb aller Bänder, in Quadratmetern.",
+                    ),
+                },
+            ],
+            dimension: None,
+            services: &[
+                "plan-span",
+                "proximity",
+                "vertical-extent",
+                "plan-area",
+                "relationship-selection",
+            ],
+            exactness: MeasuredExactness::Measured,
+            subject: MeasuredSubject::Object,
+            not_evaluated: &[
+                "a service is not registered",
+                "the path to the members cannot be read",
+            ],
+            label: &en_de("Wall spacing", "Wandabstand"),
+            help: &en_de(
+                "What `wall-spacing` judges of a storey: each pair of members surely parallel and \
+                 facing with its distance, why some pair may stand closer than the minimum, and \
+                 the area of each footprint outside every band between pairs at most the maximum \
+                 apart.",
+                "Was `wall-spacing` an einem Geschoss beurteilt: jedes sicher parallele und \
+                 gegenüberstehende Paar von Mitgliedern mit seinem Abstand, warum ein Paar näher \
+                 als das Minimum stehen kann, und die Fläche jedes Grundrisses außerhalb aller \
+                 Bänder zwischen Paaren höchstens das Maximum auseinander.",
+            ),
+        },
+        fields: &[
+            field(
+                "close",
+                TRUTH,
+                &en_de("Pair", "Paar"),
+                &en_de(
+                    "True on an item of a pair surely parallel, facing and selected.",
+                    "Wahr am Element eines sicher parallelen, gegenüberstehenden und gewählten Paars.",
+                ),
+            ),
+            field(
+                "distance",
+                LENGTH,
+                &en_de("Distance", "Abstand"),
+                &en_de(
+                    "The pair's plan distance.",
+                    "Der Grundrissabstand des Paars.",
+                ),
+            ),
+            field(
+                "apart",
+                MemberFieldKind::Text,
+                &en_de("Apart", "Abstand"),
+                &en_de(
+                    "The pair's plan distance as findings show it.",
+                    "Der Grundrissabstand des Paars, wie Befunde ihn zeigen.",
+                ),
+            ),
+            field(
+                "pair",
+                MemberFieldKind::Objects,
+                &en_de("Members", "Mitglieder"),
+                &en_de(
+                    "The pair's two members.",
+                    "Die beiden Mitglieder des Paars.",
+                ),
+            ),
+            field(
+                "spacing",
+                LENGTH,
+                &en_de("Spacing", "Abstand"),
+                &en_de(
+                    "Not evaluated, for why some pair may stand closer than the minimum.",
+                    "Nicht ausgewertet, mit dem Grund, warum ein Paar näher als das Minimum stehen kann.",
+                ),
+            ),
+            field(
+                "cover",
+                TRUTH,
+                &en_de("Cover", "Überdeckung"),
+                &en_de(
+                    "True on an item of a footprint the bands must cover.",
+                    "Wahr am Element eines Grundrisses, den die Bänder überdecken müssen.",
+                ),
+            ),
+            field(
+                "uncovered",
+                RATIO,
+                &en_de("Uncovered", "Unüberdeckt"),
+                &en_de(
+                    "The footprint's area outside every band, in square metres; refused for why it cannot be measured.",
+                    "Die Fläche des Grundrisses außerhalb aller Bänder, in Quadratmetern; verweigert mit dem Grund, warum sie nicht gemessen werden kann.",
+                ),
+            ),
+            field(
+                "what",
+                MemberFieldKind::Text,
+                &en_de("Words", "Worte"),
+                &en_de(
+                    "Words naming the uncovered area.",
+                    "Worte, die die unüberdeckte Fläche nennen.",
+                ),
+            ),
+            field(
+                "unknown",
+                MemberFieldKind::Text,
+                &en_de("Unknown", "Unbekannt"),
+                &en_de(
+                    "Why the bands may cover more, each after `; `.",
+                    "Warum die Bänder mehr überdecken können, jeweils nach `; `.",
+                ),
+            ),
+            field(
+                "related",
+                MemberFieldKind::Objects,
+                &en_de("Related", "Bezogen"),
+                &en_de(
+                    "The members bounding a sure band, and the footprint.",
+                    "Die Mitglieder, die ein sicheres Band begrenzen, und der Grundriss.",
+                ),
+            ),
+        ],
+    },
+    MemberDescriptor {
+        list: MeasuredDescriptor {
             name: "well_gaps",
             parameters: &[WELL_MEMBERS],
             dimension: None,

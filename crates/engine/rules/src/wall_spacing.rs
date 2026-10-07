@@ -2,7 +2,9 @@
 //! storey the bands between them cover.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::LazyLock;
 
+use axioval_engine::template::Template;
 use axioval_engine::{
     CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ObjectBounds, ParameterDescriptor,
     ParameterType, PlanAreaServiceHandle, PlanBand, PlanRectangle, PlanSpanServiceHandle,
@@ -15,16 +17,19 @@ use axioval_ir::{Evidence, Object, ObjectId, QuantityDimension};
 use crate::orientation::{
     Alignment, Tri, aligned, along, angle_tolerance, rectangle, rectangle_service,
 };
-use crate::pairs::refuse_all;
-use crate::plan_area::{shown, unavailable};
-use crate::selection::select_objects;
-use crate::support::{Parameters, Traversal, Unavailable, finding, invalid};
+use crate::plan_area::unavailable;
+use crate::support::{Parameters, Traversal, Unavailable, invalid};
 
+mod items;
 mod measured;
+#[cfg(feature = "parity-reference")]
+pub(crate) mod reference;
+mod template;
 
+pub(crate) use items::SpacingItems;
 pub(crate) use measured::SpacingMeasures;
 
-const NAME: &str = "wall-spacing";
+pub(crate) const NAME: &str = "wall-spacing";
 
 /// Requires the parallel walls or beams on each selected storey to stand at
 /// least a minimum apart in plan and, with a maximum, the bands between
@@ -54,93 +59,75 @@ const NAME: &str = "wall-spacing";
 /// and closer than the minimum; the uncovered area is bounded from above by
 /// the sure bands and from below by every possible one, so an undecided
 /// member leaves a finding or pass standing only when it cannot change it.
+///
+/// It runs as a template ([`axioval_engine::template`]): the items of the
+/// measured `wall_spacing` list of each storey, its pairs surely parallel
+/// and facing with their distances and the area of each footprint outside
+/// the bands, judged against the minimum and the area allowed.
 pub struct WallSpacing;
 
-struct Coverage<'a> {
-    maximum: f64,
-    footprints: &'a Selector,
-    footprint_path: Traversal,
-    threshold: f64,
-}
+static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
 
-struct Config<'a> {
-    members: &'a Selector,
-    member_path: Traversal,
-    tolerance: f64,
-    minimum: Option<f64>,
-    coverage: Option<Coverage<'a>>,
-}
+/// The plans of the rules bound to it, kept across runs.
+static PLANS: crate::templates::Plans = crate::templates::Plans::new();
 
 impl RuleCapability for WallSpacing {
     fn id(&self) -> &'static str {
-        "axioval:capability.wall-spacing"
+        template::ID
     }
 
     fn parameters(&self) -> Vec<ParameterDescriptor> {
-        vec![
-            ParameterDescriptor::required("members", ParameterType::Selector),
-            ParameterDescriptor::required("member_path", ParameterType::StringList),
-            ParameterDescriptor::required("angle_tolerance", ParameterType::Quantity),
-            ParameterDescriptor::optional("minimum", ParameterType::Quantity),
-            ParameterDescriptor::optional("maximum", ParameterType::Quantity),
-            ParameterDescriptor::optional("footprints", ParameterType::Selector),
-            ParameterDescriptor::optional("footprint_path", ParameterType::StringList),
-            ParameterDescriptor::optional("uncovered_above", ParameterType::Quantity),
-        ]
+        TEMPLATE.parameters.clone()
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
-        let config = match parse(&Parameters(rule)) {
-            Ok(config) => config,
-            Err((reason, message)) => {
-                return CapabilityEvaluation::not_evaluated(reason, format!("{NAME}: {message}"));
-            }
-        };
-        let (storeys, mut evaluation) = select_objects(context, &rule.selector);
-        let services = match Services::of(context, &config) {
-            Ok(services) => services,
-            Err((reason, message)) => return refuse_all(&storeys, evaluation, &reason, &message),
-        };
-        let (matched, selection) = select_objects(context, config.members);
-        let undecided: BTreeSet<ObjectId> = selection
-            .not_evaluated_outcomes()
-            .iter()
-            .filter_map(|outcome| outcome.object_id().cloned())
-            .collect();
-        let matched: BTreeSet<ObjectId> = matched.iter().map(|object| object.id.clone()).collect();
-        let universe: Vec<&Object> = context
-            .project
-            .objects()
-            .filter(|object| matched.contains(&object.id) || undecided.contains(&object.id))
-            .collect();
-        let members = Members {
-            matched: &matched,
-            universe: &universe,
-        };
-        for storey in storeys {
-            let judged = Storey {
-                context,
-                config: &config,
-                services: &services,
-                object: storey,
-            };
-            for check in judged.checks(&members) {
-                match check {
-                    Ok((message, evidence, related)) => {
-                        evaluation
-                            .push_finding(finding(rule, &storey.id, message, evidence, related));
-                    }
-                    Err((reason, message)) => {
-                        evaluation.push_object_not_evaluated(storey.id.clone(), reason, message);
-                    }
-                }
-            }
-        }
-        evaluation
+        crate::templates::run((&TEMPLATE, &PLANS), context, rule)
+    }
+
+    fn template(&self) -> Option<&Template> {
+        Some(&TEMPLATE)
     }
 }
 
-fn parse<'a>(parameters: &Parameters<'a>) -> Result<Config<'a>, Unavailable> {
+/// The capability's parameter descriptor.
+pub(crate) fn parameters() -> Vec<ParameterDescriptor> {
+    vec![
+        ParameterDescriptor::required("members", ParameterType::Selector),
+        ParameterDescriptor::required("member_path", ParameterType::StringList),
+        ParameterDescriptor::required("angle_tolerance", ParameterType::Quantity),
+        ParameterDescriptor::optional("minimum", ParameterType::Quantity),
+        ParameterDescriptor::optional("maximum", ParameterType::Quantity),
+        ParameterDescriptor::optional("footprints", ParameterType::Selector),
+        ParameterDescriptor::optional("footprint_path", ParameterType::StringList),
+        ParameterDescriptor::optional("uncovered_above", ParameterType::Quantity),
+    ]
+}
+
+/// Checks the rule parameters the measured `wall_spacing` is handed, as the
+/// rule states them: the capability's declaration, in its order and words.
+pub(crate) fn check_arguments(
+    arguments: &BTreeMap<String, axioval_ir::contract::ParameterValue>,
+) -> Result<(), Unavailable> {
+    let rule = crate::light_area::synthesised(arguments.clone());
+    parse(&Parameters(&rule)).map(|_| ())
+}
+
+pub(crate) struct Coverage<'a> {
+    pub(crate) maximum: f64,
+    pub(crate) footprints: &'a Selector,
+    pub(crate) footprint_path: Traversal,
+    pub(crate) threshold: f64,
+}
+
+pub(crate) struct Config<'a> {
+    pub(crate) members: &'a Selector,
+    pub(crate) member_path: Traversal,
+    pub(crate) tolerance: f64,
+    pub(crate) minimum: Option<f64>,
+    pub(crate) coverage: Option<Coverage<'a>>,
+}
+
+pub(crate) fn parse<'a>(parameters: &Parameters<'a>) -> Result<Config<'a>, Unavailable> {
     let length = |name: &str| match parameters.quantity(name)? {
         None => Ok(None),
         Some((value, QuantityDimension::Length)) if value >= 0.0 => Ok(Some(value)),
@@ -198,15 +185,15 @@ fn parse<'a>(parameters: &Parameters<'a>) -> Result<Config<'a>, Unavailable> {
     })
 }
 
-struct Services<'a> {
-    rectangles: &'a PlanSpanServiceHandle,
-    proximity: &'a ProximityServiceHandle,
-    extents: &'a VerticalExtentServiceHandle,
-    areas: Option<&'a PlanAreaServiceHandle>,
+pub(crate) struct Services<'a> {
+    pub(crate) rectangles: &'a PlanSpanServiceHandle,
+    pub(crate) proximity: &'a ProximityServiceHandle,
+    pub(crate) extents: &'a VerticalExtentServiceHandle,
+    pub(crate) areas: Option<&'a PlanAreaServiceHandle>,
 }
 
 impl<'a> Services<'a> {
-    fn of(context: &RuleContext<'a>, config: &Config<'_>) -> Result<Self, Unavailable> {
+    pub(crate) fn of(context: &RuleContext<'a>, config: &Config<'_>) -> Result<Self, Unavailable> {
         let missing = |what: &str| {
             (
                 NotEvaluatedReason::MissingService,
@@ -237,71 +224,39 @@ impl<'a> Services<'a> {
 }
 
 /// The candidate members: selected or undecided.
-struct Members<'m> {
-    matched: &'m BTreeSet<ObjectId>,
-    universe: &'m [&'m Object],
+pub(crate) struct Members<'m> {
+    pub(crate) matched: &'m BTreeSet<ObjectId>,
+    pub(crate) universe: &'m [&'m Object],
 }
 
 /// A finding (message, evidence, related objects).
-type Found = (String, Vec<Evidence>, Vec<ObjectId>);
+pub(crate) type Found = (String, Vec<Evidence>, Vec<ObjectId>);
 
 /// One pair of members as far as it was judged.
-struct Pair {
-    first: ObjectId,
-    second: ObjectId,
+pub(crate) struct Pair {
+    pub(crate) first: ObjectId,
+    pub(crate) second: ObjectId,
     /// Parallel, facing and both selected.
-    paired: Tri,
+    pub(crate) paired: Tri,
     /// Why `paired` or the distance is undecided.
-    why: Vec<String>,
-    distance: (f64, f64),
+    pub(crate) why: Vec<String>,
+    pub(crate) distance: (f64, f64),
     /// The first member's long axis, or the second's.
-    axis: Option<[f64; 2]>,
-    evidence: Vec<Evidence>,
+    pub(crate) axis: Option<[f64; 2]>,
+    pub(crate) evidence: Vec<Evidence>,
 }
 
-struct Storey<'s, 'a> {
-    context: &'s RuleContext<'a>,
-    config: &'s Config<'s>,
-    services: &'s Services<'a>,
-    object: &'s Object,
+pub(crate) struct Storey<'s, 'a> {
+    pub(crate) context: &'s RuleContext<'a>,
+    pub(crate) config: &'s Config<'s>,
+    pub(crate) services: &'s Services<'a>,
+    pub(crate) object: &'s Object,
 }
 
 impl Storey<'_, '_> {
-    fn checks(&self, members: &Members<'_>) -> Vec<Result<Found, Unavailable>> {
-        let (reached, mut evidence) =
-            match self
-                .config
-                .member_path
-                .related(self.context, &self.object.id, members.universe)
-            {
-                Ok(reached) => reached,
-                Err(unavailable) => return vec![Err(unavailable)],
-            };
-        let reach = self
-            .config
-            .minimum
-            .unwrap_or(0.0)
-            .max(self.config.coverage.as_ref().map_or(0.0, |c| c.maximum));
-        let (pairs, blind) = match self.pairs(&reached, members, reach) {
-            Ok(pairs) => pairs,
-            Err(unavailable) => return vec![Err(unavailable)],
-        };
-        for pair in &pairs {
-            evidence.extend(pair.evidence.iter().cloned());
-        }
-        let mut checks = Vec::new();
-        if let Some(minimum) = self.config.minimum {
-            checks.extend(Self::minimum(minimum, &pairs, &blind));
-        }
-        if let Some(coverage) = &self.config.coverage {
-            checks.extend(self.coverage(coverage, &pairs, &blind, &evidence));
-        }
-        checks
-    }
-
     /// Every pair within `reach` of each other in plan, and the members
     /// whose extent cannot be read.
-    fn pairs(
+    pub(crate) fn pairs(
         &self,
         reached: &[ObjectId],
         members: &Members<'_>,
@@ -460,137 +415,6 @@ impl Storey<'_, '_> {
             possible_high - possible_low <= -margin,
         ))
     }
-
-    fn minimum(minimum: f64, pairs: &[Pair], blind: &[String]) -> Vec<Result<Found, Unavailable>> {
-        let mut checks = Vec::new();
-        let mut unknown: Vec<String> = blind.to_vec();
-        for pair in pairs {
-            let (low, high) = pair.distance;
-            let close = pair.paired.and(Tri::of(high < minimum, low >= minimum));
-            match close {
-                Tri::Yes => checks.push(Ok((
-                    format!(
-                        "{} and {} are parallel and {} m apart in plan; at least {minimum} m \
-                         required",
-                        pair.first,
-                        pair.second,
-                        shown(low, high)
-                    ),
-                    pair.evidence.clone(),
-                    vec![pair.first.clone(), pair.second.clone()],
-                ))),
-                Tri::Maybe => {
-                    let mut why = pair.why.clone();
-                    if why.is_empty() {
-                        why.push(format!(
-                            "{} and {} may be closer than {minimum} m ({} m)",
-                            pair.first,
-                            pair.second,
-                            shown(low, high)
-                        ));
-                    }
-                    unknown.extend(why);
-                }
-                Tri::No => {}
-            }
-        }
-        if !unknown.is_empty() {
-            checks.push(Err((
-                NotEvaluatedReason::IncompleteEvidence,
-                format!(
-                    "minimum spacing: whether every parallel pair stands {minimum} m apart is \
-                     unknown: {}",
-                    unknown.join("; ")
-                ),
-            )));
-        }
-        checks
-    }
-
-    fn coverage(
-        &self,
-        coverage: &Coverage<'_>,
-        pairs: &[Pair],
-        blind: &[String],
-        evidence: &[Evidence],
-    ) -> Vec<Result<Found, Unavailable>> {
-        let Some(areas) = self.services.areas else {
-            return Vec::new();
-        };
-        let maximum = coverage.maximum;
-        let Bands {
-            least,
-            most,
-            mut unknown,
-            related,
-        } = Bands::of(pairs, maximum);
-        unknown.splice(0..0, blind.iter().cloned());
-        let (matched, selection) = select_objects(self.context, coverage.footprints);
-        if let Some(outcome) = selection.not_evaluated_outcomes().first() {
-            return vec![Err((
-                outcome.reason().clone(),
-                format!(
-                    "the storey's footprint objects are undecided: {}",
-                    outcome.message()
-                ),
-            ))];
-        }
-        let (footprints, mut cited) =
-            match coverage
-                .footprint_path
-                .related(self.context, &self.object.id, &matched)
-            {
-                Ok(found) => found,
-                Err(unavailable) => return vec![Err(unavailable)],
-            };
-        if footprints.is_empty() {
-            return vec![Err((
-                NotEvaluatedReason::IncompleteEvidence,
-                format!(
-                    "{} reaches no footprint object, so it has no gross footprint to cover",
-                    self.object.id
-                ),
-            ))];
-        }
-        cited.extend(evidence.iter().cloned());
-        let threshold = coverage.threshold;
-        let mut checks = Vec::new();
-        for footprint in footprints {
-            let (lower, upper) =
-                match uncovered(areas, &footprint, (&least, &most), unknown.is_empty()) {
-                    Ok((area, measured)) => {
-                        cited.extend(measured);
-                        area
-                    }
-                    Err(error) => {
-                        checks.push(Err(error));
-                        continue;
-                    }
-                };
-            let what = format!(
-                "{} m² of {footprint} lies outside every band between parallel members at most \
-                 {maximum} m apart",
-                shown(lower, upper)
-            );
-            if lower > threshold {
-                let mut objects: Vec<ObjectId> = related.iter().cloned().collect();
-                objects.push(footprint.clone());
-                checks.push(Ok((
-                    format!("{what}; at most {threshold} m² allowed"),
-                    cited.clone(),
-                    objects,
-                )));
-            } else if upper > threshold {
-                let mut message = format!("{what}, which straddles {threshold} m²");
-                for reason in &unknown {
-                    message.push_str("; ");
-                    message.push_str(reason);
-                }
-                checks.push(Err((NotEvaluatedReason::IncompleteEvidence, message)));
-            }
-        }
-        checks
-    }
 }
 
 /// The area of `footprint` outside the bands, `(lower, upper)` square
@@ -598,7 +422,7 @@ impl Storey<'_, '_> {
 /// (`least`) leave, at least what every possible band (`most`) leaves when
 /// nothing is unknown (`known`), otherwise nothing, since anything unknown
 /// may bound another band.
-fn uncovered(
+pub(crate) fn uncovered(
     areas: &PlanAreaServiceHandle,
     footprint: &ObjectId,
     (least, most): (&[PlanBand], &[PlanBand]),
@@ -624,19 +448,19 @@ fn uncovered(
 }
 
 /// The bands between parallel pairs at most a maximum apart.
-struct Bands {
+pub(crate) struct Bands {
     /// Surely qualifying: the least the bands can cover.
-    least: Vec<PlanBand>,
+    pub(crate) least: Vec<PlanBand>,
     /// Surely or possibly qualifying: the most.
-    most: Vec<PlanBand>,
+    pub(crate) most: Vec<PlanBand>,
     /// Why the bands may cover more than `most`.
-    unknown: Vec<String>,
+    pub(crate) unknown: Vec<String>,
     /// The members bounding a sure band.
-    related: BTreeSet<ObjectId>,
+    pub(crate) related: BTreeSet<ObjectId>,
 }
 
 impl Bands {
-    fn of(pairs: &[Pair], maximum: f64) -> Self {
+    pub(crate) fn of(pairs: &[Pair], maximum: f64) -> Self {
         let mut least = Vec::new();
         let mut most = Vec::new();
         let mut unknown = Vec::new();

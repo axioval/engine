@@ -404,3 +404,11 @@ template's fixed cost per anchor, on models of few anchors and members.
 0.67 to 1.21× its reference's run time and 0.93 to 1.07× its peak heap.
 Its list reads the whole selection's numbers and scopes once per rule,
 compiling the pattern once, and hands each object its own items.
+
+`wall-spacing` runs the `spans` case's two rules: 0.43 to 1.35× its
+reference's run time and 0.90 to 1.34× its peak heap, the small models
+under the floor together within 1.22×. Its list binds the member and
+footprint selections once per rule, lists each selection's objects and
+the project's once per run (`support::everything`, which a traversal walks
+through), and measures each storey's pairs and footprints once, as the
+capability did.

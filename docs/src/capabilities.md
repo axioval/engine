@@ -1325,7 +1325,7 @@ Angled bays drawn as parallelograms are enclosed by a rectangle that is not thei
 
 ### Wall spacing
 
-`axioval:capability.wall-spacing` checks the parallel walls or beams on each selected storey. It needs the plan-span, proximity, vertical-extent and (with a maximum) plan-area services, and a relationship service for the paths.
+`axioval:capability.wall-spacing` checks the parallel walls or beams on each selected storey. It needs the plan-span, proximity, vertical-extent and (with a maximum) plan-area services, and a relationship service for the paths. It runs as a template ([Capability templates](./templates.md#wall-spacing)).
 
 | Parameter | Type | Meaning |
 |---|---|---|

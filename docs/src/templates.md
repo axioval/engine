@@ -45,7 +45,7 @@ table, and `light-well`, `centre-line-distance`, `component-visibility`
 and `exit-separation` (whose required separation stays an interval over
 both shares where its flag is unknown) follow, and `name-sequence` is the
 first judging the items of a list on objects of their own (`at`), and
-`numbering-consistency` follows; `coordinate-consistency` is the first judging the sources themselves,
+`numbering-consistency` and `wall-spacing` follow; `coordinate-consistency` is the first judging the sources themselves,
 against a reference read once per rule, and `external-wall-validation`
 the first leading one measurement to outcomes at source and at object
 level ([#291](https://github.com/axioval/engine/issues/291)): every
@@ -1362,6 +1362,30 @@ Findings relate the objects the prefix or step is judged against. The
 declaration is the capability's own (`arguments`,
 `numbering_consistency::check_arguments`), refused once for the rule.
 
+### `wall-spacing`
+
+| Form | When | Values | Checks |
+| --- | --- | --- | --- |
+| one | always | `judged` = 1 | `Items` over `wall_spacing;members=@members;member_path=@member_path;…;uncovered_above=@uncovered_above` (every parameter under its own name, unstated ones dropped) |
+
+The list is the capability's own reading (`Storey::pairs`, `Bands`,
+`uncovered`): the members the path reaches among those the bound member
+selection picks, each pair parallel and facing, the bands between pairs at
+most `maximum` apart and each footprint's area outside them. Its items:
+each pair surely parallel, facing and selected, with its plan distance,
+at least `minimum` or a finding (`{pair:and} are parallel and {apart} m
+apart in plan; at least {minimum:si} m required`), a distance straddling
+the minimum passing here, since the list words every doubt once: why some
+pair may stand closer than the minimum (`minimum spacing: whether every
+parallel pair stands … apart is unknown: …`), open; and each footprint's
+area outside every band, at most `uncovered_above` (an area, bound in
+square metres) or a finding (`{what}; at most {uncovered_above:si} m²
+allowed`), open where it straddles (`{what}, which straddles … m²{unknown}`)
+or cannot be measured, for its reason (`MemberValue::Refused`). Missing
+services and a path that cannot be read refuse the list for each storey.
+The declaration is the capability's own (`arguments`,
+`wall_spacing::check_arguments`), refused once for the rule.
+
 ### `coordinate-consistency`
 
 | Form | When | Once | Scopes | Decision |
@@ -2139,6 +2163,16 @@ on no storey and one in another source, checked for prefixes and gaps per
 storey, per source and across sources; and by the `numbering-consistency`
 rules of the `numbering` case, recorded before the switch. It is never
 forked (D33).
+
+`wall-spacing` is held to `wall_spacing/reference.rs`
+(`axioval_rules::reference::WallSpacing`, which pairs members and measures
+bands through the same `Storey`, `Bands` and `uncovered`) on every fixture
+of the facade's `tests/axiolid_bays_and_spacing.rs`, measured on real
+meshes, its messages and refusals asserted literally; by generated storeys
+of walls at random offsets, turns and lengths, some tessellated, under
+random minimums, maximums and areas allowed; and by the `wall-spacing`
+rules of the `spans` case, recorded before the switch. It is never forked
+(D34).
 `coordinate-consistency` is held to `coordinate_consistency/reference.rs`
 (`axioval_rules::reference::CoordinateConsistencyCheck`, which shares the
 comparison and the choice of the reference) through `common::Held` on

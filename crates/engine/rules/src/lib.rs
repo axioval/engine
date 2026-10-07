@@ -227,6 +227,7 @@ pub mod reference {
     pub use crate::stair_geometry::reference::StairGeometryReference as StairGeometry;
     pub use crate::triangle_count::reference::TriangleCountLimit;
     pub use crate::unique_value::reference::UniqueValue;
+    pub use crate::wall_spacing::reference::WallSpacing;
 }
 /// XML Schema patterns (as IDS and `property-value` write them) in `regex`
 /// syntax, for a property selector's `matches` operator.
@@ -336,6 +337,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(free_floor::PlacementMeasures))
         .and_then(|registry| registry.register_measured(parking_bay::BayMeasures))
         .and_then(|registry| registry.register_measured(wall_spacing::SpacingMeasures))
+        .and_then(|registry| registry.register_measured(wall_spacing::SpacingItems))
         .and_then(|registry| registry.register_measured(counterpart_coverage::CoverageMeasures))
         .and_then(|registry| registry.register_measured(effective_coverage::EffectMeasures))
         .and_then(|registry| registry.register_measured(space_boundary_coverage::BoundaryMeasures))

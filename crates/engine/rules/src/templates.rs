@@ -862,7 +862,6 @@ fn check(check: &Check, rule: &CompiledRule, template: &Template) -> Result<(), 
 /// The rule parameters the measured value `value` names, as stated and
 /// keyed by the value's keys, checked by the value's own argument check.
 fn arguments_checked(rule: &CompiledRule, value: &str) -> Result<(), Unavailable> {
-    use axioval_ir::measured::MeasuredArgument;
     // A measured value, or a measured member list.
     let call = axioval_ir::measured::parse(value)
         .or_else(|_| axioval_ir::measured::parse_members(value))
@@ -870,7 +869,18 @@ fn arguments_checked(rule: &CompiledRule, value: &str) -> Result<(), Unavailable
     let Some(check) = crate::measured_kinds::argument_check(call.name()) else {
         return Ok(());
     };
-    let stated = call
+    check(&stated_arguments(rule, &call))
+}
+
+/// The rule parameters `call` names, as stated and keyed by its keys, and
+/// the options it chooses itself (`shape=circle`), which say which form of
+/// the measurement the parameters declare.
+fn stated_arguments(
+    rule: &CompiledRule,
+    call: &axioval_ir::measured::MeasuredCall,
+) -> BTreeMap<String, ParameterValue> {
+    use axioval_ir::measured::MeasuredArgument;
+    let mut stated: BTreeMap<String, ParameterValue> = call
         .references()
         .filter_map(|(key, argument)| match argument {
             MeasuredArgument::Parameter(name) => rule
@@ -880,7 +890,16 @@ fn arguments_checked(rule: &CompiledRule, value: &str) -> Result<(), Unavailable
             _ => None,
         })
         .collect();
-    check(&stated)
+    for declared in call.descriptor.parameters {
+        if let Some(option) = call.choice(declared.key) {
+            stated
+                .entry(declared.key.to_owned())
+                .or_insert_with(|| ParameterValue::String {
+                    value: option.to_owned(),
+                });
+        }
+    }
+    stated
 }
 
 /// Whether the rule declares `name`: states it, a boolean true, a table
@@ -4787,4 +4806,44 @@ fn measured_references(expression: &Expression) -> std::collections::BTreeSet<St
         pending.extend(node.children());
     }
     names
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use axioval_ir::RuleId;
+    use axioval_ir::contract::{ParameterValue, Selector, Severity};
+
+    /// An argument check sees the rule parameters a list names under the
+    /// list's keys, and the options the list chooses itself beside them.
+    #[test]
+    fn an_argument_check_sees_the_lists_own_choices() {
+        let rule = axioval_engine::CompiledRule {
+            id: RuleId::new("checked").unwrap(),
+            capability: "axioval:capability.free-floor-rectangle".into(),
+            severity: Severity::Warning,
+            selector: Selector::All,
+            parameters: BTreeMap::from([(
+                "tall".to_owned(),
+                ParameterValue::Number { value: 2.0 },
+            )]),
+        };
+        let call = axioval_ir::measured::parse_members(
+            "free_placements;shape=rectangle;height=@tall;width=1;length=@unstated",
+        )
+        .unwrap();
+        assert_eq!(
+            super::stated_arguments(&rule, &call),
+            BTreeMap::from([
+                ("height".to_owned(), ParameterValue::Number { value: 2.0 }),
+                (
+                    "shape".to_owned(),
+                    ParameterValue::String {
+                        value: "rectangle".to_owned()
+                    }
+                ),
+            ])
+        );
+    }
 }

@@ -310,7 +310,10 @@ pub enum Check {
     /// the value's keys, by the value's own argument check (one its
     /// provider declares, `measured_kinds::argument_check`): a declaration
     /// only the measurement knows how to read, such as a table of rows,
-    /// refused once for the rule in the measurement's words.
+    /// refused once for the rule in the measurement's words. The options
+    /// the value chooses itself (`shape=circle`) are checked beside them,
+    /// as strings under their keys: which form of the measurement the
+    /// parameters declare.
     Arguments {
         when: &'static [&'static str],
         value: &'static str,

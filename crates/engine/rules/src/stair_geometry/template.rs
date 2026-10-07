@@ -1287,6 +1287,8 @@ pub(crate) fn ramp(parameters: Vec<ParameterDescriptor>) -> Template {
         services: Some(Services {
             needs: vec![Service::WalkingSurface],
             message: "walking-surface service is not registered",
+            only: None,
+            whole: false,
         }),
         texts: Vec::new(),
         forms: vec![Form {
@@ -2111,6 +2113,8 @@ pub(crate) fn stair(parameters: Vec<ParameterDescriptor>) -> Template {
         services: Some(Services {
             needs: vec![Service::WalkingSurface],
             message: "walking-surface service is not registered",
+            only: None,
+            whole: false,
         }),
         texts: Vec::new(),
         forms: vec![

@@ -240,6 +240,8 @@ pub(crate) fn template() -> Template {
         services: Some(Services {
             needs: vec![Service::ObjectFrame, Service::VerticalExtent],
             message: "body-extent needs the object-frame and vertical-extent services",
+            only: None,
+            whole: false,
         }),
         texts: texts(),
         forms: vec![stated_form(), range_form()],

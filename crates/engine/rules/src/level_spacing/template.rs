@@ -42,6 +42,8 @@ fn extents() -> Services {
     Services {
         needs: vec![Service::VerticalExtent],
         message: "vertical-extent service is not registered",
+        only: None,
+        whole: false,
     }
 }
 

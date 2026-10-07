@@ -863,6 +863,8 @@ mod near {
             services: services.then(|| Services {
                 needs: vec![Service::PlanArea],
                 message: "no plan areas",
+                only: None,
+                whole: false,
             }),
             texts: Vec::new(),
             forms: vec![Form {
@@ -990,6 +992,48 @@ mod near {
                 .iter()
                 .all(|outcome| outcome.message() == "no plan areas")
         );
+    }
+
+    /// A service only one mode needs is asked for only where the rule
+    /// states that mode, and its absence leaves the rule as a whole open,
+    /// after the name, whatever the template's refusals.
+    #[test]
+    fn a_service_one_mode_needs_refuses_the_rule_once() {
+        let mut template = template(true);
+        if let Some(services) = template.services.as_mut() {
+            services.only = Some(("compare_mode", "strict"));
+            services.whole = true;
+        }
+        let templated = Templated::new(template);
+        let judged = |mode: &str| {
+            panels().evaluate(
+                &templated,
+                &rule(
+                    ID,
+                    kind("panel"),
+                    vec![
+                        ("compare", common::strings(&["height"])),
+                        ("tolerance", number(0.1)),
+                        ("compare_mode", common::string(mode)),
+                    ],
+                ),
+            )
+        };
+        let strict = judged("strict");
+        assert_eq!(
+            unevaluated(&strict),
+            [("-".to_owned(), NotEvaluatedReason::MissingService)]
+        );
+        assert_eq!(
+            strict.not_evaluated_outcomes()[0].message(),
+            "near-share: no plan areas"
+        );
+        let loose = judged("loose");
+        assert_eq!(
+            findings(&loose),
+            [("far".to_owned(), "height 3 differs from 3.5".to_owned())]
+        );
+        assert!(loose.not_evaluated_outcomes().is_empty());
     }
 }
 

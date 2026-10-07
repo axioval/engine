@@ -91,6 +91,8 @@ pub(crate) fn template() -> Template {
         services: Some(Services {
             needs: vec![Service::CoordinateSystem],
             message: "coordinate-consistency: no coordinate-system service is registered",
+            only: None,
+            whole: false,
         }),
         texts: vec![
             Text {

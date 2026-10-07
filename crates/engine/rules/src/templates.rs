@@ -3753,11 +3753,27 @@ pub(crate) fn run(
         }
     };
     if let Some(services) = &template.services
+        && services.only.is_none_or(|(parameter, value)| {
+            matches!(
+                rule.parameters.get(parameter),
+                Some(
+                    ParameterValue::String { value: stated }
+                        | ParameterValue::Enum { value: stated }
+                        | ParameterValue::Reference { value: stated }
+                ) if stated == value
+            )
+        })
         && !services
             .needs
             .iter()
             .all(|service| service.registered(context.services))
     {
+        if services.whole {
+            return CapabilityEvaluation::not_evaluated(
+                NotEvaluatedReason::MissingService,
+                named(template, services.message.to_owned()),
+            );
+        }
         if let Some((_, mut evaluation)) = selected {
             evaluation.push_not_evaluated(
                 NotEvaluatedReason::MissingService,

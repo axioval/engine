@@ -389,6 +389,8 @@ pub(crate) fn template() -> Template {
         services: Some(Services {
             needs: vec![Service::Guard],
             message: "guard service is not registered",
+            only: None,
+            whole: false,
         }),
         texts: Vec::new(),
         forms: vec![Form {

@@ -130,6 +130,8 @@ pub(crate) fn template() -> Template {
         services: Some(Services {
             needs: vec![Service::PlanSpan],
             message: "plan-span service is not registered",
+            only: None,
+            whole: false,
         }),
         texts: Vec::new(),
         forms: vec![Form {

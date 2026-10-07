@@ -252,6 +252,8 @@ pub(crate) fn template() -> Template {
         services: Some(Services {
             needs: vec![Service::ObjectFrame, Service::FreeSpace],
             message: "door-swing needs the object-frame and free-space services",
+            only: None,
+            whole: false,
         }),
         texts: Vec::new(),
         forms: vec![Form {

@@ -242,6 +242,8 @@ pub(crate) fn template() -> Template {
         services: Some(Services {
             needs: vec![Service::PlanSpan],
             message: "centre-line-distance needs the plan-span service",
+            only: None,
+            whole: false,
         }),
         texts: Vec::new(),
         forms: vec![Form {

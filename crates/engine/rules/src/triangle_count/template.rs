@@ -31,6 +31,8 @@ pub(crate) fn template() -> Template {
         services: Some(Services {
             needs: vec![Service::TriangleCount],
             message: "triangle-count service is not registered",
+            only: None,
+            whole: false,
         }),
         texts: vec![Text {
             name: "tessellated",

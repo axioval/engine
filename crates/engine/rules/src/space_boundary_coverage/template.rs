@@ -229,6 +229,8 @@ pub(crate) fn template() -> Template {
         services: Some(Services {
             needs: vec![Service::BoundaryCoverage],
             message: "space-boundary coverage service is not registered",
+            only: None,
+            whole: false,
         }),
         texts: vec![Text {
             name: "between",

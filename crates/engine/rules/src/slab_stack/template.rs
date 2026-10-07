@@ -273,6 +273,8 @@ pub(crate) fn template() -> Template {
         services: Some(Services {
             needs: vec![Service::VerticalExtent, Service::PlanArea],
             message: "slab-stack-spacing needs the vertical-extent and plan-area services",
+            only: None,
+            whole: false,
         }),
         texts: Vec::new(),
         forms: vec![Form {

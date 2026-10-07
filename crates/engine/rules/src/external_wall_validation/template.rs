@@ -327,6 +327,8 @@ pub(crate) fn template() -> Template {
         services: Some(Services {
             needs: vec![Service::EnvelopeMembership],
             message: "envelope-membership service is not registered",
+            only: None,
+            whole: false,
         }),
         texts: Vec::new(),
         forms: vec![form()],

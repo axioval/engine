@@ -507,6 +507,17 @@ pub enum RowCheck {
 pub struct Services {
     pub needs: Vec<Service>,
     pub message: &'static str,
+    /// Where stated, the services are needed only where the rule's string
+    /// parameter (the first) states the value (the second): a service only
+    /// one mode reads (`elevation_overlap` `overlapping`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub only: Option<(&'static str, &'static str)>,
+    /// Whether a missing service leaves the rule as a whole open, worded
+    /// after the template's name, whatever its [`Refusals`]: as a
+    /// capability that asked for a service only one mode needs before it
+    /// selected, beside services it reported for each object.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub whole: bool,
 }
 
 /// A host service a template may need, by the name the measured-value

@@ -418,3 +418,16 @@ reference's run time and 0.62 to 1.44× its peak heap. Its list runs the
 plan broad phase once per rule and kind of neighbour, keeping only the
 extents a bay reads (`Nearby::kept`), as the capability searched once per
 rule, and measures each bay's rectangle, extent and obstacles once.
+
+`distance` runs the `proximity` case's four rules: 1.02 to 1.17× its
+reference's run time on every input above the floor and 0.94 to 1.36× its
+peak heap; on the one model under the floor (three objects) the template's
+fixed cost per rule (binding its two lists and the selections) is 1.82×.
+Its lists read one rule at a time (`measured_kinds::latest`), each rule's
+pairs prepared once and dropped before the next.
+
+`containment` runs the case's two rules: 1.00 to 1.28× its reference's run
+time on the public models above the floor and 1.03 to 1.38× its peak
+heap; on the generated walls it is 1.38× and 1.65×, its count items one
+per wall, and on the two models under the floor 1.40×. Both are over the
+budget there and are the open part of #283.

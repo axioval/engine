@@ -190,7 +190,10 @@ fn a_room_whose_flat_number_cannot_be_read_leaves_every_flat_undecided() {
             .all(|(subject, _)| !subject.starts_with("axioval:group/")),
         "{report:#?}"
     );
-    assert!(open.iter().any(|(scope, _)| *scope == Scope::Object(id("r4"))
+    // Every flat is open: the rule as a whole, as the template leaves it
+    // (divergence D40), or each flat and the ungrouped room.
+    assert!(open.iter().any(|(scope, _)| *scope == Scope::Project
+        || *scope == Scope::Object(id("r4"))
         || matches!(scope, Scope::Object(object) if object.local_id.starts_with("axioval:group/"))));
 }
 

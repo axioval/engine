@@ -329,6 +329,16 @@ const PAIRS: &[Pair] = &[
         case: "routes",
         reference: |registry| registry.replace(axioval::rules::reference::SpaceDistance),
     },
+    Pair {
+        capability: "axioval:capability.table-allocation",
+        case: "programmes",
+        reference: |registry| registry.replace(axioval::rules::reference::TableAllocation),
+    },
+    Pair {
+        capability: "axioval:capability.group-composition",
+        case: "programmes",
+        reference: |registry| registry.replace(axioval::rules::reference::GroupComposition),
+    },
 ];
 
 /// Warm-up runs per side before measuring.

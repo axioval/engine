@@ -8,7 +8,7 @@ use super::super::{
     LocalizedText, MeasuredDescriptor, MeasuredExactness, MeasuredParameter, MeasuredParameterKind,
     MeasuredSubject,
 };
-use super::{MemberDescriptor, MemberFieldKind, TRUTH, field};
+use super::{AREA, MemberDescriptor, MemberFieldKind, RATIO, TRUTH, field};
 
 const OBJECTS: MemberFieldKind = MemberFieldKind::Objects;
 
@@ -526,6 +526,637 @@ pub(super) const DISTANCE_ROWS: MemberDescriptor = MemberDescriptor {
             &en_de(
                 "Why an undecided distance is open, as a report writes it.",
                 "Warum ein unentschiedener Abstand offen ist, wie ein Bericht es schreibt.",
+            ),
+        ),
+    ],
+};
+
+const fn property(key: &'static str, help: &'static [LocalizedText]) -> MeasuredParameter {
+    MeasuredParameter {
+        key,
+        kind: MeasuredParameterKind::Property,
+        required: false,
+        default: None,
+        help,
+    }
+}
+
+const fn truth(key: &'static str, help: &'static [LocalizedText]) -> MeasuredParameter {
+    MeasuredParameter {
+        key,
+        kind: MeasuredParameterKind::Truth,
+        required: false,
+        default: None,
+        help,
+    }
+}
+
+/// The traversal a rule reaches members along, each parameter under its
+/// own name.
+const RELATIONSHIP: MeasuredParameter = words(
+    "relationship",
+    &en_de(
+        "The relationship the members are reached along.",
+        "Die Beziehung, über die die Mitglieder erreicht werden.",
+    ),
+);
+const DIRECTION: MeasuredParameter = words(
+    "direction",
+    &en_de(
+        "The relationship's direction: `forward`, `backward` or `either`.",
+        "Die Richtung der Beziehung: `forward`, `backward` oder `either`.",
+    ),
+);
+const FOLLOW_CHAIN: MeasuredParameter = truth(
+    "follow_chain",
+    &en_de(
+        "Whether the relationship is followed as a chain.",
+        "Ob der Beziehung als Kette gefolgt wird.",
+    ),
+);
+const TRAVERSAL_PATH: MeasuredParameter = path(
+    "path",
+    &en_de(
+        "The relationship steps the members are reached along.",
+        "Die Beziehungsschritte, über die die Mitglieder erreicht werden.",
+    ),
+);
+const SKIP_ABSENT: MeasuredParameter = truth(
+    "skip_absent_relationship_ends",
+    &en_de(
+        "Whether relationship ends the source does not hold are skipped.",
+        "Ob Beziehungsenden, die die Quelle nicht enthält, übergangen werden.",
+    ),
+);
+const SELECTION: MeasuredParameter = objects(
+    "selection",
+    &en_de(
+        "The objects the rule selects, those it cannot decide possible members.",
+        "Die Objekte, die die Regel wählt, die unentschiedenen mögliche Mitglieder.",
+    ),
+);
+const KEY_1: MeasuredParameter = property(
+    "key_1",
+    &en_de(
+        "The property a row's `key_1` tests.",
+        "Die Eigenschaft, die `key_1` einer Zeile prüft.",
+    ),
+);
+const KEY_2: MeasuredParameter = property(
+    "key_2",
+    &en_de(
+        "The property a row's `key_2` tests.",
+        "Die Eigenschaft, die `key_2` einer Zeile prüft.",
+    ),
+);
+const KEY_3: MeasuredParameter = property(
+    "key_3",
+    &en_de(
+        "The property a row's `key_3` tests.",
+        "Die Eigenschaft, die `key_3` einer Zeile prüft.",
+    ),
+);
+const CASE_SENSITIVE: MeasuredParameter = truth(
+    "case_sensitive",
+    &en_de(
+        "Whether key patterns compare case-sensitively (the default).",
+        "Ob Schlüsselmuster Groß- und Kleinschreibung unterscheiden (Standard).",
+    ),
+);
+
+const ALLOCATION: [MeasuredParameter; 18] = [
+    MeasuredParameter {
+        key: "rows",
+        kind: MeasuredParameterKind::Table,
+        required: true,
+        default: None,
+        help: &en_de(
+            "The rows of `table-allocation`: key and anchor patterns, `label`, `count`, \
+             `area` and its tolerance.",
+            "Die Zeilen von `table-allocation`: Schlüssel- und Ankermuster, `label`, \
+             `count`, `area` und ihre Toleranz.",
+        ),
+    },
+    words(
+        "mode",
+        &en_de(
+            "How a row is chosen: `first` (the default) or `most_specific`.",
+            "Wie eine Zeile gewählt wird: `first` (Standard) oder `most_specific`.",
+        ),
+    ),
+    KEY_1,
+    KEY_2,
+    KEY_3,
+    property(
+        "key_4",
+        &en_de(
+            "The property a row's `key_4` tests.",
+            "Die Eigenschaft, die `key_4` einer Zeile prüft.",
+        ),
+    ),
+    CASE_SENSITIVE,
+    property(
+        "area_property",
+        &en_de(
+            "The area quantity an object states, in place of its measured footprint.",
+            "Die Flächenangabe eines Objekts anstelle seiner gemessenen Grundfläche.",
+        ),
+    ),
+    words(
+        "area_mode",
+        &en_de(
+            "`sum` (the default): a row's objects' areas summed; `each`: each object's own \
+             area a match condition.",
+            "`sum` (Standard): die Flächen der Objekte einer Zeile summiert; `each`: die \
+             eigene Fläche jedes Objekts als Bedingung.",
+        ),
+    ),
+    objects(
+        "anchor_selector",
+        &en_de(
+            "The anchors whose reached objects are judged together.",
+            "Die Anker, deren erreichte Objekte zusammen beurteilt werden.",
+        ),
+    ),
+    property(
+        "anchor_key",
+        &en_de(
+            "The anchor's property a row's `anchor` pattern tests.",
+            "Die Eigenschaft des Ankers, die das Muster `anchor` einer Zeile prüft.",
+        ),
+    ),
+    truth(
+        "across_sources",
+        &en_de(
+            "Whether the whole project is one group, not each source.",
+            "Ob das ganze Projekt eine Gruppe ist statt jeder Quelle.",
+        ),
+    ),
+    RELATIONSHIP,
+    DIRECTION,
+    FOLLOW_CHAIN,
+    TRAVERSAL_PATH,
+    SKIP_ABSENT,
+    SELECTION,
+];
+
+/// The allocation of `table-allocation`, of the project.
+pub(super) const ALLOCATIONS: MemberDescriptor = MemberDescriptor {
+    list: MeasuredDescriptor {
+        name: "allocations",
+        parameters: &ALLOCATION,
+        dimension: None,
+        services: &["property-resolution", "relationship-selection", "plan-area"],
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Project,
+        not_evaluated: &[
+            "the project has no source to allocate in",
+            "an object's row, a group's rows or a row's area cannot be told",
+        ],
+        label: &en_de("Allocation to rows", "Zuordnung zu Zeilen"),
+        help: &en_de(
+            "The objects the rule selects, each assigned to one row as `table-allocation` \
+             assigns them: an item per object no row matches or left open, per group whose \
+             rows cannot be told, and per row of a group, its objects counted and their \
+             summed area, each naming where its outcome goes.",
+            "Die Objekte, die die Regel wählt, jedes einer Zeile zugeordnet wie \
+             `table-allocation` sie zuordnet: ein Element je Objekt, das keine Zeile trifft \
+             oder offen bleibt, je Gruppe, deren Zeilen sich nicht bestimmen lassen, und je \
+             Zeile einer Gruppe, ihre Objekte gezählt und ihre Flächen summiert, jedes mit \
+             dem Ort seines Ergebnisses.",
+        ),
+    },
+    fields: &[
+        field(
+            "at",
+            OBJECTS,
+            &en_de("Where", "Wo"),
+            &en_de(
+                "The object, anchor, or source's or project's stand-in the item's outcome \
+                 goes to.",
+                "Das Objekt, der Anker oder der Platzhalter der Quelle oder des Projekts, zu \
+                 dem das Ergebnis des Elements gehört.",
+            ),
+        ),
+        field(
+            "extra",
+            TRUTH,
+            &en_de("Extra", "Überzählig"),
+            &en_de(
+                "An object no row matches.",
+                "Ein Objekt, das keine Zeile trifft.",
+            ),
+        ),
+        field(
+            "keys",
+            TEXT,
+            &en_de("Keys", "Schlüssel"),
+            &en_de(
+                "The extra's key values.",
+                "Die Schlüsselwerte des überzähligen Objekts.",
+            ),
+        ),
+        field(
+            "open",
+            TRUTH,
+            &en_de("Open", "Offen"),
+            &en_de(
+                "Undecided, with why: an object's row or anchorship, or a group's rows.",
+                "Unentschieden, mit Grund: die Zeile oder Ankerschaft eines Objekts oder die \
+                 Zeilen einer Gruppe.",
+            ),
+        ),
+        field(
+            "name",
+            TEXT,
+            &en_de("Row", "Zeile"),
+            &en_de(
+                "The row, as findings name it.",
+                "Die Zeile, wie Befunde sie nennen.",
+            ),
+        ),
+        field(
+            "place",
+            TEXT,
+            &en_de("Place", "Ort"),
+            &en_de(
+                "Where the group lies, as findings word it.",
+                "Wo die Gruppe liegt, wie Befunde es formulieren.",
+            ),
+        ),
+        field(
+            "related",
+            OBJECTS,
+            &en_de("Assigned", "Zugeordnet"),
+            &en_de(
+                "The objects surely assigned to the row in the group.",
+                "Die der Zeile in der Gruppe sicher zugeordneten Objekte.",
+            ),
+        ),
+        field(
+            "found",
+            RATIO,
+            &en_de("Objects", "Objekte"),
+            &en_de(
+                "From the objects surely assigned to every one that may belong.",
+                "Von den sicher zugeordneten Objekten bis zu jedem, das dazugehören kann.",
+            ),
+        ),
+        field(
+            "count",
+            RATIO,
+            &en_de("Required count", "Geforderte Anzahl"),
+            &en_de(
+                "The row's `count`; `null` without one.",
+                "Die `count` der Zeile; `null` ohne.",
+            ),
+        ),
+        field(
+            "empty",
+            TRUTH,
+            &en_de("Empty", "Leer"),
+            &en_de(
+                "Whether the row matched nothing and nothing may still belong to it.",
+                "Ob die Zeile nichts traf und nichts mehr dazugehören kann.",
+            ),
+        ),
+        field(
+            "open_count",
+            RATIO,
+            &en_de("May belong", "Kann dazugehören"),
+            &en_de(
+                "How many more objects may belong to the row.",
+                "Wie viele weitere Objekte zur Zeile gehören können.",
+            ),
+        ),
+        field(
+            "sum",
+            AREA,
+            &en_de("Summed area", "Summierte Fläche"),
+            &en_de(
+                "The assigned objects' summed area; undecided where one cannot be measured.",
+                "Die summierte Fläche der zugeordneten Objekte; unentschieden, wo eine nicht \
+                 messbar ist.",
+            ),
+        ),
+        field(
+            "low",
+            AREA,
+            &en_de("Least area", "Kleinste Fläche"),
+            &en_de(
+                "The row's area less its tolerance.",
+                "Die Fläche der Zeile abzüglich Toleranz.",
+            ),
+        ),
+        field(
+            "high",
+            AREA,
+            &en_de("Greatest area", "Größte Fläche"),
+            &en_de(
+                "The row's area plus its tolerance.",
+                "Die Fläche der Zeile zuzüglich Toleranz.",
+            ),
+        ),
+        field(
+            "required",
+            TEXT,
+            &en_de("Required area", "Geforderte Fläche"),
+            &en_de(
+                "The row's area as findings word it.",
+                "Die Fläche der Zeile, wie Befunde sie nennen.",
+            ),
+        ),
+        field(
+            "more",
+            TRUTH,
+            &en_de("More may belong", "Weitere möglich"),
+            &en_de(
+                "Whether objects that may still belong to the row could add area.",
+                "Ob Objekte, die noch zur Zeile gehören können, Fläche hinzufügen könnten.",
+            ),
+        ),
+        field(
+            "reason",
+            TEXT,
+            &en_de("Reason", "Grund"),
+            &en_de(
+                "Why an undecided item is open, as a report writes it.",
+                "Warum ein unentschiedenes Element offen ist, wie ein Bericht es schreibt.",
+            ),
+        ),
+    ],
+};
+
+const COMPOSITION: [MeasuredParameter; 18] = [
+    MeasuredParameter {
+        key: "requirements",
+        kind: MeasuredParameterKind::Table,
+        required: true,
+        default: None,
+        help: &en_de(
+            "The member entries of `group-composition`: key and group patterns, `label` and \
+             `count`.",
+            "Die Mitgliedereinträge von `group-composition`: Schlüssel- und Gruppenmuster, \
+             `label` und `count`.",
+        ),
+    },
+    KEY_1,
+    KEY_2,
+    KEY_3,
+    CASE_SENSITIVE,
+    property(
+        "group_key",
+        &en_de(
+            "The group's property a row's `group` pattern tests (the older name of \
+             `group_key_1`).",
+            "Die Eigenschaft der Gruppe, die das Muster `group` einer Zeile prüft (der ältere \
+             Name von `group_key_1`).",
+        ),
+    ),
+    property(
+        "group_key_1",
+        &en_de(
+            "The group's property a row's `group` pattern tests.",
+            "Die Eigenschaft der Gruppe, die das Muster `group` einer Zeile prüft.",
+        ),
+    ),
+    property(
+        "group_key_2",
+        &en_de(
+            "The group's property a row's `group_2` pattern tests.",
+            "Die Eigenschaft der Gruppe, die das Muster `group_2` einer Zeile prüft.",
+        ),
+    ),
+    property(
+        "group_key_3",
+        &en_de(
+            "The group's property a row's `group_3` pattern tests.",
+            "Die Eigenschaft der Gruppe, die das Muster `group_3` einer Zeile prüft.",
+        ),
+    ),
+    truth(
+        "report_absent_groups",
+        &en_de(
+            "Whether a row no group in the model matches is found.",
+            "Ob eine Zeile, die keine Gruppe im Modell trifft, gemeldet wird.",
+        ),
+    ),
+    objects(
+        "member_selector",
+        &en_de(
+            "The reached objects that are members; every one without it.",
+            "Die erreichten Objekte, die Mitglieder sind; ohne Angabe jedes.",
+        ),
+    ),
+    objects(
+        "ungrouped_selector",
+        &en_de(
+            "The objects some selected group must reach.",
+            "Die Objekte, die eine gewählte Gruppe erreichen muss.",
+        ),
+    ),
+    RELATIONSHIP,
+    DIRECTION,
+    FOLLOW_CHAIN,
+    TRAVERSAL_PATH,
+    SKIP_ABSENT,
+    SELECTION,
+];
+
+/// The matching of `group-composition`, of the project.
+pub(super) const COMPOSITIONS: MemberDescriptor = MemberDescriptor {
+    list: MeasuredDescriptor {
+        name: "compositions",
+        parameters: &COMPOSITION,
+        dimension: None,
+        services: &["property-resolution", "relationship-selection"],
+        exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Project,
+        not_evaluated: &[
+            "a group cannot be walked, or its requirements, members or their keys cannot be \
+             told",
+        ],
+        label: &en_de("Group compositions", "Gruppenzusammensetzungen"),
+        help: &en_de(
+            "Each selected group's members matched to the requirement entries by a maximum \
+             matching, as `group-composition` matches them: an item per part every maximum \
+             matching leaves short or with a surplus, per group no row matches, per row no \
+             group matches, per object no group reaches and per group or object left open, \
+             each naming where its outcome goes.",
+            "Die Mitglieder jeder gewählten Gruppe den Anforderungseinträgen durch eine \
+             größte Zuordnung zugeordnet, wie `group-composition` sie zuordnet: ein Element \
+             je Teil, den jede größte Zuordnung unterbesetzt oder mit Überschuss lässt, je \
+             Gruppe ohne passende Zeile, je Zeile ohne passende Gruppe, je Objekt, das keine \
+             Gruppe erreicht, und je offen bleibender Gruppe oder Objekt, jedes mit dem Ort \
+             seines Ergebnisses.",
+        ),
+    },
+    fields: &[
+        field(
+            "at",
+            OBJECTS,
+            &en_de("Where", "Wo"),
+            &en_de(
+                "The group, member, object or the project's stand-in the outcome goes to.",
+                "Die Gruppe, das Mitglied, das Objekt oder der Platzhalter des Projekts, zu \
+                 dem das Ergebnis gehört.",
+            ),
+        ),
+        field(
+            "open",
+            TRUTH,
+            &en_de("Open", "Offen"),
+            &en_de("Undecided, with why.", "Unentschieden, mit Grund."),
+        ),
+        field(
+            "unmatched",
+            TRUTH,
+            &en_de("No row", "Keine Zeile"),
+            &en_de(
+                "A group no row with a group cell matches.",
+                "Eine Gruppe, die keine Zeile mit Gruppenzelle trifft.",
+            ),
+        ),
+        field(
+            "absent",
+            TRUTH,
+            &en_de("Not in model", "Nicht im Modell"),
+            &en_de(
+                "A row no group in the model matches.",
+                "Eine Zeile, die keine Gruppe im Modell trifft.",
+            ),
+        ),
+        field(
+            "ungrouped",
+            TRUTH,
+            &en_de("In no group", "In keiner Gruppe"),
+            &en_de(
+                "An object no selected group reaches.",
+                "Ein Objekt, das keine gewählte Gruppe erreicht.",
+            ),
+        ),
+        field(
+            "keys",
+            TEXT,
+            &en_de("Keys", "Schlüssel"),
+            &en_de(
+                "The key values of a group no row matches or a member no entry fits.",
+                "Die Schlüsselwerte einer Gruppe ohne passende Zeile oder eines Mitglieds \
+                 ohne passenden Eintrag.",
+            ),
+        ),
+        field(
+            "name",
+            TEXT,
+            &en_de("Row", "Zeile"),
+            &en_de(
+                "The row no group matches.",
+                "Die Zeile, die keine Gruppe trifft.",
+            ),
+        ),
+        field(
+            "subject",
+            TEXT,
+            &en_de("Entries", "Einträge"),
+            &en_de(
+                "The entries left short, with their verb.",
+                "Die unterbesetzten Einträge, mit ihrem Verb.",
+            ),
+        ),
+        field(
+            "filled",
+            RATIO,
+            &en_de("Members", "Mitglieder"),
+            &en_de(
+                "How many members the entries left short hold.",
+                "Wie viele Mitglieder die unterbesetzten Einträge haben.",
+            ),
+        ),
+        field(
+            "places",
+            RATIO,
+            &en_de("Places", "Plätze"),
+            &en_de(
+                "How many members the entries take.",
+                "Wie viele Mitglieder die Einträge aufnehmen.",
+            ),
+        ),
+        field(
+            "missing",
+            RATIO,
+            &en_de("Missing", "Fehlend"),
+            &en_de(
+                "The places less the members.",
+                "Die Plätze abzüglich der Mitglieder.",
+            ),
+        ),
+        field(
+            "found",
+            RATIO,
+            &en_de("Fitting members", "Passende Mitglieder"),
+            &en_de(
+                "How many members compete for the entries.",
+                "Wie viele Mitglieder um die Einträge konkurrieren.",
+            ),
+        ),
+        field(
+            "surplus",
+            RATIO,
+            &en_de("Surplus", "Überschuss"),
+            &en_de(
+                "The members less the places.",
+                "Die Mitglieder abzüglich der Plätze.",
+            ),
+        ),
+        field(
+            "unfit",
+            TRUTH,
+            &en_de("Fits no entry", "Passt zu keinem Eintrag"),
+            &en_de(
+                "Whether the surplus member fits no entry at all.",
+                "Ob das überzählige Mitglied zu gar keinem Eintrag passt.",
+            ),
+        ),
+        field(
+            "entries",
+            TEXT,
+            &en_de("Competed entries", "Umkämpfte Einträge"),
+            &en_de(
+                "The entries a surplus competes for.",
+                "Die Einträge, um die ein Überschuss konkurriert.",
+            ),
+        ),
+        field(
+            "verb",
+            TEXT,
+            &en_de("Verb", "Verb"),
+            &en_de("`takes` or `take`.", "`takes` oder `take`."),
+        ),
+        field(
+            "via",
+            TEXT,
+            &en_de("Relation", "Beziehung"),
+            &en_de(
+                "How a group reaches its members, as findings word it.",
+                "Wie eine Gruppe ihre Mitglieder erreicht, wie Befunde es formulieren.",
+            ),
+        ),
+        field(
+            "related",
+            OBJECTS,
+            &en_de("Members concerned", "Betroffene Mitglieder"),
+            &en_de(
+                "The members a finding relates.",
+                "Die Mitglieder, auf die sich ein Befund bezieht.",
+            ),
+        ),
+        field(
+            "reason",
+            TEXT,
+            &en_de("Reason", "Grund"),
+            &en_de(
+                "Why an undecided item is open, as a report writes it.",
+                "Warum ein unentschiedenes Element offen ist, wie ein Bericht es schreibt.",
             ),
         ),
     ],

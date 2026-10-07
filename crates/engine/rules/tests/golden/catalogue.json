@@ -20801,7 +20801,261 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "group-composition",
+        "declaration": [
+          {
+            "kind": "arguments",
+            "when": [],
+            "value": "compositions;requirements=@requirements;key_1=@key_1;key_2=@key_2;key_3=@key_3;case_sensitive=@case_sensitive;group_key=@group_key;group_key_1=@group_key_1;group_key_2=@group_key_2;group_key_3=@group_key_3;report_absent_groups=@report_absent_groups;member_selector=@member_selector;ungrouped_selector=@ungrouped_selector;relationship=@relationship;direction=@direction;follow_chain=@follow_chain;path=@path;skip_absent_relationship_ends=@skip_absent_relationship_ends;selection=@selection"
+          }
+        ],
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "judged",
+                "expression": {
+                  "kind": "literal",
+                  "value": {
+                    "type": "integer",
+                    "value": 1
+                  },
+                  "label": "the groups' members are matched"
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "judged",
+              "rounding": []
+            },
+            "fail": "",
+            "undecided": "",
+            "project": [
+              {
+                "values": [],
+                "decision": {
+                  "kind": "items",
+                  "applies": {},
+                  "list": "compositions;requirements=@requirements;key_1=@key_1;key_2=@key_2;key_3=@key_3;case_sensitive=@case_sensitive;group_key=@group_key;group_key_1=@group_key_1;group_key_2=@group_key_2;group_key_3=@group_key_3;report_absent_groups=@report_absent_groups;member_selector=@member_selector;ungrouped_selector=@ungrouped_selector;relationship=@relationship;direction=@direction;follow_chain=@follow_chain;path=@path;skip_absent_relationship_ends=@skip_absent_relationship_ends;selection=@selection",
+                  "refused": "group-composition: {why}",
+                  "checks": [
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "stated",
+                          "field": "open"
+                        }
+                      ],
+                      "judge": {
+                        "kind": "truth",
+                        "value": "open",
+                        "finding": true
+                      },
+                      "fail": "",
+                      "undecided": "{why}",
+                      "related": "related"
+                    },
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "stated",
+                          "field": "unmatched"
+                        }
+                      ],
+                      "judge": {
+                        "kind": "truth",
+                        "value": "unmatched",
+                        "finding": true
+                      },
+                      "fail": "no requirement row matches the group ({keys})",
+                      "undecided": "{why}",
+                      "related": "related"
+                    },
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "stated",
+                          "field": "absent"
+                        }
+                      ],
+                      "judge": {
+                        "kind": "truth",
+                        "value": "absent",
+                        "finding": true
+                      },
+                      "fail": "not in model: no group matches {name}",
+                      "undecided": "{why}",
+                      "related": "related"
+                    },
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "stated",
+                          "field": "ungrouped"
+                        }
+                      ],
+                      "judge": {
+                        "kind": "truth",
+                        "value": "ungrouped",
+                        "finding": true
+                      },
+                      "fail": "in no group {via}",
+                      "undecided": "{why}",
+                      "related": "related"
+                    },
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "stated",
+                          "field": "filled"
+                        }
+                      ],
+                      "judge": {
+                        "kind": "range",
+                        "value": "filled",
+                        "unit": "count",
+                        "atLeast": [
+                          {
+                            "name": "places",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "value",
+                                    "name": "places"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "allowance": {
+                          "kind": "none"
+                        },
+                        "grade": false,
+                        "null": {
+                          "kind": "skip"
+                        }
+                      },
+                      "fail": "{subject} {filled:count} of {places:count} required member(s) {via}; {missing:count} missing",
+                      "undecided": "",
+                      "related": "related"
+                    },
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "stated",
+                          "field": "found"
+                        }
+                      ],
+                      "judge": {
+                        "kind": "range",
+                        "value": "found",
+                        "unit": "count",
+                        "atMost": [
+                          {
+                            "name": "places",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "value",
+                                    "name": "places"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "allowance": {
+                          "kind": "none"
+                        },
+                        "grade": false,
+                        "null": {
+                          "kind": "skip"
+                        }
+                      },
+                      "fail": "{surplus_words}",
+                      "undecided": "",
+                      "related": "related"
+                    }
+                  ],
+                  "texts": [
+                    {
+                      "name": "surplus_words",
+                      "when": [
+                        {
+                          "kind": "field",
+                          "field": "unfit",
+                          "value": true
+                        }
+                      ],
+                      "text": "surplus member {via}: no entry fits it ({keys})"
+                    },
+                    {
+                      "name": "surplus_words",
+                      "text": "{entries} {verb} {places:count} member(s), but {found:count} fit {via}; {surplus:count} surplus"
+                    }
+                  ],
+                  "at": "at",
+                  "reason": "reason"
+                },
+                "fail": "",
+                "undecided": ""
+              }
+            ]
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "isDefined",
+              "operand": {
+                "kind": "literal",
+                "value": {
+                  "type": "integer",
+                  "value": 1
+                },
+                "label": "the groups' members are matched"
+              },
+              "label": "read"
+            },
+            "blocks": {
+              "type": "expression.isDefined",
+              "label": "read",
+              "inputs": {
+                "operand": {
+                  "block": {
+                    "type": "expression.literal",
+                    "label": "the groups' members are matched",
+                    "fields": {
+                      "value": {
+                        "type": "integer",
+                        "value": 1
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.horizontal-guard",
@@ -64875,7 +65129,334 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "grades": true,
+        "name": "table-allocation",
+        "declaration": [
+          {
+            "kind": "arguments",
+            "when": [],
+            "value": "allocations;rows=@rows;mode=@mode;key_1=@key_1;key_2=@key_2;key_3=@key_3;key_4=@key_4;case_sensitive=@case_sensitive;area_property=@area_property;area_mode=@area_mode;anchor_selector=@anchor_selector;anchor_key=@anchor_key;across_sources=@across_sources;relationship=@relationship;direction=@direction;follow_chain=@follow_chain;path=@path;skip_absent_relationship_ends=@skip_absent_relationship_ends;selection=@selection"
+          }
+        ],
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "judged",
+                "expression": {
+                  "kind": "literal",
+                  "value": {
+                    "type": "integer",
+                    "value": 1
+                  },
+                  "label": "the objects are allocated"
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "judged",
+              "rounding": []
+            },
+            "fail": "",
+            "undecided": "",
+            "project": [
+              {
+                "values": [],
+                "decision": {
+                  "kind": "items",
+                  "applies": {},
+                  "list": "allocations;rows=@rows;mode=@mode;key_1=@key_1;key_2=@key_2;key_3=@key_3;key_4=@key_4;case_sensitive=@case_sensitive;area_property=@area_property;area_mode=@area_mode;anchor_selector=@anchor_selector;anchor_key=@anchor_key;across_sources=@across_sources;relationship=@relationship;direction=@direction;follow_chain=@follow_chain;path=@path;skip_absent_relationship_ends=@skip_absent_relationship_ends;selection=@selection",
+                  "refused": "table-allocation: {why}",
+                  "checks": [
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "stated",
+                          "field": "extra"
+                        }
+                      ],
+                      "judge": {
+                        "kind": "truth",
+                        "value": "extra",
+                        "finding": true
+                      },
+                      "fail": "no row matches ({keys})",
+                      "undecided": "",
+                      "related": "related"
+                    },
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "stated",
+                          "field": "open"
+                        }
+                      ],
+                      "judge": {
+                        "kind": "truth",
+                        "value": "open",
+                        "finding": true
+                      },
+                      "fail": "",
+                      "undecided": "{why}",
+                      "related": "related"
+                    },
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "field",
+                          "field": "empty",
+                          "value": true
+                        },
+                        {
+                          "kind": "null",
+                          "field": "count"
+                        }
+                      ],
+                      "judge": {
+                        "kind": "fails"
+                      },
+                      "fail": "{name} matched no object{place}",
+                      "undecided": "",
+                      "related": "related"
+                    },
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "stated",
+                          "field": "count"
+                        }
+                      ],
+                      "judge": {
+                        "kind": "range",
+                        "value": "found",
+                        "unit": "count",
+                        "atLeast": [
+                          {
+                            "name": "count",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "value",
+                                    "name": "count"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "atMost": [
+                          {
+                            "name": "count",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "value",
+                                    "name": "count"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "allowance": {
+                          "kind": "none"
+                        },
+                        "grade": true,
+                        "null": {
+                          "kind": "skip"
+                        },
+                        "unmeasured": "{why}"
+                      },
+                      "fail": "{count_words}",
+                      "undecided": "table-allocation: {name} has {found:lower0} object(s){place} and {open_count:count} more that may belong to it; required exactly {count:count}",
+                      "related": "related"
+                    },
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "field",
+                          "field": "more",
+                          "value": false
+                        }
+                      ],
+                      "judge": {
+                        "kind": "range",
+                        "value": "sum",
+                        "unit": "area",
+                        "atLeast": [
+                          {
+                            "name": "low",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "value",
+                                    "name": "low"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "atMost": [
+                          {
+                            "name": "high",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "value",
+                                    "name": "high"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "allowance": {
+                          "kind": "none"
+                        },
+                        "grade": true,
+                        "null": {
+                          "kind": "skip"
+                        },
+                        "unmeasured": "{why}"
+                      },
+                      "fail": "{name} sums {sum:area} m²{place}; required {required}",
+                      "undecided": "table-allocation: {name} sums {sum:area} m²{place}, which straddles the required {required}",
+                      "related": "related"
+                    },
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "field",
+                          "field": "more",
+                          "value": true
+                        }
+                      ],
+                      "judge": {
+                        "kind": "range",
+                        "value": "sum",
+                        "unit": "area",
+                        "atMost": [
+                          {
+                            "name": "high",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "value",
+                                    "name": "high"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "allowance": {
+                          "kind": "none"
+                        },
+                        "grade": true,
+                        "null": {
+                          "kind": "skip"
+                        },
+                        "unmeasured": "{why}"
+                      },
+                      "fail": "{name} sums {sum:area} m²{place}; required {required}",
+                      "undecided": "table-allocation: {name} sums {sum:area} m²{place} and {open_count:count} more object(s) may belong to it; required {required}",
+                      "effects": [
+                        {
+                          "on": "pass",
+                          "message": "table-allocation: {name} sums {sum:area} m²{place} and {open_count:count} more object(s) may belong to it; required {required}"
+                        }
+                      ],
+                      "related": "related"
+                    }
+                  ],
+                  "texts": [
+                    {
+                      "name": "count_words",
+                      "when": [
+                        {
+                          "kind": "field",
+                          "field": "empty",
+                          "value": true
+                        }
+                      ],
+                      "text": "{name} matched no object{place}; required exactly {count:count}"
+                    },
+                    {
+                      "name": "count_words",
+                      "text": "{name} has {found:lower0} object(s){place}; required exactly {count:count}"
+                    }
+                  ],
+                  "at": "at",
+                  "reason": "reason"
+                },
+                "fail": "",
+                "undecided": ""
+              }
+            ]
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "isDefined",
+              "operand": {
+                "kind": "literal",
+                "value": {
+                  "type": "integer",
+                  "value": 1
+                },
+                "label": "the objects are allocated"
+              },
+              "label": "read"
+            },
+            "blocks": {
+              "type": "expression.isDefined",
+              "label": "read",
+              "inputs": {
+                "operand": {
+                  "block": {
+                    "type": "expression.literal",
+                    "label": "the objects are allocated",
+                    "fields": {
+                      "value": {
+                        "type": "integer",
+                        "value": 1
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.triangle-count",
@@ -82032,6 +82613,814 @@
   ],
   "measuredMembers": [
     {
+      "name": "allocations",
+      "parameters": [
+        {
+          "key": "rows",
+          "kind": {
+            "type": "table"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rows of `table-allocation`: key and anchor patterns, `label`, `count`, `area` and its tolerance."
+            },
+            {
+              "language": "de",
+              "text": "Die Zeilen von `table-allocation`: Schlüssel- und Ankermuster, `label`, `count`, `area` und ihre Toleranz."
+            }
+          ],
+          "references": "table"
+        },
+        {
+          "key": "mode",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "How a row is chosen: `first` (the default) or `most_specific`."
+            },
+            {
+              "language": "de",
+              "text": "Wie eine Zeile gewählt wird: `first` (Standard) oder `most_specific`."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "key_1",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The property a row's `key_1` tests."
+            },
+            {
+              "language": "de",
+              "text": "Die Eigenschaft, die `key_1` einer Zeile prüft."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "key_2",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The property a row's `key_2` tests."
+            },
+            {
+              "language": "de",
+              "text": "Die Eigenschaft, die `key_2` einer Zeile prüft."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "key_3",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The property a row's `key_3` tests."
+            },
+            {
+              "language": "de",
+              "text": "Die Eigenschaft, die `key_3` einer Zeile prüft."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "key_4",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The property a row's `key_4` tests."
+            },
+            {
+              "language": "de",
+              "text": "Die Eigenschaft, die `key_4` einer Zeile prüft."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "case_sensitive",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether key patterns compare case-sensitively (the default)."
+            },
+            {
+              "language": "de",
+              "text": "Ob Schlüsselmuster Groß- und Kleinschreibung unterscheiden (Standard)."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "area_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The area quantity an object states, in place of its measured footprint."
+            },
+            {
+              "language": "de",
+              "text": "Die Flächenangabe eines Objekts anstelle seiner gemessenen Grundfläche."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "area_mode",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "`sum` (the default): a row's objects' areas summed; `each`: each object's own area a match condition."
+            },
+            {
+              "language": "de",
+              "text": "`sum` (Standard): die Flächen der Objekte einer Zeile summiert; `each`: die eigene Fläche jedes Objekts als Bedingung."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "anchor_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The anchors whose reached objects are judged together."
+            },
+            {
+              "language": "de",
+              "text": "Die Anker, deren erreichte Objekte zusammen beurteilt werden."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "anchor_key",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The anchor's property a row's `anchor` pattern tests."
+            },
+            {
+              "language": "de",
+              "text": "Die Eigenschaft des Ankers, die das Muster `anchor` einer Zeile prüft."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "across_sources",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the whole project is one group, not each source."
+            },
+            {
+              "language": "de",
+              "text": "Ob das ganze Projekt eine Gruppe ist statt jeder Quelle."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "relationship",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship the members are reached along."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehung, über die die Mitglieder erreicht werden."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "direction",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship's direction: `forward`, `backward` or `either`."
+            },
+            {
+              "language": "de",
+              "text": "Die Richtung der Beziehung: `forward`, `backward` oder `either`."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "follow_chain",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the relationship is followed as a chain."
+            },
+            {
+              "language": "de",
+              "text": "Ob der Beziehung als Kette gefolgt wird."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps the members are reached along."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte, über die die Mitglieder erreicht werden."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "skip_absent_relationship_ends",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether relationship ends the source does not hold are skipped."
+            },
+            {
+              "language": "de",
+              "text": "Ob Beziehungsenden, die die Quelle nicht enthält, übergangen werden."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "selection",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects the rule selects, those it cannot decide possible members."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, die die Regel wählt, die unentschiedenen mögliche Mitglieder."
+            }
+          ],
+          "references": "selector"
+        }
+      ],
+      "services": [
+        "property-resolution",
+        "relationship-selection",
+        "plan-area"
+      ],
+      "exactness": "measured",
+      "subject": "project",
+      "notEvaluated": [
+        "the project has no source to allocate in",
+        "an object's row, a group's rows or a row's area cannot be told"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Allocation to rows"
+        },
+        {
+          "language": "de",
+          "text": "Zuordnung zu Zeilen"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The objects the rule selects, each assigned to one row as `table-allocation` assigns them: an item per object no row matches or left open, per group whose rows cannot be told, and per row of a group, its objects counted and their summed area, each naming where its outcome goes."
+        },
+        {
+          "language": "de",
+          "text": "Die Objekte, die die Regel wählt, jedes einer Zeile zugeordnet wie `table-allocation` sie zuordnet: ein Element je Objekt, das keine Zeile trifft oder offen bleibt, je Gruppe, deren Zeilen sich nicht bestimmen lassen, und je Zeile einer Gruppe, ihre Objekte gezählt und ihre Flächen summiert, jedes mit dem Ort seines Ergebnisses."
+        }
+      ],
+      "fields": [
+        {
+          "name": "at",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Where"
+            },
+            {
+              "language": "de",
+              "text": "Wo"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The object, anchor, or source's or project's stand-in the item's outcome goes to."
+            },
+            {
+              "language": "de",
+              "text": "Das Objekt, der Anker oder der Platzhalter der Quelle oder des Projekts, zu dem das Ergebnis des Elements gehört."
+            }
+          ]
+        },
+        {
+          "name": "extra",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Extra"
+            },
+            {
+              "language": "de",
+              "text": "Überzählig"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "An object no row matches."
+            },
+            {
+              "language": "de",
+              "text": "Ein Objekt, das keine Zeile trifft."
+            }
+          ]
+        },
+        {
+          "name": "keys",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Keys"
+            },
+            {
+              "language": "de",
+              "text": "Schlüssel"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The extra's key values."
+            },
+            {
+              "language": "de",
+              "text": "Die Schlüsselwerte des überzähligen Objekts."
+            }
+          ]
+        },
+        {
+          "name": "open",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Open"
+            },
+            {
+              "language": "de",
+              "text": "Offen"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Undecided, with why: an object's row or anchorship, or a group's rows."
+            },
+            {
+              "language": "de",
+              "text": "Unentschieden, mit Grund: die Zeile oder Ankerschaft eines Objekts oder die Zeilen einer Gruppe."
+            }
+          ]
+        },
+        {
+          "name": "name",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Row"
+            },
+            {
+              "language": "de",
+              "text": "Zeile"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The row, as findings name it."
+            },
+            {
+              "language": "de",
+              "text": "Die Zeile, wie Befunde sie nennen."
+            }
+          ]
+        },
+        {
+          "name": "place",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Place"
+            },
+            {
+              "language": "de",
+              "text": "Ort"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Where the group lies, as findings word it."
+            },
+            {
+              "language": "de",
+              "text": "Wo die Gruppe liegt, wie Befunde es formulieren."
+            }
+          ]
+        },
+        {
+          "name": "related",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Assigned"
+            },
+            {
+              "language": "de",
+              "text": "Zugeordnet"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects surely assigned to the row in the group."
+            },
+            {
+              "language": "de",
+              "text": "Die der Zeile in der Gruppe sicher zugeordneten Objekte."
+            }
+          ]
+        },
+        {
+          "name": "found",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Objects"
+            },
+            {
+              "language": "de",
+              "text": "Objekte"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "From the objects surely assigned to every one that may belong."
+            },
+            {
+              "language": "de",
+              "text": "Von den sicher zugeordneten Objekten bis zu jedem, das dazugehören kann."
+            }
+          ]
+        },
+        {
+          "name": "count",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Required count"
+            },
+            {
+              "language": "de",
+              "text": "Geforderte Anzahl"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The row's `count`; `null` without one."
+            },
+            {
+              "language": "de",
+              "text": "Die `count` der Zeile; `null` ohne."
+            }
+          ]
+        },
+        {
+          "name": "empty",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Empty"
+            },
+            {
+              "language": "de",
+              "text": "Leer"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the row matched nothing and nothing may still belong to it."
+            },
+            {
+              "language": "de",
+              "text": "Ob die Zeile nichts traf und nichts mehr dazugehören kann."
+            }
+          ]
+        },
+        {
+          "name": "open_count",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "May belong"
+            },
+            {
+              "language": "de",
+              "text": "Kann dazugehören"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "How many more objects may belong to the row."
+            },
+            {
+              "language": "de",
+              "text": "Wie viele weitere Objekte zur Zeile gehören können."
+            }
+          ]
+        },
+        {
+          "name": "sum",
+          "kind": {
+            "type": "number",
+            "dimension": "area"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Summed area"
+            },
+            {
+              "language": "de",
+              "text": "Summierte Fläche"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The assigned objects' summed area; undecided where one cannot be measured."
+            },
+            {
+              "language": "de",
+              "text": "Die summierte Fläche der zugeordneten Objekte; unentschieden, wo eine nicht messbar ist."
+            }
+          ]
+        },
+        {
+          "name": "low",
+          "kind": {
+            "type": "number",
+            "dimension": "area"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Least area"
+            },
+            {
+              "language": "de",
+              "text": "Kleinste Fläche"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The row's area less its tolerance."
+            },
+            {
+              "language": "de",
+              "text": "Die Fläche der Zeile abzüglich Toleranz."
+            }
+          ]
+        },
+        {
+          "name": "high",
+          "kind": {
+            "type": "number",
+            "dimension": "area"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Greatest area"
+            },
+            {
+              "language": "de",
+              "text": "Größte Fläche"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The row's area plus its tolerance."
+            },
+            {
+              "language": "de",
+              "text": "Die Fläche der Zeile zuzüglich Toleranz."
+            }
+          ]
+        },
+        {
+          "name": "required",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Required area"
+            },
+            {
+              "language": "de",
+              "text": "Geforderte Fläche"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The row's area as findings word it."
+            },
+            {
+              "language": "de",
+              "text": "Die Fläche der Zeile, wie Befunde sie nennen."
+            }
+          ]
+        },
+        {
+          "name": "more",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "More may belong"
+            },
+            {
+              "language": "de",
+              "text": "Weitere möglich"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether objects that may still belong to the row could add area."
+            },
+            {
+              "language": "de",
+              "text": "Ob Objekte, die noch zur Zeile gehören können, Fläche hinzufügen könnten."
+            }
+          ]
+        },
+        {
+          "name": "reason",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Reason"
+            },
+            {
+              "language": "de",
+              "text": "Grund"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Why an undecided item is open, as a report writes it."
+            },
+            {
+              "language": "de",
+              "text": "Warum ein unentschiedenes Element offen ist, wie ein Bericht es schreibt."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
       "name": "axes_within",
       "parameters": [
         {
@@ -85888,6 +87277,861 @@
             {
               "language": "de",
               "text": "`flight` oder `ramp`."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
+      "name": "compositions",
+      "parameters": [
+        {
+          "key": "requirements",
+          "kind": {
+            "type": "table"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The member entries of `group-composition`: key and group patterns, `label` and `count`."
+            },
+            {
+              "language": "de",
+              "text": "Die Mitgliedereinträge von `group-composition`: Schlüssel- und Gruppenmuster, `label` und `count`."
+            }
+          ],
+          "references": "table"
+        },
+        {
+          "key": "key_1",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The property a row's `key_1` tests."
+            },
+            {
+              "language": "de",
+              "text": "Die Eigenschaft, die `key_1` einer Zeile prüft."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "key_2",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The property a row's `key_2` tests."
+            },
+            {
+              "language": "de",
+              "text": "Die Eigenschaft, die `key_2` einer Zeile prüft."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "key_3",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The property a row's `key_3` tests."
+            },
+            {
+              "language": "de",
+              "text": "Die Eigenschaft, die `key_3` einer Zeile prüft."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "case_sensitive",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether key patterns compare case-sensitively (the default)."
+            },
+            {
+              "language": "de",
+              "text": "Ob Schlüsselmuster Groß- und Kleinschreibung unterscheiden (Standard)."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "group_key",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The group's property a row's `group` pattern tests (the older name of `group_key_1`)."
+            },
+            {
+              "language": "de",
+              "text": "Die Eigenschaft der Gruppe, die das Muster `group` einer Zeile prüft (der ältere Name von `group_key_1`)."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "group_key_1",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The group's property a row's `group` pattern tests."
+            },
+            {
+              "language": "de",
+              "text": "Die Eigenschaft der Gruppe, die das Muster `group` einer Zeile prüft."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "group_key_2",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The group's property a row's `group_2` pattern tests."
+            },
+            {
+              "language": "de",
+              "text": "Die Eigenschaft der Gruppe, die das Muster `group_2` einer Zeile prüft."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "group_key_3",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The group's property a row's `group_3` pattern tests."
+            },
+            {
+              "language": "de",
+              "text": "Die Eigenschaft der Gruppe, die das Muster `group_3` einer Zeile prüft."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "report_absent_groups",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether a row no group in the model matches is found."
+            },
+            {
+              "language": "de",
+              "text": "Ob eine Zeile, die keine Gruppe im Modell trifft, gemeldet wird."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "member_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The reached objects that are members; every one without it."
+            },
+            {
+              "language": "de",
+              "text": "Die erreichten Objekte, die Mitglieder sind; ohne Angabe jedes."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "ungrouped_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects some selected group must reach."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, die eine gewählte Gruppe erreichen muss."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "relationship",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship the members are reached along."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehung, über die die Mitglieder erreicht werden."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "direction",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship's direction: `forward`, `backward` or `either`."
+            },
+            {
+              "language": "de",
+              "text": "Die Richtung der Beziehung: `forward`, `backward` oder `either`."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "follow_chain",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the relationship is followed as a chain."
+            },
+            {
+              "language": "de",
+              "text": "Ob der Beziehung als Kette gefolgt wird."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps the members are reached along."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte, über die die Mitglieder erreicht werden."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "skip_absent_relationship_ends",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether relationship ends the source does not hold are skipped."
+            },
+            {
+              "language": "de",
+              "text": "Ob Beziehungsenden, die die Quelle nicht enthält, übergangen werden."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "selection",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects the rule selects, those it cannot decide possible members."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, die die Regel wählt, die unentschiedenen mögliche Mitglieder."
+            }
+          ],
+          "references": "selector"
+        }
+      ],
+      "services": [
+        "property-resolution",
+        "relationship-selection"
+      ],
+      "exactness": "stated",
+      "subject": "project",
+      "notEvaluated": [
+        "a group cannot be walked, or its requirements, members or their keys cannot be told"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Group compositions"
+        },
+        {
+          "language": "de",
+          "text": "Gruppenzusammensetzungen"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "Each selected group's members matched to the requirement entries by a maximum matching, as `group-composition` matches them: an item per part every maximum matching leaves short or with a surplus, per group no row matches, per row no group matches, per object no group reaches and per group or object left open, each naming where its outcome goes."
+        },
+        {
+          "language": "de",
+          "text": "Die Mitglieder jeder gewählten Gruppe den Anforderungseinträgen durch eine größte Zuordnung zugeordnet, wie `group-composition` sie zuordnet: ein Element je Teil, den jede größte Zuordnung unterbesetzt oder mit Überschuss lässt, je Gruppe ohne passende Zeile, je Zeile ohne passende Gruppe, je Objekt, das keine Gruppe erreicht, und je offen bleibender Gruppe oder Objekt, jedes mit dem Ort seines Ergebnisses."
+        }
+      ],
+      "fields": [
+        {
+          "name": "at",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Where"
+            },
+            {
+              "language": "de",
+              "text": "Wo"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The group, member, object or the project's stand-in the outcome goes to."
+            },
+            {
+              "language": "de",
+              "text": "Die Gruppe, das Mitglied, das Objekt oder der Platzhalter des Projekts, zu dem das Ergebnis gehört."
+            }
+          ]
+        },
+        {
+          "name": "open",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Open"
+            },
+            {
+              "language": "de",
+              "text": "Offen"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Undecided, with why."
+            },
+            {
+              "language": "de",
+              "text": "Unentschieden, mit Grund."
+            }
+          ]
+        },
+        {
+          "name": "unmatched",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "No row"
+            },
+            {
+              "language": "de",
+              "text": "Keine Zeile"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "A group no row with a group cell matches."
+            },
+            {
+              "language": "de",
+              "text": "Eine Gruppe, die keine Zeile mit Gruppenzelle trifft."
+            }
+          ]
+        },
+        {
+          "name": "absent",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Not in model"
+            },
+            {
+              "language": "de",
+              "text": "Nicht im Modell"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "A row no group in the model matches."
+            },
+            {
+              "language": "de",
+              "text": "Eine Zeile, die keine Gruppe im Modell trifft."
+            }
+          ]
+        },
+        {
+          "name": "ungrouped",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "In no group"
+            },
+            {
+              "language": "de",
+              "text": "In keiner Gruppe"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "An object no selected group reaches."
+            },
+            {
+              "language": "de",
+              "text": "Ein Objekt, das keine gewählte Gruppe erreicht."
+            }
+          ]
+        },
+        {
+          "name": "keys",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Keys"
+            },
+            {
+              "language": "de",
+              "text": "Schlüssel"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The key values of a group no row matches or a member no entry fits."
+            },
+            {
+              "language": "de",
+              "text": "Die Schlüsselwerte einer Gruppe ohne passende Zeile oder eines Mitglieds ohne passenden Eintrag."
+            }
+          ]
+        },
+        {
+          "name": "name",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Row"
+            },
+            {
+              "language": "de",
+              "text": "Zeile"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The row no group matches."
+            },
+            {
+              "language": "de",
+              "text": "Die Zeile, die keine Gruppe trifft."
+            }
+          ]
+        },
+        {
+          "name": "subject",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Entries"
+            },
+            {
+              "language": "de",
+              "text": "Einträge"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The entries left short, with their verb."
+            },
+            {
+              "language": "de",
+              "text": "Die unterbesetzten Einträge, mit ihrem Verb."
+            }
+          ]
+        },
+        {
+          "name": "filled",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Members"
+            },
+            {
+              "language": "de",
+              "text": "Mitglieder"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "How many members the entries left short hold."
+            },
+            {
+              "language": "de",
+              "text": "Wie viele Mitglieder die unterbesetzten Einträge haben."
+            }
+          ]
+        },
+        {
+          "name": "places",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Places"
+            },
+            {
+              "language": "de",
+              "text": "Plätze"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "How many members the entries take."
+            },
+            {
+              "language": "de",
+              "text": "Wie viele Mitglieder die Einträge aufnehmen."
+            }
+          ]
+        },
+        {
+          "name": "missing",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Missing"
+            },
+            {
+              "language": "de",
+              "text": "Fehlend"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The places less the members."
+            },
+            {
+              "language": "de",
+              "text": "Die Plätze abzüglich der Mitglieder."
+            }
+          ]
+        },
+        {
+          "name": "found",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Fitting members"
+            },
+            {
+              "language": "de",
+              "text": "Passende Mitglieder"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "How many members compete for the entries."
+            },
+            {
+              "language": "de",
+              "text": "Wie viele Mitglieder um die Einträge konkurrieren."
+            }
+          ]
+        },
+        {
+          "name": "surplus",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Surplus"
+            },
+            {
+              "language": "de",
+              "text": "Überschuss"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The members less the places."
+            },
+            {
+              "language": "de",
+              "text": "Die Mitglieder abzüglich der Plätze."
+            }
+          ]
+        },
+        {
+          "name": "unfit",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Fits no entry"
+            },
+            {
+              "language": "de",
+              "text": "Passt zu keinem Eintrag"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the surplus member fits no entry at all."
+            },
+            {
+              "language": "de",
+              "text": "Ob das überzählige Mitglied zu gar keinem Eintrag passt."
+            }
+          ]
+        },
+        {
+          "name": "entries",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Competed entries"
+            },
+            {
+              "language": "de",
+              "text": "Umkämpfte Einträge"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The entries a surplus competes for."
+            },
+            {
+              "language": "de",
+              "text": "Die Einträge, um die ein Überschuss konkurriert."
+            }
+          ]
+        },
+        {
+          "name": "verb",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Verb"
+            },
+            {
+              "language": "de",
+              "text": "Verb"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "`takes` or `take`."
+            },
+            {
+              "language": "de",
+              "text": "`takes` oder `take`."
+            }
+          ]
+        },
+        {
+          "name": "via",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Relation"
+            },
+            {
+              "language": "de",
+              "text": "Beziehung"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "How a group reaches its members, as findings word it."
+            },
+            {
+              "language": "de",
+              "text": "Wie eine Gruppe ihre Mitglieder erreicht, wie Befunde es formulieren."
+            }
+          ]
+        },
+        {
+          "name": "related",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Members concerned"
+            },
+            {
+              "language": "de",
+              "text": "Betroffene Mitglieder"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The members a finding relates."
+            },
+            {
+              "language": "de",
+              "text": "Die Mitglieder, auf die sich ein Befund bezieht."
+            }
+          ]
+        },
+        {
+          "name": "reason",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Reason"
+            },
+            {
+              "language": "de",
+              "text": "Grund"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Why an undecided item is open, as a report writes it."
+            },
+            {
+              "language": "de",
+              "text": "Warum ein unentschiedenes Element offen ist, wie ein Bericht es schreibt."
             }
           ]
         }

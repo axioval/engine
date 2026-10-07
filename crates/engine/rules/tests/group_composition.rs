@@ -6,6 +6,13 @@ mod common;
 use axioval_ir::NotEvaluatedReason;
 use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector, TableRow};
 use axioval_rules::GroupComposition;
+
+/// `group-composition` as it runs, held to the implementation it replaced
+/// on every evaluation.
+static HELD: common::Held = common::Held(
+    &GroupComposition,
+    &axioval_rules::reference::GroupComposition,
+);
 use common::{Model, findings, id, integer, kind, property, rule, selector, string, unevaluated};
 
 const ID: &str = "axioval:capability.group-composition";
@@ -55,8 +62,8 @@ fn a_member_fitting_two_entries_goes_where_the_other_member_cannot() {
     // the bedroom `a1` into `room` and leaves the living room `a2` nowhere,
     // since it is no bedroom. The maximum matching fills both.
     let parameters = requirements(vec![entry("room", "*room", 1), entry("bedroom", "Bed*", 1)]);
-    let evaluation = apartment(&["Bedroom", "Living room"])
-        .evaluate(&GroupComposition, &rule(ID, kind("zone"), parameters));
+    let evaluation =
+        apartment(&["Bedroom", "Living room"]).evaluate(&HELD, &rule(ID, kind("zone"), parameters));
     assert!(
         evaluation.findings().is_empty(),
         "{:?}",
@@ -73,7 +80,7 @@ fn missing_and_surplus_members_are_reported_per_entry() {
         entry("bathroom", "Bath*", 1),
     ]);
     let evaluation = apartment(&["Bedroom", "Bedroom", "Kitchen", "Lobby", "Bedroom"])
-        .evaluate(&GroupComposition, &rule(ID, kind("zone"), parameters));
+        .evaluate(&HELD, &rule(ID, kind("zone"), parameters));
     assert_eq!(
         findings(&evaluation),
         [
@@ -107,8 +114,7 @@ fn entries_competing_for_one_member_miss_it_together() {
         entry("bedroom", "Bed*", 1),
         entry("sleeping room", "*room", 1),
     ]);
-    let evaluation =
-        apartment(&["Bedroom"]).evaluate(&GroupComposition, &rule(ID, kind("zone"), parameters));
+    let evaluation = apartment(&["Bedroom"]).evaluate(&HELD, &rule(ID, kind("zone"), parameters));
     assert_eq!(
         findings(&evaluation),
         [(
@@ -124,7 +130,7 @@ fn entries_competing_for_one_member_miss_it_together() {
 fn an_unreadable_key_leaves_the_group_and_the_member_not_evaluated() {
     let parameters = requirements(vec![entry("bedroom", "Bed*", 2)]);
     let model = apartment(&["Bedroom", "Bedroom"]).unreadable("a2");
-    let evaluation = model.evaluate(&GroupComposition, &rule(ID, kind("zone"), parameters));
+    let evaluation = model.evaluate(&HELD, &rule(ID, kind("zone"), parameters));
     assert!(evaluation.findings().is_empty());
     assert_eq!(
         unevaluated(&evaluation),
@@ -158,7 +164,7 @@ fn an_undecided_membership_leaves_the_group_not_evaluated() {
         }),
     );
     let model = apartment(&["Bedroom", "Bedroom"]).unreadable("a2");
-    let evaluation = model.evaluate(&GroupComposition, &rule(ID, kind("zone"), parameters));
+    let evaluation = model.evaluate(&HELD, &rule(ID, kind("zone"), parameters));
     assert!(evaluation.findings().is_empty());
     assert_eq!(
         unevaluated(&evaluation),
@@ -196,7 +202,7 @@ fn group_rows_apply_by_the_groups_key_and_a_group_no_row_matches_is_found() {
         ]),
     ]);
     parameters.push(("group_key", property(Some("Pset"), "Kind")));
-    let evaluation = model.evaluate(&GroupComposition, &rule(ID, kind("zone"), parameters));
+    let evaluation = model.evaluate(&HELD, &rule(ID, kind("zone"), parameters));
     assert_eq!(
         findings(&evaluation),
         [(
@@ -214,7 +220,7 @@ fn objects_no_group_reaches_are_found_with_an_ungrouped_selector() {
         .text("loose", "Pset", "Type", "Bedroom");
     let mut parameters = requirements(vec![entry("bedroom", "Bed*", 1)]);
     parameters.push(("ungrouped_selector", selector(kind("space"))));
-    let evaluation = model.evaluate(&GroupComposition, &rule(ID, kind("zone"), parameters));
+    let evaluation = model.evaluate(&HELD, &rule(ID, kind("zone"), parameters));
     assert_eq!(
         findings(&evaluation),
         [("loose".into(), "in no group via assigns".into())]
@@ -230,7 +236,7 @@ fn an_ungrouped_object_is_not_found_when_a_group_cannot_be_walked() {
     let mut parameters = requirements(vec![entry("bedroom", "Bed*", 1)]);
     parameters[3] = ("path", common::strings(&["assigns", "unknown"]));
     parameters.push(("ungrouped_selector", selector(kind("space"))));
-    let evaluation = model.evaluate(&GroupComposition, &rule(ID, kind("zone"), parameters));
+    let evaluation = model.evaluate(&HELD, &rule(ID, kind("zone"), parameters));
     assert!(evaluation.findings().is_empty());
     assert_eq!(
         unevaluated(&evaluation),
@@ -246,16 +252,14 @@ fn an_ungrouped_object_is_not_found_when_a_group_cannot_be_walked() {
 fn a_declaration_without_a_relationship_or_a_count_is_invalid() {
     let mut parameters = requirements(vec![entry("bedroom", "Bed*", 1)]);
     parameters.pop();
-    let evaluation =
-        apartment(&["Bedroom"]).evaluate(&GroupComposition, &rule(ID, kind("zone"), parameters));
+    let evaluation = apartment(&["Bedroom"]).evaluate(&HELD, &rule(ID, kind("zone"), parameters));
     assert_eq!(
         evaluation.not_evaluated_outcomes()[0].message(),
         "group-composition: a group reaches its members only through `relationship` or `path`"
     );
 
     let parameters = requirements(vec![row(&[("key_1", string("Bed*"))])]);
-    let evaluation =
-        apartment(&["Bedroom"]).evaluate(&GroupComposition, &rule(ID, kind("zone"), parameters));
+    let evaluation = apartment(&["Bedroom"]).evaluate(&HELD, &rule(ID, kind("zone"), parameters));
     assert_eq!(
         unevaluated(&evaluation),
         [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
@@ -288,7 +292,7 @@ fn typed_apartments(extra: Vec<(&'static str, ParameterValue)>) -> Vec<(String, 
     parameters.push(("group_key_1", property(Some("Pset"), "Kind")));
     parameters.push(("group_key_3", property(Some("Pset"), "Number")));
     parameters.extend(extra);
-    let evaluation = model.evaluate(&GroupComposition, &rule(ID, kind("zone"), parameters));
+    let evaluation = model.evaluate(&HELD, &rule(ID, kind("zone"), parameters));
     assert!(
         evaluation.not_evaluated_outcomes().is_empty(),
         "{:?}",
@@ -327,7 +331,7 @@ fn a_group_whose_key_cannot_be_read_may_be_the_missing_one() {
         "report_absent_groups",
         ParameterValue::Boolean { value: true },
     ));
-    let evaluation = model.evaluate(&GroupComposition, &rule(ID, kind("zone"), parameters));
+    let evaluation = model.evaluate(&HELD, &rule(ID, kind("zone"), parameters));
     assert!(
         evaluation.findings().is_empty(),
         "{:?}",
@@ -359,11 +363,139 @@ fn group_keys_must_be_declared_once_and_used() {
         ])]);
         parameters.push(("group_key_3", property(Some("Pset"), "Number")));
         parameters.extend(extra);
-        let evaluation = apartment(&["Bedroom"])
-            .evaluate(&GroupComposition, &rule(ID, kind("zone"), parameters));
+        let evaluation =
+            apartment(&["Bedroom"]).evaluate(&HELD, &rule(ID, kind("zone"), parameters));
         assert_eq!(
             unevaluated(&evaluation),
             [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
         );
+    }
+}
+
+/// The measured list `compositions` never cites an answer measured
+/// approximately: a group reached through one is left open rather than
+/// found short on it, while an exact reach cites only exact evidence.
+#[test]
+fn a_composition_never_cites_an_approximate_answer() {
+    let parameters = requirements(vec![entry("bedroom", "Bed*", 2)]);
+    let exact =
+        apartment(&["Bedroom"]).evaluate(&HELD, &rule(ID, kind("zone"), parameters.clone()));
+    assert_eq!(exact.findings().len(), 1);
+    assert!(exact.findings()[0].evidence.iter().all(|item| item.exact));
+    let approximate = apartment(&["Bedroom"])
+        .cite_approximate("assigns", "a", "derived:assigns")
+        .evaluate(&HELD, &rule(ID, kind("zone"), parameters));
+    assert!(approximate.findings().is_empty(), "{approximate:#?}");
+    assert_eq!(
+        unevaluated(&approximate),
+        [("a".to_owned(), NotEvaluatedReason::InvalidEvidence)]
+    );
+}
+
+/// Generated groups of members whose types are random, some unreadable or
+/// undecided, some groups keyed, under random entries and switches, held to
+/// the reference.
+mod generated {
+    use super::*;
+    use proptest::prelude::*;
+
+    const TYPES: [&str; 5] = ["Bedroom", "Living room", "Kitchen", "Bath", "Hall"];
+    const PATTERNS: [&str; 6] = ["Bed*", "*room", "Kitchen", "B*", "*", "Hall"];
+    const KINDS: [&str; 2] = ["flat", "house"];
+
+    fn typed() -> Selector {
+        Selector::Property {
+            property_set: Some("Pset".into()),
+            property: "Type".into(),
+            operator: ComparisonOperator::Exists,
+            value: None,
+            case_sensitive: true,
+            trim: false,
+            quantifier: None,
+            precision: None,
+        }
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(128))]
+
+        #[test]
+        fn generated_compositions_hold_parity(
+            groups in proptest::collection::vec(
+                (
+                    0..KINDS.len(),
+                    any::<bool>(),
+                    proptest::collection::vec((0..TYPES.len(), 0..8u8), 0..5),
+                ),
+                0..3,
+            ),
+            loose in proptest::collection::vec(0..TYPES.len(), 0..2),
+            entries in proptest::collection::vec(
+                (0..PATTERNS.len(), 0..3i64, proptest::option::of(0..KINDS.len())),
+                1..4,
+            ),
+            keyed in any::<bool>(),
+            absent in any::<bool>(),
+            ungrouped in any::<bool>(),
+        ) {
+            let mut model = Model::default();
+            for (index, (kind_of, unreadable, members)) in groups.iter().enumerate() {
+                let group = format!("g{index}");
+                model = model.object(&group, "zone");
+                model = if *unreadable {
+                    model.unreadable_value(&group, "Pset", "Kind", "string")
+                } else {
+                    model.text(&group, "Pset", "Kind", KINDS[*kind_of])
+                };
+                for (number, (space_type, fate)) in members.iter().enumerate() {
+                    let member = format!("{group}m{number}");
+                    model = model.object(&member, "space").edge("assigns", &group, &member);
+                    // Fate 0 leaves the type unreadable, 1 its object
+                    // unreadable (its membership undecided), 2 the type
+                    // absent.
+                    model = match fate {
+                        0 => model.unreadable_value(&member, "Pset", "Type", "string"),
+                        1 => model.unreadable(&member),
+                        2 => model,
+                        _ => model.text(&member, "Pset", "Type", TYPES[*space_type]),
+                    };
+                }
+            }
+            for (number, space_type) in loose.iter().enumerate() {
+                let member = format!("loose{number}");
+                model = model
+                    .object(&member, "space")
+                    .text(&member, "Pset", "Type", TYPES[*space_type]);
+            }
+            let rows: Vec<TableRow> = entries
+                .iter()
+                .map(|(pattern, count, group)| {
+                    let mut cells = vec![
+                        ("key_1", string(PATTERNS[*pattern])),
+                        ("count", integer(*count)),
+                    ];
+                    if keyed && let Some(group) = group {
+                        cells.push(("group", string(KINDS[*group])));
+                    }
+                    row(&cells)
+                })
+                .collect();
+            let any_group_cell = keyed && entries.iter().any(|(_, _, group)| group.is_some());
+            let mut parameters = requirements(rows);
+            parameters[2] = ("member_selector", selector(typed()));
+            if any_group_cell {
+                parameters.push(("group_key", property(Some("Pset"), "Kind")));
+            }
+            if absent {
+                parameters.push((
+                    "report_absent_groups",
+                    ParameterValue::Boolean { value: true },
+                ));
+            }
+            if ungrouped {
+                parameters.push(("ungrouped_selector", selector(kind("space"))));
+            }
+            model.evaluate(&HELD, &rule(ID, kind("zone"), parameters));
+        }
     }
 }

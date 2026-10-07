@@ -520,6 +520,7 @@ const ZONE: [MeasuredParameter; 21] = [
 
 /// Every list of measured members, sorted by name.
 pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
+    searches::ALLOCATIONS,
     MemberDescriptor {
         list: MeasuredDescriptor {
             name: "axes_within",
@@ -755,6 +756,7 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
     clash::CLASH_PAIRS,
     walking::CLEAR_WIDTHS,
     walking::CLEARANCES,
+    searches::COMPOSITIONS,
     MemberDescriptor {
         list: MeasuredDescriptor {
             name: "connected_spaces",

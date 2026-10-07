@@ -1,27 +1,36 @@
 //! Required members per group: a table of member entries, filled by a
-//! maximum matching of the group's members.
+//! maximum matching of the group's members. The matching stays here
+//! (`compose`); the capability runs as a template judging what it found
+//! (`group_composition/template.rs`).
+
+mod measured;
+#[cfg(feature = "parity-reference")]
+pub(crate) mod reference;
+mod template;
+
+pub(crate) use measured::CompositionMeasures;
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::sync::LazyLock;
 
+use axioval_engine::template::Template;
 use axioval_engine::{
     CapabilityEvaluation, ColumnKind, CompiledRule, NotEvaluatedReason, ParameterDescriptor,
     ParameterType, RuleCapability, RuleContext, TableColumn,
 };
-use axioval_ir::contract::Selector;
-use axioval_ir::{Evidence, Finding, Object, ObjectId, Scope};
+use axioval_ir::measured::MeasuredSelection;
+use axioval_ir::{Evidence, Object, ObjectId};
 
 use crate::counts::{Population, relation_text};
-use crate::pairs::severity;
-use crate::selection::select_objects;
 use crate::support::table::{Matched, RowSelection, RowTest, match_rows};
-use crate::support::{Parameters, Traversal, Unavailable, finding, invalid};
+use crate::support::{Parameters, Traversal, Unavailable, invalid};
 use crate::table_allocation::{
     KEY_COUNT, Key, KeyCells, KeyProperties, describe_keys, key_cells, key_properties, read_keys,
     row_name, test_keys, unknown_key,
 };
 
 /// The group cells, each over the group key of the same position.
-const GROUP_COLUMNS: [&str; 3] = ["group", "group_2", "group_3"];
+pub(crate) const GROUP_COLUMNS: [&str; 3] = ["group", "group_2", "group_3"];
 
 const COLUMNS: &[TableColumn] = &[
     TableColumn::optional("key_1", ColumnKind::TextPattern),
@@ -33,6 +42,27 @@ const COLUMNS: &[TableColumn] = &[
     TableColumn::optional("label", ColumnKind::String),
     TableColumn::required("count", ColumnKind::Integer),
 ];
+
+/// The capability's parameter descriptor.
+pub(crate) fn parameters() -> Vec<ParameterDescriptor> {
+    vec![
+        ParameterDescriptor::required("requirements", ParameterType::Table(COLUMNS)),
+        ParameterDescriptor::optional("key_1", ParameterType::PropertyReference),
+        ParameterDescriptor::optional("key_2", ParameterType::PropertyReference),
+        ParameterDescriptor::optional("key_3", ParameterType::PropertyReference),
+        ParameterDescriptor::optional("case_sensitive", ParameterType::Boolean),
+        ParameterDescriptor::optional("group_key", ParameterType::PropertyReference),
+        ParameterDescriptor::optional("group_key_1", ParameterType::PropertyReference),
+        ParameterDescriptor::optional("group_key_2", ParameterType::PropertyReference),
+        ParameterDescriptor::optional("group_key_3", ParameterType::PropertyReference),
+        ParameterDescriptor::optional("report_absent_groups", ParameterType::Boolean),
+        ParameterDescriptor::optional("member_selector", ParameterType::Selector),
+        ParameterDescriptor::optional("ungrouped_selector", ParameterType::Selector),
+    ]
+    .into_iter()
+    .chain(crate::support::traversal_parameters())
+    .collect()
+}
 
 /// Requires each selected group to hold a multiset of members: two
 /// bedrooms, one kitchen and one bathroom per apartment.
@@ -68,127 +98,199 @@ const COLUMNS: &[TableColumn] = &[
 /// picks that no selected group reaches is a finding.
 pub struct GroupComposition;
 
+static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
+
+/// The plans of the rules bound to it, kept across runs.
+static PLANS: crate::templates::Plans = crate::templates::Plans::new();
+
 impl RuleCapability for GroupComposition {
     fn id(&self) -> &'static str {
-        "axioval:capability.group-composition"
+        TEMPLATE.id
     }
 
     fn parameters(&self) -> Vec<ParameterDescriptor> {
-        vec![
-            ParameterDescriptor::required("requirements", ParameterType::Table(COLUMNS)),
-            ParameterDescriptor::optional("key_1", ParameterType::PropertyReference),
-            ParameterDescriptor::optional("key_2", ParameterType::PropertyReference),
-            ParameterDescriptor::optional("key_3", ParameterType::PropertyReference),
-            ParameterDescriptor::optional("case_sensitive", ParameterType::Boolean),
-            ParameterDescriptor::optional("group_key", ParameterType::PropertyReference),
-            ParameterDescriptor::optional("group_key_1", ParameterType::PropertyReference),
-            ParameterDescriptor::optional("group_key_2", ParameterType::PropertyReference),
-            ParameterDescriptor::optional("group_key_3", ParameterType::PropertyReference),
-            ParameterDescriptor::optional("report_absent_groups", ParameterType::Boolean),
-            ParameterDescriptor::optional("member_selector", ParameterType::Selector),
-            ParameterDescriptor::optional("ungrouped_selector", ParameterType::Selector),
-        ]
-        .into_iter()
-        .chain(crate::support::traversal_parameters())
-        .collect()
+        TEMPLATE.parameters.clone()
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
-        let declaration = match Declaration::parse(rule) {
-            Ok(declaration) => declaration,
-            Err((reason, message)) => {
-                return CapabilityEvaluation::not_evaluated(
-                    reason,
-                    format!("group-composition: {message}"),
-                );
-            }
-        };
-        let members = Population::of(context, declaration.members);
-        let ungrouped = declaration
-            .ungrouped
-            .map(|selector| Population::of(context, selector));
-        let universe: Vec<&Object> = context
-            .project
-            .objects()
-            .filter(|object| {
-                members.contains(&object.id)
-                    || ungrouped
-                        .as_ref()
-                        .is_some_and(|ungrouped| ungrouped.contains(&object.id))
-            })
-            .collect();
-        let (groups, mut evaluation) = select_objects(context, &rule.selector);
-        let undecided_groups: Vec<ObjectId> = evaluation
-            .not_evaluated_outcomes()
-            .iter()
-            .filter_map(|outcome| outcome.object_id().cloned())
-            .collect();
+        crate::templates::run((&TEMPLATE, &PLANS), context, rule)
+    }
 
-        if declaration.report_absent {
-            report_absent(
-                context,
-                rule,
-                &declaration,
-                &groups,
-                &undecided_groups,
-                &mut evaluation,
-            );
-        }
-        let mut judge = Judge {
-            context,
-            rule,
-            declaration: &declaration,
-            members: &members,
-            keys: BTreeMap::new(),
-            reported: BTreeSet::new(),
-            evaluation: &mut evaluation,
-        };
-        // Objects some decided group reaches, and whether every group could be walked.
-        let mut grouped = BTreeSet::new();
-        let mut complete = true;
-        for group in groups {
-            match declaration.traversal.related(context, &group.id, &universe) {
-                Ok((reached, evidence)) => {
-                    judge.group(group, &reached, evidence);
-                    grouped.extend(reached);
-                }
-                Err((reason, message)) => {
-                    complete = false;
-                    judge
-                        .evaluation
-                        .push_object_not_evaluated(group.id.clone(), reason, message);
-                }
-            }
-        }
-        if let Some(ungrouped) = ungrouped {
-            let reach = Reach {
-                universe: &universe,
-                grouped: &grouped,
-                undecided_groups: &undecided_groups,
-                complete,
-            };
-            report_ungrouped(
-                context,
-                rule,
-                &declaration,
-                &ungrouped,
-                &reach,
-                &mut evaluation,
-            );
-        }
-        evaluation
+    fn template(&self) -> Option<&Template> {
+        Some(&TEMPLATE)
     }
 }
 
-/// A project finding for each requirement row no group in the model
-/// matches, unless a group of undecided selection or key might.
-fn report_absent(
+/// Checks the rule parameters `compositions` names, as the rule states
+/// them: the declaration the capability refused, in its order and words.
+///
+/// # Errors
+///
+/// An invalid declaration.
+pub(crate) fn check_arguments(
+    stated: &BTreeMap<String, axioval_ir::contract::ParameterValue>,
+) -> Result<(), Unavailable> {
+    let rule = crate::light_area::synthesised(stated.clone());
+    Declaration::parse(&rule).map(|_| ())
+}
+
+/// What the matching found, each where its outcome goes.
+pub(crate) enum Composed {
+    /// An object or a group left open, for its reason.
+    Open { at: ObjectId, why: Unavailable },
+    /// A group no row with a group cell matches.
+    Unmatched {
+        group: ObjectId,
+        keys: String,
+        evidence: Vec<Evidence>,
+    },
+    /// A row no group in the model matches.
+    Absent {
+        name: String,
+        evidence: Vec<Evidence>,
+    },
+    /// An object no selected group reaches.
+    Ungrouped { object: ObjectId, via: String },
+    /// Entries every maximum matching leaves short, together.
+    Short {
+        group: ObjectId,
+        /// The entries as findings name them, with their verb.
+        subject: String,
+        filled: usize,
+        places: usize,
+        via: String,
+        related: Vec<ObjectId>,
+        evidence: Vec<Evidence>,
+    },
+    /// Members every maximum matching leaves without a place, together.
+    Surplus {
+        group: ObjectId,
+        /// The entries they compete for as findings name them, with their
+        /// verb; `None` for a member no entry fits.
+        entries: Option<(String, &'static str)>,
+        /// The key values of a member no entry fits.
+        keys: String,
+        found: usize,
+        places: usize,
+        via: String,
+        related: Vec<ObjectId>,
+        evidence: Vec<Evidence>,
+    },
+}
+
+/// The members, groups and ungrouped objects measured values' arguments
+/// bound.
+pub(crate) struct Selected<'s> {
+    pub(crate) groups: &'s MeasuredSelection,
+    pub(crate) members: &'s Population,
+    pub(crate) ungrouped: Option<&'s MeasuredSelection>,
+}
+
+/// Matches each group's members to the rows of `rule`, and lists what the
+/// template judges, in the capability's order.
+///
+/// # Errors
+///
+/// An invalid declaration.
+pub(crate) fn compose(
     context: &RuleContext<'_>,
     rule: &CompiledRule,
+    selected: &Selected<'_>,
+) -> Result<Vec<Composed>, Unavailable> {
+    let declaration = Declaration::parse(rule)?;
+    let members = selected.members;
+    let ungrouped = selected.ungrouped.map(|picked| Population {
+        matched: picked.matched.clone(),
+        undecided: picked.undecided.clone(),
+        first: None,
+    });
+    let universe: Vec<&Object> = context
+        .project
+        .objects()
+        .filter(|object| {
+            members.contains(&object.id)
+                || ungrouped
+                    .as_ref()
+                    .is_some_and(|ungrouped| ungrouped.contains(&object.id))
+        })
+        .collect();
+    // The groups in the order they are selected: the model's objects, then
+    // the run's resource objects and derived groups.
+    let in_order = |ids: &std::collections::BTreeSet<ObjectId>| -> Vec<&Object> {
+        let mut objects: Vec<&Object> = context
+            .project
+            .objects()
+            .filter(|object| ids.contains(&object.id))
+            .collect();
+        objects.extend(
+            ids.iter()
+                .filter(|id| context.project.object(id).is_none())
+                .filter_map(|id| crate::selection::object_by_id(context, id)),
+        );
+        objects
+    };
+    let groups: Vec<&Object> = in_order(&selected.groups.matched);
+    let undecided_groups: Vec<ObjectId> = in_order(&selected.groups.undecided)
+        .into_iter()
+        .map(|object| object.id.clone())
+        .collect();
+    let mut found = Vec::new();
+    if declaration.report_absent {
+        absent(
+            context,
+            &declaration,
+            &groups,
+            &undecided_groups,
+            &mut found,
+        );
+    }
+    let mut judge = Judge {
+        context,
+        declaration: &declaration,
+        members,
+        keys: BTreeMap::new(),
+        reported: BTreeSet::new(),
+        found: &mut found,
+    };
+    // Objects some decided group reaches, and whether every group could be
+    // walked.
+    let mut grouped = BTreeSet::new();
+    let mut complete = true;
+    for group in groups {
+        match declaration.traversal.related(context, &group.id, &universe) {
+            Ok((reached, evidence)) => {
+                judge.group(group, &reached, evidence);
+                grouped.extend(reached);
+            }
+            Err(why) => {
+                complete = false;
+                judge.found.push(Composed::Open {
+                    at: group.id.clone(),
+                    why,
+                });
+            }
+        }
+    }
+    if let Some(ungrouped) = ungrouped {
+        let reach = Reach {
+            universe: &universe,
+            grouped: &grouped,
+            undecided_groups: &undecided_groups,
+            complete,
+        };
+        outside(context, &declaration, &ungrouped, &reach, &mut found);
+    }
+    Ok(found)
+}
+
+/// Each requirement row no group in the model matches, unless a group of
+/// undecided selection or key might.
+fn absent(
+    context: &RuleContext<'_>,
     declaration: &Declaration<'_>,
     groups: &[&Object],
     undecided_groups: &[ObjectId],
-    evaluation: &mut CapabilityEvaluation,
+    found: &mut Vec<Composed>,
 ) {
     let rows = declaration.rows.len();
     let (mut present, mut maybe) = (vec![false; rows], vec![false; rows]);
@@ -215,23 +317,21 @@ fn report_absent(
         }
         let name = row_name(row.number, row.label, &row.group, &declaration.group_key);
         if maybe[index] {
-            evaluation.push_not_evaluated(
-                NotEvaluatedReason::IncompleteEvidence,
-                format!(
-                    "group-composition: whether a group matches {name} is undecided: a group's \
-                     selection or key cannot be read"
+            found.push(Composed::Open {
+                at: axioval_engine::template::scope_stand_in(None),
+                why: (
+                    NotEvaluatedReason::IncompleteEvidence,
+                    format!(
+                        "group-composition: whether a group matches {name} is undecided: a \
+                         group's selection or key cannot be read"
+                    ),
                 ),
-            );
+            });
         } else {
-            evaluation.push_finding(
-                Finding::new(
-                    rule.id.clone(),
-                    Scope::Project,
-                    severity(rule),
-                    format!("not in model: no group matches {name}"),
-                )
-                .with_evidence(evidence.clone()),
-            );
+            found.push(Composed::Absent {
+                name,
+                evidence: evidence.clone(),
+            });
         }
     }
 }
@@ -245,15 +345,14 @@ struct Reach<'r> {
     complete: bool,
 }
 
-/// A finding for each `ungrouped` object no group reaches, unless a group
-/// that could not be decided or walked might.
-fn report_ungrouped(
+/// Each `ungrouped` object no group reaches, unless a group that could not
+/// be decided or walked might.
+fn outside(
     context: &RuleContext<'_>,
-    rule: &CompiledRule,
     declaration: &Declaration<'_>,
     ungrouped: &Population,
     reach: &Reach<'_>,
-    evaluation: &mut CapabilityEvaluation,
+    found: &mut Vec<Composed>,
 ) {
     let mut complete = reach.complete;
     // Objects a group of undecided selection reaches.
@@ -278,24 +377,23 @@ fn report_ungrouped(
         }
         let decided = ungrouped.matched.contains(object);
         if decided && complete && !maybe_grouped.contains(object) {
-            evaluation.push_finding(finding(
-                rule,
-                object,
-                format!("in no group {via}"),
-                Vec::new(),
-                Vec::new(),
-            ));
+            found.push(Composed::Ungrouped {
+                object: object.clone(),
+                via: via.clone(),
+            });
         } else {
             let why = if decided {
                 "a group that cannot be decided or walked may hold it"
             } else {
                 "whether it must be in a group is undecided"
             };
-            evaluation.push_object_not_evaluated(
-                object.clone(),
-                NotEvaluatedReason::IncompleteEvidence,
-                format!("group-composition: no group reaches it {via}, but {why}"),
-            );
+            found.push(Composed::Open {
+                at: object.clone(),
+                why: (
+                    NotEvaluatedReason::IncompleteEvidence,
+                    format!("group-composition: no group reaches it {via}, but {why}"),
+                ),
+            });
         }
     }
 }
@@ -317,8 +415,6 @@ struct Declaration<'a> {
     properties: KeyProperties<'a>,
     group_key: KeyProperties<'a>,
     report_absent: bool,
-    members: &'a Selector,
-    ungrouped: Option<&'a Selector>,
     traversal: Traversal,
 }
 
@@ -394,15 +490,16 @@ impl<'a> Declaration<'a> {
                 )));
             }
         }
+        // Read as the capability read them, so one of another type is
+        // refused in its order.
+        let report_absent = parameters.boolean("report_absent_groups")?.unwrap_or(false);
+        parameters.selector("member_selector")?;
+        parameters.selector("ungrouped_selector")?;
         Ok(Self {
             rows,
             properties,
             group_key,
-            report_absent: parameters.boolean("report_absent_groups")?.unwrap_or(false),
-            members: parameters
-                .selector("member_selector")?
-                .unwrap_or(&Selector::All),
-            ungrouped: parameters.selector("ungrouped_selector")?,
+            report_absent,
             traversal,
         })
     }
@@ -451,25 +548,23 @@ struct MemberKeys {
     evidence: Vec<Evidence>,
 }
 
-/// Judges one group after another.
+/// Matches one group after another.
 struct Judge<'j, 'a> {
     context: &'j RuleContext<'j>,
-    rule: &'j CompiledRule,
     declaration: &'j Declaration<'a>,
     members: &'j Population,
     keys: BTreeMap<ObjectId, MemberKeys>,
     /// Members already reported not evaluated for an unreadable key.
     reported: BTreeSet<ObjectId>,
-    evaluation: &'j mut CapabilityEvaluation,
+    found: &'j mut Vec<Composed>,
 }
 
 impl Judge<'_, '_> {
-    fn not_evaluated(&mut self, group: &ObjectId, reason: NotEvaluatedReason, message: &str) {
-        self.evaluation.push_object_not_evaluated(
-            group.clone(),
-            reason,
-            format!("group-composition: {message}"),
-        );
+    fn open(&mut self, group: &ObjectId, reason: NotEvaluatedReason, message: &str) {
+        self.found.push(Composed::Open {
+            at: group.clone(),
+            why: (reason, format!("group-composition: {message}")),
+        });
     }
 
     /// The requirement rows that apply to `group`, or `None` when the group
@@ -489,21 +584,18 @@ impl Judge<'_, '_> {
                     .iter()
                     .all(|(index, _)| rows[*index].group.iter().all(Option::is_none))
                 {
-                    let shown = describe_keys(&declaration.group_key, &keys);
-                    self.evaluation.push_finding(finding(
-                        self.rule,
-                        &group.id,
-                        format!("no requirement row matches the group ({shown})"),
-                        std::mem::take(evidence),
-                        Vec::new(),
-                    ));
+                    self.found.push(Composed::Unmatched {
+                        group: group.id.clone(),
+                        keys: describe_keys(&declaration.group_key, &keys),
+                        evidence: std::mem::take(evidence),
+                    });
                     return None;
                 }
                 Some(matched.into_iter().map(|(index, _)| index).collect())
             }
             Matched::Undecided | Matched::Ambiguous(_) => {
                 let (reason, message) = unknown_key(&keys);
-                self.not_evaluated(
+                self.open(
                     &group.id,
                     reason,
                     &format!("the group's requirements cannot be decided: {message}"),
@@ -524,7 +616,7 @@ impl Judge<'_, '_> {
             .collect();
         let undecided = reached.len() - members.len();
         if undecided > 0 {
-            self.not_evaluated(
+            self.open(
                 &group.id,
                 NotEvaluatedReason::IncompleteEvidence,
                 &format!("{undecided} object(s) it reaches {via} may be members"),
@@ -542,45 +634,46 @@ impl Judge<'_, '_> {
         for part in allocation.shortfalls() {
             let rows: Vec<usize> = part.entries.iter().map(|entry| entries[*entry]).collect();
             let places: usize = part.entries.iter().map(|entry| capacity[*entry]).sum();
-            let filled = part.members.len();
             let subject = if rows.len() == 1 {
                 format!("{} has", self.declaration.name(rows[0]))
             } else {
                 format!("{} together have", self.declaration.names(&rows))
             };
-            let message = format!(
-                "{subject} {filled} of {places} required member(s) {via}; {} missing",
-                places - filled
-            );
-            self.report(
-                group,
-                message,
-                &evidence,
-                part.members.iter().map(|m| members[*m]),
-            );
+            let (related, evidence) =
+                self.cited(&evidence, part.members.iter().map(|m| members[*m]));
+            self.found.push(Composed::Short {
+                group: group.id.clone(),
+                subject,
+                filled: part.members.len(),
+                places,
+                via: via.clone(),
+                related,
+                evidence,
+            });
         }
         for part in allocation.surpluses() {
-            let found = part.members.len();
-            let message = if part.entries.is_empty() {
+            let (keys, entries_named) = if part.entries.is_empty() {
                 let member = members[part.members[0]];
                 let shown = describe_keys(&self.declaration.properties, &self.keys_of(member).keys);
-                format!("surplus member {via}: no entry fits it ({shown})")
+                (shown, None)
             } else {
                 let rows: Vec<usize> = part.entries.iter().map(|entry| entries[*entry]).collect();
-                let places: usize = part.entries.iter().map(|entry| capacity[*entry]).sum();
                 let verb = if rows.len() == 1 { "takes" } else { "take" };
-                format!(
-                    "{} {verb} {places} member(s), but {found} fit {via}; {} surplus",
-                    self.declaration.names(&rows),
-                    found - places
-                )
+                (String::new(), Some((self.declaration.names(&rows), verb)))
             };
-            self.report(
-                group,
-                message,
-                &evidence,
-                part.members.iter().map(|m| members[*m]),
-            );
+            let places: usize = part.entries.iter().map(|entry| capacity[*entry]).sum();
+            let (related, evidence) =
+                self.cited(&evidence, part.members.iter().map(|m| members[*m]));
+            self.found.push(Composed::Surplus {
+                group: group.id.clone(),
+                entries: entries_named,
+                keys,
+                found: part.members.len(),
+                places,
+                via: via.clone(),
+                related,
+                evidence,
+            });
         }
     }
 
@@ -617,14 +710,18 @@ impl Judge<'_, '_> {
             let count = unknown.len();
             for (member, (reason, message)) in unknown {
                 if self.reported.insert(member.clone()) {
-                    self.evaluation.push_object_not_evaluated(
-                        member,
-                        reason,
-                        format!("group-composition: which entries it fits is undecided: {message}"),
-                    );
+                    self.found.push(Composed::Open {
+                        at: member,
+                        why: (
+                            reason,
+                            format!(
+                                "group-composition: which entries it fits is undecided: {message}"
+                            ),
+                        ),
+                    });
                 }
             }
-            self.not_evaluated(
+            self.open(
                 &group.id,
                 reason,
                 &format!("{count} member(s) {via} may fit entries their keys cannot decide"),
@@ -660,20 +757,19 @@ impl Judge<'_, '_> {
         })
     }
 
-    fn report<'m>(
+    /// The objects a finding relates and what it cites: the group's
+    /// evidence and each related member's keys.
+    fn cited<'m>(
         &mut self,
-        group: &Object,
-        message: String,
         evidence: &[Evidence],
         related: impl Iterator<Item = &'m ObjectId>,
-    ) {
+    ) -> (Vec<ObjectId>, Vec<Evidence>) {
         let related: Vec<ObjectId> = related.cloned().collect();
         let mut evidence = evidence.to_vec();
         for member in &related {
             evidence.extend(self.keys_of(member).evidence.iter().cloned());
         }
-        self.evaluation
-            .push_finding(finding(self.rule, &group.id, message, evidence, related));
+        (related, evidence)
     }
 }
 

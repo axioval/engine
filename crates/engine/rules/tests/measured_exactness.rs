@@ -155,6 +155,16 @@ const COVERED: &[(&str, &str, &str)] = &[
         "only_a_placement_found_exactly_is_exact",
     ),
     (
+        "allocations",
+        "tests/table_allocation.rs",
+        "an_area_summed_over_tessellated_footprints_is_cited_inexactly",
+    ),
+    (
+        "compositions",
+        "tests/group_composition.rs",
+        "a_composition_never_cites_an_approximate_answer",
+    ),
+    (
         "distance_rows",
         "tests/space_distance.rs",
         "a_distance_between_tessellated_bodies_is_cited_inexactly",

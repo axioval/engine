@@ -203,6 +203,7 @@ pub mod reference {
     pub use crate::exit_separation::reference::ExitSeparation;
     pub use crate::external_wall_validation::reference::ExternalWallValidation;
     pub use crate::free_floor::reference::{FreeFloorCircle, FreeFloorRectangle};
+    pub use crate::group_composition::reference::GroupComposition;
     pub use crate::horizontal_guard::reference::HorizontalGuard;
     pub use crate::keyed_limit::reference::KeyedLimit;
     pub use crate::level_spacing::reference::LevelSpacing;
@@ -228,10 +229,11 @@ pub mod reference {
     pub use crate::slab_stack::reference::SlabStackSpacing;
     pub use crate::space_boundary_coverage::reference::SpaceBoundaryCoverage;
     pub use crate::space_connection::reference::SpaceConnection;
-    pub use crate::space_validation::reference::SpaceValidation;
     pub use crate::space_distance::reference::SpaceDistance;
+    pub use crate::space_validation::reference::SpaceValidation;
     pub use crate::stair_geometry::reference::RampGeometryReference as RampGeometry;
     pub use crate::stair_geometry::reference::StairGeometryReference as StairGeometry;
+    pub use crate::table_allocation::reference::TableAllocation;
     pub use crate::triangle_count::reference::TriangleCountLimit;
     pub use crate::unique_value::reference::UniqueValue;
     pub use crate::wall_spacing::reference::WallSpacing;
@@ -347,6 +349,8 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(free_floor::PlacementMeasures))
         .and_then(|registry| registry.register_measured(free_floor::FitMeasures))
         .and_then(|registry| registry.register_measured(space_distance::RowMeasures))
+        .and_then(|registry| registry.register_measured(table_allocation::AllocationMeasures))
+        .and_then(|registry| registry.register_measured(group_composition::CompositionMeasures))
         .and_then(|registry| registry.register_measured(parking_bay::BayMeasures))
         .and_then(|registry| registry.register_measured(parking_bay::BayItems))
         .and_then(|registry| registry.register_measured(wall_spacing::SpacingMeasures))

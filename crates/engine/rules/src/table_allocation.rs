@@ -1,18 +1,27 @@
 //! Exclusive allocation of objects to table rows, with per-row count and
-//! summed-area requirements.
+//! summed-area requirements: the allocation (`allocate`) stays here, its
+//! counts and areas judged by the capability's template.
+
+mod measured;
+#[cfg(feature = "parity-reference")]
+pub(crate) mod reference;
+mod template;
+
+pub(crate) use measured::AllocationMeasures;
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::LazyLock;
 
+use axioval_engine::template::Template;
 use axioval_engine::{
-    CapabilityEvaluation, ColumnKind, CompiledRule, Deviation, NotEvaluatedReason,
-    ParameterDescriptor, ParameterType, RuleCapability, RuleContext, TableColumn,
+    CapabilityEvaluation, ColumnKind, CompiledRule, NotEvaluatedReason, ParameterDescriptor,
+    ParameterType, RuleCapability, RuleContext, TableColumn,
 };
-use axioval_ir::{Evidence, Finding, Object, ObjectId, PropertyValue, Scope};
+use axioval_ir::measured::MeasuredSelection;
+use axioval_ir::{Evidence, Object, ObjectId, PropertyValue, Scope};
 
-use crate::counts::{Population, real, relation_text, tally};
-use crate::pairs::severity;
+use crate::counts::{Population, relation_text, tally};
 use crate::plan_area::{Sum, footprint, shown};
-use crate::selection::select_objects;
 use crate::support::table::{self, Matched, RowSelection, RowTest, TextPattern, match_rows};
 use crate::support::{
     Parameters, PropertyRef, Traversal, Unavailable, display, invalid, resolve, sources,
@@ -200,7 +209,7 @@ pub(crate) fn describe_keys(
     }
 }
 
-const COLUMNS: &[TableColumn] = &[
+pub(crate) const COLUMNS: &[TableColumn] = &[
     TableColumn::optional("key_1", ColumnKind::TextPattern),
     TableColumn::optional("key_2", ColumnKind::TextPattern),
     TableColumn::optional("key_3", ColumnKind::TextPattern),
@@ -212,6 +221,27 @@ const COLUMNS: &[TableColumn] = &[
     TableColumn::optional("area_tolerance", ColumnKind::Number),
     TableColumn::optional("area_tolerance_ratio", ColumnKind::Number),
 ];
+
+/// The capability's parameter descriptor.
+pub(crate) fn parameters() -> Vec<ParameterDescriptor> {
+    vec![
+        ParameterDescriptor::required("rows", ParameterType::Table(COLUMNS)),
+        ParameterDescriptor::optional("mode", ParameterType::String),
+        ParameterDescriptor::optional("key_1", ParameterType::PropertyReference),
+        ParameterDescriptor::optional("key_2", ParameterType::PropertyReference),
+        ParameterDescriptor::optional("key_3", ParameterType::PropertyReference),
+        ParameterDescriptor::optional("key_4", ParameterType::PropertyReference),
+        ParameterDescriptor::optional("case_sensitive", ParameterType::Boolean),
+        ParameterDescriptor::optional("area_property", ParameterType::PropertyReference),
+        ParameterDescriptor::optional("area_mode", ParameterType::String),
+        ParameterDescriptor::optional("anchor_selector", ParameterType::Selector),
+        ParameterDescriptor::optional("anchor_key", ParameterType::PropertyReference),
+        ParameterDescriptor::optional("across_sources", ParameterType::Boolean),
+    ]
+    .into_iter()
+    .chain(traversal_parameters())
+    .collect()
+}
 
 /// Assigns each selected object to exactly one row of a table, then checks
 /// every row's assigned objects: how many, and their summed area.
@@ -249,120 +279,228 @@ const COLUMNS: &[TableColumn] = &[
 /// evaluated, and so is every row it might belong to unless an excess over
 /// the row's count or area already stands. Measured areas are intervals: one
 /// straddling a bound is not evaluated.
+///
+/// The allocation stays here (`allocate`); the capability runs as a
+/// template (`table_allocation/template.rs`) judging each row's count and
+/// area through the measured list `allocations` of the project.
 pub struct TableAllocation;
+
+static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
+
+/// The plans of the rules bound to it, kept across runs.
+static PLANS: crate::templates::Plans = crate::templates::Plans::new();
 
 impl RuleCapability for TableAllocation {
     fn id(&self) -> &'static str {
-        "axioval:capability.table-allocation"
+        TEMPLATE.id
     }
 
     fn grades_deviation(&self) -> bool {
-        true
+        TEMPLATE.grades
     }
 
     fn parameters(&self) -> Vec<ParameterDescriptor> {
-        vec![
-            ParameterDescriptor::required("rows", ParameterType::Table(COLUMNS)),
-            ParameterDescriptor::optional("mode", ParameterType::String),
-            ParameterDescriptor::optional("key_1", ParameterType::PropertyReference),
-            ParameterDescriptor::optional("key_2", ParameterType::PropertyReference),
-            ParameterDescriptor::optional("key_3", ParameterType::PropertyReference),
-            ParameterDescriptor::optional("key_4", ParameterType::PropertyReference),
-            ParameterDescriptor::optional("case_sensitive", ParameterType::Boolean),
-            ParameterDescriptor::optional("area_property", ParameterType::PropertyReference),
-            ParameterDescriptor::optional("area_mode", ParameterType::String),
-            ParameterDescriptor::optional("anchor_selector", ParameterType::Selector),
-            ParameterDescriptor::optional("anchor_key", ParameterType::PropertyReference),
-            ParameterDescriptor::optional("across_sources", ParameterType::Boolean),
-        ]
-        .into_iter()
-        .chain(traversal_parameters())
-        .collect()
+        TEMPLATE.parameters.clone()
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
-        let declaration = match Declaration::parse(rule) {
-            Ok(declaration) => declaration,
-            Err((reason, message)) => {
-                return CapabilityEvaluation::not_evaluated(
-                    reason,
-                    format!("table-allocation: {message}"),
-                );
-            }
-        };
-        let (selected, mut evaluation) = select_objects(context, &rule.selector);
-        let members = Population {
-            first: None,
-            matched: selected.iter().map(|object| object.id.clone()).collect(),
-            undecided: evaluation
-                .not_evaluated_outcomes()
-                .iter()
-                .filter_map(|outcome| outcome.object_id().cloned())
-                .collect(),
-        };
-
-        let mut allocator = Allocator {
-            context,
-            rule,
-            declaration: &declaration,
-            assignments: BTreeMap::new(),
-            areas: BTreeMap::new(),
-            reported: BTreeSet::new(),
-        };
-        let every: Applicable = vec![Some(0); declaration.rows.len()];
-        // Without anchor rows each object is assigned once, whatever groups
-        // it is counted in, and even when no anchor reaches it.
-        if !declaration.anchored() {
-            for object in &selected {
-                allocator.assignment(&every, object, &mut evaluation);
-            }
-        }
-
-        let groups = match declaration.groups(context, &members, &mut evaluation) {
-            Ok(groups) => groups,
-            Err((reason, message)) => {
-                evaluation.push_not_evaluated(reason, format!("table-allocation: {message}"));
-                return evaluation;
-            }
-        };
-        for group in groups {
-            let applicable = if declaration.anchored() {
-                match declaration.applicable(context, &group) {
-                    Ok(applicable) => applicable,
-                    Err((reason, message)) => {
-                        Report {
-                            rule,
-                            scope: &group.scope,
-                            evaluation: &mut evaluation,
-                        }
-                        .not_evaluated_because(reason, &message);
-                        continue;
-                    }
-                }
-            } else {
-                every.clone()
-            };
-            for member in &group.members {
-                if let Some(object) = context.project.object(member) {
-                    allocator.assignment(&applicable, object, &mut evaluation);
-                }
-            }
-            let assigned = allocator
-                .assignments
-                .get(&applicable)
-                .cloned()
-                .unwrap_or_default();
-            declaration.judge(
-                context,
-                rule,
-                &group,
-                &applicable,
-                &assigned,
-                &mut evaluation,
-            );
-        }
-        evaluation
+        crate::templates::run((&TEMPLATE, &PLANS), context, rule)
     }
+
+    fn template(&self) -> Option<&Template> {
+        Some(&TEMPLATE)
+    }
+}
+
+/// Checks the rule parameters `allocations` names, as the rule states
+/// them: the declaration the capability refused, in its order and words.
+///
+/// # Errors
+///
+/// An invalid declaration.
+pub(crate) fn check_arguments(
+    stated: &BTreeMap<String, axioval_ir::contract::ParameterValue>,
+) -> Result<(), Unavailable> {
+    let rule = crate::light_area::synthesised(stated.clone());
+    Declaration::parse(&rule).map(|_| ())
+}
+
+/// A row's required area, square metres.
+#[derive(Clone, Copy)]
+pub(crate) struct Area {
+    pub(crate) target: f64,
+    pub(crate) tolerance: f64,
+    /// The tolerance as a share of the target, when it was written so.
+    pub(crate) ratio: Option<f64>,
+}
+
+impl Area {
+    pub(crate) fn bounds(self) -> (f64, f64) {
+        (self.target - self.tolerance, self.target + self.tolerance)
+    }
+
+    pub(crate) fn required(self) -> String {
+        match self.ratio {
+            Some(ratio) => format!("{} m² ± {} %", self.target, ratio * 100.0),
+            None if self.tolerance > 0.0 => format!("{} ± {} m²", self.target, self.tolerance),
+            None => format!("{} m²", self.target),
+        }
+    }
+}
+
+/// A row's `area` with its absolute or relative tolerance.
+pub(crate) fn parse_area(row: table::Row<'_>, number: usize) -> Result<Option<Area>, Unavailable> {
+    let tolerance = row.number("area_tolerance")?;
+    let ratio = row.number("area_tolerance_ratio")?;
+    let Some(target) = row.number("area")? else {
+        if tolerance.is_some() || ratio.is_some() {
+            return Err(invalid(format!(
+                "row {number} has an area tolerance but no area"
+            )));
+        }
+        return Ok(None);
+    };
+    if tolerance.is_some() && ratio.is_some() {
+        return Err(invalid(format!(
+            "row {number} states `area_tolerance` and `area_tolerance_ratio`; state one"
+        )));
+    }
+    if target < 0.0 || tolerance.is_some_and(|t| t < 0.0) || ratio.is_some_and(|r| r < 0.0) {
+        return Err(invalid(format!(
+            "row {number} has a negative area or tolerance"
+        )));
+    }
+    Ok(Some(Area {
+        target,
+        tolerance: tolerance.unwrap_or_else(|| ratio.map_or(0.0, |ratio| target * ratio)),
+        ratio,
+    }))
+}
+
+/// An object's key value.
+#[derive(Clone)]
+pub(crate) enum Key {
+    Text(String),
+    /// Exactly absent, or null: no pattern matches it.
+    Absent,
+    Unknown(NotEvaluatedReason, String),
+}
+
+/// What the allocation found: an object's outcome of its own, or one
+/// row's count or area in one group, which the template judges.
+pub(crate) enum Allocated {
+    /// An object no row matches, its key values as a reviewer reads them,
+    /// citing them.
+    Extra {
+        object: ObjectId,
+        keys: String,
+        evidence: Vec<Evidence>,
+    },
+    /// An object left open: its row undecided, its anchorship undecided or
+    /// no anchor reaching it.
+    Open { object: ObjectId, why: Unavailable },
+    /// A group whose applicable rows cannot be told.
+    GroupOpen { scope: Scope, why: Unavailable },
+    /// A row's objects in a group, counted.
+    Count(Counted),
+    /// A row's objects' summed area in a group.
+    Summed {
+        counted: Counted,
+        area: Area,
+        sum: Result<Sum, Unavailable>,
+    },
+}
+
+/// One row's objects in one group.
+pub(crate) struct Counted {
+    pub(crate) scope: Scope,
+    /// How findings name the row.
+    pub(crate) name: String,
+    /// Where the group lies, as findings word it (`in source …`, after a
+    /// space).
+    pub(crate) place: String,
+    /// The objects surely assigned, which a finding relates.
+    pub(crate) assigned: Vec<ObjectId>,
+    /// How many more objects may belong to the row.
+    pub(crate) open: usize,
+    /// The row's `count`.
+    pub(crate) count: Option<i64>,
+    /// What the group and the assignments cite.
+    pub(crate) evidence: Vec<Evidence>,
+}
+
+impl Counted {
+    /// Whether the row matched nothing in the group, and nothing may still
+    /// belong to it.
+    pub(crate) fn empty(&self) -> bool {
+        self.assigned.is_empty() && self.open == 0
+    }
+}
+
+/// Allocates the objects `members` holds (the rule's selection) to the rows
+/// of `rule`, the anchors those `anchors` holds, and lists what the
+/// template judges, in the capability's order.
+///
+/// # Errors
+///
+/// An invalid declaration, or a project with no source to allocate in.
+pub(crate) fn allocate(
+    context: &RuleContext<'_>,
+    rule: &CompiledRule,
+    members: &Population,
+    anchors: Option<&MeasuredSelection>,
+) -> Result<Vec<Allocated>, Unavailable> {
+    let declaration = Declaration::parse(rule)?;
+    let mut found = Vec::new();
+    let mut allocator = Allocator {
+        context,
+        declaration: &declaration,
+        assignments: BTreeMap::new(),
+        areas: BTreeMap::new(),
+        reported: BTreeSet::new(),
+    };
+    let every: Applicable = vec![Some(0); declaration.rows.len()];
+    let selected: Vec<&Object> = context
+        .project
+        .objects()
+        .filter(|object| members.matched.contains(&object.id))
+        .collect();
+    // Without anchor rows each object is assigned once, whatever groups it
+    // is counted in, and even when no anchor reaches it.
+    if !declaration.anchored() {
+        for object in &selected {
+            allocator.assignment(&every, object, &mut found);
+        }
+    }
+    let groups = declaration.groups(context, members, anchors, &mut found)?;
+    for group in groups {
+        let applicable = if declaration.anchored() {
+            match declaration.applicable(context, &group) {
+                Ok(applicable) => applicable,
+                Err(why) => {
+                    found.push(Allocated::GroupOpen {
+                        scope: group.scope.clone(),
+                        why,
+                    });
+                    continue;
+                }
+            }
+        } else {
+            every.clone()
+        };
+        for member in &group.members {
+            if let Some(object) = context.project.object(member) {
+                allocator.assignment(&applicable, object, &mut found);
+            }
+        }
+        let assigned = allocator
+            .assignments
+            .get(&applicable)
+            .cloned()
+            .unwrap_or_default();
+        declaration.counted(context, &group, &applicable, &assigned, &mut found);
+    }
+    Ok(found)
 }
 
 /// Per row, whether it applies in a group and the specificity its anchor
@@ -376,7 +514,6 @@ type Assignments = BTreeMap<ObjectId, (Assignment, Vec<Evidence>)>;
 /// extra or undecided object once however many groups hold it.
 struct Allocator<'r, 'a> {
     context: &'r RuleContext<'r>,
-    rule: &'r CompiledRule,
     declaration: &'r Declaration<'a>,
     assignments: BTreeMap<Applicable, Assignments>,
     /// Each object's own area, for `area_mode` `each`.
@@ -385,12 +522,7 @@ struct Allocator<'r, 'a> {
 }
 
 impl Allocator<'_, '_> {
-    fn assignment(
-        &mut self,
-        applicable: &Applicable,
-        object: &Object,
-        evaluation: &mut CapabilityEvaluation,
-    ) {
+    fn assignment(&mut self, applicable: &Applicable, object: &Object, found: &mut Vec<Allocated>) {
         if self
             .assignments
             .get(applicable)
@@ -403,20 +535,15 @@ impl Allocator<'_, '_> {
                 .assign(self.context, object, applicable, &mut self.areas);
         if self.reported.insert(object.id.clone()) {
             match &assignment {
-                Assignment::Extra(keys) => evaluation.push_finding(
-                    Finding::new(
-                        self.rule.id.clone(),
-                        Scope::Object(object.id.clone()),
-                        severity(self.rule),
-                        format!("no row matches ({keys})"),
-                    )
-                    .with_evidence(evidence.clone()),
-                ),
-                Assignment::Open(_, reason, message) => evaluation.push_object_not_evaluated(
-                    object.id.clone(),
-                    reason.clone(),
-                    message.clone(),
-                ),
+                Assignment::Extra(keys) => found.push(Allocated::Extra {
+                    object: object.id.clone(),
+                    keys: keys.clone(),
+                    evidence: evidence.clone(),
+                }),
+                Assignment::Open(_, reason, message) => found.push(Allocated::Open {
+                    object: object.id.clone(),
+                    why: (reason.clone(), message.clone()),
+                }),
                 Assignment::Row(_) => {
                     self.reported.remove(&object.id);
                 }
@@ -453,38 +580,6 @@ impl Row<'_> {
     }
 }
 
-/// A row's required area, square metres.
-#[derive(Clone, Copy)]
-struct Area {
-    target: f64,
-    tolerance: f64,
-    /// The tolerance as a share of the target, when it was written so.
-    ratio: Option<f64>,
-}
-
-impl Area {
-    fn bounds(self) -> (f64, f64) {
-        (self.target - self.tolerance, self.target + self.tolerance)
-    }
-
-    fn required(self) -> String {
-        match self.ratio {
-            Some(ratio) => format!("{} m² ± {} %", self.target, ratio * 100.0),
-            None if self.tolerance > 0.0 => format!("{} ± {} m²", self.target, self.tolerance),
-            None => format!("{} m²", self.target),
-        }
-    }
-}
-
-/// An object's key value.
-#[derive(Clone)]
-pub(crate) enum Key {
-    Text(String),
-    /// Exactly absent, or null: no pattern matches it.
-    Absent,
-    Unknown(NotEvaluatedReason, String),
-}
-
 /// Where an object belongs.
 #[derive(Clone)]
 enum Assignment {
@@ -512,7 +607,7 @@ struct Declaration<'a> {
     /// Whether a row's area is each object's own (a match condition)
     /// rather than the sum of its objects.
     each: bool,
-    anchors: Option<&'a axioval_ir::contract::Selector>,
+    anchors: bool,
     anchor_key: Option<PropertyRef<'a>>,
     traversal: Option<Traversal>,
     across_sources: bool,
@@ -532,7 +627,7 @@ impl<'a> Declaration<'a> {
         };
         let case_sensitive = parameters.boolean("case_sensitive")?.unwrap_or(true);
         let properties = key_properties(&parameters)?;
-        let anchors = parameters.selector("anchor_selector")?;
+        let anchors = parameters.selector("anchor_selector")?.is_some();
         let traversal = parameters.traversal()?;
         let across_sources = parameters.boolean("across_sources")?.unwrap_or(false);
         let anchor_key = parameters.property("anchor_key")?;
@@ -545,15 +640,15 @@ impl<'a> Declaration<'a> {
                 )));
             }
         };
-        if anchor_key.is_some() && anchors.is_none() {
+        if anchor_key.is_some() && !anchors {
             return Err(invalid("`anchor_key` needs `anchor_selector`"));
         }
-        if anchors.is_none() && traversal.is_some() {
+        if !anchors && traversal.is_some() {
             return Err(invalid(
                 "a relationship reaches members only from `anchor_selector`",
             ));
         }
-        if anchors.is_some() && across_sources {
+        if anchors && across_sources {
             return Err(invalid(
                 "`across_sources` groups without anchors; declare one or the other",
             ));
@@ -764,15 +859,16 @@ impl<'a> Declaration<'a> {
         (assignment, evidence)
     }
 
-    /// The groups rows are judged in. Members no anchor reaches are not
-    /// evaluated here.
+    /// The groups rows are judged in. Members no anchor reaches are left
+    /// open here.
     fn groups(
         &self,
         context: &RuleContext<'_>,
         members: &Population,
-        evaluation: &mut CapabilityEvaluation,
+        anchors: Option<&MeasuredSelection>,
+        found: &mut Vec<Allocated>,
     ) -> Result<Vec<Group>, Unavailable> {
-        let Some(anchors) = self.anchors else {
+        let (true, Some(anchors)) = (self.anchors, anchors) else {
             let mut groups: BTreeMap<Scope, Group> = BTreeMap::new();
             // Every source is a group even when it holds no objects, so a
             // row an empty source cannot meet is reported, not skipped.
@@ -816,56 +912,65 @@ impl<'a> Declaration<'a> {
             }
             return Ok(groups.into_values().collect());
         };
-        let (selected, outcomes) = select_objects(context, anchors);
-        for outcome in outcomes.not_evaluated_outcomes() {
-            if let Some(object) = outcome.object_id() {
-                evaluation.push_object_not_evaluated(
-                    object.clone(),
-                    outcome.reason().clone(),
-                    format!("whether it is an anchor: {}", outcome.message()),
-                );
+        for object in context.project.objects() {
+            if anchors.undecided.contains(&object.id) {
+                let (reason, message) = anchors.reasons.get(&object.id).cloned().unwrap_or((
+                    NotEvaluatedReason::IncompleteEvidence,
+                    "its selection is undecided".to_owned(),
+                ));
+                found.push(Allocated::Open {
+                    object: object.id.clone(),
+                    why: (reason, format!("whether it is an anchor: {message}")),
+                });
             }
         }
         let mut reached = BTreeSet::new();
         let mut groups = Vec::new();
-        for anchor in selected {
+        for anchor in context
+            .project
+            .objects()
+            .filter(|object| anchors.matched.contains(&object.id))
+        {
             match tally(context, self.traversal.as_ref(), anchor, members) {
-                Ok(found) => {
-                    reached.extend(found.decided.iter().cloned());
+                Ok(tallied) => {
+                    reached.extend(tallied.decided.iter().cloned());
                     groups.push(Group {
                         scope: Scope::Object(anchor.id.clone()),
-                        members: found.decided,
-                        undecided: found.undecided,
-                        evidence: found.evidence,
+                        members: tallied.decided,
+                        undecided: tallied.undecided,
+                        evidence: tallied.evidence,
                     });
                 }
-                Err((reason, message)) => {
-                    evaluation.push_object_not_evaluated(anchor.id.clone(), reason, message);
-                }
+                Err(why) => found.push(Allocated::Open {
+                    object: anchor.id.clone(),
+                    why,
+                }),
             }
         }
         let via = relation_text(self.traversal.as_ref());
         for member in &members.matched {
             if !reached.contains(member) {
-                evaluation.push_object_not_evaluated(
-                    member.clone(),
-                    NotEvaluatedReason::IncompleteEvidence,
-                    format!("no anchor reaches it {via}"),
-                );
+                found.push(Allocated::Open {
+                    object: member.clone(),
+                    why: (
+                        NotEvaluatedReason::IncompleteEvidence,
+                        format!("no anchor reaches it {via}"),
+                    ),
+                });
             }
         }
         Ok(groups)
     }
 
-    /// Judges every applicable row within one group.
-    fn judge(
+    /// Every applicable row within one group: its count, and its summed
+    /// area where it states one and is judged beyond being empty.
+    fn counted(
         &self,
         context: &RuleContext<'_>,
-        rule: &CompiledRule,
         group: &Group,
         applicable: &Applicable,
         assignments: &Assignments,
-        evaluation: &mut CapabilityEvaluation,
+        found: &mut Vec<Allocated>,
     ) {
         let place = match &group.scope {
             Scope::Source(source) => format!(" in source `{source}`"),
@@ -889,194 +994,49 @@ impl<'a> Declaration<'a> {
                     _ => {}
                 }
             }
-            let name = row.name(&self.properties);
-            let mut report = Report {
-                rule,
-                scope: &group.scope,
-                evaluation: &mut *evaluation,
-            };
-            if assigned.is_empty() && open == 0 && row.count != Some(0) {
-                let required = row
-                    .count
-                    .map(|count| format!("; required exactly {count}"))
-                    .unwrap_or_default();
-                report.graded(
-                    format!("{name} matched no object{place}{required}"),
-                    evidence,
-                    assigned,
-                    row.count
-                        .map(|count| Deviation::below(real(count), 0.0, 0.0)),
-                );
-                continue;
-            }
-            if let Some(count) = row.count {
-                let found = i64::try_from(assigned.len()).unwrap_or(i64::MAX);
-                let most = found.saturating_add(i64::try_from(open).unwrap_or(i64::MAX));
-                if found > count || most < count {
-                    let (least, greatest) = (real(found), real(most));
-                    report.graded(
-                        format!("{name} has {found} object(s){place}; required exactly {count}"),
-                        evidence.clone(),
-                        assigned.clone(),
-                        Some(if found > count {
-                            Deviation::above(real(count), least, greatest)
-                        } else {
-                            Deviation::below(real(count), least, greatest)
-                        }),
-                    );
-                } else if open > 0 {
-                    report.not_evaluated(&format!(
-                        "{name} has {found} object(s){place} and {open} more that may belong to it; required exactly {count}"
-                    ));
-                }
-            }
-            if let Some(area) = row.area.filter(|_| !self.each) {
-                self.judge_area(
-                    context,
-                    &mut report,
-                    &name,
-                    &place,
-                    area,
-                    assigned,
-                    open,
-                    evidence,
-                );
-            }
-        }
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn judge_area(
-        &self,
-        context: &RuleContext<'_>,
-        report: &mut Report<'_, '_>,
-        name: &str,
-        place: &str,
-        area: Area,
-        assigned: Vec<ObjectId>,
-        open: usize,
-        mut evidence: Vec<Evidence>,
-    ) {
-        let measured = (|| {
-            let mut sum = Sum::default();
-            for member in &assigned {
-                let own = self.area_of(context, member)?;
-                sum.lower += own.lower;
-                sum.upper += own.upper;
-                sum.evidence.extend(own.evidence);
-            }
-            Ok::<_, Unavailable>(sum)
-        })();
-        let sum = match measured {
-            Ok(sum) => sum,
-            Err((reason, message)) => {
-                report.not_evaluated_because(reason, &format!("{name}{place}: {message}"));
-                return;
-            }
-        };
-        evidence.extend(sum.evidence);
-        let required = area.required();
-        let (low, high) = area.bounds();
-        let summed = shown(sum.lower, sum.upper);
-        // Objects that may still belong to the row can only add area.
-        if sum.lower > high || (open == 0 && sum.upper < low) {
-            let deviation = if sum.lower > high {
-                Deviation::above(high, sum.lower, sum.upper)
-            } else {
-                Deviation::below(low, sum.lower, sum.upper)
-            };
-            report.graded(
-                format!("{name} sums {summed} m²{place}; required {required}"),
-                evidence,
+            let counted = Counted {
+                scope: group.scope.clone(),
+                name: row.name(&self.properties),
+                place: place.clone(),
                 assigned,
-                Some(deviation),
-            );
-        } else if open > 0 {
-            report.not_evaluated(&format!(
-                "{name} sums {summed} m²{place} and {open} more object(s) may belong to it; required {required}"
-            ));
-        } else if sum.lower < low || sum.upper > high {
-            report.not_evaluated(&format!(
-                "{name} sums {summed} m²{place}, which straddles the required {required}"
-            ));
-        }
-    }
-}
-
-/// A row's `area` with its absolute or relative tolerance.
-fn parse_area(row: table::Row<'_>, number: usize) -> Result<Option<Area>, Unavailable> {
-    let tolerance = row.number("area_tolerance")?;
-    let ratio = row.number("area_tolerance_ratio")?;
-    let Some(target) = row.number("area")? else {
-        if tolerance.is_some() || ratio.is_some() {
-            return Err(invalid(format!(
-                "row {number} has an area tolerance but no area"
-            )));
-        }
-        return Ok(None);
-    };
-    if tolerance.is_some() && ratio.is_some() {
-        return Err(invalid(format!(
-            "row {number} states `area_tolerance` and `area_tolerance_ratio`; state one"
-        )));
-    }
-    if target < 0.0 || tolerance.is_some_and(|t| t < 0.0) || ratio.is_some_and(|r| r < 0.0) {
-        return Err(invalid(format!(
-            "row {number} has a negative area or tolerance"
-        )));
-    }
-    Ok(Some(Area {
-        target,
-        tolerance: tolerance.unwrap_or_else(|| ratio.map_or(0.0, |ratio| target * ratio)),
-        ratio,
-    }))
-}
-
-/// Where a group's outcomes go.
-struct Report<'r, 'e> {
-    rule: &'r CompiledRule,
-    scope: &'r Scope,
-    evaluation: &'e mut CapabilityEvaluation,
-}
-
-impl Report<'_, '_> {
-    /// A finding of a count or area missing its bound by `deviation`.
-    fn graded(
-        &mut self,
-        message: String,
-        evidence: Vec<Evidence>,
-        related: Vec<ObjectId>,
-        deviation: Option<Deviation>,
-    ) {
-        self.evaluation.push_finding_deviating(
-            Finding::new(
-                self.rule.id.clone(),
-                self.scope.clone(),
-                severity(self.rule),
-                message,
-            )
-            .with_evidence(evidence)
-            .with_related(related),
-            deviation,
-        );
-    }
-
-    fn not_evaluated(&mut self, message: &str) {
-        self.not_evaluated_because(NotEvaluatedReason::IncompleteEvidence, message);
-    }
-
-    fn not_evaluated_because(&mut self, reason: NotEvaluatedReason, message: &str) {
-        let message = format!("table-allocation: {message}");
-        match self.scope {
-            Scope::Object(object) => {
-                self.evaluation
-                    .push_object_not_evaluated(object.clone(), reason, message);
+                open,
+                count: row.count,
+                evidence,
+            };
+            // A row empty where it may not be is judged for that alone.
+            let judged_on = !(counted.empty() && row.count != Some(0));
+            let summed =
+                row.area
+                    .filter(|_| !self.each && judged_on)
+                    .map(|area| Allocated::Summed {
+                        sum: self.summed(context, &counted.assigned),
+                        counted: Counted {
+                            scope: counted.scope.clone(),
+                            name: counted.name.clone(),
+                            place: counted.place.clone(),
+                            assigned: counted.assigned.clone(),
+                            open: counted.open,
+                            count: counted.count,
+                            evidence: counted.evidence.clone(),
+                        },
+                        area,
+                    });
+            if row.count.is_some() || !judged_on {
+                found.push(Allocated::Count(counted));
             }
-            Scope::Source(source) => {
-                self.evaluation
-                    .push_source_not_evaluated(source.clone(), reason, message);
-            }
-            Scope::Project => self.evaluation.push_not_evaluated(reason, message),
+            found.extend(summed);
         }
+    }
+
+    /// The summed area of `assigned`.
+    fn summed(&self, context: &RuleContext<'_>, assigned: &[ObjectId]) -> Result<Sum, Unavailable> {
+        let mut sum = Sum::default();
+        for member in assigned {
+            let own = self.area_of(context, member)?;
+            sum.lower += own.lower;
+            sum.upper += own.upper;
+            sum.evidence.extend(own.evidence);
+        }
+        Ok(sum)
     }
 }

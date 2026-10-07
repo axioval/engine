@@ -1,68 +1,35 @@
-//! Exact source-neutral free-floor-circle capability.
+//! Exact source-neutral free-floor-circle capability, a template over the
+//! free-floor search (`free_floor/template.rs`).
 
+use std::sync::LazyLock;
+
+use axioval_engine::template::Template;
 use axioval_engine::{
-    CapabilityEvaluation, CompiledRule, CylinderClearance, NotEvaluatedReason, ParameterDescriptor,
-    ParameterType, PlacementShape, RuleCapability, RuleContext,
+    CapabilityEvaluation, CompiledRule, ParameterDescriptor, RuleCapability, RuleContext,
 };
-use axioval_ir::contract::ParameterValue;
-
-use crate::free_floor::{self, Options, unavailable};
-use crate::selection::select_objects;
 
 /// Exact free-floor circle placement using a trusted free-space service.
 pub struct FreeFloorCircle;
 
+static TEMPLATE: LazyLock<Template> = LazyLock::new(crate::free_floor::template::circle);
+
+/// The plans of the rules bound to it, kept across runs.
+static PLANS: crate::templates::Plans = crate::templates::Plans::new();
+
 impl RuleCapability for FreeFloorCircle {
     fn id(&self) -> &'static str {
-        "axioval:capability.free-floor-circle"
+        TEMPLATE.id
     }
-    fn parameters(&self) -> Vec<ParameterDescriptor> {
-        let mut parameters = vec![
-            ParameterDescriptor::required("diameter_metres", ParameterType::Number),
-            ParameterDescriptor::required("height_metres", ParameterType::Number),
-        ];
-        parameters.extend(free_floor::parameters());
-        parameters
-    }
-    fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
-        let (selected, evaluation) = select_objects(context, &rule.selector);
-        let invalid = |message: &str, evaluation| {
-            unavailable(
-                &selected,
-                &NotEvaluatedReason::InvalidDeclaration,
-                message,
-                evaluation,
-            )
-        };
-        let Some((diameter, height)) = dimensions(rule) else {
-            return invalid("free-floor circle dimensions are invalid", evaluation);
-        };
-        let Ok(shape) = CylinderClearance::try_new(diameter / 2.0, height) else {
-            return invalid(
-                "free-floor circle dimensions must be positive and finite",
-                evaluation,
-            );
-        };
-        let options = match Options::parse(rule, height) {
-            Ok(options) => options,
-            Err((_, message)) => return invalid(&message, evaluation),
-        };
-        free_floor::evaluate(
-            context,
-            rule,
-            &selected,
-            evaluation,
-            &PlacementShape::Cylinder(shape),
-            &options,
-            "NO_FREE_FLOOR_SPACE_FOR_CIRCLE",
-        )
-    }
-}
 
-fn dimensions(rule: &CompiledRule) -> Option<(f64, f64)> {
-    let number = |name: &str| match rule.parameters.get(name)? {
-        ParameterValue::Number { value } => Some(*value),
-        _ => None,
-    };
-    Some((number("diameter_metres")?, number("height_metres")?))
+    fn parameters(&self) -> Vec<ParameterDescriptor> {
+        TEMPLATE.parameters.clone()
+    }
+
+    fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
+        crate::templates::run((&TEMPLATE, &PLANS), context, rule)
+    }
+
+    fn template(&self) -> Option<&Template> {
+        Some(&TEMPLATE)
+    }
 }

@@ -19737,7 +19737,218 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "free-floor-circle",
+        "refusals": "objects",
+        "declaration": [
+          {
+            "kind": "arguments",
+            "when": [],
+            "value": "free_floor_fit;shape=circle;diameter_metres=@diameter_metres;height_metres=@height_metres;obstacles=@obstacles;band_from_metres=@band_from_metres;band_to_metres=@band_to_metres;merge_path=@merge_path;subtract_door_swings=@subtract_door_swings;entrance_path_width=@entrance_path_width;entrance_tolerance_metres=@entrance_tolerance_metres;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector"
+          }
+        ],
+        "services": {
+          "needs": [
+            "free-space"
+          ],
+          "message": "free-space service is not registered"
+        },
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "judged",
+                "expression": {
+                  "kind": "literal",
+                  "value": {
+                    "type": "integer",
+                    "value": 1
+                  },
+                  "label": "the free floor is searched"
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "judged",
+              "rounding": []
+            },
+            "fail": "",
+            "undecided": "",
+            "checks": [
+              {
+                "values": [],
+                "decision": {
+                  "kind": "items",
+                  "applies": {},
+                  "list": "free_floor_fit;shape=circle;diameter_metres=@diameter_metres;height_metres=@height_metres;obstacles=@obstacles;band_from_metres=@band_from_metres;band_to_metres=@band_to_metres;merge_path=@merge_path;subtract_door_swings=@subtract_door_swings;entrance_path_width=@entrance_path_width;entrance_tolerance_metres=@entrance_tolerance_metres;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector",
+                  "refused": "{why}",
+                  "checks": [
+                    {
+                      "kind": "test",
+                      "judge": {
+                        "kind": "truth",
+                        "value": "fits",
+                        "finding": false
+                      },
+                      "fail": "NO_FREE_FLOOR_SPACE_FOR_CIRCLE{unreached_note}",
+                      "undecided": "{why}",
+                      "related": "related"
+                    }
+                  ],
+                  "texts": [
+                    {
+                      "name": "unreached_note",
+                      "when": [
+                        {
+                          "kind": "field",
+                          "field": "unreached",
+                          "value": true
+                        }
+                      ],
+                      "text": ": the shape fits only where no path {entrance_path_width:length} wide from an entrance reaches it"
+                    },
+                    {
+                      "name": "unreached_note",
+                      "text": ""
+                    }
+                  ]
+                },
+                "fail": "",
+                "undecided": ""
+              }
+            ]
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "aggregate",
+                  "function": "none",
+                  "over": {
+                    "kind": "measured",
+                    "name": "free_floor_fit;shape=circle;diameter_metres=@diameter_metres;height_metres=@height_metres;obstacles=@obstacles;band_from_metres=@band_from_metres;band_to_metres=@band_to_metres;merge_path=@merge_path;subtract_door_swings=@subtract_door_swings;entrance_path_width=@entrance_path_width;entrance_tolerance_metres=@entrance_tolerance_metres;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector"
+                  },
+                  "value": {
+                    "kind": "not",
+                    "operand": {
+                      "kind": "and",
+                      "operands": [
+                        {
+                          "kind": "property",
+                          "propertySet": "axioval:member",
+                          "property": "fits"
+                        }
+                      ]
+                    }
+                  },
+                  "label": "no item fails"
+                },
+                {
+                  "kind": "isDefined",
+                  "operand": {
+                    "kind": "literal",
+                    "value": {
+                      "type": "integer",
+                      "value": 1
+                    },
+                    "label": "the free floor is searched"
+                  },
+                  "label": "read"
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.aggregate",
+                      "label": "no item fails",
+                      "fields": {
+                        "function": "none"
+                      },
+                      "inputs": {
+                        "over": {
+                          "block": {
+                            "type": "members.free_floor_fit",
+                            "fields": {
+                              "access_path": "@access_path",
+                              "band_from_metres": "@band_from_metres",
+                              "band_to_metres": "@band_to_metres",
+                              "diameter_metres": "@diameter_metres",
+                              "door_selector": "@door_selector",
+                              "entrance_path_width": "@entrance_path_width",
+                              "entrance_tolerance_metres": "@entrance_tolerance_metres",
+                              "height_metres": "@height_metres",
+                              "merge_path": "@merge_path",
+                              "obstacles": "@obstacles",
+                              "opening_selector": "@opening_selector",
+                              "shape": "circle",
+                              "space_selector": "@space_selector",
+                              "subtract_door_swings": "@subtract_door_swings"
+                            }
+                          }
+                        },
+                        "value": {
+                          "block": {
+                            "type": "expression.not",
+                            "inputs": {
+                              "operand": {
+                                "block": {
+                                  "type": "expression.and",
+                                  "inputs": {
+                                    "operands": {
+                                      "blocks": [
+                                        {
+                                          "type": "expression.property",
+                                          "fields": {
+                                            "property": "fits",
+                                            "propertySet": "axioval:member"
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.isDefined",
+                      "label": "read",
+                      "inputs": {
+                        "operand": {
+                          "block": {
+                            "type": "expression.literal",
+                            "label": "the free floor is searched",
+                            "fields": {
+                              "value": {
+                                "type": "integer",
+                                "value": 1
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.free-floor-rectangle",
@@ -20019,7 +20230,220 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "free-floor-rectangle",
+        "refusals": "objects",
+        "declaration": [
+          {
+            "kind": "arguments",
+            "when": [],
+            "value": "free_floor_fit;shape=rectangle;width_metres=@width_metres;length_metres=@length_metres;height_metres=@height_metres;orientation=@orientation;obstacles=@obstacles;band_from_metres=@band_from_metres;band_to_metres=@band_to_metres;merge_path=@merge_path;subtract_door_swings=@subtract_door_swings;entrance_path_width=@entrance_path_width;entrance_tolerance_metres=@entrance_tolerance_metres;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector"
+          }
+        ],
+        "services": {
+          "needs": [
+            "free-space"
+          ],
+          "message": "free-space service is not registered"
+        },
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "judged",
+                "expression": {
+                  "kind": "literal",
+                  "value": {
+                    "type": "integer",
+                    "value": 1
+                  },
+                  "label": "the free floor is searched"
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "judged",
+              "rounding": []
+            },
+            "fail": "",
+            "undecided": "",
+            "checks": [
+              {
+                "values": [],
+                "decision": {
+                  "kind": "items",
+                  "applies": {},
+                  "list": "free_floor_fit;shape=rectangle;width_metres=@width_metres;length_metres=@length_metres;height_metres=@height_metres;orientation=@orientation;obstacles=@obstacles;band_from_metres=@band_from_metres;band_to_metres=@band_to_metres;merge_path=@merge_path;subtract_door_swings=@subtract_door_swings;entrance_path_width=@entrance_path_width;entrance_tolerance_metres=@entrance_tolerance_metres;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector",
+                  "refused": "{why}",
+                  "checks": [
+                    {
+                      "kind": "test",
+                      "judge": {
+                        "kind": "truth",
+                        "value": "fits",
+                        "finding": false
+                      },
+                      "fail": "NO_FREE_FLOOR_SPACE_FOR_RECTANGLE{unreached_note}",
+                      "undecided": "{why}",
+                      "related": "related"
+                    }
+                  ],
+                  "texts": [
+                    {
+                      "name": "unreached_note",
+                      "when": [
+                        {
+                          "kind": "field",
+                          "field": "unreached",
+                          "value": true
+                        }
+                      ],
+                      "text": ": the shape fits only where no path {entrance_path_width:length} wide from an entrance reaches it"
+                    },
+                    {
+                      "name": "unreached_note",
+                      "text": ""
+                    }
+                  ]
+                },
+                "fail": "",
+                "undecided": ""
+              }
+            ]
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "aggregate",
+                  "function": "none",
+                  "over": {
+                    "kind": "measured",
+                    "name": "free_floor_fit;shape=rectangle;width_metres=@width_metres;length_metres=@length_metres;height_metres=@height_metres;orientation=@orientation;obstacles=@obstacles;band_from_metres=@band_from_metres;band_to_metres=@band_to_metres;merge_path=@merge_path;subtract_door_swings=@subtract_door_swings;entrance_path_width=@entrance_path_width;entrance_tolerance_metres=@entrance_tolerance_metres;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector"
+                  },
+                  "value": {
+                    "kind": "not",
+                    "operand": {
+                      "kind": "and",
+                      "operands": [
+                        {
+                          "kind": "property",
+                          "propertySet": "axioval:member",
+                          "property": "fits"
+                        }
+                      ]
+                    }
+                  },
+                  "label": "no item fails"
+                },
+                {
+                  "kind": "isDefined",
+                  "operand": {
+                    "kind": "literal",
+                    "value": {
+                      "type": "integer",
+                      "value": 1
+                    },
+                    "label": "the free floor is searched"
+                  },
+                  "label": "read"
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.aggregate",
+                      "label": "no item fails",
+                      "fields": {
+                        "function": "none"
+                      },
+                      "inputs": {
+                        "over": {
+                          "block": {
+                            "type": "members.free_floor_fit",
+                            "fields": {
+                              "access_path": "@access_path",
+                              "band_from_metres": "@band_from_metres",
+                              "band_to_metres": "@band_to_metres",
+                              "door_selector": "@door_selector",
+                              "entrance_path_width": "@entrance_path_width",
+                              "entrance_tolerance_metres": "@entrance_tolerance_metres",
+                              "height_metres": "@height_metres",
+                              "length_metres": "@length_metres",
+                              "merge_path": "@merge_path",
+                              "obstacles": "@obstacles",
+                              "opening_selector": "@opening_selector",
+                              "orientation": "@orientation",
+                              "shape": "rectangle",
+                              "space_selector": "@space_selector",
+                              "subtract_door_swings": "@subtract_door_swings",
+                              "width_metres": "@width_metres"
+                            }
+                          }
+                        },
+                        "value": {
+                          "block": {
+                            "type": "expression.not",
+                            "inputs": {
+                              "operand": {
+                                "block": {
+                                  "type": "expression.and",
+                                  "inputs": {
+                                    "operands": {
+                                      "blocks": [
+                                        {
+                                          "type": "expression.property",
+                                          "fields": {
+                                            "property": "fits",
+                                            "propertySet": "axioval:member"
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.isDefined",
+                      "label": "read",
+                      "inputs": {
+                        "operand": {
+                          "block": {
+                            "type": "expression.literal",
+                            "label": "the free floor is searched",
+                            "fields": {
+                              "value": {
+                                "type": "integer",
+                                "value": 1
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.group-composition",
@@ -90231,6 +90655,440 @@
             {
               "language": "de",
               "text": "Ob seine Lauflinie sich wendet."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
+      "name": "free_floor_fit",
+      "parameters": [
+        {
+          "key": "shape",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "circle",
+              "rectangle"
+            ]
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The shape searched for: a circle of `diameter_metres`, or a rectangle `width_metres` by `length_metres`, each `height_metres` high."
+            },
+            {
+              "language": "de",
+              "text": "Die gesuchte Form: ein Kreis mit `diameter_metres` oder ein Rechteck `width_metres` mal `length_metres`, jeweils `height_metres` hoch."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "diameter_metres",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The circle's diameter."
+            },
+            {
+              "language": "de",
+              "text": "Der Durchmesser des Kreises."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "width_metres",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rectangle's width."
+            },
+            {
+              "language": "de",
+              "text": "Die Breite des Rechtecks."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "length_metres",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rectangle's length."
+            },
+            {
+              "language": "de",
+              "text": "Die Länge des Rechtecks."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "height_metres",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The shape's height."
+            },
+            {
+              "language": "de",
+              "text": "Die Höhe der Form."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "orientation",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rectangle's orientation: `any`, every rotation counting."
+            },
+            {
+              "language": "de",
+              "text": "Die Ausrichtung des Rechtecks: `any`, jede Drehung zählt."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "obstacles",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "What obstructs the floor; every other object without it. Objects the selection cannot decide can only keep a proof of absence open."
+            },
+            {
+              "language": "de",
+              "text": "Was den Boden verstellt; ohne Angabe jedes andere Objekt. Von der Auswahl unentschiedene Objekte können nur einen Nachweis des Fehlens offenhalten."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "band_from_metres",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Where above the floor obstacles start to count."
+            },
+            {
+              "language": "de",
+              "text": "Ab welcher Höhe über dem Boden Hindernisse zählen."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "band_to_metres",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Where above the floor obstacles stop counting; the shape's height without it."
+            },
+            {
+              "language": "de",
+              "text": "Bis zu welcher Höhe über dem Boden Hindernisse zählen; ohne Angabe die Höhe der Form."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "merge_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps to the spaces searched with the space."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte zu den mit dem Raum durchsuchten Räumen."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "subtract_door_swings",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The doors whose swings obstruct the floor."
+            },
+            {
+              "language": "de",
+              "text": "Die Türen, deren Aufschlag den Boden verstellt."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "entrance_path_width",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "How wide a path from an entrance must reach the shape."
+            },
+            {
+              "language": "de",
+              "text": "Wie breit ein Weg von einem Zugang die Form erreichen muss."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "entrance_tolerance_metres",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "How much farther than half the path's width an entrance may lie from it (0.05 m by default)."
+            },
+            {
+              "language": "de",
+              "text": "Wie viel weiter als die halbe Wegbreite ein Zugang vom Weg liegen darf (standardmäßig 0,05 m)."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "access_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps from a door or opening to the spaces it opens onto."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte von einer Tür oder Öffnung zu den Räumen, in die sie führt."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "door_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The doors that are entrances."
+            },
+            {
+              "language": "de",
+              "text": "Die Türen, die Zugänge sind."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "opening_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The openings that are entrances."
+            },
+            {
+              "language": "de",
+              "text": "Die Öffnungen, die Zugänge sind."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "space_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The spaces the access path may reach; every object without it."
+            },
+            {
+              "language": "de",
+              "text": "Die Räume, die der Zugangsweg erreichen darf; ohne Angabe jedes Objekt."
+            }
+          ],
+          "references": "selector"
+        }
+      ],
+      "services": [
+        "free-space",
+        "object-frame",
+        "relationship-selection"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the free-space service is not registered or cannot search the floor",
+        "the spaces searched with the space cannot be read"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Free-floor fit"
+        },
+        {
+          "language": "de",
+          "text": "Passt auf die freie Bodenfläche"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "One item: whether the shape fits on the space's free floor, searched as `free-floor-circle` and `free-floor-rectangle` search it, obstacles and swings the selections cannot decide sent first and a proof of absence asked again without them; undecided where the selections leave it open."
+        },
+        {
+          "language": "de",
+          "text": "Ein Element: ob die Form auf die freie Bodenfläche des Raums passt, gesucht wie `free-floor-circle` und `free-floor-rectangle` suchen, von den Auswahlen unentschiedene Hindernisse und Aufschläge zuerst mitgeschickt und ein Nachweis des Fehlens ohne sie erneut erfragt; unentschieden, wo die Auswahlen es offenlassen."
+        }
+      ],
+      "fields": [
+        {
+          "name": "fits",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Fits"
+            },
+            {
+              "language": "de",
+              "text": "Passt"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether a placement is found (true) or proven absent (false); undecided where only what the selections cannot decide stands in its way."
+            },
+            {
+              "language": "de",
+              "text": "Ob eine Platzierung gefunden (wahr) oder ihr Fehlen nachgewiesen ist (falsch); unentschieden, wo nur steht, was die Auswahlen nicht entscheiden."
+            }
+          ]
+        },
+        {
+          "name": "related",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Related"
+            },
+            {
+              "language": "de",
+              "text": "Bezogen"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The spaces searched with the space and its entrances."
+            },
+            {
+              "language": "de",
+              "text": "Die mit dem Raum durchsuchten Räume und seine Zugänge."
+            }
+          ]
+        },
+        {
+          "name": "unreached",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Unreached"
+            },
+            {
+              "language": "de",
+              "text": "Unerreicht"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the shape, proven not to be reached from an entrance, fits where no path reaches it."
+            },
+            {
+              "language": "de",
+              "text": "Ob die Form, die nachweislich von keinem Zugang erreicht wird, dort passt, wo kein Weg sie erreicht."
             }
           ]
         }

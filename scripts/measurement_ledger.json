@@ -398,6 +398,14 @@
     "free_floor::ask::find_placement": {
       "count": 1,
       "providedBy": [
+        "free_floor_fit",
+        "free_placements"
+      ]
+    },
+    "free_floor::reference::ask::find_placement": {
+      "count": 1,
+      "providedBy": [
+        "free_floor_fit",
         "free_placements"
       ]
     },

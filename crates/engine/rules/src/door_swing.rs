@@ -49,9 +49,8 @@ impl Swings {
         context: &RuleContext<'_>,
         selector: Option<&Selector>,
     ) -> Result<Self, Unavailable> {
-        let mut swings = Self::default();
         let Some(selector) = selector else {
-            return Ok(swings);
+            return Ok(Self::default());
         };
         let (picked, outcomes) = select_objects(context, selector);
         let mut doors: Vec<(ObjectId, bool)> = picked
@@ -72,13 +71,39 @@ impl Swings {
                 }
             }
         }
+        Ok(Self::of_doors(context, doors))
+    }
+
+    /// The swings of the doors a measured value's argument bound: those
+    /// surely picked, then those it cannot decide, each in the project's
+    /// order, as [`Swings::select`] reads a selection.
+    pub(crate) fn of_selection(
+        context: &RuleContext<'_>,
+        selection: &axioval_ir::measured::MeasuredSelection,
+    ) -> Self {
+        let in_order = |set: &std::collections::BTreeSet<ObjectId>, sure: bool| {
+            context
+                .project
+                .objects()
+                .filter(|object| set.contains(&object.id))
+                .map(|object| (object.id.clone(), sure))
+                .collect::<Vec<_>>()
+        };
+        let mut doors = in_order(&selection.matched, true);
+        doors.extend(in_order(&selection.undecided, false));
+        Self::of_doors(context, doors)
+    }
+
+    /// The swings of `doors`, each surely selected or not.
+    fn of_doors(context: &RuleContext<'_>, doors: Vec<(ObjectId, bool)>) -> Self {
+        let mut swings = Self::default();
         let Some(frames) = context.services.get::<ObjectFrameServiceHandle>() else {
             for (door, _) in doors {
                 swings
                     .unknown
                     .push((door, "the object-frame service is not registered".into()));
             }
-            return Ok(swings);
+            return swings;
         };
         for (door, sure) in doors {
             let swept = leaves(frames, &door).and_then(|leaves| {
@@ -92,7 +117,7 @@ impl Swings {
                 Err((_, why)) => swings.unknown.push((door, why)),
             }
         }
-        Ok(swings)
+        swings
     }
 
     /// Why the swings are not all decided, if they are not.

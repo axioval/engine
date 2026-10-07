@@ -20,6 +20,7 @@ use super::{
 use crate::QuantityDimension;
 
 mod clash;
+mod searches;
 mod walking;
 
 /// One list of measured members.
@@ -2683,6 +2684,7 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
         ],
     },
     walking::FLIGHTS_ITEM,
+    searches::FREE_FLOOR_FIT,
     MemberDescriptor {
         list: MeasuredDescriptor {
             name: "free_placements",

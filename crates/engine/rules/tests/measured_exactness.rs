@@ -155,6 +155,11 @@ const COVERED: &[(&str, &str, &str)] = &[
         "only_a_placement_found_exactly_is_exact",
     ),
     (
+        "free_floor_fit",
+        "tests/free_floor_circle.rs",
+        "a_fit_is_exact_only_where_its_answer_rests_on_exact_evidence",
+    ),
+    (
         "rectangle_side",
         "../../facade/axioval/tests/axiolid_bays_and_spacing.rs",
         "values_measured_on_tessellations_are_never_exact",

@@ -14,6 +14,15 @@ use axioval_ir::contract::{ParameterValue, Selector, Severity as RuleSeverity};
 use axioval_ir::{Evidence, Object, ObjectId, Project, RuleId, SourceId};
 use axioval_rules::FreeFloorRectangle;
 
+mod common;
+
+/// `FreeFloorRectangle` as it runs, held to the implementation it replaced on every
+/// evaluation.
+static HELD: common::Held = common::Held(
+    &FreeFloorRectangle,
+    &axioval_rules::reference::FreeFloorRectangle,
+);
+
 fn source() -> SourceId {
     SourceId::new("cad", "model").unwrap()
 }
@@ -54,7 +63,7 @@ fn missing_free_space_service_is_not_a_pass_or_violation() {
     let room = object("room", "space");
     let project = Project::new(vec![room.clone()]).unwrap();
     let services = ServiceRegistry::new();
-    let outcome = FreeFloorRectangle.evaluate(
+    let outcome = HELD.evaluate(
         &RuleContext {
             project: &project,
             services: &services,
@@ -160,7 +169,7 @@ fn evaluate(answer: Answer) -> axioval_engine::CapabilityEvaluation {
     services
         .register(FreeSpaceServiceHandle::new(Arc::new(FakeService(answer))))
         .unwrap();
-    FreeFloorRectangle.evaluate(
+    HELD.evaluate(
         &RuleContext {
             project: &project,
             services: &services,
@@ -230,7 +239,7 @@ fn evaluate_rule(rule: &CompiledRule) -> axioval_engine::CapabilityEvaluation {
             Answer::NoPlacement,
         ))))
         .unwrap();
-    FreeFloorRectangle.evaluate(
+    HELD.evaluate(
         &RuleContext {
             project: &project,
             services: &services,
@@ -313,7 +322,7 @@ fn a_fit_as_a_count_of_placements_reaches_the_verdicts() {
             project: &project,
             services: &services,
         };
-        let expected = FreeFloorRectangle.evaluate(&context, &rule());
+        let expected = HELD.evaluate(&context, &rule());
         registry.install_measured(&mut services, &project);
         let evaluation = axioval_rules::ExpressionRequirement.evaluate(
             &RuleContext {

@@ -54,6 +54,9 @@ the first wording everything one object leaves open in one outcome
 ([#284](https://github.com/axioval/engine/issues/284)); `clash` and
 `clash-matrix` are the first judging pairs, each put in a class
 ([#285](https://github.com/axioval/engine/issues/285)).
+`free-floor-circle` and `free-floor-rectangle` are the first of the
+search capabilities, a template judging the answer of a search kept in
+built-in code ([#286](https://github.com/axioval/engine/issues/286)).
 
 ## The outside contract
 
@@ -1911,6 +1914,32 @@ missing or not realisable`, `ifStated` for the optional parameters), and
 without the service each space is open (`space service is not
 registered`).
 
+### `free-floor-circle` and `free-floor-rectangle`
+
+One form each, judged by one check over the measured list
+`free_floor_fit;shape=circle;diameter_metres=@diameter_metres;height_metres=@height_metres;obstacles=@obstacles;…`
+(the rectangle's `shape=rectangle`, `width_metres`, `length_metres` and
+`orientation`): every parameter under its own name, so the list's argument
+check (`Check::Arguments`, which sees the list's own `shape` beside them)
+refuses a declaration in the capability's order and words, for each
+selected space (`Refusals::Objects`), as does a host without the free-space
+service.
+
+The search stays the capability's (`free_floor::Search::place`): undecided
+obstacles and swings sent first and a proof of absence asked again without
+them, a door whose leaves are unknown turning a witness into open, a path
+from the entrances needing a sure entrance for a witness and every entrance
+for a proof. It answers one item per space: `fits` true for a placement,
+false for a proven absence, undecided (with why) where only what the
+selections cannot decide stands in its way; a search refused for another
+reason refuses the list, for its reason. The template judges `fits`: false
+is a finding, `NO_FREE_FLOOR_SPACE_FOR_CIRCLE` (or `…_RECTANGLE`), followed
+where the shape fits but no path reaches it (`unreached`) by `: the shape
+fits only where no path {entrance_path_width:length} wide from an entrance
+reaches it`, relating the merged spaces and the entrances (`related`) and
+citing the proof. `free_placements`, the count of placements an expression
+reads, lists the same answer.
+
 ## Binding and running a rule
 
 The rules crate's `templates` module runs a template
@@ -2585,6 +2614,16 @@ generated matrices of cells keyed by trade, pattern and selector over
 trades stated, unread or absent; and by the rules of the case `clashes`,
 recorded before the switch. A class of one's own (`a_class_of_its_own_is_tried_first`)
 is a class added to the data. They are never forked (D38).
+
+`free-floor-circle` and `free-floor-rectangle` are held to
+`free_floor/reference.rs` (`axioval_rules::reference::FreeFloorCircle`,
+`…::FreeFloorRectangle`) on every fixture of `tests/free_floor_circle.rs`,
+`tests/free_floor_rectangle.rs` and `tests/free_floor_options.rs` under
+`Parity::contract()`, each side asking a service of its own so the
+requests the tests inspect are the template's; by generated searches over
+blocking obstacles, doors and entrance paths, undecided selections,
+unknown leaves, bands, merged spaces and entrance widths; and by the rules
+of the case `floors`, recorded before the switch. They are never forked.
 
 The reference is kept, rather than deleted, because generated inputs need
 a live implementation to compare with; recorded outcomes outlive it on the

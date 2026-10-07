@@ -107,6 +107,7 @@ fn run(
     run_with_doors(model, capability, rule, blocking, Doors::default())
 }
 
+#[allow(clippy::needless_pass_by_value)]
 fn run_with_doors(
     model: Model,
     capability: &dyn RuleCapability,
@@ -114,18 +115,37 @@ fn run_with_doors(
     blocking: &[&str],
     doors: Doors,
 ) -> (CapabilityEvaluation, Vec<PlacementRequest>) {
-    let service = Arc::new(Scripted {
-        blocking: blocking.iter().map(|local| id(local)).collect(),
-        requests: Mutex::new(Vec::new()),
-    });
-    let handle = service.clone();
-    let evaluation = model.evaluate_with(capability, rule, |services| {
-        services
-            .register(FreeSpaceServiceHandle::new(handle))
-            .unwrap();
-        services.register(doors.handle()).unwrap();
-    });
-    let requests = service.requests.lock().unwrap().clone();
+    // The capability runs as a template, held to the implementation it
+    // replaced, each with a service of its own so the requests are the
+    // template's.
+    let reference: &dyn RuleCapability = if capability.id() == FreeFloorCircle.id() {
+        &axioval_rules::reference::FreeFloorCircle
+    } else {
+        &axioval_rules::reference::FreeFloorRectangle
+    };
+    let frames = doors.handle();
+    let evaluate = |capability: &dyn RuleCapability, measured: bool| {
+        let service = Arc::new(Scripted {
+            blocking: blocking.iter().map(|local| id(local)).collect(),
+            requests: Mutex::new(Vec::new()),
+        });
+        let register = |services: &mut axioval_engine::ServiceRegistry| {
+            services
+                .register(FreeSpaceServiceHandle::new(service.clone()))
+                .unwrap();
+            services.register(frames.clone()).unwrap();
+        };
+        let evaluation = if measured {
+            model.clone().evaluate_measured(capability, rule, register)
+        } else {
+            model.clone().evaluate_with(capability, rule, register)
+        };
+        let requests = service.requests.lock().unwrap().clone();
+        (evaluation, requests)
+    };
+    let (evaluation, requests) = evaluate(capability, true);
+    let (expected, _) = evaluate(reference, false);
+    common::hold_to_reference(capability.id(), &expected, &evaluation);
     (evaluation, requests)
 }
 
@@ -193,6 +213,11 @@ fn undecided_obstacles_can_only_keep_a_proof_open() {
         unevaluated(&evaluation),
         vec![("room".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
     );
+    assert_eq!(
+        evaluation.not_evaluated_outcomes()[0].message(),
+        "the shape fits only if what the selections cannot decide goes its way: \
+         test:model/crate"
+    );
     assert_eq!(requests[0].obstacles(), &ids(&["cabinet", "crate"])[..]);
     assert_eq!(requests[1].obstacles(), &ids(&["cabinet"])[..]);
 
@@ -254,6 +279,20 @@ fn an_invalid_band_is_an_invalid_declaration() {
             vec![("room".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
         );
     }
+    let (evaluation, _) = run(
+        model(),
+        &FreeFloorCircle,
+        &circle(vec![
+            ("band_from_metres", number(1.0)),
+            ("band_to_metres", number(0.5)),
+        ]),
+        &[],
+    );
+    assert_eq!(
+        evaluation.not_evaluated_outcomes()[0].message(),
+        "the elevation band from 1 m to 0.5 m above the floor is invalid: it must start at or \
+         above the floor and end above its start"
+    );
 }
 
 /// Spaces the merge path reaches are searched with the space, are never
@@ -671,5 +710,83 @@ fn a_fit_as_a_count_of_placements_reaches_the_verdicts() {
             ("expression", &outcome),
         );
         assert!(parity.holds(), "case {index}:\n{}", parity.diff());
+    }
+}
+
+/// Generated declarations and answers: each obstacle, door and entrance
+/// blocking or not, selections leaving objects undecided, unknown leaves,
+/// bands, merged spaces and entrance paths, held to the reference.
+mod generated {
+    use super::*;
+    use proptest::prelude::*;
+
+    const BLOCKERS: [&str; 7] = [
+        "wall", "cabinet", "crate", "alcove", "door", "hatch", "path",
+    ];
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(96))]
+
+        #[test]
+        fn generated_searches_hold_parity(
+            blocking in proptest::collection::vec(0..BLOCKERS.len(), 0..3),
+            rectangle in any::<bool>(),
+            obstacles in 0..3u8,
+            unreadable_crate in any::<bool>(),
+            swings in any::<bool>(),
+            unknown_hatch in any::<bool>(),
+            band in proptest::option::of((0.0..1.0f64, 0.5..2.5f64)),
+            merged in any::<bool>(),
+            entrance in proptest::option::of(0.5..1.5f64),
+        ) {
+            let mut model = model_with_door()
+                .object("hatch", "door")
+                .edge("Opens", "hatch", "room");
+            if unreadable_crate {
+                model = model.unreadable("crate");
+            }
+            let mut parameters = match obstacles {
+                0 => Vec::new(),
+                1 => vec![("obstacles", selector(kind("furniture")))],
+                _ => vec![("obstacles", selector(fixed()))],
+            };
+            if swings {
+                parameters.push(("subtract_door_swings", selector(kind("door"))));
+            }
+            if let Some((from, to)) = band {
+                parameters.push(("band_from_metres", number(from)));
+                parameters.push(("band_to_metres", number(to)));
+            }
+            if merged {
+                parameters.push(("merge_path", strings(&["Groups:forward"])));
+            }
+            if let Some(width) = entrance {
+                parameters.push(("entrance_path_width", number(width)));
+                parameters.push(("access_path", strings(&["Opens:forward"])));
+                parameters.push(("door_selector", selector(fixed())));
+            }
+            let doors = if unknown_hatch {
+                doors().unknown(
+                    "hatch",
+                    axioval_engine::DoorLeavesError::NotStated("no operation".into()),
+                )
+            } else {
+                doors()
+            };
+            let blocking: Vec<&str> = blocking.iter().map(|index| BLOCKERS[*index]).collect();
+            if rectangle {
+                let mut all = vec![
+                    ("width_metres", number(1.8)),
+                    ("length_metres", number(1.5)),
+                    ("height_metres", number(2.0)),
+                    ("orientation", string("any")),
+                ];
+                all.extend(parameters);
+                let declared = rule("axioval:capability.free-floor-rectangle", kind("room"), all);
+                run_with_doors(model, &FreeFloorRectangle, &declared, &blocking, doors);
+            } else {
+                run_with_doors(model, &FreeFloorCircle, &circle(parameters), &blocking, doors);
+            }
+        }
     }
 }

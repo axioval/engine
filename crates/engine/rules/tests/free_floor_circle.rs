@@ -14,6 +14,13 @@ use axioval_ir::contract::{ParameterValue, Selector, Severity as RuleSeverity};
 use axioval_ir::{Evidence, Object, ObjectId, Project, RuleId, SourceId};
 use axioval_rules::FreeFloorCircle;
 
+mod common;
+
+/// `FreeFloorCircle` as it runs, held to the implementation it replaced on every
+/// evaluation.
+static HELD: common::Held =
+    common::Held(&FreeFloorCircle, &axioval_rules::reference::FreeFloorCircle);
+
 fn source() -> SourceId {
     SourceId::new("cad", "model").unwrap()
 }
@@ -47,7 +54,7 @@ fn missing_free_space_service_is_not_a_pass_or_violation() {
     let room = object("room", "space");
     let project = Project::new(vec![room.clone()]).unwrap();
     let services = ServiceRegistry::new();
-    let outcome = FreeFloorCircle.evaluate(
+    let outcome = HELD.evaluate(
         &RuleContext {
             project: &project,
             services: &services,
@@ -151,7 +158,7 @@ fn evaluate(answer: Answer) -> axioval_engine::CapabilityEvaluation {
     services
         .register(FreeSpaceServiceHandle::new(Arc::new(FakeService(answer))))
         .unwrap();
-    FreeFloorCircle.evaluate(
+    HELD.evaluate(
         &RuleContext {
             project: &project,
             services: &services,
@@ -244,6 +251,49 @@ fn only_a_placement_found_exactly_is_exact() {
     assert!(measure(Answer::Invalid).is_err());
 }
 
+/// The capability's own answer, `free_floor_fit`: a fit found or proven
+/// absent on exact evidence is exact, a search the evidence leaves open is
+/// undecided and never exact, and a refused search refuses the list.
+#[test]
+fn a_fit_is_exact_only_where_its_answer_rests_on_exact_evidence() {
+    let project = Project::new(vec![
+        Object::new(ObjectId::new(source(), "room").unwrap(), "space"),
+        Object::new(ObjectId::new(source(), "chair").unwrap(), "furniture"),
+    ])
+    .unwrap();
+    let registry =
+        axioval_rules::register_builtins(axioval_engine::CapabilityRegistry::new()).unwrap();
+    let measure = |answer: Answer| {
+        let mut services = ServiceRegistry::new();
+        services
+            .register(FreeSpaceServiceHandle::new(Arc::new(FakeService(answer))))
+            .unwrap();
+        registry.install_measured(&mut services, &project);
+        axioval_engine::measured_members(
+            &services,
+            &ObjectId::new(source(), "room").unwrap(),
+            "free_floor_fit;shape=circle;diameter_metres=1.5;height_metres=2",
+        )
+        .map(|members| {
+            members
+                .iter()
+                .map(|member| {
+                    let fits = match &member.fields["fits"] {
+                        axioval_engine::MemberValue::Truth { value, .. } => Some(*value),
+                        _ => None,
+                    };
+                    (fits, member.exact)
+                })
+                .collect::<Vec<_>>()
+        })
+    };
+    assert_eq!(measure(Answer::Found), Ok(vec![(Some(true), true)]));
+    assert_eq!(measure(Answer::NoPlacement), Ok(vec![(Some(false), true)]));
+    assert_eq!(measure(Answer::Incomplete), Ok(vec![(None, false)]));
+    assert!(measure(Answer::Invalid).is_err());
+    assert!(measure(Answer::Unavailable).is_err());
+}
+
 /// Whether the shape fits as an expression over the measured placements
 /// (at least one), held to the parity harness on every answer of the
 /// service and without it.
@@ -289,7 +339,7 @@ fn a_fit_as_a_count_of_placements_reaches_the_verdicts() {
             project: &project,
             services: &services,
         };
-        let expected = FreeFloorCircle.evaluate(&context, &rule());
+        let expected = HELD.evaluate(&context, &rule());
         registry.install_measured(&mut services, &project);
         let evaluation = axioval_rules::ExpressionRequirement.evaluate(
             &RuleContext {

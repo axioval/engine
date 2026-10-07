@@ -957,6 +957,7 @@ sites that cite a value exact:
 | `plan_diameter`, `well_*`, `centre_line_distance`, `recesses`, `end_walls`, `exit_pairs` | the plan-span, section or extent evidence (and for the centre line its rectangle and side distances) is exact | differences rounded outward; the centre line's walls that may lie nearer |
 | `travel_distance` | walked with exact evidence | the possible exits, as `escape-route` cites them (`Cited`) |
 | `free_placements` (members) | a placement is surely found (exact witness and support by contract) | nothing; an open search's placement is never exact |
+| `free_floor_fit` (members) | the fit is found, or proven absent on exact evidence (the proof, the merged spaces, the swings and the entrances read) | nothing; an open search is never exact |
 | `rectangle_side`, `obstruction_count`, `axes_within` | the rectangles and every obstacle measured are exact | the undecided obstacles |
 | `band_uncovered_area`, `parallel_pairs` | every pair and area is exact and every member was read | the possible bands |
 | `level_rise`, `prevailing_rise`, `prevailing_elevation` | the heights' or extent's evidence is exact (points decide the prevailing value, as `level-spacing` decides it) | rounding |
@@ -1088,6 +1089,10 @@ Whether a shape fits is `count` of the measured `free_placements` at least
 `free-floor-rectangle` do, with their obstacles, band, merged spaces, door
 swings and entrance path, and a search the selections leave open is one
 undecided member, so the count straddles 1 and the fit is not evaluated.
+Both lists and both capabilities' templates read one search
+(`free_floor::Search::place`), which answers found, proven absent or open
+with its reason; `free_floor_fit` is its answer under the capabilities' own
+parameter names.
 
 ### Measured members
 
@@ -1119,6 +1124,7 @@ and declare their parameters and typed fields:
 | `name_sequence` (every `name-sequence` parameter under its own name) | the members an anchor reaches, in order, as `name-sequence` reads them | `member`, `shown`, `set`, `whole`, `value` (`null` where it states none), `previous` (`null` for the first), `expected`, `above`, `below` |
 | `numbering` (every `numbering-consistency` parameter under its own name, `selection`) | what `numbering-consistency` judges of an object's number among those of its scope | `unread`, `number` (refused, for why it cannot be read), `prefixed`, `lead`, `departs`, `stepped`, `step`, `fillable`, `shown`, `below`, `missing`, `related` |
 | `free_placements` (`shape`, `diameter`, `width`, `length`, `height`, `obstacles`, `band_from`, `band_to`, `merge`, `swings`, `entrance_width`, `access`, `doors`, `openings`) | a placement of the shape on a space's free floor: one found, none possible, or one undecided | none |
+| `free_floor_fit` (`shape` and every parameter of `free-floor-circle` and `free-floor-rectangle` under its own name) | one item: whether the shape fits on the space's free floor, searched as the capabilities search it; a search refused for another reason than the selections refuses the list | `fits` (undecided where only what the selections cannot decide stands in its way), `related` (merged spaces and entrances), `unreached` (it fits where no path from an entrance reaches it) |
 | `guard_edges` (`barrier_gap`, `platform_gap`, `landing_gap`, `landing_width`, `climb_distance`, `climb_side`, `measure_from` or `from_curb`, `climb_height`, `barriers`, `landings`, `climbables`, `surfaces`) | the exposed edges of a walking surface, as the guard service samples them; with `surfaces`, measured together with the others in one request | `guarded_height`, `tallest_barrier`, `tallest`, `tallest_top`, `partial_height`, `barrier_share`, `landing_fall`, `nearest_gap`, `nearest_fall`, `nearest_width`, `nearest`, `climbable_height`, `climbable` |
 | `axes_within` (`of`, `reach`) | the objects of the kinds named within reach of the footprint in plan | `angle`, `centre_angle` |
 | `parking_bay` (every `parking-bay` parameter under its own name, `selection`) | what `parking-bay` judges of a bay, in its order | `counting`, `count`, `allowed`, `found_words`, `open_words`, `related`; `sized`, `size` (undecided for why it cannot be measured), `measured`, `low`, `high`, `suffix`, `doubtful`, `applies_why`, `later`; `judged`, `found`, `message` |

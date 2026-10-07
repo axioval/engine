@@ -314,6 +314,16 @@ const PAIRS: &[Pair] = &[
         case: "spaces",
         reference: |registry| registry.replace(axioval::rules::reference::SpaceValidation),
     },
+    Pair {
+        capability: "axioval:capability.free-floor-circle",
+        case: "floors",
+        reference: |registry| registry.replace(axioval::rules::reference::FreeFloorCircle),
+    },
+    Pair {
+        capability: "axioval:capability.free-floor-rectangle",
+        case: "floors",
+        reference: |registry| registry.replace(axioval::rules::reference::FreeFloorRectangle),
+    },
 ];
 
 /// Warm-up runs per side before measuring.

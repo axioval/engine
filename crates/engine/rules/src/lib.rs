@@ -202,6 +202,7 @@ pub mod reference {
     pub use crate::empty_host::reference::EmptyHost;
     pub use crate::exit_separation::reference::ExitSeparation;
     pub use crate::external_wall_validation::reference::ExternalWallValidation;
+    pub use crate::free_floor::reference::{FreeFloorCircle, FreeFloorRectangle};
     pub use crate::horizontal_guard::reference::HorizontalGuard;
     pub use crate::keyed_limit::reference::KeyedLimit;
     pub use crate::level_spacing::reference::LevelSpacing;
@@ -343,6 +344,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(axioval_engine::FacePieceMeasures))
         .and_then(|registry| registry.register_measured(escape_route::TravelMeasures))
         .and_then(|registry| registry.register_measured(free_floor::PlacementMeasures))
+        .and_then(|registry| registry.register_measured(free_floor::FitMeasures))
         .and_then(|registry| registry.register_measured(parking_bay::BayMeasures))
         .and_then(|registry| registry.register_measured(parking_bay::BayItems))
         .and_then(|registry| registry.register_measured(wall_spacing::SpacingMeasures))

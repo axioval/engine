@@ -130,6 +130,11 @@ const COVERED: &[(&str, &str, &str)] = &[
         "approximate_guard_edges_are_never_measured",
     ),
     (
+        "space_height",
+        "tests/space_validation.rs",
+        "space_aspects_measured_approximately_are_inexact",
+    ),
+    (
         "boundary_coverage_share",
         "tests/space_boundary_coverage.rs",
         "coverage_measured_approximately_is_never_exact",

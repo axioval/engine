@@ -227,6 +227,7 @@ pub mod reference {
     pub use crate::slab_stack::reference::SlabStackSpacing;
     pub use crate::space_boundary_coverage::reference::SpaceBoundaryCoverage;
     pub use crate::space_connection::reference::SpaceConnection;
+    pub use crate::space_validation::reference::SpaceValidation;
     pub use crate::stair_geometry::reference::RampGeometryReference as RampGeometry;
     pub use crate::stair_geometry::reference::StairGeometryReference as StairGeometry;
     pub use crate::triangle_count::reference::TriangleCountLimit;
@@ -349,6 +350,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(counterpart_coverage::CoverageMeasures))
         .and_then(|registry| registry.register_measured(effective_coverage::EffectMeasures))
         .and_then(|registry| registry.register_measured(space_boundary_coverage::BoundaryMeasures))
+        .and_then(|registry| registry.register_measured(space_validation::SpaceMeasures))
         .and_then(|registry| registry.register_measured(triangle_count::TriangleMeasures))
         .and_then(|registry| registry.register_measured(body_extent::ExtentMeasures))
         .and_then(|registry| registry.register_measured(plan_area::AreaMeasures))

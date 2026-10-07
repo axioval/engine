@@ -53256,7 +53256,1108 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "grades": true,
+        "name": "space-validation",
+        "refusals": "objects",
+        "defaults": [
+          {
+            "parameter": "tolerance_metres",
+            "value": {
+              "type": "number",
+              "value": 0.005
+            }
+          }
+        ],
+        "declaration": [
+          {
+            "kind": "finite",
+            "parameters": [
+              "required_height_metres",
+              "uncovered_segment_length_metres",
+              "maximum_unallocated_area_square_metres"
+            ],
+            "at_least": 0.0,
+            "message": "space-validation declaration is missing or not realisable"
+          },
+          {
+            "kind": "holds",
+            "condition": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "stated",
+                  "parameter": "check_top_cap"
+                },
+                {
+                  "kind": "stated",
+                  "parameter": "check_bottom_cap"
+                },
+                {
+                  "kind": "stated",
+                  "parameter": "check_unallocated_area"
+                }
+              ]
+            },
+            "message": "space-validation declaration is missing or not realisable"
+          },
+          {
+            "kind": "ifStated",
+            "parameter": "tolerance_metres",
+            "check": {
+              "kind": "finite",
+              "parameters": [
+                "tolerance_metres"
+              ],
+              "at_least": 0.0,
+              "message": "space-validation declaration is missing or not realisable"
+            }
+          },
+          {
+            "kind": "ifStated",
+            "parameter": "maximum_unallocated_share",
+            "check": {
+              "kind": "finite",
+              "parameters": [
+                "maximum_unallocated_share"
+              ],
+              "at_least": 0.0,
+              "message": "space-validation declaration is missing or not realisable"
+            }
+          },
+          {
+            "kind": "ifStated",
+            "parameter": "maximum_unallocated_share",
+            "check": {
+              "kind": "atMost",
+              "parameters": [
+                "maximum_unallocated_share"
+              ],
+              "value": 1.0,
+              "message": "space-validation declaration is missing or not realisable"
+            }
+          },
+          {
+            "kind": "ifStated",
+            "parameter": "top_cap_elements",
+            "check": {
+              "kind": "holds",
+              "condition": {
+                "kind": "stated",
+                "parameter": "top_cap_elements"
+              },
+              "message": "space-validation declaration is missing or not realisable"
+            }
+          },
+          {
+            "kind": "ifStated",
+            "parameter": "bottom_cap_elements",
+            "check": {
+              "kind": "holds",
+              "condition": {
+                "kind": "stated",
+                "parameter": "bottom_cap_elements"
+              },
+              "message": "space-validation declaration is missing or not realisable"
+            }
+          },
+          {
+            "kind": "ifStated",
+            "parameter": "boundary_elements",
+            "check": {
+              "kind": "holds",
+              "condition": {
+                "kind": "stated",
+                "parameter": "boundary_elements"
+              },
+              "message": "space-validation declaration is missing or not realisable"
+            }
+          },
+          {
+            "kind": "ifStated",
+            "parameter": "intersection_elements",
+            "check": {
+              "kind": "holds",
+              "condition": {
+                "kind": "stated",
+                "parameter": "intersection_elements"
+              },
+              "message": "space-validation declaration is missing or not realisable"
+            }
+          }
+        ],
+        "services": {
+          "needs": [
+            "space"
+          ],
+          "message": "space service is not registered"
+        },
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "zero",
+                "expression": {
+                  "kind": "literal",
+                  "value": {
+                    "type": "number",
+                    "value": 0.0
+                  }
+                }
+              },
+              {
+                "name": "complete",
+                "expression": {
+                  "kind": "literal",
+                  "value": {
+                    "type": "number",
+                    "value": 0.98
+                  }
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "zero",
+              "rounding": []
+            },
+            "fail": "",
+            "undecided": "",
+            "checks": [
+              {
+                "values": [
+                  {
+                    "name": "duplicates",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "space_duplicates;space=@anchor"
+                    }
+                  }
+                ],
+                "decision": {
+                  "kind": "within",
+                  "value": "duplicates",
+                  "maximum": [
+                    {
+                      "sign": "plus",
+                      "operand": {
+                        "kind": "value",
+                        "name": "zero"
+                      }
+                    }
+                  ],
+                  "rounding": []
+                },
+                "fail": "duplicate_space: space body duplicated by {duplicates:least} other space(s)",
+                "undecided": "{why}",
+                "related": "duplicates",
+                "grading": {
+                  "bands": [
+                    {
+                      "severity": "error"
+                    }
+                  ]
+                },
+                "ungraded": true
+              },
+              {
+                "values": [
+                  {
+                    "name": "height",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "space_height"
+                    }
+                  },
+                  {
+                    "name": "lowered",
+                    "expression": {
+                      "kind": "negate",
+                      "operand": {
+                        "kind": "parameter",
+                        "name": "tolerance_metres"
+                      }
+                    }
+                  }
+                ],
+                "derived": [
+                  {
+                    "kind": "difference",
+                    "name": "raised",
+                    "minuend": "height",
+                    "subtrahend": "lowered"
+                  }
+                ],
+                "decision": {
+                  "kind": "within",
+                  "value": "raised",
+                  "minimum": [
+                    {
+                      "sign": "plus",
+                      "operand": {
+                        "kind": "parameter",
+                        "name": "required_height_metres"
+                      }
+                    }
+                  ],
+                  "rounding": []
+                },
+                "fail": "insufficient_height: clear height {height:fixed3} below required {required_height_metres:fixed3}",
+                "undecided": "{why}",
+                "grading": {
+                  "bands": [
+                    {
+                      "severity": "warning"
+                    }
+                  ]
+                },
+                "ungraded": true
+              },
+              {
+                "values": [
+                  {
+                    "name": "uncovered",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "space_uncovered_boundary;segment=@uncovered_segment_length_metres;elements=@boundary_elements"
+                    },
+                    "expect": "optional"
+                  }
+                ],
+                "decision": {
+                  "kind": "within",
+                  "value": "uncovered",
+                  "maximum": [
+                    {
+                      "sign": "plus",
+                      "operand": {
+                        "kind": "value",
+                        "name": "zero"
+                      }
+                    }
+                  ],
+                  "rounding": []
+                },
+                "fail": "uncovered_boundary: {uncovered:fixed3} m of space boundary is uncovered",
+                "undecided": "{why}",
+                "related": "uncovered",
+                "grading": {
+                  "bands": [
+                    {
+                      "severity": "warning"
+                    }
+                  ]
+                },
+                "ungraded": true
+              },
+              {
+                "values": [
+                  {
+                    "name": "intersecting",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "space_intersections;elements=@intersection_elements;tolerance=@tolerance_metres"
+                    },
+                    "expect": "optional"
+                  }
+                ],
+                "decision": {
+                  "kind": "items",
+                  "applies": {},
+                  "list": "space_overlaps;elements=@intersection_elements;tolerance=@tolerance_metres",
+                  "checks": [
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "field",
+                          "field": "inside",
+                          "value": true
+                        }
+                      ],
+                      "judge": {
+                        "kind": "fails"
+                      },
+                      "fail": "contained_body: space is contained by another body",
+                      "undecided": "{why}",
+                      "related": "other"
+                    },
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "field",
+                          "field": "contains",
+                          "value": true
+                        }
+                      ],
+                      "judge": {
+                        "kind": "fails"
+                      },
+                      "fail": "contained_body: space contains another body",
+                      "undecided": "{why}",
+                      "related": "other"
+                    },
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "field",
+                          "field": "partial",
+                          "value": true
+                        },
+                        {
+                          "kind": "field",
+                          "field": "space",
+                          "value": true
+                        }
+                      ],
+                      "judge": {
+                        "kind": "fails"
+                      },
+                      "fail": "intersecting_space: space intersects another space over {area:fixed4} m2",
+                      "undecided": "{why}",
+                      "related": "other"
+                    },
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "field",
+                          "field": "partial",
+                          "value": true
+                        },
+                        {
+                          "kind": "field",
+                          "field": "space",
+                          "value": false
+                        }
+                      ],
+                      "judge": {
+                        "kind": "fails"
+                      },
+                      "fail": "intersecting_component: space intersects a component over {area:fixed4} m2",
+                      "undecided": "{why}",
+                      "related": "other"
+                    }
+                  ]
+                },
+                "fail": "",
+                "undecided": "{why}",
+                "grading": {
+                  "bands": [
+                    {
+                      "severity": "error"
+                    }
+                  ]
+                },
+                "ungraded": true
+              },
+              {
+                "values": [
+                  {
+                    "name": "top",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "space_cap;cap=top;check=@check_top_cap;elements=@top_cap_elements"
+                    },
+                    "expect": "optional"
+                  }
+                ],
+                "decision": {
+                  "kind": "within",
+                  "value": "top",
+                  "minimum": [
+                    {
+                      "sign": "plus",
+                      "operand": {
+                        "kind": "value",
+                        "name": "complete"
+                      }
+                    }
+                  ],
+                  "rounding": []
+                },
+                "fail": "uncovered_top_cap: top cap only {top:hundred1}% covered",
+                "undecided": "{why}",
+                "related": "top",
+                "grading": {
+                  "bands": [
+                    {
+                      "severity": "error",
+                      "when": {
+                        "kind": "below",
+                        "value": "top",
+                        "than": 0.01
+                      }
+                    },
+                    {
+                      "severity": "warning",
+                      "when": {
+                        "kind": "not",
+                        "condition": {
+                          "kind": "above",
+                          "value": "top",
+                          "than": 0.15
+                        }
+                      }
+                    },
+                    {
+                      "severity": "info"
+                    }
+                  ]
+                },
+                "ungraded": true
+              },
+              {
+                "values": [
+                  {
+                    "name": "bottom",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "space_cap;cap=bottom;check=@check_bottom_cap;elements=@bottom_cap_elements"
+                    },
+                    "expect": "optional"
+                  }
+                ],
+                "decision": {
+                  "kind": "within",
+                  "value": "bottom",
+                  "minimum": [
+                    {
+                      "sign": "plus",
+                      "operand": {
+                        "kind": "value",
+                        "name": "complete"
+                      }
+                    }
+                  ],
+                  "rounding": []
+                },
+                "fail": "uncovered_bottom_cap: bottom cap only {bottom:hundred1}% covered",
+                "undecided": "{why}",
+                "related": "bottom",
+                "grading": {
+                  "bands": [
+                    {
+                      "severity": "error",
+                      "when": {
+                        "kind": "below",
+                        "value": "bottom",
+                        "than": 0.01
+                      }
+                    },
+                    {
+                      "severity": "warning",
+                      "when": {
+                        "kind": "not",
+                        "condition": {
+                          "kind": "above",
+                          "value": "bottom",
+                          "than": 0.15
+                        }
+                      }
+                    },
+                    {
+                      "severity": "info"
+                    }
+                  ]
+                },
+                "ungraded": true
+              }
+            ],
+            "once": [
+              {
+                "value": {
+                  "name": "supports",
+                  "expression": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "space_supports;top=@check_top_cap;bottom=@check_bottom_cap;top_elements=@top_cap_elements;bottom_elements=@bottom_cap_elements"
+                  }
+                },
+                "refused": "{why}",
+                "required": true
+              }
+            ],
+            "project": [
+              {
+                "values": [],
+                "decision": {
+                  "kind": "items",
+                  "applies": {},
+                  "list": "unallocated_regions",
+                  "refused": "{why}",
+                  "checks": [
+                    {
+                      "kind": "test",
+                      "judge": {
+                        "kind": "range",
+                        "value": "area",
+                        "unit": "area",
+                        "atMost": [
+                          {
+                            "name": "bound",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "parameter",
+                                    "name": "maximum_unallocated_area_square_metres"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "allowance": {
+                          "kind": "none"
+                        },
+                        "grade": true,
+                        "null": {
+                          "kind": "skip"
+                        }
+                      },
+                      "fail": "unallocated_area: a region of {area:fixed3} m2 of storey floor belongs to no space (allowed {maximum_unallocated_area_square_metres:fixed3} m2)",
+                      "undecided": "{why}",
+                      "related": "elements"
+                    }
+                  ],
+                  "at": "storey"
+                },
+                "fail": "",
+                "undecided": "",
+                "grading": {
+                  "bands": [
+                    {
+                      "severity": "warning"
+                    }
+                  ]
+                },
+                "applies": {
+                  "when": [
+                    "check_unallocated_area"
+                  ]
+                }
+              },
+              {
+                "values": [],
+                "decision": {
+                  "kind": "items",
+                  "applies": {},
+                  "list": "unallocated_storeys",
+                  "checks": [
+                    {
+                      "kind": "test",
+                      "judge": {
+                        "kind": "range",
+                        "value": "share",
+                        "unit": "area",
+                        "atMost": [
+                          {
+                            "name": "bound",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "parameter",
+                                    "name": "maximum_unallocated_share"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "allowance": {
+                          "kind": "none"
+                        },
+                        "grade": true,
+                        "null": {
+                          "kind": "open",
+                          "message": "space-validation: the storey's gross floor area is not measured, so its unallocated share is undefined"
+                        }
+                      },
+                      "fail": "unallocated_area: {share:hundred3}% of the storey's gross floor area ({area:fixed3} m2 of {gross:fixed3} m2) belongs to no space; required at most {maximum_unallocated_share:hundred}%",
+                      "undecided": "space-validation: the storey's unallocated share ({area:fixed3} m2 of {gross:fixed3} m2) straddles the maximum of {maximum_unallocated_share:hundred}%",
+                      "related": "elements"
+                    }
+                  ],
+                  "at": "storey"
+                },
+                "fail": "",
+                "undecided": "",
+                "grading": {
+                  "bands": [
+                    {
+                      "severity": "warning"
+                    }
+                  ]
+                },
+                "applies": {
+                  "when": [
+                    "check_unallocated_area",
+                    "maximum_unallocated_share"
+                  ]
+                },
+                "quiet": true
+              }
+            ]
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "and",
+                  "operands": [
+                    {
+                      "kind": "compare",
+                      "operator": "lessThanOrEquals",
+                      "left": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "space_duplicates;space=@anchor"
+                      },
+                      "right": {
+                        "kind": "literal",
+                        "value": {
+                          "type": "number",
+                          "value": 0.0
+                        }
+                      },
+                      "label": "at most the upper bound"
+                    }
+                  ]
+                },
+                {
+                  "kind": "and",
+                  "operands": [
+                    {
+                      "kind": "compare",
+                      "operator": "greaterThanOrEquals",
+                      "left": {
+                        "kind": "subtract",
+                        "left": {
+                          "kind": "property",
+                          "propertySet": "axioval:measured",
+                          "property": "space_height"
+                        },
+                        "right": {
+                          "kind": "negate",
+                          "operand": {
+                            "kind": "parameter",
+                            "name": "tolerance_metres"
+                          }
+                        },
+                        "label": "raised"
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "required_height_metres"
+                      },
+                      "label": "at least the lower bound"
+                    }
+                  ]
+                },
+                {
+                  "kind": "and",
+                  "operands": [
+                    {
+                      "kind": "compare",
+                      "operator": "lessThanOrEquals",
+                      "left": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "space_uncovered_boundary;segment=@uncovered_segment_length_metres;elements=@boundary_elements"
+                      },
+                      "right": {
+                        "kind": "literal",
+                        "value": {
+                          "type": "number",
+                          "value": 0.0
+                        }
+                      },
+                      "label": "at most the upper bound"
+                    }
+                  ]
+                },
+                {
+                  "kind": "aggregate",
+                  "function": "none",
+                  "over": {
+                    "kind": "measured",
+                    "name": "space_overlaps;elements=@intersection_elements;tolerance=@tolerance_metres"
+                  },
+                  "value": {
+                    "kind": "not",
+                    "operand": {
+                      "kind": "and",
+                      "operands": [
+                        {
+                          "kind": "literal",
+                          "value": {
+                            "type": "boolean",
+                            "value": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "label": "no item fails"
+                },
+                {
+                  "kind": "and",
+                  "operands": [
+                    {
+                      "kind": "compare",
+                      "operator": "greaterThanOrEquals",
+                      "left": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "space_cap;cap=top;check=@check_top_cap;elements=@top_cap_elements"
+                      },
+                      "right": {
+                        "kind": "literal",
+                        "value": {
+                          "type": "number",
+                          "value": 0.98
+                        }
+                      },
+                      "label": "at least the lower bound"
+                    }
+                  ]
+                },
+                {
+                  "kind": "and",
+                  "operands": [
+                    {
+                      "kind": "compare",
+                      "operator": "greaterThanOrEquals",
+                      "left": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "space_cap;cap=bottom;check=@check_bottom_cap;elements=@bottom_cap_elements"
+                      },
+                      "right": {
+                        "kind": "literal",
+                        "value": {
+                          "type": "number",
+                          "value": 0.98
+                        }
+                      },
+                      "label": "at least the lower bound"
+                    }
+                  ]
+                },
+                {
+                  "kind": "isDefined",
+                  "operand": {
+                    "kind": "literal",
+                    "value": {
+                      "type": "number",
+                      "value": 0.0
+                    }
+                  },
+                  "label": "read"
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.and",
+                      "inputs": {
+                        "operands": {
+                          "blocks": [
+                            {
+                              "type": "expression.compare",
+                              "label": "at most the upper bound",
+                              "fields": {
+                                "operator": "lessThanOrEquals"
+                              },
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "measured.space_duplicates",
+                                    "fields": {
+                                      "space": "@anchor"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.literal",
+                                    "fields": {
+                                      "value": {
+                                        "type": "number",
+                                        "value": 0.0
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.and",
+                      "inputs": {
+                        "operands": {
+                          "blocks": [
+                            {
+                              "type": "expression.compare",
+                              "label": "at least the lower bound",
+                              "fields": {
+                                "operator": "greaterThanOrEquals"
+                              },
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "expression.subtract",
+                                    "label": "raised",
+                                    "inputs": {
+                                      "left": {
+                                        "block": {
+                                          "type": "measured.space_height"
+                                        }
+                                      },
+                                      "right": {
+                                        "block": {
+                                          "type": "expression.negate",
+                                          "inputs": {
+                                            "operand": {
+                                              "block": {
+                                                "type": "expression.parameter",
+                                                "fields": {
+                                                  "name": "tolerance_metres"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "required_height_metres"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.and",
+                      "inputs": {
+                        "operands": {
+                          "blocks": [
+                            {
+                              "type": "expression.compare",
+                              "label": "at most the upper bound",
+                              "fields": {
+                                "operator": "lessThanOrEquals"
+                              },
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "measured.space_uncovered_boundary",
+                                    "fields": {
+                                      "elements": "@boundary_elements",
+                                      "segment": "@uncovered_segment_length_metres"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.literal",
+                                    "fields": {
+                                      "value": {
+                                        "type": "number",
+                                        "value": 0.0
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.aggregate",
+                      "label": "no item fails",
+                      "fields": {
+                        "function": "none"
+                      },
+                      "inputs": {
+                        "over": {
+                          "block": {
+                            "type": "members.space_overlaps",
+                            "fields": {
+                              "elements": "@intersection_elements",
+                              "tolerance": "@tolerance_metres"
+                            }
+                          }
+                        },
+                        "value": {
+                          "block": {
+                            "type": "expression.not",
+                            "inputs": {
+                              "operand": {
+                                "block": {
+                                  "type": "expression.and",
+                                  "inputs": {
+                                    "operands": {
+                                      "blocks": [
+                                        {
+                                          "type": "expression.literal",
+                                          "fields": {
+                                            "value": {
+                                              "type": "boolean",
+                                              "value": true
+                                            }
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.and",
+                      "inputs": {
+                        "operands": {
+                          "blocks": [
+                            {
+                              "type": "expression.compare",
+                              "label": "at least the lower bound",
+                              "fields": {
+                                "operator": "greaterThanOrEquals"
+                              },
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "measured.space_cap",
+                                    "fields": {
+                                      "cap": "top",
+                                      "check": "@check_top_cap",
+                                      "elements": "@top_cap_elements"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.literal",
+                                    "fields": {
+                                      "value": {
+                                        "type": "number",
+                                        "value": 0.98
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.and",
+                      "inputs": {
+                        "operands": {
+                          "blocks": [
+                            {
+                              "type": "expression.compare",
+                              "label": "at least the lower bound",
+                              "fields": {
+                                "operator": "greaterThanOrEquals"
+                              },
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "measured.space_cap",
+                                    "fields": {
+                                      "cap": "bottom",
+                                      "check": "@check_bottom_cap",
+                                      "elements": "@bottom_cap_elements"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.literal",
+                                    "fields": {
+                                      "value": {
+                                        "type": "number",
+                                        "value": 0.98
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.isDefined",
+                      "label": "read",
+                      "inputs": {
+                        "operand": {
+                          "block": {
+                            "type": "expression.literal",
+                            "fields": {
+                              "value": {
+                                "type": "number",
+                                "value": 0.0
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.stair-geometry",
@@ -77822,6 +78923,437 @@
       "available": true
     },
     {
+      "name": "space_cap",
+      "parameters": [
+        {
+          "key": "cap",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "top",
+              "bottom"
+            ]
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The cap: `top` or `bottom`."
+            },
+            {
+              "language": "de",
+              "text": "Der Abschluss: `top` oder `bottom`."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "check",
+          "kind": {
+            "type": "truth"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the cap is checked at all; stated absent where not."
+            },
+            {
+              "language": "de",
+              "text": "Ob der Abschluss überhaupt geprüft wird; sonst als fehlend angegeben."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "elements",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The elements: their source kinds or `@` a selector parameter of the rule, whose undecided objects leave the value not evaluated; without it, the service's own."
+            },
+            {
+              "language": "de",
+              "text": "Die Bauteile: ihre Quellarten oder mit `@` ein Selektorparameter der Regel, dessen unentschiedene Objekte den Wert nicht auswerten lassen; ohne Angabe die des Dienstes."
+            }
+          ],
+          "references": "selector"
+        }
+      ],
+      "services": [
+        "space"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the space service cannot measure this aspect of the space",
+        "the selection leaves elements undecided"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Covered cap share"
+        },
+        {
+          "language": "de",
+          "text": "Bedeckter Abschlussanteil"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The share of a space's top or bottom cap the elements cover, as `space-validation` measures it, citing the elements covering it; stated absent where the cap is not checked, the selection names no element or no element of the model could form it."
+        },
+        {
+          "language": "de",
+          "text": "Der Anteil des oberen oder unteren Abschlusses eines Raums, den die Bauteile bedecken, wie `space-validation` ihn misst, mit den bedeckenden Bauteilen; als fehlend angegeben, wo der Abschluss nicht geprüft wird, die Auswahl kein Bauteil nennt oder kein Bauteil des Modells ihn bilden kann."
+        }
+      ],
+      "unit": "1",
+      "available": true
+    },
+    {
+      "name": "space_duplicates",
+      "parameters": [
+        {
+          "key": "space",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The space, `@anchor` where a template reads it with the spaces it cites; the object itself without it."
+            },
+            {
+              "language": "de",
+              "text": "Der Raum, `@anchor`, wo eine Vorlage ihn mit den genannten Räumen liest; ohne Angabe das Objekt selbst."
+            }
+          ],
+          "references": "selector"
+        }
+      ],
+      "services": [
+        "space"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the space service cannot measure this aspect of the space"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Duplicate spaces"
+        },
+        {
+          "language": "de",
+          "text": "Doppelte Räume"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "How many other spaces have the same body, as `space-validation` measures it, citing them."
+        },
+        {
+          "language": "de",
+          "text": "Wie viele andere Räume denselben Körper haben, wie `space-validation` es misst, mit diesen Räumen."
+        }
+      ],
+      "unit": "1",
+      "available": true
+    },
+    {
+      "name": "space_height",
+      "parameters": [],
+      "dimension": "length",
+      "services": [
+        "space"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the space service cannot measure this aspect of the space"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Space clear height"
+        },
+        {
+          "language": "de",
+          "text": "Lichte Raumhöhe"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "A space's clear height, as `space-validation` measures it."
+        },
+        {
+          "language": "de",
+          "text": "Die lichte Höhe eines Raums, wie `space-validation` sie misst."
+        }
+      ],
+      "unit": "m",
+      "available": true
+    },
+    {
+      "name": "space_intersections",
+      "parameters": [
+        {
+          "key": "elements",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The elements: their source kinds or `@` a selector parameter of the rule, whose undecided objects leave the value not evaluated; without it, the service's own."
+            },
+            {
+              "language": "de",
+              "text": "Die Bauteile: ihre Quellarten oder mit `@` ein Selektorparameter der Regel, dessen unentschiedene Objekte den Wert nicht auswerten lassen; ohne Angabe die des Dienstes."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "tolerance",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "A partial overlap no thicker than this is contact, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Eine teilweise Überlappung, die nicht dicker ist, ist Berührung, in Metern."
+            }
+          ],
+          "references": "length"
+        }
+      ],
+      "services": [
+        "space"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the space service cannot measure this aspect of the space",
+        "the selection leaves elements undecided"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Intersecting bodies"
+        },
+        {
+          "language": "de",
+          "text": "Durchdringende Körper"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "How many bodies a space contains, is contained by or intersects, as `space-validation` counts them (`space_overlaps` lists them); stated absent where the selection names no element."
+        },
+        {
+          "language": "de",
+          "text": "Wie viele Körper ein Raum enthält, ihn enthalten oder ihn durchdringen, wie `space-validation` sie zählt (`space_overlaps` listet sie); als fehlend angegeben, wo die Auswahl kein Bauteil nennt."
+        }
+      ],
+      "unit": "1",
+      "available": true
+    },
+    {
+      "name": "space_supports",
+      "parameters": [
+        {
+          "key": "top",
+          "kind": {
+            "type": "truth"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the top cap is checked."
+            },
+            {
+              "language": "de",
+              "text": "Ob der obere Abschluss geprüft wird."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "bottom",
+          "kind": {
+            "type": "truth"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the bottom cap is checked."
+            },
+            {
+              "language": "de",
+              "text": "Ob der untere Abschluss geprüft wird."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "top_elements",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The elements forming the top cap; the model's slabs and roofs without it."
+            },
+            {
+              "language": "de",
+              "text": "Die Bauteile des oberen Abschlusses; ohne Angabe die Platten und Dächer des Modells."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "bottom_elements",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The elements forming the bottom cap; the model's slabs without it."
+            },
+            {
+              "language": "de",
+              "text": "Die Bauteile des unteren Abschlusses; ohne Angabe die Platten des Modells."
+            }
+          ],
+          "references": "selector"
+        }
+      ],
+      "services": [
+        "space"
+      ],
+      "exactness": "measured",
+      "subject": "project",
+      "notEvaluated": [
+        "the space service cannot measure this aspect of the space"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Cap supports"
+        },
+        {
+          "language": "de",
+          "text": "Abschlussbauteile"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "How many slabs the model has to form a cap, asked of the space service only where a checked cap names no elements of its own, as `space-validation` asks it: zero otherwise."
+        },
+        {
+          "language": "de",
+          "text": "Wie viele Platten das Modell für einen Abschluss hat, beim Raumdienst nur erfragt, wo ein geprüfter Abschluss keine eigenen Bauteile nennt, wie `space-validation` es fragt: sonst null."
+        }
+      ],
+      "unit": "1",
+      "available": true
+    },
+    {
+      "name": "space_uncovered_boundary",
+      "parameters": [
+        {
+          "key": "segment",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "Only uncovered runs at least this long count, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Nur unbedeckte Abschnitte mindestens dieser Länge zählen, in Metern."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "elements",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The elements: their source kinds or `@` a selector parameter of the rule, whose undecided objects leave the value not evaluated; without it, the service's own."
+            },
+            {
+              "language": "de",
+              "text": "Die Bauteile: ihre Quellarten oder mit `@` ein Selektorparameter der Regel, dessen unentschiedene Objekte den Wert nicht auswerten lassen; ohne Angabe die des Dienstes."
+            }
+          ],
+          "references": "selector"
+        }
+      ],
+      "dimension": "length",
+      "services": [
+        "space"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the space service cannot measure this aspect of the space",
+        "the selection leaves elements undecided"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Uncovered space boundary"
+        },
+        {
+          "language": "de",
+          "text": "Unbedeckter Raumrand"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The summed length of a space's boundary runs no element covers, each at least `segment` long, as `space-validation` measures it, citing the elements along them; stated absent where the selection names no element."
+        },
+        {
+          "language": "de",
+          "text": "Die summierte Länge der Abschnitte des Raumrands, die kein Bauteil bedeckt, jeder mindestens `segment` lang, wie `space-validation` sie misst, mit den Bauteilen daran; als fehlend angegeben, wo die Auswahl kein Bauteil nennt."
+        }
+      ],
+      "unit": "m",
+      "available": true
+    },
+    {
       "name": "stack_distance",
       "parameters": [
         {
@@ -97912,6 +99444,236 @@
       "available": true
     },
     {
+      "name": "space_overlaps",
+      "parameters": [
+        {
+          "key": "elements",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The elements: their source kinds or `@` a selector parameter of the rule, whose undecided objects leave the value not evaluated; without it, the service's own."
+            },
+            {
+              "language": "de",
+              "text": "Die Bauteile: ihre Quellarten oder mit `@` ein Selektorparameter der Regel, dessen unentschiedene Objekte den Wert nicht auswerten lassen; ohne Angabe die des Dienstes."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "tolerance",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "A partial overlap no thicker than this is contact, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Eine teilweise Überlappung, die nicht dicker ist, ist Berührung, in Metern."
+            }
+          ],
+          "references": "length"
+        }
+      ],
+      "services": [
+        "space"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the space service cannot measure this aspect of the space",
+        "the selection leaves elements undecided"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Intersecting bodies"
+        },
+        {
+          "language": "de",
+          "text": "Durchdringende Körper"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "Each body a space contains, is contained by or intersects (a partial overlap thicker than `tolerance`), as `space-validation` judges them."
+        },
+        {
+          "language": "de",
+          "text": "Jeder Körper, den ein Raum enthält, der ihn enthält oder ihn durchdringt (eine teilweise Überlappung dicker als `tolerance`), wie `space-validation` sie beurteilt."
+        }
+      ],
+      "fields": [
+        {
+          "name": "inside",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Inside"
+            },
+            {
+              "language": "de",
+              "text": "Innerhalb"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the space lies inside the body."
+            },
+            {
+              "language": "de",
+              "text": "Ob der Raum im Körper liegt."
+            }
+          ]
+        },
+        {
+          "name": "contains",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Contains"
+            },
+            {
+              "language": "de",
+              "text": "Enthält"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the space contains the body."
+            },
+            {
+              "language": "de",
+              "text": "Ob der Raum den Körper enthält."
+            }
+          ]
+        },
+        {
+          "name": "space",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Another space"
+            },
+            {
+              "language": "de",
+              "text": "Anderer Raum"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the body partly overlapping it is another space."
+            },
+            {
+              "language": "de",
+              "text": "Ob der teilweise überlappende Körper ein anderer Raum ist."
+            }
+          ]
+        },
+        {
+          "name": "partial",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Partial"
+            },
+            {
+              "language": "de",
+              "text": "Teilweise"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the body partly overlaps it."
+            },
+            {
+              "language": "de",
+              "text": "Ob der Körper ihn teilweise überlappt."
+            }
+          ]
+        },
+        {
+          "name": "area",
+          "kind": {
+            "type": "number",
+            "dimension": "area"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Overlap area"
+            },
+            {
+              "language": "de",
+              "text": "Überlappungsfläche"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The area they overlap over."
+            },
+            {
+              "language": "de",
+              "text": "Die Fläche, über die sie sich überlappen."
+            }
+          ]
+        },
+        {
+          "name": "other",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Body"
+            },
+            {
+              "language": "de",
+              "text": "Körper"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The body it overlaps."
+            },
+            {
+              "language": "de",
+              "text": "Der überlappte Körper."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
       "name": "stair_clear_widths",
       "parameters": [
         {
@@ -99522,6 +101284,287 @@
             {
               "language": "de",
               "text": "Ob das Ende auf einem Podest zwischen zwei Läufen der Treppe liegt."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
+      "name": "unallocated_regions",
+      "parameters": [],
+      "services": [
+        "space"
+      ],
+      "exactness": "measured",
+      "subject": "project",
+      "notEvaluated": [
+        "the space service cannot measure this aspect of the space"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Unallocated floor"
+        },
+        {
+          "language": "de",
+          "text": "Nicht zugeordnete Fläche"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "Each connected region of storey floor that belongs to no space, as `space-validation` judges them, of the project."
+        },
+        {
+          "language": "de",
+          "text": "Jede zusammenhängende Geschossfläche, die keinem Raum gehört, wie `space-validation` sie beurteilt, im Projekt."
+        }
+      ],
+      "fields": [
+        {
+          "name": "storey",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Storey"
+            },
+            {
+              "language": "de",
+              "text": "Geschoss"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The storey it lies on."
+            },
+            {
+              "language": "de",
+              "text": "Das Geschoss, auf dem sie liegt."
+            }
+          ]
+        },
+        {
+          "name": "area",
+          "kind": {
+            "type": "number",
+            "dimension": "area"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Area"
+            },
+            {
+              "language": "de",
+              "text": "Fläche"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The region's area."
+            },
+            {
+              "language": "de",
+              "text": "Die Fläche des Bereichs."
+            }
+          ]
+        },
+        {
+          "name": "elements",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Bodies around"
+            },
+            {
+              "language": "de",
+              "text": "Umgebende Körper"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The bodies around the region."
+            },
+            {
+              "language": "de",
+              "text": "Die Körper um den Bereich."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
+      "name": "unallocated_storeys",
+      "parameters": [],
+      "services": [
+        "space"
+      ],
+      "exactness": "measured",
+      "subject": "project",
+      "notEvaluated": [
+        "the space service cannot measure this aspect of the space"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Unallocated storey floor"
+        },
+        {
+          "language": "de",
+          "text": "Nicht zugeordnete Geschossfläche"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "Each storey with floor belonging to no space: its regions' summed area and share of its gross floor area, as `space-validation` judges them."
+        },
+        {
+          "language": "de",
+          "text": "Jedes Geschoss mit Fläche, die keinem Raum gehört: die summierte Fläche seiner Bereiche und ihr Anteil an seiner Bruttogeschossfläche, wie `space-validation` sie beurteilt."
+        }
+      ],
+      "fields": [
+        {
+          "name": "storey",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Storey"
+            },
+            {
+              "language": "de",
+              "text": "Geschoss"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The storey."
+            },
+            {
+              "language": "de",
+              "text": "Das Geschoss."
+            }
+          ]
+        },
+        {
+          "name": "share",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Unallocated share"
+            },
+            {
+              "language": "de",
+              "text": "Nicht zugeordneter Anteil"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The regions' summed area over the gross floor area; `null` where the service states none."
+            },
+            {
+              "language": "de",
+              "text": "Die summierte Fläche der Bereiche über der Bruttogeschossfläche; `null`, wo der Dienst keine angibt."
+            }
+          ]
+        },
+        {
+          "name": "area",
+          "kind": {
+            "type": "number",
+            "dimension": "area"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Unallocated area"
+            },
+            {
+              "language": "de",
+              "text": "Nicht zugeordnete Fläche"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The regions' summed area, its lower end."
+            },
+            {
+              "language": "de",
+              "text": "Die summierte Fläche der Bereiche, ihr unteres Ende."
+            }
+          ]
+        },
+        {
+          "name": "gross",
+          "kind": {
+            "type": "number",
+            "dimension": "area"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Gross floor area"
+            },
+            {
+              "language": "de",
+              "text": "Bruttogeschossfläche"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The storey's gross floor area."
+            },
+            {
+              "language": "de",
+              "text": "Die Bruttogeschossfläche des Geschosses."
+            }
+          ]
+        },
+        {
+          "name": "elements",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Bodies around"
+            },
+            {
+              "language": "de",
+              "text": "Umgebende Körper"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The bodies around its regions."
+            },
+            {
+              "language": "de",
+              "text": "Die Körper um seine Bereiche."
             }
           ]
         }

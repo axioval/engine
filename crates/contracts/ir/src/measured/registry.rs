@@ -324,8 +324,38 @@ const VERTICAL_DIRECTION: MeasuredParameter = MeasuredParameter {
 
 const NO_DISTANCE: &str = "a counterpart's distance could not be read or straddles";
 
-const SPACE: &[&str] = &["space"];
-const SPACE_UNMEASURED: &str = "the space service cannot measure this aspect of the space";
+pub(super) const SPACE: &[&str] = &["space"];
+pub(super) const SPACE_UNMEASURED: &str =
+    "the space service cannot measure this aspect of the space";
+
+/// The elements a space-validation aspect is measured against.
+pub(super) const SPACE_SELECTED: MeasuredParameter = MeasuredParameter {
+    key: "elements",
+    kind: MeasuredParameterKind::Objects,
+    required: false,
+    default: None,
+    help: &en_de(
+        "The elements: their source kinds or `@` a selector parameter of the rule, whose \
+         undecided objects leave the value not evaluated; without it, the service's own.",
+        "Die Bauteile: ihre Quellarten oder mit `@` ein Selektorparameter der Regel, dessen \
+         unentschiedene Objekte den Wert nicht auswerten lassen; ohne Angabe die des Dienstes.",
+    ),
+};
+
+/// How thick an overlap of a space must be to intersect.
+pub(super) const SPACE_TOLERANCE: MeasuredParameter = MeasuredParameter {
+    key: "tolerance",
+    kind: MeasuredParameterKind::Length { minimum: 0.0 },
+    required: true,
+    default: None,
+    help: &en_de(
+        "A partial overlap no thicker than this is contact, in metres.",
+        "Eine teilweise Überlappung, die nicht dicker ist, ist Berührung, in Metern.",
+    ),
+};
+
+/// Why a space-validation value of selected elements is not evaluated.
+pub(super) const SPACE_UNDECIDED: &str = "the selection leaves elements undecided";
 
 const ELEMENTS: MeasuredParameter = MeasuredParameter {
     key: "elements",
@@ -5612,6 +5642,199 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              it is positive.",
             "Das Gefälle der Fläche in einer Grundrissrichtung als Winkel mit \
              Vorzeichen: steigend ist positiv.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "space_cap",
+        parameters: &[
+            MeasuredParameter {
+                key: "cap",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["top", "bottom"],
+                },
+                required: true,
+                default: None,
+                help: &en_de(
+                    "The cap: `top` or `bottom`.",
+                    "Der Abschluss: `top` oder `bottom`.",
+                ),
+            },
+            MeasuredParameter {
+                key: "check",
+                kind: MeasuredParameterKind::Truth,
+                required: true,
+                default: None,
+                help: &en_de(
+                    "Whether the cap is checked at all; stated absent where not.",
+                    "Ob der Abschluss überhaupt geprüft wird; sonst als fehlend angegeben.",
+                ),
+            },
+            SPACE_SELECTED,
+        ],
+        dimension: None,
+        services: SPACE,
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[SPACE_UNMEASURED, SPACE_UNDECIDED],
+        label: &en_de("Covered cap share", "Bedeckter Abschlussanteil"),
+        help: &en_de(
+            "The share of a space's top or bottom cap the elements cover, as \
+             `space-validation` measures it, citing the elements covering it; stated absent \
+             where the cap is not checked, the selection names no element or no element of \
+             the model could form it.",
+            "Der Anteil des oberen oder unteren Abschlusses eines Raums, den die Bauteile \
+             bedecken, wie `space-validation` ihn misst, mit den bedeckenden Bauteilen; als \
+             fehlend angegeben, wo der Abschluss nicht geprüft wird, die Auswahl kein Bauteil \
+             nennt oder kein Bauteil des Modells ihn bilden kann.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "space_duplicates",
+        parameters: &[MeasuredParameter {
+            key: "space",
+            kind: MeasuredParameterKind::Objects,
+            required: false,
+            default: None,
+            help: &en_de(
+                "The space, `@anchor` where a template reads it with the spaces it cites; the \
+                 object itself without it.",
+                "Der Raum, `@anchor`, wo eine Vorlage ihn mit den genannten Räumen liest; ohne \
+                 Angabe das Objekt selbst.",
+            ),
+        }],
+        dimension: None,
+        services: SPACE,
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[SPACE_UNMEASURED],
+        label: &en_de("Duplicate spaces", "Doppelte Räume"),
+        help: &en_de(
+            "How many other spaces have the same body, as `space-validation` measures it, \
+             citing them.",
+            "Wie viele andere Räume denselben Körper haben, wie `space-validation` es misst, \
+             mit diesen Räumen.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "space_height",
+        parameters: &[],
+        dimension: Some(QuantityDimension::Length),
+        services: SPACE,
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[SPACE_UNMEASURED],
+        label: &en_de("Space clear height", "Lichte Raumhöhe"),
+        help: &en_de(
+            "A space's clear height, as `space-validation` measures it.",
+            "Die lichte Höhe eines Raums, wie `space-validation` sie misst.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "space_intersections",
+        parameters: &[SPACE_SELECTED, SPACE_TOLERANCE],
+        dimension: None,
+        services: SPACE,
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[SPACE_UNMEASURED, SPACE_UNDECIDED],
+        label: &en_de("Intersecting bodies", "Durchdringende Körper"),
+        help: &en_de(
+            "How many bodies a space contains, is contained by or intersects, as \
+             `space-validation` counts them (`space_overlaps` lists them); stated absent \
+             where the selection names no element.",
+            "Wie viele Körper ein Raum enthält, ihn enthalten oder ihn durchdringen, wie \
+             `space-validation` sie zählt (`space_overlaps` listet sie); als fehlend \
+             angegeben, wo die Auswahl kein Bauteil nennt.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "space_supports",
+        parameters: &[
+            MeasuredParameter {
+                key: "top",
+                kind: MeasuredParameterKind::Truth,
+                required: true,
+                default: None,
+                help: &en_de(
+                    "Whether the top cap is checked.",
+                    "Ob der obere Abschluss geprüft wird.",
+                ),
+            },
+            MeasuredParameter {
+                key: "bottom",
+                kind: MeasuredParameterKind::Truth,
+                required: true,
+                default: None,
+                help: &en_de(
+                    "Whether the bottom cap is checked.",
+                    "Ob der untere Abschluss geprüft wird.",
+                ),
+            },
+            MeasuredParameter {
+                key: "top_elements",
+                kind: MeasuredParameterKind::Objects,
+                required: false,
+                default: None,
+                help: &en_de(
+                    "The elements forming the top cap; the model's slabs and roofs without it.",
+                    "Die Bauteile des oberen Abschlusses; ohne Angabe die Platten und Dächer \
+                     des Modells.",
+                ),
+            },
+            MeasuredParameter {
+                key: "bottom_elements",
+                kind: MeasuredParameterKind::Objects,
+                required: false,
+                default: None,
+                help: &en_de(
+                    "The elements forming the bottom cap; the model's slabs without it.",
+                    "Die Bauteile des unteren Abschlusses; ohne Angabe die Platten des Modells.",
+                ),
+            },
+        ],
+        dimension: None,
+        services: SPACE,
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Project,
+        not_evaluated: &[SPACE_UNMEASURED],
+        label: &en_de("Cap supports", "Abschlussbauteile"),
+        help: &en_de(
+            "How many slabs the model has to form a cap, asked of the space service only \
+             where a checked cap names no elements of its own, as `space-validation` asks it: \
+             zero otherwise.",
+            "Wie viele Platten das Modell für einen Abschluss hat, beim Raumdienst nur \
+             erfragt, wo ein geprüfter Abschluss keine eigenen Bauteile nennt, wie \
+             `space-validation` es fragt: sonst null.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "space_uncovered_boundary",
+        parameters: &[
+            MeasuredParameter {
+                key: "segment",
+                kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                required: true,
+                default: None,
+                help: &en_de(
+                    "Only uncovered runs at least this long count, in metres.",
+                    "Nur unbedeckte Abschnitte mindestens dieser Länge zählen, in Metern.",
+                ),
+            },
+            SPACE_SELECTED,
+        ],
+        dimension: Some(QuantityDimension::Length),
+        services: SPACE,
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[SPACE_UNMEASURED, SPACE_UNDECIDED],
+        label: &en_de("Uncovered space boundary", "Unbedeckter Raumrand"),
+        help: &en_de(
+            "The summed length of a space's boundary runs no element covers, each at least \
+             `segment` long, as `space-validation` measures it, citing the elements along \
+             them; stated absent where the selection names no element.",
+            "Die summierte Länge der Abschnitte des Raumrands, die kein Bauteil bedeckt, \
+             jeder mindestens `segment` lang, wie `space-validation` sie misst, mit den \
+             Bauteilen daran; als fehlend angegeben, wo die Auswahl kein Bauteil nennt.",
         ),
     },
     MeasuredDescriptor {

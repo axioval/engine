@@ -743,43 +743,43 @@
         "bottom"
       ]
     },
-    "space_validation::cap_plans::measure_support_counts": {
+    "space_validation::reference::cap_plans::measure_support_counts": {
       "count": 1,
       "providedBy": [
         "support_count"
       ]
     },
-    "space_validation::check_boundary::measure_boundary_gaps": {
+    "space_validation::reference::check_boundary::measure_boundary_gaps": {
       "count": 1,
       "providedBy": [
         "boundary_gap"
       ]
     },
-    "space_validation::check_cap::measure_cap_coverage": {
+    "space_validation::reference::check_cap::measure_cap_coverage": {
       "count": 1,
       "providedBy": [
         "cap_coverage"
       ]
     },
-    "space_validation::check_duplicates::measure_duplicates": {
+    "space_validation::reference::check_duplicates::measure_duplicates": {
       "count": 1,
       "providedBy": [
         "duplicate_count"
       ]
     },
-    "space_validation::check_height::measure_clear_height": {
+    "space_validation::reference::check_height::measure_clear_height": {
       "count": 1,
       "providedBy": [
         "clear_height"
       ]
     },
-    "space_validation::check_overlaps::measure_overlaps": {
+    "space_validation::reference::check_overlaps::measure_overlaps": {
       "count": 1,
       "providedBy": [
         "intersection_count"
       ]
     },
-    "space_validation::check_residuals::measure_unallocated_regions": {
+    "space_validation::reference::check_residuals::measure_unallocated_regions": {
       "count": 1,
       "providedBy": [
         "largest_unallocated_region",

@@ -19,6 +19,7 @@ use axioval_engine::{
 };
 use axioval_ir::contract::{ParameterValue, Selector, Severity as RuleSeverity};
 use axioval_ir::{Evidence, Object, ObjectId, Project, RuleId, Severity, SourceId};
+use axioval_rules::reference::SpaceValidation as Reference;
 use axioval_rules::{SpaceCategory, SpaceValidation};
 
 fn source() -> SourceId {
@@ -101,6 +102,9 @@ struct Stub {
     overlap_requests: Mutex<Vec<OverlapRequest>>,
     /// A service measuring tessellations: its evidence is not exact.
     approximate: bool,
+    /// Every space whose duplicates, then clear height, were asked for.
+    duplicate_requests: Mutex<Vec<ObjectId>>,
+    height_requests: Mutex<Vec<ObjectId>>,
 }
 
 fn evidence() -> Evidence {
@@ -108,10 +112,12 @@ fn evidence() -> Evidence {
 }
 
 impl SpaceService for Stub {
-    fn measure_duplicates(&self, _space: &ObjectId) -> Result<Vec<ObjectId>, SpaceError> {
+    fn measure_duplicates(&self, space: &ObjectId) -> Result<Vec<ObjectId>, SpaceError> {
+        self.duplicate_requests.lock().unwrap().push(space.clone());
         self.duplicates.clone().unwrap_or(Ok(Vec::new()))
     }
     fn measure_clear_height(&self, space: &ObjectId) -> Result<ClearHeightEvidence, SpaceError> {
+        self.height_requests.lock().unwrap().push(space.clone());
         let metres = self.height.clone().unwrap_or(Ok(3.0))?;
         ClearHeightEvidence::try_new(space.clone(), metres, evidence())
     }
@@ -178,6 +184,63 @@ impl SpaceService for Stub {
     }
 }
 
+/// The template's evaluation of `rule`, its measured values read as a run
+/// reads them, held to the replaced implementation's whole contract on the
+/// same services, graded deviations included.
+fn held(
+    project: &Project,
+    services: &ServiceRegistry,
+    rule: &CompiledRule,
+) -> axioval_engine::CapabilityEvaluation {
+    use axioval_rules::parity::{Observations, Parity};
+    let reference = Reference.evaluate(&RuleContext { project, services }, rule);
+    let registry =
+        axioval_rules::register_builtins(axioval_engine::CapabilityRegistry::new()).unwrap();
+    // What the measured values read: the space service.
+    let mut inner = services.clone();
+    registry.install_measured(&mut inner, project);
+    let values = axioval_engine::MeasuredValues::of(&inner, project);
+    // What the template reads: the measured set answered, as a run does.
+    // One run's providers and memo, so a request is made once.
+    let mut measured = inner.clone();
+    measured
+        .register(PropertyResolutionServiceHandle::new(Arc::new(
+            MeasuredOnly {
+                services: inner,
+                project: project.clone(),
+            },
+        )))
+        .unwrap();
+    measured.register(values).unwrap();
+    let template = SpaceValidation.evaluate(
+        &RuleContext {
+            project,
+            services: &measured,
+        },
+        rule,
+    );
+    let parity = Parity::contract().compare(
+        ("space-validation", &Observations::of_evaluation(&reference)),
+        ("template", &Observations::of_evaluation(&template)),
+    );
+    assert!(parity.holds(), "{}", parity.diff());
+    template
+}
+
+/// Of the asks the replaced implementation and then the template made,
+/// those the template made, asserting it asked exactly what the
+/// capability asked.
+fn halved<T: PartialEq + std::fmt::Debug>(asked: &mut Vec<T>) {
+    let half = asked.len() / 2;
+    assert_eq!(asked.len() % 2, 0, "{asked:?}");
+    assert_eq!(
+        asked[..half],
+        asked[half..],
+        "the template asks what the capability asked"
+    );
+    asked.truncate(half);
+}
+
 fn evaluate(stub: Stub, rule: &CompiledRule) -> axioval_engine::CapabilityEvaluation {
     evaluate_shared(&Arc::new(stub), rule)
 }
@@ -195,13 +258,19 @@ fn evaluate_shared(stub: &Arc<Stub>, rule: &CompiledRule) -> axioval_engine::Cap
     services
         .register(SpaceServiceHandle::new(stub.clone()))
         .unwrap();
-    SpaceValidation.evaluate(
-        &RuleContext {
-            project: &project,
-            services: &services,
-        },
-        rule,
-    )
+    let evaluation = held(&project, &services, rule);
+    // The replaced implementation asked first, the template after it: the
+    // template asks exactly what it asked, and the tests read its asks.
+    halved(&mut stub.cap_requests.lock().unwrap());
+    halved(&mut stub.boundary_requests.lock().unwrap());
+    halved(&mut stub.overlap_requests.lock().unwrap());
+    halved(&mut stub.duplicate_requests.lock().unwrap());
+    halved(&mut stub.height_requests.lock().unwrap());
+    let mut calls = stub.support_calls.lock().unwrap();
+    assert_eq!(*calls % 2, 0);
+    *calls /= 2;
+    drop(calls);
+    evaluation
 }
 
 #[test]
@@ -518,13 +587,7 @@ fn an_unmeasured_refusal_names_what_blocked_it() {
 fn missing_service_is_neither_a_pass_nor_a_violation() {
     let project = Project::new(vec![Object::new(oid("space-1"), "space")]).unwrap();
     let services = ServiceRegistry::new();
-    let outcome = SpaceValidation.evaluate(
-        &RuleContext {
-            project: &project,
-            services: &services,
-        },
-        &rule(),
-    );
+    let outcome = held(&project, &services, &rule());
     assert!(outcome.findings().is_empty());
     assert_eq!(
         outcome.not_evaluated_outcomes()[0].reason(),
@@ -1519,13 +1582,7 @@ fn the_aspects_as_expression_rules_hold_to_the_parity_harness() {
         services
             .register(SpaceServiceHandle::new(stub.clone()))
             .unwrap();
-        let expected = SpaceValidation.evaluate(
-            &RuleContext {
-                project: &project,
-                services: &services,
-            },
-            &declared,
-        );
+        let expected = held(&project, &services, &declared);
         registry.install_measured(&mut services, &project);
         // The expression reads the measured set as a run answers it.
         services
@@ -1617,5 +1674,274 @@ impl PropertyResolutionService for MeasuredOnly {
             request.object_id(),
             request.property(),
         )
+    }
+}
+
+/// The aspects measured by a service measuring tessellations are never
+/// exact, whichever value reads them, a point included; measured exactly,
+/// they are.
+#[test]
+fn space_aspects_measured_approximately_are_inexact() {
+    let project = Project::new(vec![Object::new(oid("space-1"), "space")]).unwrap();
+    for approximate in [false, true] {
+        let mut services = ServiceRegistry::new();
+        services
+            .register(SpaceServiceHandle::new(Arc::new(Stub {
+                approximate,
+                ..Stub::default()
+            })))
+            .unwrap();
+        axioval_rules::register_builtins(axioval_engine::CapabilityRegistry::new())
+            .unwrap()
+            .install_measured(&mut services, &project);
+        for name in ["space_height", "space_duplicates"] {
+            let Ok(PropertyResolution::Present(resolved)) =
+                axioval_engine::measured_value(&services, &project, &oid("space-1"), name)
+            else {
+                panic!("{name} is measured");
+            };
+            assert_eq!(
+                resolved.property().evidence.as_ref().unwrap().exact,
+                !approximate,
+                "{name}"
+            );
+        }
+    }
+}
+
+mod generated {
+    use super::*;
+    use proptest::collection::vec;
+    use proptest::prelude::*;
+
+    fn error() -> impl Strategy<Value = SpaceError> {
+        prop_oneof![
+            Just(SpaceError::Unavailable),
+            Just(SpaceError::InexactEvidence),
+        ]
+    }
+
+    fn answer<T: std::fmt::Debug + Clone>(
+        value: impl Strategy<Value = T>,
+    ) -> impl Strategy<Value = Answer<T>> {
+        prop_oneof![
+            3 => value.prop_map(|value| Some(Ok(value))),
+            1 => error().prop_map(|error| Some(Err(error))),
+            1 => Just(None),
+        ]
+    }
+
+    fn containment() -> impl Strategy<Value = Containment> {
+        prop_oneof![
+            Just(Containment::Partial),
+            Just(Containment::SubjectInsideOther),
+            Just(Containment::OtherInsideSubject),
+        ]
+    }
+
+    #[derive(Debug, Clone)]
+    struct Raw {
+        duplicates: Answer<Vec<ObjectId>>,
+        height: Answer<f64>,
+        gaps: Answer<GapRows>,
+        overlaps: Answer<OverlapRows>,
+        cap: Answer<(f64, f64)>,
+        residuals: Answer<ResidualRows>,
+        floor: Option<f64>,
+        support: Answer<(usize, usize)>,
+    }
+
+    fn stub() -> impl Strategy<Value = Raw> {
+        (
+            answer(vec(0u8..3, 0..3).prop_map(|others| {
+                others
+                    .into_iter()
+                    .map(|other| oid(&format!("space-{}", other + 2)))
+                    .collect()
+            })),
+            answer((0u32..40).prop_map(|height| f64::from(height) / 10.0)),
+            answer(
+                vec(
+                    (
+                        (0u32..30).prop_map(|length| f64::from(length) / 10.0),
+                        vec(0u8..3, 0..2),
+                    ),
+                    0..3,
+                )
+                .prop_map(|gaps| {
+                    gaps.into_iter()
+                        .map(|(length, elements)| {
+                            (
+                                length,
+                                elements
+                                    .into_iter()
+                                    .map(|element| oid(&format!("wall-{element}")))
+                                    .collect(),
+                            )
+                        })
+                        .collect()
+                }),
+            ),
+            answer(
+                vec((any::<bool>(), 0u32..20, 0u32..20, containment()), 0..3).prop_map(
+                    |overlaps| {
+                        overlaps
+                            .into_iter()
+                            .map(|(space, area, height, containment)| {
+                                (
+                                    space,
+                                    f64::from(area) / 100.0,
+                                    f64::from(height) / 1000.0,
+                                    containment,
+                                )
+                            })
+                            .collect()
+                    },
+                ),
+            ),
+            answer((1u32..20, 0u32..20).prop_map(|(whole, covered)| {
+                let whole = f64::from(whole);
+                (whole, f64::from(covered).min(whole))
+            })),
+            answer(
+                vec((0u8..2, 0u32..40, vec(0u8..3, 0..2)), 0..4).prop_map(|regions| {
+                    regions
+                        .into_iter()
+                        .map(|(storey, area, elements)| {
+                            (
+                                oid(&format!("storey-{storey}")),
+                                f64::from(area) / 10.0,
+                                elements
+                                    .into_iter()
+                                    .map(|element| oid(&format!("wall-{element}")))
+                                    .collect(),
+                            )
+                        })
+                        .collect()
+                }),
+            ),
+            proptest::option::of((1u32..200).prop_map(|floor| f64::from(floor) / 2.0)),
+            answer((0usize..3, 0usize..2)),
+        )
+            .prop_map(
+                |(duplicates, height, gaps, overlaps, cap, residuals, floor, support)| Raw {
+                    duplicates,
+                    height,
+                    gaps,
+                    overlaps,
+                    cap,
+                    residuals,
+                    floor,
+                    support,
+                },
+            )
+    }
+
+    fn parameters() -> impl Strategy<Value = Vec<(&'static str, ParameterValue)>> {
+        (
+            (0u32..40, 0u32..20, 0u32..30),
+            (any::<bool>(), any::<bool>(), any::<bool>()),
+            (
+                proptest::option::of(0u32..20),
+                proptest::option::of(0u32..=100),
+            ),
+            (
+                proptest::option::of(0u8..3),
+                proptest::option::of(0u8..3),
+                proptest::option::of(0u8..3),
+                proptest::option::of(0u8..3),
+            ),
+        )
+            .prop_map(
+                |(
+                    (height, segment, allowance),
+                    (top, bottom, unallocated),
+                    (tolerance, share),
+                    (top_with, bottom_with, boundary_with, intersection_with),
+                )| {
+                    let number = |value: f64| ParameterValue::Number { value };
+                    let boolean = |value: bool| ParameterValue::Boolean { value };
+                    let mut parameters = vec![
+                        ("required_height_metres", number(f64::from(height) / 10.0)),
+                        (
+                            "uncovered_segment_length_metres",
+                            number(f64::from(segment) / 10.0),
+                        ),
+                        ("check_top_cap", boolean(top)),
+                        ("check_bottom_cap", boolean(bottom)),
+                        ("check_unallocated_area", boolean(unallocated)),
+                        (
+                            "maximum_unallocated_area_square_metres",
+                            number(f64::from(allowance) / 10.0),
+                        ),
+                    ];
+                    if let Some(tolerance) = tolerance {
+                        parameters
+                            .push(("tolerance_metres", number(f64::from(tolerance) / 1000.0)));
+                    }
+                    if let Some(share) = share {
+                        parameters.push((
+                            "maximum_unallocated_share",
+                            number(f64::from(share) / 100.0),
+                        ));
+                    }
+                    // Elements of the model, of none, or of what is absent.
+                    let kinds = ["covering", "door", "slab"];
+                    for (name, with) in [
+                        ("top_cap_elements", top_with),
+                        ("bottom_cap_elements", bottom_with),
+                        ("boundary_elements", boundary_with),
+                        ("intersection_elements", intersection_with),
+                    ] {
+                        if let Some(kind) = with {
+                            parameters.push((name, of_type(kinds[usize::from(kind)])));
+                        }
+                    }
+                    parameters
+                },
+            )
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(160))]
+
+        #[test]
+        fn generated_spaces_hold_parity(
+            raw in stub(),
+            parameters in parameters(),
+            spaces in 0usize..3,
+            severe in any::<bool>(),
+        ) {
+            let mut objects = vec![
+                Object::new(oid("ceiling"), "covering"),
+                Object::new(oid("slab"), "slab"),
+            ];
+            for space in 0..spaces {
+                objects.push(Object::new(oid(&format!("space-{}", space + 1)), "space"));
+            }
+            let project = Project::new(objects).unwrap();
+            let stub = Stub {
+                duplicates: raw.duplicates,
+                height: raw.height,
+                gaps: raw.gaps,
+                overlaps: raw.overlaps,
+                cap: raw.cap,
+                residuals: raw.residuals,
+                floor: raw.floor,
+                support: raw.support,
+                ..Stub::default()
+            };
+            let mut services = ServiceRegistry::new();
+            services
+                .register(SpaceServiceHandle::new(Arc::new(stub)))
+                .unwrap();
+            // Each finding at the severity the capability gave it,
+            // whatever the rule's.
+            let mut rule = rule_with(&parameters);
+            if severe {
+                rule.severity = RuleSeverity::Error;
+            }
+            held(&project, &services, &rule);
+        }
     }
 }

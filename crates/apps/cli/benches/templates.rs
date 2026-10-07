@@ -309,6 +309,11 @@ const PAIRS: &[Pair] = &[
         case: "clashes",
         reference: |registry| registry.replace(axioval::rules::reference::ClashMatrix),
     },
+    Pair {
+        capability: "axioval:capability.space-validation",
+        case: "spaces",
+        reference: |registry| registry.replace(axioval::rules::reference::SpaceValidation),
+    },
 ];
 
 /// Warm-up runs per side before measuring.

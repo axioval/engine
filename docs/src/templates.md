@@ -1874,6 +1874,43 @@ capability related them. An opening whose hosts cannot be told is open with
 the list's refusal. The declaration is the list's own argument check
 (`Check::Arguments`), in the capability's order and words.
 
+### `space-validation`
+
+| Form | When | Once | Checks | Project |
+| --- | --- | --- | --- | --- |
+| one | always | `space_supports;top=@check_top_cap;bottom=@check_bottom_cap;…`, required | `duplicates` (`space_duplicates;space=@anchor`) at most 0, error; `raised` (`space_height` less the negated `tolerance_metres`, 5 mm by default) at least `required_height_metres`, warning; `uncovered` (`space_uncovered_boundary;segment=@uncovered_segment_length_metres;elements=@boundary_elements`) at most 0, warning; each item of `space_overlaps;elements=@intersection_elements;tolerance=@tolerance_metres` (read after `space_intersections`) a finding, error; `top` and `bottom` (`space_cap;cap=…;check=@check_…_cap;elements=@…_cap_elements`) at least 0.98, error below 0.01, warning to 0.15, info above | with `check_unallocated_area`: each item of `unallocated_regions` at most `maximum_unallocated_area_square_metres`, graded; with `maximum_unallocated_share` too, each item of `unallocated_storeys` (`quiet`) at most it, graded; both warnings on the storey (`at: storey`) |
+
+The support counts are asked once per run, and only where a checked cap
+names no elements of its own (`space_supports`); a refusal leaves each
+selected space open, and nothing else, the storeys included, is judged.
+Each aspect of a space is its own check, so one the service refuses
+leaves only that check open, for the reason the space service's refusal
+gives (`SpaceError`: unavailable or unmeasured is incomplete evidence,
+inexact or incoherent invalid evidence). Elements a rule selects are
+bound into the values: a selection of nothing states the value absent and
+the check passes, one leaving objects undecided refuses it (`boundary
+elements could not be selected: …`). Findings read `duplicate_space:
+space body duplicated by {duplicates:least} other space(s)` (relating
+them), `insufficient_height: clear height {height:fixed3} below required
+{required_height_metres:fixed3}`, `uncovered_boundary: {uncovered:fixed3}
+m of space boundary is uncovered` (relating the elements along the runs),
+`contained_body: space is contained by another body`, `… contains another
+body`, `intersecting_space: space intersects another space over
+{area:fixed4} m2`, `intersecting_component: …` (each relating the body)
+and `uncovered_top_cap: top cap only {top:hundred1}% covered` (relating
+the covering elements), all `ungraded`. A region of floor reads
+`unallocated_area: a region of {area:fixed3} m2 of storey floor belongs to
+no space (allowed {maximum_unallocated_area_square_metres:fixed3} m2)`, a
+storey's share `unallocated_area: {share:hundred3}% of the storey's gross
+floor area ({area:fixed3} m2 of {gross:fixed3} m2) belongs to no space;
+required at most {maximum_unallocated_share:hundred}%`, open where the
+gross area is not measured or the share straddles the maximum; the
+regions refused leave the rule open once. The declaration is refused for
+each selected space with one message (`space-validation declaration is
+missing or not realisable`, `ifStated` for the optional parameters), and
+without the service each space is open (`space service is not
+registered`).
+
 ## Binding and running a rule
 
 The rules crate's `templates` module runs a template
@@ -2421,6 +2458,17 @@ climbable objects under random thresholds, curb measurement and role
 selections; and by the `horizontal-guard` rules of the `spaces` case,
 recorded before the switch (the public models' guard requests are refused,
 so they hold the rule's refusal). It is never forked.
+
+`space-validation` is held to `space_validation/reference.rs`
+(`axioval_rules::reference::SpaceValidation`) on every fixture of
+`tests/space_validation.rs` (`held`), the template asking the space
+service exactly what the capability asked and its graded deviations
+compared; by generated spaces, storeys and regions whose every aspect the
+service answers, refuses as unavailable or inexact, or leaves to its
+defaults, under random requirements, tolerances, caps, element selections
+of elements, of none or of what is absent, shares and rule severities;
+and by the `space-validation` rules of the `spaces` case, recorded before
+the switch. It is never forked.
 
 `space-boundary-coverage` is held to `space_boundary_coverage/reference.rs`
 (`axioval_rules::reference::SpaceBoundaryCoverage`) on every fixture of

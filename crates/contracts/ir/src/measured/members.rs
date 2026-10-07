@@ -10,7 +10,8 @@ use serde::Serialize;
 use super::registry::{
     ANGLE_TOLERANCE, COORDINATE_DIFFERENCES, COORDINATES, COORDINATES_UNREAD, EFFECT_SERVICES,
     EFFECT_UNMEASURED, EFFECTIVE, FACE, FACE_AXES, FACING, MEMBER_PATH, NO_FACE, NO_GEOMETRY,
-    OPENINGS_MINIMUM, PAIRED, SPACED_MEMBERS, TRAVERSAL, WELL_MEMBERS, en_de,
+    OPENINGS_MINIMUM, PAIRED, SPACE, SPACE_SELECTED, SPACE_TOLERANCE, SPACE_UNDECIDED,
+    SPACE_UNMEASURED, SPACED_MEMBERS, TRAVERSAL, WELL_MEMBERS, en_de,
 };
 use super::{
     FACE_PIECES, LocalizedText, MeasuredCall, MeasuredDescriptor, MeasuredError, MeasuredExactness,
@@ -4900,6 +4901,78 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             ),
         ],
     },
+    MemberDescriptor {
+        list: MeasuredDescriptor {
+            name: "space_overlaps",
+            parameters: &[SPACE_SELECTED, SPACE_TOLERANCE],
+            dimension: None,
+            services: SPACE,
+            exactness: MeasuredExactness::Measured,
+            subject: MeasuredSubject::Object,
+            not_evaluated: &[SPACE_UNMEASURED, SPACE_UNDECIDED],
+            label: &en_de("Intersecting bodies", "Durchdringende Körper"),
+            help: &en_de(
+                "Each body a space contains, is contained by or intersects (a partial \
+                 overlap thicker than `tolerance`), as `space-validation` judges them.",
+                "Jeder Körper, den ein Raum enthält, der ihn enthält oder ihn durchdringt \
+                 (eine teilweise Überlappung dicker als `tolerance`), wie \
+                 `space-validation` sie beurteilt.",
+            ),
+        },
+        fields: &[
+            field(
+                "inside",
+                TRUTH,
+                &en_de("Inside", "Innerhalb"),
+                &en_de(
+                    "Whether the space lies inside the body.",
+                    "Ob der Raum im Körper liegt.",
+                ),
+            ),
+            field(
+                "contains",
+                TRUTH,
+                &en_de("Contains", "Enthält"),
+                &en_de(
+                    "Whether the space contains the body.",
+                    "Ob der Raum den Körper enthält.",
+                ),
+            ),
+            field(
+                "space",
+                TRUTH,
+                &en_de("Another space", "Anderer Raum"),
+                &en_de(
+                    "Whether the body partly overlapping it is another space.",
+                    "Ob der teilweise überlappende Körper ein anderer Raum ist.",
+                ),
+            ),
+            field(
+                "partial",
+                TRUTH,
+                &en_de("Partial", "Teilweise"),
+                &en_de(
+                    "Whether the body partly overlaps it.",
+                    "Ob der Körper ihn teilweise überlappt.",
+                ),
+            ),
+            field(
+                "area",
+                AREA,
+                &en_de("Overlap area", "Überlappungsfläche"),
+                &en_de(
+                    "The area they overlap over.",
+                    "Die Fläche, über die sie sich überlappen.",
+                ),
+            ),
+            field(
+                "other",
+                MemberFieldKind::Objects,
+                &en_de("Body", "Körper"),
+                &en_de("The body it overlaps.", "Der überlappte Körper."),
+            ),
+        ],
+    },
     walking::STAIR_CLEAR_WIDTHS,
     walking::STAIR_CONTINUITY,
     walking::STAIRS,
@@ -5131,6 +5204,115 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
         ],
     },
     walking::TACTILE_STRIPS,
+    MemberDescriptor {
+        list: MeasuredDescriptor {
+            name: "unallocated_regions",
+            parameters: &[],
+            dimension: None,
+            services: SPACE,
+            exactness: MeasuredExactness::Measured,
+            subject: MeasuredSubject::Project,
+            not_evaluated: &[SPACE_UNMEASURED],
+            label: &en_de("Unallocated floor", "Nicht zugeordnete Fläche"),
+            help: &en_de(
+                "Each connected region of storey floor that belongs to no space, as \
+                 `space-validation` judges them, of the project.",
+                "Jede zusammenhängende Geschossfläche, die keinem Raum gehört, wie \
+                 `space-validation` sie beurteilt, im Projekt.",
+            ),
+        },
+        fields: &[
+            field(
+                "storey",
+                MemberFieldKind::Objects,
+                &en_de("Storey", "Geschoss"),
+                &en_de("The storey it lies on.", "Das Geschoss, auf dem sie liegt."),
+            ),
+            field(
+                "area",
+                AREA,
+                &en_de("Area", "Fläche"),
+                &en_de("The region's area.", "Die Fläche des Bereichs."),
+            ),
+            field(
+                "elements",
+                MemberFieldKind::Objects,
+                &en_de("Bodies around", "Umgebende Körper"),
+                &en_de(
+                    "The bodies around the region.",
+                    "Die Körper um den Bereich.",
+                ),
+            ),
+        ],
+    },
+    MemberDescriptor {
+        list: MeasuredDescriptor {
+            name: "unallocated_storeys",
+            parameters: &[],
+            dimension: None,
+            services: SPACE,
+            exactness: MeasuredExactness::Measured,
+            subject: MeasuredSubject::Project,
+            not_evaluated: &[SPACE_UNMEASURED],
+            label: &en_de(
+                "Unallocated storey floor",
+                "Nicht zugeordnete Geschossfläche",
+            ),
+            help: &en_de(
+                "Each storey with floor belonging to no space: its regions' summed area \
+                 and share of its gross floor area, as `space-validation` judges them.",
+                "Jedes Geschoss mit Fläche, die keinem Raum gehört: die summierte Fläche \
+                 seiner Bereiche und ihr Anteil an seiner Bruttogeschossfläche, wie \
+                 `space-validation` sie beurteilt.",
+            ),
+        },
+        fields: &[
+            field(
+                "storey",
+                MemberFieldKind::Objects,
+                &en_de("Storey", "Geschoss"),
+                &en_de("The storey.", "Das Geschoss."),
+            ),
+            field(
+                "share",
+                RATIO,
+                &en_de("Unallocated share", "Nicht zugeordneter Anteil"),
+                &en_de(
+                    "The regions' summed area over the gross floor area; `null` where the \
+                     service states none.",
+                    "Die summierte Fläche der Bereiche über der Bruttogeschossfläche; `null`, \
+                     wo der Dienst keine angibt.",
+                ),
+            ),
+            field(
+                "area",
+                AREA,
+                &en_de("Unallocated area", "Nicht zugeordnete Fläche"),
+                &en_de(
+                    "The regions' summed area, its lower end.",
+                    "Die summierte Fläche der Bereiche, ihr unteres Ende.",
+                ),
+            ),
+            field(
+                "gross",
+                AREA,
+                &en_de("Gross floor area", "Bruttogeschossfläche"),
+                &en_de(
+                    "The storey's gross floor area.",
+                    "Die Bruttogeschossfläche des Geschosses.",
+                ),
+            ),
+            field(
+                "elements",
+                MemberFieldKind::Objects,
+                &en_de("Bodies around", "Umgebende Körper"),
+                &en_de(
+                    "The bodies around its regions.",
+                    "Die Körper um seine Bereiche.",
+                ),
+            ),
+        ],
+    },
     MemberDescriptor {
         list: MeasuredDescriptor {
             name: "wall_spacing",

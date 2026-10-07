@@ -39,7 +39,8 @@ mod surface;
 
 use axioval_ir::measured::{
     ANGLE_TO, BEARING, CROSS_FALL, EXTENT, GRADIENT_DIRECTION, INCLINATION, LENGTH,
-    MeasuredArgument, MeasuredCall, PERIMETER, SKEW, SLOPE, SLOPE_ALONG, THICKNESS,
+    MeasuredArgument, MeasuredCall, MeasuredSelection, PERIMETER, SKEW, SLOPE, SLOPE_ALONG,
+    THICKNESS,
 };
 
 use crate::ServiceRegistry;
@@ -357,6 +358,20 @@ impl MeasuredValues {
     ) -> Vec<Result<BoundRead, PropertyResolutionError>> {
         self.0.read_prepared(prepared, objects)
     }
+
+    /// [`Self::read_prepared`] of a call prepared with its anchor left
+    /// ([`PreparedRead::anchored`]), the anchor bound to `anchor`: exactly
+    /// what [`Self::read_bound_batch`] answers for the call so bound,
+    /// without preparing it again for every anchor.
+    #[must_use]
+    pub fn read_anchored(
+        &self,
+        prepared: &PreparedRead,
+        anchor: &ObjectId,
+        objects: &[&ObjectId],
+    ) -> Vec<Result<BoundRead, PropertyResolutionError>> {
+        self.0.read_anchored(prepared, anchor, objects)
+    }
 }
 
 /// A measured value's call with every reference bound, prepared to be read
@@ -367,22 +382,27 @@ impl MeasuredValues {
 pub struct PreparedRead(Arc<Prepared>);
 
 struct Prepared {
-    written: String,
     name: Result<MeasuredName, PropertyResolutionError>,
     key: BoundKey,
+    /// A call whose anchor (`@anchor`) each read binds: the call, every
+    /// other reference bound, and the keys naming the anchor.
+    anchored: Option<(MeasuredCall, Vec<&'static str>)>,
 }
 
 /// The memo key of a prepared read beside the object: the name as written,
-/// the bound arguments and their selections' identities, hashed once.
+/// the bound arguments and their selections' identities, hashed once, and
+/// the anchor a read bound.
 #[derive(Clone, PartialEq, Eq)]
 struct BoundKey {
     hash: u64,
     parts: Arc<(String, String, Vec<axioval_ir::measured::SelectionIdentity>)>,
+    anchor: Option<ObjectId>,
 }
 
 impl std::hash::Hash for BoundKey {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.hash.hash(state);
+        self.anchor.hash(state);
     }
 }
 
@@ -391,25 +411,79 @@ impl PreparedRead {
     /// call that does not parse is refused by every read.
     #[must_use]
     pub fn of(written: &str, call: &MeasuredCall) -> Self {
-        use std::hash::{BuildHasher, BuildHasherDefault, DefaultHasher};
-        let name = if let Some((key, argument)) = call.references().next() {
-            Err(PropertyResolutionError::InvalidArgument(format!(
-                "`{}` parameter `{key}`: `{}` is not bound",
-                call.name(),
-                argument.written().unwrap_or_default()
-            )))
-        } else {
-            of_call(call.clone()).map_err(PropertyResolutionError::InvalidArgument)
+        Self::of_owned(written, call.clone())
+    }
+
+    /// [`Self::of`] of a call the caller gives up.
+    #[must_use]
+    pub fn of_owned(written: &str, call: MeasuredCall) -> Self {
+        let key = BoundKey::of(written, &call);
+        let unbound = call
+            .references()
+            .next()
+            .map(|(key, argument)| unbound(&call, key, argument));
+        let name = match unbound {
+            Some(error) => Err(error),
+            None => of_call(call).map_err(PropertyResolutionError::InvalidArgument),
         };
+        Self(Arc::new(Prepared {
+            name,
+            key,
+            anchored: None,
+        }))
+    }
+
+    /// `call`, written `written`, every reference bound but the anchor's
+    /// (`@anchor`), prepared once to be read of object after object: each
+    /// read binds the anchor it is given
+    /// ([`MeasuredValues::read_anchored`]) and answers what
+    /// [`Self::of`] of the call so bound answers. A call naming no anchor
+    /// is prepared as [`Self::of`] prepares it.
+    #[must_use]
+    pub fn anchored(written: &str, call: MeasuredCall) -> Self {
+        let anchors: Vec<&'static str> = call
+            .references()
+            .filter(|(_, argument)| **argument == MeasuredArgument::Anchor)
+            .map(|(key, _)| key)
+            .collect();
+        if anchors.is_empty()
+            || call
+                .references()
+                .any(|(_, argument)| *argument != MeasuredArgument::Anchor)
+        {
+            return Self::of_owned(written, call);
+        }
+        let key = BoundKey::of(written, &call);
+        Self(Arc::new(Prepared {
+            name: Err(PropertyResolutionError::InvalidRequest),
+            key,
+            anchored: Some((call, anchors)),
+        }))
+    }
+}
+
+impl BoundKey {
+    /// The key of `call`, written `written`.
+    fn of(written: &str, call: &MeasuredCall) -> Self {
+        use std::hash::{BuildHasher, BuildHasherDefault, DefaultHasher};
         let (arguments, selections) = arguments_key(call);
         let parts = Arc::new((written.to_owned(), arguments, selections));
         let hash = BuildHasherDefault::<DefaultHasher>::default().hash_one(&*parts);
-        Self(Arc::new(Prepared {
-            written: written.to_owned(),
-            name,
-            key: BoundKey { hash, parts },
-        }))
+        Self {
+            hash,
+            parts,
+            anchor: None,
+        }
     }
+}
+
+/// The refusal of a call whose reference `key` is left unbound.
+fn unbound(call: &MeasuredCall, key: &str, argument: &MeasuredArgument) -> PropertyResolutionError {
+    PropertyResolutionError::InvalidArgument(format!(
+        "`{}` parameter `{key}`: `{}` is not bound",
+        call.name(),
+        argument.written().unwrap_or_default()
+    ))
 }
 
 /// The bound arguments of `call` in a form a memo keys by: every argument's
@@ -420,16 +494,44 @@ fn arguments_key(call: &MeasuredCall) -> (String, Vec<axioval_ir::measured::Sele
     use std::fmt::Write as _;
     let mut key = String::new();
     let mut selections = Vec::new();
+    // Written without the formatting machinery where it can be: a key only
+    // tells calls apart, each argument's kind marked in lower case (a
+    // variant's own words start upper case) and a word's length given, so
+    // no two arguments write alike.
+    let bits = |key: &mut String, mark: char, value: f64| {
+        key.push(mark);
+        let _ = write!(key, "{:x}", value.to_bits());
+    };
     for (name, argument) in &call.arguments {
+        key.push_str(name);
+        key.push('=');
         match argument {
             MeasuredArgument::Objects(selection) => {
-                let _ = write!(key, "{name}=@{};", selection.parameter);
+                key.push('@');
+                key.push_str(&selection.parameter);
                 selections.push(axioval_ir::measured::SelectionIdentity(selection.clone()));
             }
+            MeasuredArgument::Length(value) => bits(&mut key, 'l', *value),
+            MeasuredArgument::Number(value) => bits(&mut key, 'n', *value),
+            MeasuredArgument::Truth(value) => key.push_str(if *value { "t1" } else { "t0" }),
+            MeasuredArgument::Choice(choice) => {
+                key.push('c');
+                key.push_str(choice);
+            }
+            MeasuredArgument::Text(text) | MeasuredArgument::SourceKind(text) => {
+                let mark = if matches!(argument, MeasuredArgument::Text(_)) {
+                    'x'
+                } else {
+                    's'
+                };
+                let _ = write!(key, "{mark}{}:", text.len());
+                key.push_str(text);
+            }
             other => {
-                let _ = write!(key, "{name}={other:?};");
+                let _ = write!(key, "{other:?}");
             }
         }
+        key.push(';');
     }
     (key, selections)
 }
@@ -727,11 +829,56 @@ impl Measures {
         prepared: &PreparedRead,
         objects: &[&ObjectId],
     ) -> Vec<Result<BoundRead, PropertyResolutionError>> {
-        let Prepared { written, name, key } = &*prepared.0;
+        let Prepared { name, key, .. } = &*prepared.0;
         let name = match name {
             Ok(name) => name,
             Err(error) => return objects.iter().map(|_| Err(error.clone())).collect(),
         };
+        self.read_named(name, key, objects)
+    }
+
+    /// The measured value `prepared` reads of each of `objects`, its anchor
+    /// bound to `anchor` ([`MeasuredValues::read_anchored`]).
+    fn read_anchored(
+        &self,
+        prepared: &PreparedRead,
+        anchor: &ObjectId,
+        objects: &[&ObjectId],
+    ) -> Vec<Result<BoundRead, PropertyResolutionError>> {
+        let Some((call, anchors)) = &prepared.0.anchored else {
+            return self.read_prepared(prepared, objects);
+        };
+        let mut call = call.clone();
+        let selection = Arc::new(MeasuredSelection::anchor(anchor.clone()));
+        for key in anchors {
+            if let Err(error) = call.bind(key, MeasuredArgument::Objects(Arc::clone(&selection))) {
+                let error = PropertyResolutionError::InvalidArgument(error.to_string());
+                return objects.iter().map(|_| Err(error.clone())).collect();
+            }
+        }
+        let name = match of_call(call) {
+            Ok(name) => name,
+            Err(error) => {
+                let error = PropertyResolutionError::InvalidArgument(error);
+                return objects.iter().map(|_| Err(error.clone())).collect();
+            }
+        };
+        let key = BoundKey {
+            anchor: Some(anchor.clone()),
+            ..prepared.0.key.clone()
+        };
+        self.read_named(&name, &key, objects)
+    }
+
+    /// The measured value `name` of each of `objects`, kept in the run's
+    /// memo by `key` unless its provider keeps it.
+    fn read_named(
+        &self,
+        name: &MeasuredName,
+        key: &BoundKey,
+        objects: &[&ObjectId],
+    ) -> Vec<Result<BoundRead, PropertyResolutionError>> {
+        let written = &key.parts.0;
         let measure = |object: &ObjectId| -> Result<BoundRead, PropertyResolutionError> {
             let (answer, citation) = match name {
                 MeasuredName::Provided(call) => self.provided_cited(call, object)?,

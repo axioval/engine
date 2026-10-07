@@ -472,10 +472,49 @@ type Table<K, V> = HashMap<K, V, foldhash::fast::RandomState>;
 ///
 /// Entries are kept by key and value type: two providers using distinct
 /// key types never share entries.
+///
+/// What only one rule reads (a rule's own table or patterns, prepared from
+/// its arguments) is kept for that rule alone ([`MeasuredMemo::of_rule`]):
+/// the runtime drops it once the rule is evaluated
+/// ([`MeasuredMemo::end_rule`]), so a run of many rules does not hold every
+/// rule's preparation at once.
 #[derive(Clone, Default)]
-pub struct MeasuredMemo(Arc<Mutex<HashMap<TypeId, Box<dyn Any + Send>>>>);
+pub struct MeasuredMemo(
+    Arc<Mutex<HashMap<TypeId, Box<dyn Any + Send>>>>,
+    Arc<Mutex<HashMap<TypeId, Box<dyn Any + Send>>>>,
+);
 
 impl MeasuredMemo {
+    /// The value kept for `key` while the rule being evaluated runs, or
+    /// `measure`'s, kept: what only that rule reads.
+    pub fn get_or_measure_for_rule<K, V>(&self, key: K, measure: impl FnOnce() -> V) -> V
+    where
+        K: Hash + Eq + Send + 'static,
+        V: Clone + Send + 'static,
+    {
+        Self::kept_in(&self.1, key, measure)
+    }
+
+    /// `measure` of `key` kept for the rule being evaluated in `services`'
+    /// memo when a run installed one, else measured.
+    pub fn of_rule<K, V>(services: &ServiceRegistry, key: K, measure: impl FnOnce() -> V) -> V
+    where
+        K: Hash + Eq + Send + 'static,
+        V: Clone + Send + 'static,
+    {
+        match services.get::<Self>() {
+            Some(memo) => memo.get_or_measure_for_rule(key, measure),
+            None => measure(),
+        }
+    }
+
+    /// Drops what was kept for the rule just evaluated.
+    pub fn end_rule(&self) {
+        if let Ok(mut entries) = self.1.lock() {
+            entries.clear();
+        }
+    }
+
     /// The value memoized for `key`, or `measure`'s, memoized.
     ///
     /// `measure` runs without the memo locked, so it may read the memo
@@ -485,8 +524,21 @@ impl MeasuredMemo {
         K: Hash + Eq + Send + 'static,
         V: Clone + Send + 'static,
     {
+        Self::kept_in(&self.0, key, measure)
+    }
+
+    /// [`Self::get_or_measure`] in `tables`.
+    fn kept_in<K, V>(
+        tables: &Mutex<HashMap<TypeId, Box<dyn Any + Send>>>,
+        key: K,
+        measure: impl FnOnce() -> V,
+    ) -> V
+    where
+        K: Hash + Eq + Send + 'static,
+        V: Clone + Send + 'static,
+    {
         let table = TypeId::of::<Table<K, V>>();
-        if let Ok(entries) = self.0.lock()
+        if let Ok(entries) = tables.lock()
             && let Some(value) = entries
                 .get(&table)
                 .and_then(|entries| entries.downcast_ref::<Table<K, V>>())
@@ -495,7 +547,7 @@ impl MeasuredMemo {
             return value.clone();
         }
         let value = measure();
-        if let Ok(mut entries) = self.0.lock()
+        if let Ok(mut entries) = tables.lock()
             && let Some(entries) = entries
                 .entry(table)
                 .or_insert_with(|| Box::new(Table::<K, V>::default()))

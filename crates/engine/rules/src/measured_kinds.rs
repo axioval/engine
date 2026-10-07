@@ -254,7 +254,36 @@ pub(crate) fn refused(
     name: &str,
     object: &ObjectId,
 ) -> impl Fn(crate::support::Unavailable) -> PropertyResolutionError {
-    move |(reason, why)| resolution_error((reason, format!("`{name}` of {object}: {why}")))
+    move |(reason, why)| resolution_error((reason, refusal_of(name, object, &why)))
+}
+
+/// `` `name` of object: why ``, as `format!` words it, joined without the
+/// formatting machinery: a refusal is worded for every object refused.
+fn refusal_of(name: &str, object: &ObjectId, why: &str) -> String {
+    let source = &object.source;
+    let mut message = String::with_capacity(
+        name.len()
+            + source.system.len()
+            + source.document.len()
+            + object.local_id.len()
+            + why.len()
+            + 10,
+    );
+    for piece in [
+        "`",
+        name,
+        "` of ",
+        &source.system,
+        ":",
+        &source.document,
+        "/",
+        &object.local_id,
+        ": ",
+        why,
+    ] {
+        message.push_str(piece);
+    }
+    message
 }
 
 /// A value sure to lie in `[lower, upper]`, cited as exactly as the
@@ -391,12 +420,11 @@ impl axioval_engine::MeasuredProvider for SelectionMeasures {
     }
 }
 
-/// What one rule reads once for all its objects, kept until the next
-/// rule's: a memo of one entry per provider (`marker`), its entry the
-/// latest call's, compared by the call's arguments (a bound selection by
-/// identity first). A run keeps one rule's reading at a time, as a
-/// capability kept its own only while it ran; the previous one is dropped
-/// before the next is read.
+/// What one rule reads once for all its objects, kept for that rule alone
+/// ([`axioval_engine::MeasuredMemo::of_rule`], dropped once the rule is
+/// evaluated), by provider (`marker`) and the call's arguments: a run keeps
+/// one rule's reading at a time, as a capability kept its own only while
+/// it ran.
 pub(crate) fn latest<M, T>(
     context: &axioval_engine::RuleContext<'_>,
     marker: M,
@@ -407,27 +435,9 @@ where
     M: std::hash::Hash + Eq + Send + 'static,
     T: Send + Sync + 'static,
 {
-    type Slot<T> = std::sync::Arc<
-        std::sync::Mutex<
-            Option<(
-                std::collections::BTreeMap<&'static str, MeasuredArgument>,
-                std::sync::Arc<T>,
-            )>,
-        >,
-    >;
-    let slot: Slot<T> = axioval_engine::MeasuredMemo::of(context.services, marker, || {
-        std::sync::Arc::new(std::sync::Mutex::new(None))
-    });
-    let mut held = slot
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    if let Some((arguments, value)) = held.as_ref()
-        && *arguments == call.arguments
-    {
-        return value.clone();
-    }
-    *held = None;
-    let value = std::sync::Arc::new(read());
-    *held = Some((call.arguments.clone(), value.clone()));
-    value
+    axioval_engine::MeasuredMemo::of_rule(
+        context.services,
+        (marker, axioval_engine::ArgumentsKey::of(call)),
+        || std::sync::Arc::new(read()),
+    )
 }

@@ -1475,6 +1475,10 @@ impl Runtime {
         refinement: Option<&RuleRefinement>,
     ) -> CapabilityEvaluation {
         let mut evaluation = capability.evaluate(context, rule);
+        // What only this rule read is dropped with it.
+        if let Some(memo) = context.services.get::<MeasuredMemo>() {
+            memo.end_rule();
+        }
         if let Some(refinement) = refinement {
             evaluation.grade(&refinement.severity_bands);
         }

@@ -52,7 +52,14 @@ fn judged(
     ) {
         return vec![outcome];
     }
-    judge_checks_in(plan, (checks, bound_checks), &read, context, object, leaves)
+    judge_checks_in(
+        plan,
+        (checks, bound_checks),
+        (&read, None),
+        context,
+        object,
+        leaves,
+    )
 }
 
 /// Runs a form deciding `parts` for `rule`.

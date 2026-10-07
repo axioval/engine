@@ -185,7 +185,14 @@ measurement the rule's own parameters and the anchor, `@name` and
 as an expression rule may ([Rule parameters and the anchor as
 arguments](./derived.md#rule-parameters-and-the-anchor-as-arguments)).
 Binding leaves a reference in place; the value binds it per object, the
-selections read once per rule. A reference to an optional rule parameter
+selections read once per rule. The bound plan keeps each measured name
+it reads, for every run of the rule (`measured_arguments::Planned`):
+parsed once, and bound (a value also prepared) once where no reference
+needs the run; one naming a selection keeps its other parameters bound
+and binds only the selection per run, and one naming the anchor is
+prepared once with the anchor left (`PreparedRead::anchored`), each
+object's read binding it (`MeasuredValues::read_anchored`). A member list
+is written once per plan without its unstated arguments. A reference to an optional rule parameter
 the rule leaves unstated, where the measured parameter is optional without
 a default, is dropped when the rule binds (the value is measured as if the
 argument were not written); any other unstated reference leaves the value

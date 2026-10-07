@@ -121,7 +121,7 @@ fn read_of(subject: &Subject<'_>, member: Option<&Subject<'_>>) -> Read {
     for (name, span) in &subject.values {
         read.values.insert(name, number(*span));
     }
-    read.stated = subject.stated.clone();
+    read.stated.clone_from(&subject.stated);
     if let Some(member) = member {
         for (name, span) in &member.values {
             read.outer.insert(name, number(*span));

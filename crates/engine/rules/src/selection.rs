@@ -43,18 +43,40 @@ pub(crate) fn select_shared<'a>(
     context: &RuleContext<'a>,
     selector: &Selector,
 ) -> (Vec<&'a Object>, CapabilityEvaluation) {
-    let written = (selector.rule_references().is_empty() && selector.expressions().is_empty())
+    select_shared_as(context, selector, shared_as(selector).as_deref())
+}
+
+/// What a shared selection of `selector` is kept by, as written; `None`
+/// where it is never shared.
+pub(crate) fn shared_as(selector: &Selector) -> Option<String> {
+    (selector.rule_references().is_empty() && selector.expressions().is_empty())
         .then(|| serde_json::to_string(selector).ok())
-        .flatten();
+        .flatten()
+}
+
+/// [`select_shared`] of a selector written already ([`shared_as`]).
+pub(crate) fn select_shared_as<'a>(
+    context: &RuleContext<'a>,
+    selector: &Selector,
+    written: Option<&str>,
+) -> (Vec<&'a Object>, CapabilityEvaluation) {
     let (Some(written), Some(memo)) = (written, context.services.get::<MeasuredMemo>()) else {
         return select_objects(context, selector);
     };
+    let written = written.to_owned();
     // The population is the same for every rule of the run, so a position
     // in it names the same object.
     let (population, unreadable) = population(context, selector);
     let population: Vec<&'a Object> = population.collect();
     let shared: Shared = memo.get_or_measure(SharedSelector(written), || {
-        Arc::new(select_in(context, selector, &population, unreadable))
+        let decided: Arc<Decided> = memo.get_or_measure(DecidedKey, Arc::default);
+        Arc::new(select_in(
+            context,
+            selector,
+            &population,
+            unreadable,
+            Some(&decided),
+        ))
     });
     let selected = shared.0.iter().map(|index| population[*index]).collect();
     (selected, shared.1.clone())
@@ -66,7 +88,7 @@ pub(crate) fn select_objects<'a>(
 ) -> (Vec<&'a Object>, CapabilityEvaluation) {
     let (population, unreadable) = population(context, selector);
     let population: Vec<&'a Object> = population.collect();
-    let (selected, evaluation) = select_in(context, selector, &population, unreadable);
+    let (selected, evaluation) = select_in(context, selector, &population, unreadable, None);
     (
         selected
             .into_iter()
@@ -84,6 +106,7 @@ fn select_in(
     selector: &Selector,
     population: &[&Object],
     unreadable: Vec<(SourceId, String)>,
+    decided: Option<&Decided>,
 ) -> (Vec<usize>, CapabilityEvaluation) {
     let mut selected = Vec::new();
     let mut evaluation = CapabilityEvaluation::default();
@@ -97,12 +120,19 @@ fn select_in(
     // An entity type selects by the object's source and kind alone: each
     // pair is decided once, however many objects share it.
     let mut kinds: Vec<(&SourceId, &str, Selection)> = Vec::new();
+    // Entity types combined, in a shared selection: each decided once per
+    // run (one alone is decided once per source and kind here).
+    let decided =
+        decided.filter(|_| !matches!(selector, Selector::EntityType { .. }) && of_kinds(selector));
     for (index, object) in population.iter().copied().enumerate() {
-        let selection = match selector {
-            Selector::EntityType {
-                object_type,
-                include_subtypes,
-            } => {
+        let selection = match (selector, decided) {
+            (
+                Selector::EntityType {
+                    object_type,
+                    include_subtypes,
+                },
+                None,
+            ) => {
                 let (source, kind) = (&object.id.source, object.kind());
                 let decided = kinds
                     .iter()
@@ -118,6 +148,21 @@ fn select_in(
                     selection
                 })
             }
+            // Decided once per source and kind.
+            (_, Some(decided)) => {
+                let (source, kind) = (&object.id.source, object.kind());
+                let known = kinds
+                    .iter()
+                    .find(|(known, known_kind, _)| {
+                        *known_kind == kind && (std::ptr::eq(*known, source) || *known == source)
+                    })
+                    .map(|(_, _, selection)| selection.clone());
+                known.unwrap_or_else(|| {
+                    let selection = of_kind(context, selector, object, decided);
+                    kinds.push((source, kind, selection.clone()));
+                    selection
+                })
+            }
             _ => selector_matches(context, selector, object, &mut Vec::new()),
         };
         match selection {
@@ -129,6 +174,136 @@ fn select_in(
         }
     }
     (selected, evaluation)
+}
+
+/// What the entity types a run decided are kept by.
+#[derive(Hash, PartialEq, Eq)]
+struct DecidedKey;
+
+/// The entity types a run decided for its shared selections: whether an
+/// object is of a type is a fact of the run, whichever selector asks.
+#[derive(Default)]
+pub(crate) struct Decided(std::sync::Mutex<DecidedTable>);
+
+#[derive(Default)]
+struct DecidedTable {
+    /// The entity types asked, as written, each with whether subtypes
+    /// count.
+    types: Vec<(Box<str>, bool)>,
+    /// Each object's decision of a type, by the object's place in memory
+    /// (the run's objects stay where they are for the run) and the type's
+    /// place in `types`: matched (0), not (1), or undecided, `unsure`'s
+    /// entry at the code less two. Small, since a run keeps it whole.
+    decided: std::collections::HashMap<(usize, u32), u32>,
+    /// The undecided outcomes, each with its reason and message.
+    unsure: Vec<Selection>,
+}
+
+impl DecidedTable {
+    fn get(&self, key: (usize, u32)) -> Option<Selection> {
+        Some(match *self.decided.get(&key)? {
+            0 => Selection::Match,
+            1 => Selection::NoMatch,
+            code => self.unsure.get(usize::try_from(code - 2).ok()?)?.clone(),
+        })
+    }
+
+    fn insert(&mut self, key: (usize, u32), selection: &Selection) {
+        let code = match selection {
+            Selection::Match => 0,
+            Selection::NoMatch => 1,
+            Selection::NotEvaluated(..) => {
+                let Ok(code) = u32::try_from(self.unsure.len() + 2) else {
+                    return;
+                };
+                self.unsure.push(selection.clone());
+                code
+            }
+        };
+        self.decided.insert(key, code);
+    }
+}
+
+impl Decided {
+    /// Whether `object` is of `object_type` (with subtypes where
+    /// `include_subtypes`), decided once per run.
+    fn entity_type(
+        &self,
+        context: &RuleContext<'_>,
+        object: &Object,
+        object_type: &str,
+        include_subtypes: bool,
+    ) -> Selection {
+        let place = std::ptr::from_ref(object) as usize;
+        let key = self.0.lock().ok().map(|mut table| {
+            let known = table.types.iter().position(|(known, subtypes)| {
+                **known == *object_type && *subtypes == include_subtypes
+            });
+            let index = if let Some(index) = known {
+                index
+            } else {
+                table.types.push((object_type.into(), include_subtypes));
+                table.types.len() - 1
+            };
+            let index = u32::try_from(index).unwrap_or(u32::MAX);
+            (place, index, table.get((place, index)))
+        });
+        if let Some((_, _, Some(selection))) = key {
+            return selection;
+        }
+        let selection = entity_type_matches(context, object, object_type, include_subtypes);
+        if let Some((place, index, None)) = key
+            && let Ok(mut table) = self.0.lock()
+        {
+            table.insert((place, index), &selection);
+        }
+        selection
+    }
+}
+
+/// Whether `selector` selects by entity types alone: by an object's source
+/// and kind, nothing else of it.
+fn of_kinds(selector: &Selector) -> bool {
+    match selector {
+        Selector::EntityType { .. } => true,
+        Selector::AllOf { operands } | Selector::AnyOf { operands } => {
+            operands.iter().all(of_kinds)
+        }
+        Selector::Not { operand } => of_kinds(operand),
+        _ => false,
+    }
+}
+
+/// [`selector_matches`] of a selector [`of_kinds`], each entity type
+/// decided once per run.
+fn of_kind(
+    context: &RuleContext<'_>,
+    selector: &Selector,
+    object: &Object,
+    decided: &Decided,
+) -> Selection {
+    match selector {
+        Selector::EntityType {
+            object_type,
+            include_subtypes,
+        } => decided.entity_type(context, object, object_type, *include_subtypes),
+        Selector::AllOf { operands } => all_of(
+            operands
+                .iter()
+                .map(|item| of_kind(context, item, object, decided)),
+        ),
+        Selector::AnyOf { operands } => any_of(
+            operands
+                .iter()
+                .map(|item| of_kind(context, item, object, decided)),
+        ),
+        Selector::Not { operand } => match of_kind(context, operand, object, decided) {
+            Selection::Match => Selection::NoMatch,
+            Selection::NoMatch => Selection::Match,
+            unavailable @ Selection::NotEvaluated(..) => unavailable,
+        },
+        other => selector_matches(context, other, object, &mut Vec::new()),
+    }
 }
 
 /// Every object `selector` may select: the project's objects, then the

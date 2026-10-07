@@ -193,6 +193,14 @@ struct Bound {
     /// once and kept with the plan, since it depends only on the template
     /// and the rule's parameters.
     written: Mutex<BTreeMap<&'static str, Arc<str>>>,
+    /// What every run of the rule reads of its measured names, parsed and
+    /// bound once ([`Planned`](crate::measured_arguments::Planned)).
+    measured: Arc<crate::measured_arguments::Planned>,
+    /// Each constant as a message shows it, worded once.
+    shown: BTreeMap<String, String>,
+    /// Whether each of the form's `unless` values applies to the rule,
+    /// decided once.
+    unless_applies: std::sync::OnceLock<Vec<bool>>,
 }
 
 impl Bound {
@@ -1409,7 +1417,6 @@ fn bind(template: &Template, rule: &CompiledRule) -> Result<Bound, Unavailable> 
         written: Mutex::new(BTreeMap::new()),
         form: index,
         parameters,
-        constants,
         expressions,
         comparison,
         proportion,
@@ -1423,6 +1430,13 @@ fn bind(template: &Template, rule: &CompiledRule) -> Result<Bound, Unavailable> 
         reads_selection: serde_json::to_string(form).map_or(true, |written| {
             written.contains(&format!("@{}", axioval_engine::template::SELECTION))
         }),
+        measured: Arc::default(),
+        unless_applies: std::sync::OnceLock::new(),
+        shown: constants
+            .iter()
+            .map(|(name, constant)| (name.clone(), constant.shown()))
+            .collect(),
+        constants,
     })
 }
 
@@ -1467,7 +1481,7 @@ fn effective_of(plan: &Plan<'_>, decision: &Decision) -> Decision {
 }
 
 /// What one object's values were read as.
-#[derive(Clone, Default)]
+#[derive(Default)]
 struct Read {
     values: Named<Value>,
     stated: Named<Option<PropertyValue>>,
@@ -1499,15 +1513,66 @@ struct Read {
     keep_null: bool,
 }
 
+impl Clone for Read {
+    fn clone(&self) -> Self {
+        let mut read = Self::default();
+        read.clone_from(self);
+        read
+    }
+
+    /// Field by field, keeping what `self` allocated: each of an object's
+    /// checks starts over from the object's read in one buffer.
+    fn clone_from(&mut self, source: &Self) {
+        // Every field named, so a new one is not left behind.
+        let Self {
+            values,
+            stated,
+            evidence,
+            inexact,
+            bound,
+            why,
+            named,
+            outer,
+            bounds,
+            related,
+            notes,
+            sources,
+            keep_null,
+        } = source;
+        self.values.clone_from(values);
+        self.stated.clone_from(stated);
+        self.evidence.clone_from(evidence);
+        self.inexact.clone_from(inexact);
+        self.bound.clone_from(bound);
+        self.why.clone_from(why);
+        self.named.clone_from(named);
+        self.outer.clone_from(outer);
+        self.bounds = *bounds;
+        self.related.clone_from(related);
+        self.notes.clone_from(notes);
+        self.sources.clone_from(sources);
+        self.keep_null = *keep_null;
+    }
+}
+
 /// The few values of one object a form names, in reading order: a list
 /// kept inline, since a form reads a handful and each object reads them
 /// anew.
-#[derive(Clone)]
 struct Named<V>(smallvec::SmallVec<[(&'static str, V); 6]>);
 
 impl<V> Default for Named<V> {
     fn default() -> Self {
         Self(smallvec::SmallVec::new())
+    }
+}
+
+impl<V: Clone> Clone for Named<V> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+
+    fn clone_from(&mut self, source: &Self) {
+        self.0.clone_from(&source.0);
     }
 }
 
@@ -1710,7 +1775,16 @@ fn property_read(expression: &Expression) -> Option<(Option<&str>, &str)> {
 /// (the object itself, or the member of an aggregate whose value it is).
 /// Matched without formatting: a refusal is worded for every object a
 /// guard refuses.
-fn refusal(message: &str, expression: &Expression, object: &Object) -> String {
+fn refusal(mut message: String, expression: &Expression, object: &Object) -> String {
+    // What is kept is the message's tail: cut in place.
+    let kept = refused_tail(&message, expression, object);
+    let start = kept.as_ptr() as usize - message.as_ptr() as usize;
+    message.drain(..start);
+    message
+}
+
+/// The tail of `message` [`refusal`] keeps.
+fn refused_tail<'m>(message: &'m str, expression: &Expression, object: &Object) -> &'m str {
     let message = message
         .strip_prefix("property evidence conflicts: ")
         .unwrap_or(message);
@@ -1735,9 +1809,9 @@ fn refusal(message: &str, expression: &Expression, object: &Object) -> String {
                         .chars()
                         .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_') =>
             {
-                why.to_owned()
+                why
             }
-            _ => message.to_owned(),
+            _ => message,
         };
     };
     let Some(rest) = message
@@ -1745,13 +1819,12 @@ fn refusal(message: &str, expression: &Expression, object: &Object) -> String {
         .and_then(|rest| rest.strip_prefix(name))
         .and_then(|rest| rest.strip_prefix("` of "))
     else {
-        return message.to_owned();
+        return message;
     };
     // The object itself, or a member's refusal read through an aggregate.
     of_object(rest, &object.id)
         .or_else(|| rest.split_once(": ").map(|(_, why)| why))
         .unwrap_or(message)
-        .to_owned()
 }
 
 /// What follows `<object>: ` at the start of `text`, `object` as it
@@ -1767,8 +1840,10 @@ fn of_object<'t>(text: &'t str, object: &ObjectId) -> Option<&'t str> {
 
 /// `template` with its placeholders rendered.
 fn render(plan: &Plan<'_>, read: &Read, template: &str) -> String {
-    // Room for the placeholders' words, so a message grows once at most.
-    let mut out = String::with_capacity(template.len() * 2);
+    // Room for the placeholders' words (a refusal's whole), so a message
+    // grows once at most.
+    let mut out =
+        String::with_capacity(template.len() * 2 + read.why.as_ref().map_or(0, String::len));
     let mut rest = template;
     while let Some(open) = rest.find('{') {
         let Some(close) = rest[open..].find('}') else {
@@ -1776,6 +1851,27 @@ fn render(plan: &Plan<'_>, read: &Read, template: &str) -> String {
         };
         out.push_str(&rest[..open]);
         let key = &rest[open + 1..open + close];
+        // A refusal, the most worded placeholder, copied once.
+        if key == "why"
+            && let Some(why) = &read.why
+            && !plan.template.texts.iter().any(|text| text.name == "why")
+        {
+            out.push_str(why);
+            rest = &rest[open + close + 1..];
+            continue;
+        }
+        // A rule's constant, worded once for the plan, where nothing of the
+        // object's names it first (as `placeholder` reads them).
+        if !key.contains(':')
+            && !matches!(key, "bound" | "why" | "target" | "required")
+            && let Some(shown) = plan.shown.get(key)
+            && read.named.get(key).is_none()
+            && !plan.template.texts.iter().any(|text| text.name == key)
+        {
+            out.push_str(shown);
+            rest = &rest[open + close + 1..];
+            continue;
+        }
         match placeholder(plan, read, key) {
             Some(text) => out.push_str(&text),
             None => out.push_str(&rest[open..=open + close]),
@@ -2379,8 +2475,15 @@ fn unless(
     object: &Object,
     leaves: &mut ObjectLeaves<'_>,
 ) -> Option<Outcome> {
+    let applying = plan.bound.unless_applies.get_or_init(|| {
+        plan.form
+            .unless
+            .iter()
+            .map(|unless| each::applies(plan, &unless.applies))
+            .collect()
+    });
     for (index, unless) in plan.form.unless.iter().enumerate() {
-        if !each::applies(plan, &unless.applies) {
+        if !applying.get(index).copied().unwrap_or(false) {
             continue;
         }
         let mut read = Read::default();
@@ -2513,7 +2616,7 @@ fn read_graded<'v>(
                     .first_reason()
                     .filter(|_| matches!(why.reason, Reason::Unreadable(_)))
                     .unwrap_or_else(|| reason_of(&why));
-                let message = match &why.reason {
+                let message = match why.reason {
                     Reason::Unreadable(message) => refusal(message, expression, object),
                     other => other.to_string(),
                 };
@@ -2537,7 +2640,41 @@ fn judge_checks(
     judge_checks_in(
         plan,
         (&plan.form.checks, &plan.bound.checks),
-        read,
+        (read, None),
+        context,
+        object,
+        leaves,
+    )
+}
+
+/// Whether each of the form's checks applies over `read`: what
+/// [`judge_checks_alike`] judges every object by, decided once.
+fn checks_applying(plan: &Plan<'_>, read: &Read) -> Vec<bool> {
+    plan.form
+        .checks
+        .iter()
+        .map(|check| {
+            check
+                .applies
+                .as_ref()
+                .is_none_or(|applies| each::applies_reading(plan, applies, read))
+        })
+        .collect()
+}
+
+/// [`judge_checks`] of objects judged over one `read` alike, which checks
+/// apply decided once ([`checks_applying`]).
+fn judge_checks_alike(
+    plan: &Plan<'_>,
+    (read, applying): (&Read, &[bool]),
+    context: &RuleContext<'_>,
+    object: &Object,
+    leaves: &mut ObjectLeaves<'_>,
+) -> Vec<Outcome> {
+    judge_checks_in(
+        plan,
+        (&plan.form.checks, &plan.bound.checks),
+        (read, Some(applying)),
         context,
         object,
         leaves,
@@ -2549,21 +2686,28 @@ fn judge_checks(
 fn judge_checks_in(
     plan: &Plan<'_>,
     (checks, values): (&[axioval_engine::template::FormCheck], &[Vec<Expression>]),
-    read: &Read,
+    (read, applying): (&Read, Option<&[bool]>),
     context: &RuleContext<'_>,
     object: &Object,
     leaves: &mut ObjectLeaves<'_>,
 ) -> Vec<Outcome> {
     let mut outcomes = Vec::new();
     let offset = graded_from(plan, checks);
+    // Each check reads on from the object's read, in one buffer.
+    let mut checked = Read::default();
     for (position, (check, bound)) in checks.iter().zip(values).enumerate() {
         let index = offset.map(|offset| position + offset);
-        if let Some(applies) = &check.applies
-            && !each::applies_reading(plan, applies, read)
-        {
+        let applies = match applying.and_then(|applying| applying.get(position)) {
+            Some(applies) => *applies,
+            None => check
+                .applies
+                .as_ref()
+                .is_none_or(|applies| each::applies_reading(plan, applies, read)),
+        };
+        if !applies {
             continue;
         }
-        let mut checked = read.clone();
+        checked.clone_from(read);
         if let Some(outcome) = read_values(
             plan,
             check.values.iter().zip(bound),
@@ -2842,13 +2986,15 @@ fn read_values<'v>(
         let stated = property_read(expression)
             .and_then(|(set, name)| leaves.stated(set, name))
             .map(|stated| stated.0);
-        if let Some(value) = &stated {
-            read.stated.insert(step.name, value.clone());
+        let (was_stated, states_value) = (stated.is_some(), matches!(stated, Some(Some(_))));
+        // Kept once, and read back where a kind is expected.
+        if let Some(value) = stated {
+            read.stated.insert(step.name, value);
         }
         // The value a comparison judges is judged as the source states it:
         // an absence, `null` and a value of any kind reach the comparison.
         if as_stated(step.name) {
-            if stated.is_some() {
+            if was_stated {
                 continue;
             }
             // A reserved set the evaluator reads apart (`axioval:value`):
@@ -2878,8 +3024,12 @@ fn read_values<'v>(
             // kind; an absence is `null` the decision judges.
             Ok(Value::Null) if read.keep_null => {
                 let mismatched = step.expect.is_some_and(|expect| {
-                    matches!(&stated, Some(Some(_)))
-                        && !expected(expect, &Value::Null, stated.as_ref())
+                    states_value
+                        && !expected(
+                            expect,
+                            &Value::Null,
+                            read.stated.get(step.name).filter(|_| was_stated),
+                        )
                 });
                 read.values.insert(step.name, Value::Null);
                 if mismatched {
@@ -2897,9 +3047,13 @@ fn read_values<'v>(
                 ));
             }
             Ok(value) => {
-                let mismatched = step
-                    .expect
-                    .is_some_and(|expect| !expected(expect, &value, stated.as_ref()));
+                let mismatched = step.expect.is_some_and(|expect| {
+                    !expected(
+                        expect,
+                        &value,
+                        read.stated.get(step.name).filter(|_| was_stated),
+                    )
+                });
                 read.values.insert(step.name, value);
                 if mismatched {
                     return Some(mismatch(plan, read, step));
@@ -2907,7 +3061,7 @@ fn read_values<'v>(
             }
             // Stated, but no single value of any kind: not the kind the
             // step needs, worded as the source states it.
-            Err(_) if step.expect.is_some() && matches!(stated, Some(Some(_))) => {
+            Err(_) if step.expect.is_some() && states_value => {
                 return Some(mismatch(plan, read, step));
             }
             Err(why) => {
@@ -2915,13 +3069,16 @@ fn read_values<'v>(
                     .first_reason()
                     .filter(|_| matches!(why.reason, Reason::Unreadable(_)))
                     .unwrap_or_else(|| reason_of(&why));
-                read.why = Some(match &why.reason {
+                let why = match why.reason {
                     Reason::Unreadable(message) => refusal(message, expression, object),
                     other => other.to_string(),
-                });
-                let message = match step.refused {
-                    Some(refused) => render(plan, read, refused),
-                    None => read.why.clone().unwrap_or_default(),
+                };
+                let message = if let Some(refused) = step.refused {
+                    read.why = Some(why);
+                    render(plan, read, refused)
+                } else {
+                    read.why = None;
+                    why
                 };
                 return Some(Outcome::Open(reason, message));
             }
@@ -3041,11 +3198,13 @@ fn judge_object(
         .values
         .iter()
         .any(|step| property_read(&step.expression).is_none());
-    let mut leaves = ObjectLeaves::new(context, object, Some(&plan.bound.parameters))
-        .with_prefetched(ahead.prefetched)
-        .with_bound(ahead.bound)
-        .with_arguments(arguments)
-        .with_cached_reads(composed);
+    let mut leaves = ObjectLeaves::read_ahead(
+        context,
+        (object, &plan.bound.parameters),
+        arguments,
+        (ahead.prefetched, ahead.bound),
+        composed,
+    );
     if let Some(outcome) = unless(plan, context, object, &mut leaves) {
         return outcome.into();
     }
@@ -3515,7 +3674,7 @@ fn judge_project(
     let outcomes = judge_checks_in(
         plan,
         (&plan.form.project, &plan.bound.project),
-        &Read::default(),
+        (&Read::default(), None),
         context,
         &project,
         &mut leaves,
@@ -3556,6 +3715,9 @@ struct Ran<'a> {
     once: Read,
     opened: Vec<(NotEvaluatedReason, String)>,
     selected: Option<(Vec<&'a Object>, CapabilityEvaluation)>,
+    /// What the rule's measured values bind, shared by the values read
+    /// once and those read per object.
+    arguments: Arguments,
 }
 
 impl<'a> Ran<'a> {
@@ -3587,7 +3749,7 @@ type ReadOnce = (Read, Vec<(NotEvaluatedReason, String)>);
 fn read_once(
     plan: &Plan<'_>,
     context: &RuleContext<'_>,
-    rule: &CompiledRule,
+    arguments: &Arguments,
 ) -> Result<ReadOnce, (NotEvaluatedReason, String)> {
     let mut read = Read::default();
     let mut opened = Vec::new();
@@ -3604,7 +3766,6 @@ fn read_once(
         .expect("a valid object id"),
         axioval_engine::template::SELECTION,
     );
-    let arguments = Arguments::of_rule(rule);
     // A value read where a list parameter lists a word is read in the
     // order the rule lists the words (each derivation as the rule lists
     // it); any other in the template's order.
@@ -3630,7 +3791,7 @@ fn read_once(
         }
         // Leaves of their own, so a refusal is worded by its own reason.
         let mut leaves = ObjectLeaves::new(context, &project, Some(&plan.bound.parameters))
-            .with_arguments(&arguments);
+            .with_arguments(arguments);
         // A measured value is read with what it cites, whatever it names.
         if let Some((Some(axioval_ir::MEASURED_SET), name)) = property_read(expression) {
             let leaf = leaves.measured_cited(name);
@@ -3651,7 +3812,7 @@ fn read_once(
                         .first_reason()
                         .unwrap_or(NotEvaluatedReason::IncompleteEvidence);
                     let step = Read {
-                        why: Some(refusal(&why, expression, &project)),
+                        why: Some(refusal(why, expression, &project)),
                         ..Read::default()
                     };
                     let message = render(plan, &step, once.refused);
@@ -3811,11 +3972,13 @@ pub(crate) fn run(
             services.message.to_owned(),
         );
     }
-    let mut ran = match read_once(&plan, context, rule) {
+    let arguments = Arguments::of_rule(rule).planned(&plan.bound.measured);
+    let mut ran = match read_once(&plan, context, &arguments) {
         Ok((once, opened)) => Ran {
             once,
             opened,
             selected,
+            arguments,
         },
         Err((reason, message)) => {
             return match template.refusals {
@@ -3851,10 +4014,11 @@ pub(crate) fn run(
     let mut table = report_table(&plan, rule);
     let (selected, mut evaluation) = ran.selection(context, rule);
     // `@selection` is the selection just made, where the form names it.
+    let arguments = std::mem::take(&mut ran.arguments);
     let arguments = if plan.reads_selection {
-        Arguments::of_rule(rule).selected(&selected, &evaluation)
+        arguments.selected(&selected, &evaluation)
     } else {
-        Arguments::of_rule(rule)
+        arguments
     };
     let (batched, bound) = read_ahead(&plan, context, &arguments, selected.first().copied());
     for chunk in selected.chunks(BATCH) {
@@ -3967,8 +4131,22 @@ fn read_ahead(
             ),
         );
     }
+    // A check the rule's parameters leave out is never read.
+    let applying = |index: &usize| {
+        plan.form.checks[*index]
+            .applies
+            .as_ref()
+            .is_none_or(|applies| each::applies(plan, applies))
+    };
+    // The checks' values too, as those naming the rule's parameters are.
     let batched = batched(
-        plan.eager_values().map(|(_, expression)| expression),
+        plan.eager_values()
+            .chain(
+                (0..plan.form.checks.len())
+                    .filter(applying)
+                    .flat_map(|index| plan.check_values(index)),
+            )
+            .map(|(_, expression)| expression),
         context,
         first,
     );
@@ -3980,13 +4158,6 @@ fn read_ahead(
         .grading
         .as_ref()
         .map_or(0, |grading| grading.values.len());
-    // A check the rule's parameters leave out is never read.
-    let applying = |index: &usize| {
-        plan.form.checks[*index]
-            .applies
-            .as_ref()
-            .is_none_or(|applies| each::applies(plan, applies))
-    };
     let bound = bound_batched(
         plan.eager_values()
             .chain(
@@ -4028,18 +4199,19 @@ fn batched<'e>(
     let Some(first) = first else {
         return Vec::new();
     };
-    expressions
-        .filter_map(|expression| match property_read(expression) {
-            Some((Some(set), name))
-                if set == axioval_ir::MEASURED_SET
-                    && !name.contains('@')
-                    && bound_property_request(context, first, Some(set), name).is_ok() =>
-            {
-                Some((Some(Arc::from(set)), Arc::from(name)))
-            }
-            _ => None,
-        })
-        .collect()
+    let mut batched: Batched = Vec::new();
+    for expression in expressions {
+        if let Some((Some(set), name)) = property_read(expression)
+            && set == axioval_ir::MEASURED_SET
+            && !name.contains('@')
+            // Read ahead once, however many values read it.
+            && !batched.iter().any(|(_, read)| &**read == name)
+            && bound_property_request(context, first, Some(set), name).is_ok()
+        {
+            batched.push((Some(Arc::from(set)), Arc::from(name)));
+        }
+    }
+    batched
 }
 
 /// The measured values read for many objects together, as `(set, name)`.
@@ -4066,32 +4238,10 @@ fn bound_batched<'e>(
         {
             continue;
         }
-        let Ok(mut call) = axioval_ir::measured::parse(name) else {
-            continue;
-        };
-        if call
-            .references()
-            .any(|(_, argument)| *argument == axioval_ir::measured::MeasuredArgument::Anchor)
-        {
-            continue;
-        }
-        // No anchor named: the same arguments for every object.
-        let Some(anchor) = context.project.objects().next() else {
-            continue;
-        };
-        if crate::measured_arguments::bind(
-            context,
-            Some(parameters),
-            Some(arguments),
-            &anchor.id,
-            &mut call,
-        )
-        .is_ok()
-        {
-            bound.push((
-                Arc::from(name),
-                axioval_engine::PreparedRead::of(name, &call),
-            ));
+        // No anchor named: the same arguments for every object, bound as
+        // each object's read binds them.
+        if let Some(Ok(prepared)) = arguments.call(context, Some(parameters), name) {
+            bound.push((Arc::from(name), prepared));
         }
     }
     bound
@@ -4177,9 +4327,10 @@ fn read_step(
         ..
     } = expression
     {
+        // The runner words a refusal by its reason alone: no path to build.
         let here = |reason| NotEvaluated {
-            path: root.to_owned(),
-            label: expression.label().map(str::to_owned),
+            path: String::new(),
+            label: None,
             reason,
         };
         if !leaves.spend() {

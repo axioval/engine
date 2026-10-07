@@ -11,8 +11,8 @@ use axioval_ir::{
 };
 
 use super::{
-    Constant, Outcome, Plan, Ran, Read, candidates, cited, holds, judge_checks, push, ranged,
-    read_values, render, within,
+    Constant, Outcome, Plan, Ran, Read, candidates, checks_applying, cited, holds,
+    judge_checks_alike, push, ranged, read_values, render, within,
 };
 use crate::expression_leaves::ObjectLeaves;
 use crate::measured_arguments::Arguments;
@@ -208,7 +208,7 @@ pub(super) fn run<'a>(
         };
         evaluation.push_not_evaluated(NotEvaluatedReason::IncompleteEvidence, message);
     }
-    let arguments = Arguments::of_rule(rule);
+    let arguments = Arguments::of_rule(rule).planned(&plan.bound.measured);
     for (scope, tally) in tallies {
         judge(
             plan,
@@ -235,7 +235,7 @@ fn occupied<'a>(
 ) -> CapabilityEvaluation {
     let (selected, mut evaluation) = ran.selection(context, rule);
     // `@selection` is the selection just made.
-    let arguments = Arguments::of_rule(rule).selected(&selected, &evaluation);
+    let arguments = std::mem::take(&mut ran.arguments).selected(&selected, &evaluation);
     if holds(plan, &ran.once, scopes.needs) {
         let mut tallies: BTreeMap<Scope, Tally> = BTreeMap::new();
         for object in &selected {
@@ -275,10 +275,15 @@ fn occupied<'a>(
             );
         }
     }
+    // Every object is judged over what was read once: which checks apply is
+    // decided once.
+    let applying = checks_applying(plan, &ran.once);
     for object in selected {
         let mut leaves = ObjectLeaves::new(context, object, Some(&plan.bound.parameters))
             .with_arguments(&arguments);
-        for outcome in judge_checks(plan, &ran.once, context, object, &mut leaves) {
+        for outcome in
+            judge_checks_alike(plan, (&ran.once, &applying), context, object, &mut leaves)
+        {
             push(&mut evaluation, rule, object, outcome);
         }
     }

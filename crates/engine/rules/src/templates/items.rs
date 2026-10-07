@@ -726,7 +726,7 @@ pub(super) fn judge_items(
                 }
             }
             Some(groups) => {
-                let list = super::unstated_dropped_list(groups.list, &plan.constants);
+                let list = plan.written_list(groups.list);
                 if let Ok((groups_listed, _)) = leaves.bound_members(&list).as_ref() {
                     for group in groups_listed {
                         let Field::Number((key, _)) = field(group, groups.key) else {

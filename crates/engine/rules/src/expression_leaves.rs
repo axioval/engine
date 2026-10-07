@@ -72,7 +72,7 @@ pub(crate) struct ObjectLeaves<'a> {
     /// The rule's parameters; a selector reads none.
     parameters: Option<&'a BTreeMap<String, ParameterValue>>,
     /// Why each unreadable leaf was unreadable, in reading order.
-    reasons: RefCell<Vec<NotEvaluatedReason>>,
+    reasons: RefCell<smallvec::SmallVec<[NotEvaluatedReason; 2]>>,
     /// Every stated property read, by set and name, as the source states
     /// it (`None` where it states the property absent): a template words a
     /// value that is not of the kind it needs as the source states it.
@@ -142,7 +142,7 @@ impl<'a> ObjectLeaves<'a> {
             object,
             subject: object,
             parameters,
-            reasons: RefCell::new(Vec::new()),
+            reasons: RefCell::new(smallvec::SmallVec::new()),
             stated: RefCell::new(smallvec::SmallVec::new()),
             resolved: RefCell::new(Vec::new()),
             cached: false,
@@ -177,7 +177,7 @@ impl<'a> ObjectLeaves<'a> {
             object: member,
             subject: self.subject,
             parameters: self.parameters,
-            reasons: RefCell::new(Vec::new()),
+            reasons: RefCell::new(smallvec::SmallVec::new()),
             stated: RefCell::new(smallvec::SmallVec::new()),
             resolved: RefCell::new(Vec::new()),
             cached: false,
@@ -204,7 +204,7 @@ impl<'a> ObjectLeaves<'a> {
             object: self.object,
             subject: self.subject,
             parameters: self.parameters,
-            reasons: RefCell::new(Vec::new()),
+            reasons: RefCell::new(smallvec::SmallVec::new()),
             stated: RefCell::new(smallvec::SmallVec::new()),
             resolved: RefCell::new(Vec::new()),
             cached: false,
@@ -230,18 +230,24 @@ impl<'a> ObjectLeaves<'a> {
         self
     }
 
-    /// The same leaves, measured values naming the rule's parameters read
-    /// ahead in a batch.
-    /// Keeps each property once resolved, for values that read again what
-    /// other values read.
-    pub(crate) fn with_cached_reads(mut self, cached: bool) -> Self {
-        self.cached = cached;
-        self
-    }
-
-    pub(crate) fn with_bound(mut self, bound: Vec<BoundPrefetched>) -> Self {
-        self.bound = bound;
-        self
+    /// Leaves of `object` as a template judges it: properties and measured
+    /// values naming the rule's parameters read ahead in a batch, binding
+    /// through `arguments`, and, where `cached`, each property kept once
+    /// resolved, for values that read again what other values read. Built
+    /// in place, the leaves being large to move.
+    pub(crate) fn read_ahead(
+        context: &'a RuleContext<'a>,
+        (object, parameters): (&'a Object, &'a BTreeMap<String, ParameterValue>),
+        arguments: &'a Arguments,
+        (prefetched, bound): (Prefetch, Vec<BoundPrefetched>),
+        cached: bool,
+    ) -> Self {
+        let mut leaves = Self::new(context, object, Some(parameters));
+        leaves.prefetched = prefetched;
+        leaves.bound = bound;
+        leaves.arguments = Some(arguments);
+        leaves.cached = cached;
+        leaves
     }
 
     /// The same leaves of a part of `subject`, the rule's checked object a
@@ -279,19 +285,31 @@ impl<'a> ObjectLeaves<'a> {
     }
 
     fn measure_members(&self, list: &str) -> Listed {
-        let mut call = match self.anchored(list, true) {
-            Some(call) => call?,
-            None => axioval_ir::measured::parse_members(list)
-                .map_err(|error| (NotEvaluatedReason::InvalidDeclaration, error.to_string()))?,
+        // A list naming no anchor is read as the plan keeps it, uncopied.
+        let shared = self
+            .arguments
+            .and_then(|arguments| arguments.planned_list(self.context, self.parameters, list))
+            .filter(|call| call.is_bound());
+        let owned;
+        let call: &axioval_ir::measured::MeasuredCall = if let Some(call) = &shared {
+            call
+        } else {
+            let mut call = match self.anchored(list, true) {
+                Some(call) => call?,
+                None => axioval_ir::measured::parse_members(list)
+                    .map_err(|error| (NotEvaluatedReason::InvalidDeclaration, error.to_string()))?,
+            };
+            bind(
+                self.context,
+                self.parameters,
+                self.arguments,
+                &self.subject.id,
+                &mut call,
+            )?;
+            owned = call;
+            &owned
         };
-        bind(
-            self.context,
-            self.parameters,
-            self.arguments,
-            &self.subject.id,
-            &mut call,
-        )?;
-        axioval_engine::measured_members_bound(self.context.services, &self.object.id, &call)
+        axioval_engine::measured_members_bound(self.context.services, &self.object.id, call)
             .map_err(|error| {
                 let (reason, message) = crate::selection::property_error(error);
                 let message = message
@@ -361,6 +379,13 @@ impl<'a> ObjectLeaves<'a> {
     /// [`Self::take_related`] and [`Self::take_sources`] then give: as a
     /// template reads a value once per rule, whatever it names.
     pub(crate) fn measured_cited(&mut self, name: &str) -> Leaf {
+        // Prepared once for the rule where it names no anchor.
+        if let Some(bound) = self
+            .arguments
+            .and_then(|arguments| arguments.call(self.context, self.parameters, name))
+        {
+            return self.bound_measured_with(name, bound);
+        }
         match axioval_ir::measured::parse(name) {
             Ok(call) => self.bound_measured(name, call),
             Err(error) => {
@@ -516,6 +541,47 @@ impl<'a> ObjectLeaves<'a> {
             },
         };
         self.bound_leaf_named(name, written, read)
+    }
+
+    /// The measured value `name`, prepared once for the rule with its
+    /// anchor left, read of the object, the anchor bound to the rule's
+    /// checked object; or the rule's parameters' refusal to bind.
+    fn anchored_measured(
+        &mut self,
+        name: &str,
+        prepared: Result<axioval_engine::PreparedRead, (NotEvaluatedReason, String)>,
+    ) -> Leaf {
+        let read = match prepared {
+            Ok(prepared) => {
+                let measure = |values: &axioval_engine::MeasuredValues| {
+                    values
+                        .read_anchored(&prepared, &self.subject.id, &[&self.object.id])
+                        .pop()
+                        .unwrap_or(Err(axioval_engine::PropertyResolutionError::InvalidRequest))
+                };
+                match self
+                    .context
+                    .services
+                    .get::<axioval_engine::MeasuredValues>()
+                {
+                    Some(values) => measure(values),
+                    None => measure(&axioval_engine::MeasuredValues::of(
+                        self.context.services,
+                        self.context.project,
+                    )),
+                }
+                .map_err(crate::selection::property_error)
+            }
+            Err((reason, why)) => Err((
+                reason,
+                format!(
+                    "`{}` of {}: {why}",
+                    name.split(';').next().unwrap_or(name),
+                    self.object.id
+                ),
+            )),
+        };
+        self.bound_leaf(name, read)
     }
 
     /// The leaf of a measured value read with bound arguments.
@@ -871,11 +937,19 @@ impl ExpressionContext for ObjectLeaves<'_> {
         // read as it is, unparsed here. One naming no anchor is bound once
         // for the rule.
         if set == Some(axioval_ir::MEASURED_SET) && name.contains('@') {
-            if let Some(bound) = self
-                .arguments
-                .and_then(|arguments| arguments.call(self.context, self.parameters, name))
-            {
-                return self.bound_measured_with(name, bound);
+            // Read ahead for the object: nothing to bind.
+            if let Some(index) = self.bound.iter().position(|(read, _)| &**read == name) {
+                let (written, read) = self.bound[index].clone();
+                return self.bound_leaf_named(name, Some(written), read);
+            }
+            if let Some(arguments) = self.arguments {
+                if let Some(bound) = arguments.call(self.context, self.parameters, name) {
+                    return self.bound_measured_with(name, bound);
+                }
+                if let Some(prepared) = arguments.anchored_read(self.context, self.parameters, name)
+                {
+                    return self.anchored_measured(name, prepared);
+                }
             }
             match self.anchored(name, false) {
                 Some(Ok(call)) => return self.bound_measured(name, call),

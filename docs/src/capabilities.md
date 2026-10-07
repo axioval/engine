@@ -2,6 +2,12 @@
 
 A capability is trusted executable policy registered by a host application.
 
+Most built-in capabilities are [templates](./templates.md): their
+descriptor is a stable outside contract, and inside they compose measured
+values, expressions and generic judges, with any search kept in built-in
+code ([ADR 0005](./adr-0005.md)). An author composes the same parts into an
+`expression` rule ([Composing rules](./composing-rules.md)).
+
 Each descriptor declares:
 
 - stable capability ID and version;
@@ -2296,11 +2302,26 @@ rows with their groups, and `--csv` exports the table (see
 
 ## Adding a capability
 
+A new check is layered (see [Contributing](./contributing.md#layering-a-new-check)):
+first ask whether it is an `expression` rule over registered measured
+values, which needs no new capability at all.
+
 1. Define or reuse canonical schema concepts and parameters.
-2. Add failing contract and behavior tests.
-3. Implement policy only; put source interpretation in an adapter.
-4. Declare all evidence requirements.
-5. Add deterministic and missing-evidence tests.
-6. Register in the built-in registry.
-   Mark every bound that may sensibly differ per checked object `per_object`, and keep population bounds constant.
+2. Register every quantity the check measures as a measured value or
+   member list, answered by a provider in the rules crate; keep a search
+   (a route, a pairing, a placement) in built-in code that states its
+   answer as a measured list. Put source interpretation in an adapter.
+3. Add failing contract and behavior tests, with deterministic and
+   missing-evidence cases.
+4. Write the capability as a [template](./templates.md) over those values
+   and a generic judge, declaring its services; add a judge or a form
+   feature only where no existing one decides it.
+5. Register it in the built-in registry with catalogue texts in English
+   and German. Mark every bound that may sensibly differ per checked
+   object `per_object`, and keep population bounds constant. Bless the
+   descriptor and catalogue goldens once; from then on the descriptor is
+   the outside contract.
+6. Rebuilding an existing capability follows
+   [Rebuilding a capability as a template](./templates.md#rebuilding-a-capability-as-a-template)
+   instead: the replaced implementation becomes its parity reference.
 7. Record legacy parity and cutover in the migration ledger when applicable.

@@ -3,61 +3,41 @@
 A built-in capability is a named, parameterized rule type: packages, the
 [authoring catalogue](./catalogue.md) and the [export profiles](./export.md)
 address it as one rule, and external rule formats know many of them as one
-rule type each. Inside, a capability is being rebuilt from the shared parts
-of [composed rules](./composing-rules.md): measured values, expressions,
+rule type each. Inside, a capability is built from the shared parts of
+[composed rules](./composing-rules.md): measured values, expressions,
 aggregates, generic judges and, where needed, a search. A **template** is
-that rebuild: the capability's outside contract, kept unchanged, and a
+that composition: the capability's outside contract, kept unchanged, and a
 composition the engine evaluates with the same evaluator as any
 `expression` rule, so an improvement to a part improves every template
-that uses it.
+that uses it. [ADR 0005](./adr-0005.md) records the decision.
 
 Templates are engine-owned and built in. A package never supplies one,
 and nothing in a template runs package code: it is data the engine reads,
 like an expression.
 
-`body-extent` is the first capability that runs as a template
-([#278](https://github.com/axioval/engine/issues/278)); `triangle-count`
-and `plan-area` follow ([#282](https://github.com/axioval/engine/issues/282)),
-and `property-predicate` is the first of the generic judges
-([#287](https://github.com/axioval/engine/issues/287)); `object-count`
-is the first deciding per source or for the project
-([#290](https://github.com/axioval/engine/issues/290)); `shelf-capacity` is the
-first whose values take the rule's selectors
-([#289](https://github.com/axioval/engine/issues/289)); `area-ratio` is the
-first over two populations and a derived ratio
-([#290](https://github.com/axioval/engine/issues/290)); `consistent-value`
-and `selector-conformance` follow `unique-value` as group decisions, and
-`relative-count` judges two populations by a proportion, and
-`property-value` judges XML Schema facets, `property-requirements`
-requirements tables and `property-comparison` candidates against a target
-(#287): every generic judge now runs as a template; `ramp-geometry` is the
-first judging the items of measured lists one by one, and
-`stair-geometry` the first judging the parts of what it selects as objects
-of their own ([#280](https://github.com/axioval/engine/issues/280)); `slab-contact` is the first to grade its findings itself and
-to leave objects unjudged, `counterpart-coverage` the first graded by
-thresholds the rule states, and `effective-coverage` the first deciding by
-a value without an upper bound
-([#282](https://github.com/axioval/engine/issues/282)); `recess-width` is
-the first of the plan-span capabilities
-([#283](https://github.com/axioval/engine/issues/283)), judging the items
-of a measured list against a row its provider selects from the rule's
-table, and `light-well`, `centre-line-distance`, `component-visibility`
-and `exit-separation` (whose required separation stays an interval over
-both shares where its flag is unknown) follow, and `name-sequence` is the
-first judging the items of a list on objects of their own (`at`), and
-`numbering-consistency`, `wall-spacing`, `parking-bay`, `distance` and `containment` follow; `coordinate-consistency` is the first judging the sources themselves,
-against a reference read once per rule, and `external-wall-validation`
-the first leading one measurement to outcomes at source and at object
-level ([#291](https://github.com/axioval/engine/issues/291)): every
-capability of #282 now runs as a template; `space-boundary-coverage` is
-the first wording everything one object leaves open in one outcome
-([#284](https://github.com/axioval/engine/issues/284)); `clash` and
-`clash-matrix` are the first judging pairs, each put in a class
-([#285](https://github.com/axioval/engine/issues/285)).
-`free-floor-circle` and `free-floor-rectangle` are the first of the
-search capabilities, a template judging the answer of a search kept in
-built-in code ([#286](https://github.com/axioval/engine/issues/286)). `space-distance`
-follows, judging each row's nearest distance against the row's bounds.
+58 of the 70 built-in capabilities run as templates, each held to the
+implementation it replaced by the [parity harness](./parity.md) and the
+[benchmark](./performance.md). They were rebuilt family by family:
+
+| Rebuild | Capabilities | What it added to the form |
+| --- | --- | --- |
+| [#278](https://github.com/axioval/engine/issues/278) | `body-extent` | the template form, the range judge, expand and fork |
+| [#287](https://github.com/axioval/engine/issues/287), [#290](https://github.com/axioval/engine/issues/290) | the generic judges: `property-predicate`, `object-count`, `related-count`, `unique-value`, `consistent-value`, `selector-conformance`, `relative-count`, `property-value`, `property-requirements`, `property-comparison`; `level-spacing` | the comparison judge, scopes per source and for the project, members and two populations, group decisions, proportions, facets, requirements tables |
+| [#289](https://github.com/axioval/engine/issues/289) | `shelf-capacity` | rule parameters and the anchor as measured-value arguments |
+| [#280](https://github.com/axioval/engine/issues/280) | `ramp-geometry`, `stair-geometry` | the items of measured lists, parts of selected objects |
+| [#281](https://github.com/axioval/engine/issues/281) | doors, windows and openings (`keyed-limit`, `opening-zone`, `door-swing`, `opening-area`, `empty-host`, …) | composed truths, items judged any-of, combined item outcomes |
+| [#282](https://github.com/axioval/engine/issues/282), [#291](https://github.com/axioval/engine/issues/291) | plan, area, level and extent checks (`triangle-count`, `plan-area`, `area-ratio`, `plan-coverage`, `slab-contact`, the coverages, `coordinate-consistency`, `external-wall-validation`, …) | grading by conditions, unjudged objects, values of a source or the project read once per rule |
+| [#283](https://github.com/axioval/engine/issues/283) | plan spans, distances and layouts (`recess-width`, `light-well`, `distance`, `containment`, `parking-bay`, …) | items placed on objects of their own (`at`) |
+| [#284](https://github.com/axioval/engine/issues/284) | guards and spaces (`horizontal-guard`, `space-validation`, `space-boundary-coverage`, …) | one outcome joining what an object leaves open |
+| [#285](https://github.com/axioval/engine/issues/285) | `clash`, `clash-matrix` | pairs judged by classes |
+| [#286](https://github.com/axioval/engine/issues/286) | the search capabilities (`free-floor-circle`, `free-floor-rectangle`, `space-distance`, `table-allocation`, `group-composition`, `component-clearance`, `accessible-route`, `escape-route`, `local-circulation`) | a search kept in built-in code, its answer judged as a measured list |
+
+The remaining twelve (`expression`, `quantity-takeoff`,
+`model-comparison`, `manual-issue`, `allowed-profile`, `classification`,
+`unclassified-object`, `same-container`, `property-exists`,
+`property-required`, `property-data-type`, `property-value-equals`) run
+as implementations; their descriptors are pinned all the same. Each
+template's section below states its composition.
 
 ## The outside contract
 
@@ -2808,14 +2788,16 @@ templates are proven (the rebuild issue decides), deleting the module and
 its call sites' entries in `scripts/measurement_ledger.json`, while the
 recorded outcomes and the fixtures' literal messages remain.
 
-## Extension points for the rebuilds
+## Extension points
 
-The rebuilds of #280–#287 extend the form where a family needs it, each
-addition data the runner interprets, never code per capability:
+The rebuilds of #280–#287 extended the form where a family needed it, each
+addition data the runner interprets, never code per capability. A new
+capability extends it the same way:
 
 - **Decisions.** `Decision` is an enum: add a variant for a judge a
-  family shares (a truth `Requirement` expression over the values, worded
-  by which labelled operand failed; consistency; `Unique` is built), with its
+  family shares (built: `Within`, `Compare`, `Unique`, `Consistent`,
+  `Conforms`, `Proportion`, `Facets`, `Requirements`, `Compared`, `Each`,
+  `Near`, `Items`, `Parts`, `Joined`, `Holds` and `Pairs`), with its
   expression form for expand and fork. Decide every comparison through
   `axioval_engine::comparison`, the one implementation the evaluator, the
   selectors, the judges and `Within` share (#287); `Compare` is the
@@ -2844,9 +2826,9 @@ addition data the runner interprets, never code per capability:
   `Decision::Each` for members, `Form::checks` for an object-level form,
   each its own outcome; divergence D1; and `Decision::Items`, each item of
   a measured list judged on its own).
-- **Searches as measured values** (built for stairs and ramps: a search
-  answers one three-valued item per searched item, `found` and its
-  words).
+- **Searches as measured values** (built for stairs and ramps and every
+  search capability of #286: a search answers one three-valued item per
+  searched item, `found` or `met` and its words).
 - **Tables and defaults.** Table parameters reach values through `lookup`;
   fallbacks (a stated value, then a table, then a declared default, each on
   an exact absence only) are a value list read in order, the first that is

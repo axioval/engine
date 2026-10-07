@@ -34,6 +34,13 @@ package of each example names its concepts in the IFC 4.3 type system
 (`IfcSlab`, `IfcStairFlight`, a property set and its properties); a source
 written in another type system needs the concepts' names there.
 
+The built-in capabilities are these layers preconfigured: each is a
+[template](./templates.md) composing measured values and a generic judge
+behind its stable parameters. Where a capability is close to the rule you
+need, fork a rule bound to it into the `expression` rule it composes
+(`axioval_rules::templates::fork`) and change that, rather than starting
+from nothing.
+
 ## Three values over intervals
 
 Every number is an interval in coherent SI units: a point when known

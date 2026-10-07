@@ -78,12 +78,14 @@ rows, patterns or whole-rule lists) is kept for that rule
 (`MeasuredMemo::of_rule`) and dropped once it is evaluated, never held for
 the whole run.
 
-**Aggregates over one pass of the relationship index.** Not done yet: no
-template reads an aggregate, so nothing measures what it would cost. An
-aggregate still walks its relationship path per object. The first rebuild
-that templates a capability with an aggregate (#280–#287) adds the walk
-over one pass of the index, and the benchmark below holds it to the
-budget.
+**Members supplied, not walked.** No template walks a relationship path
+per object: the runner supplies an anchor's members, and a scope's objects,
+to the evaluator in place of an aggregate's source
+(`ObjectLeaves::supplying`), and a search's or a provider's member list is
+measured once and memoized. An `expression` rule's aggregate still walks
+its path per object; a walk over one pass of the relationship index is left
+until a rule needs it, and the benchmark would hold a template reading it
+to the budget.
 
 ## The benchmark
 
@@ -260,11 +262,16 @@ miss: judged with a stated confidence, never on one gate's median, and
 with an issue that removes it. Optimizing the runner or the capability's
 provider comes first.
 
-## Latest measurements
+## Measurements
 
-Measured by the gate (`flock … python3 scripts/bench.py gate`), the
-median of 21 interleaved runs; time and peak heap are the template's over
-the reference's.
+Each table below was measured by the gate (`flock … python3
+scripts/bench.py gate`) when its rebuild landed, as the median of 21
+interleaved runs; time and peak heap are the template's over the
+reference's. Later runner work (#292, #294) moved several of them, and
+the gate has since judged run time with a stated confidence: the last full
+judgement is under [Judged with a stated confidence](#judged-with-a-stated-confidence),
+and the inputs over budget are the recorded exceptions above. Run the gate
+for current numbers.
 
 | input | objects | body-extent | property-predicate | triangle-count | plan-area |
 | --- | ---: | --- | --- | --- | --- |

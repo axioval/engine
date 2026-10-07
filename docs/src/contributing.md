@@ -13,7 +13,9 @@ Crates reach crates.io only through the `Release` workflow (`.github/workflows/r
 ## Layering a new check
 
 A requirement is built in layers, so every rule a capability decides can
-also be stated by an author:
+also be stated by an author, and a capability is a
+[template](./templates.md) over the same parts
+([ADR 0005](./adr-0005.md)):
 
 - **Measurement in a measured value.** A quantity read through a service
   (a distance, a share, a count of what a search found) is registered in

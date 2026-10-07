@@ -62,9 +62,10 @@ type Run = Arc<BTreeMap<ObjectId, Mutex<Option<Checks>>>>;
 #[derive(Hash, PartialEq, Eq)]
 struct RunKey(ArgumentsKey);
 
-/// The checks of the run's openings, measured once per run.
+/// The checks of the rule's openings, measured once per rule and kept
+/// for it alone.
 fn run(call: &MeasuredCall, context: &RuleContext<'_>) -> Result<Run, Unavailable> {
-    MeasuredMemo::of(context.services, RunKey(ArgumentsKey::of(call)), || {
+    MeasuredMemo::of_rule(context.services, RunKey(ArgumentsKey::of(call)), || {
         measure(call, context)
     })
 }

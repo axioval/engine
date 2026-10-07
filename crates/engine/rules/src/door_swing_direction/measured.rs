@@ -53,7 +53,16 @@ fn leaves_of(
     door: &ObjectId,
     kept: bool,
 ) -> Result<Arc<DoorLeaves>, Unavailable> {
-    let memo = context.services.get::<MeasuredMemo>();
+    leaves_in(context.services.get::<MeasuredMemo>(), frames, door, kept)
+}
+
+/// [`leaves_of`], the run's memo looked up already.
+fn leaves_in(
+    memo: Option<&MeasuredMemo>,
+    frames: &ObjectFrameServiceHandle,
+    door: &ObjectId,
+    kept: bool,
+) -> Result<Arc<DoorLeaves>, Unavailable> {
     if kept
         && let Some(leaves) =
             memo.and_then(|memo| memo.get::<_, Arc<DoorLeaves>>(&LeavesKey(door.clone())))
@@ -84,6 +93,25 @@ fn relation(
         RelationKey(door.clone(), space.clone()),
         || door_swing::relation(free, leaves, space),
     )
+}
+
+/// How many hinged leaves `object` has, refused for one with none.
+fn hinged(
+    frames: Option<&ObjectFrameServiceHandle>,
+    memo: Option<&MeasuredMemo>,
+    object: &ObjectId,
+) -> Result<Measurement, PropertyResolutionError> {
+    let refused = crate::measured_kinds::refused(HINGED_LEAVES, object);
+    let frames = frames.ok_or_else(|| refused(missing("object-frame")))?;
+    let leaves = leaves_in(memo, frames, object, false).map_err(&refused)?;
+    #[allow(clippy::cast_precision_loss)]
+    let count = leaves.hinged().count() as f64;
+    Ok(crate::measured_kinds::interval(
+        (count, count),
+        None,
+        leaves.evidence().exact,
+        format!("{HINGED_LEAVES}:{object}"),
+    ))
 }
 
 impl SwingMeasures {
@@ -205,20 +233,29 @@ impl MeasuredProvider for SwingMeasures {
         if call.name() != HINGED_LEAVES {
             return Err(PropertyResolutionError::InvalidRequest);
         }
-        let refused = crate::measured_kinds::refused(HINGED_LEAVES, object);
-        let frames = context
-            .services
-            .get::<ObjectFrameServiceHandle>()
-            .ok_or_else(|| refused(missing("object-frame")))?;
-        let leaves = leaves_of(context, frames, object, false).map_err(&refused)?;
-        #[allow(clippy::cast_precision_loss)]
-        let count = leaves.hinged().count() as f64;
-        Ok(crate::measured_kinds::interval(
-            (count, count),
-            None,
-            leaves.evidence().exact,
-            format!("{HINGED_LEAVES}:{object}"),
-        ))
+        let frames = context.services.get::<ObjectFrameServiceHandle>();
+        hinged(frames, context.services.get::<MeasuredMemo>(), object)
+    }
+
+    /// The doors' hinged leaves, the services looked up once for them all.
+    fn measure_batch(
+        &self,
+        call: &MeasuredCall,
+        objects: &[&ObjectId],
+        context: &RuleContext<'_>,
+    ) -> Vec<Result<Measurement, PropertyResolutionError>> {
+        if call.name() != HINGED_LEAVES {
+            return objects
+                .iter()
+                .map(|_| Err(PropertyResolutionError::InvalidRequest))
+                .collect();
+        }
+        let frames = context.services.get::<ObjectFrameServiceHandle>();
+        let memo = context.services.get::<MeasuredMemo>();
+        objects
+            .iter()
+            .map(|object| hinged(frames, memo, object))
+            .collect()
     }
 
     fn members(

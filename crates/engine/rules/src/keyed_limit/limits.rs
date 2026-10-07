@@ -61,9 +61,10 @@ struct Prepared {
 #[derive(Hash, PartialEq, Eq)]
 struct PreparedKey(ArgumentsKey);
 
-/// The rule and rows `call` states, read once per run.
+/// The rule and rows `call` states, read once per rule (kept for the
+/// rule alone: no other rule reads them).
 fn prepared(call: &MeasuredCall, context: &RuleContext<'_>) -> Result<Arc<Prepared>, Unavailable> {
-    MeasuredMemo::of(
+    MeasuredMemo::of_rule(
         context.services,
         PreparedKey(ArgumentsKey::of(call)),
         || {
@@ -86,14 +87,14 @@ fn prepared(call: &MeasuredCall, context: &RuleContext<'_>) -> Result<Arc<Prepar
 #[derive(Hash, PartialEq, Eq)]
 struct RowsKey(ArgumentsKey);
 
-/// The rows the keys select among, compiled once per run for the row and
-/// for what it bounds alike.
+/// The rows the keys select among, compiled once per rule for the row
+/// and for what it bounds alike.
 fn compiled(
     rule: &CompiledRule,
     rows: &ArgumentsKey,
     context: &RuleContext<'_>,
 ) -> Result<Arc<Vec<Limit>>, Unavailable> {
-    MeasuredMemo::of(context.services, RowsKey(rows.clone()), || {
+    MeasuredMemo::of_rule(context.services, RowsKey(rows.clone()), || {
         let parameters = Parameters(rule);
         let declared = declared(&parameters)?;
         limits(&parameters, &declared).map(Arc::new)
@@ -104,7 +105,7 @@ fn compiled(
 #[derive(Hash, PartialEq, Eq)]
 struct RowKey(ArgumentsKey, ObjectId);
 
-/// The row `object`'s keys select, read once per run for the keys and
+/// The row `object`'s keys select, read once per rule for the keys and
 /// rows the call states.
 fn row(
     prepared: &Prepared,
@@ -112,7 +113,7 @@ fn row(
     context: &RuleContext<'_>,
 ) -> Result<Arc<Selected>, Unavailable> {
     let key = RowKey(prepared.rows.clone(), object.clone());
-    MeasuredMemo::of(context.services, key, || {
+    MeasuredMemo::of_rule(context.services, key, || {
         // A derived group is a resource object of the run, not the
         // project's.
         let subject = crate::selection::object_by_id(context, object)

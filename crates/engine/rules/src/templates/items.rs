@@ -630,6 +630,15 @@ pub(super) fn judge_items(
         for check in &items.checks {
             check_item(&item, check, evidence, object, &mut outcomes);
         }
+        // An item stating why it is open: its open outcomes give that
+        // reason.
+        if let Some(reason) = items.reason.and_then(|name| stated_reason(member, name)) {
+            for outcome in &mut outcomes[before..] {
+                if let Outcome::Open(open, _) = outcome {
+                    *open = reason.clone();
+                }
+            }
+        }
         // An item's outcomes on the object it names, where it names one.
         if let Some(at) = items.at
             && let Field::Objects([placed, ..]) = field(member, at)
@@ -688,6 +697,17 @@ pub(super) fn judge_items(
         }
     }
     outcomes
+}
+
+/// The reason the item's text field `name` states, as a report writes it
+/// (`missing_service`); none where it states none or another word.
+fn stated_reason(member: &MeasuredMember, name: &str) -> Option<NotEvaluatedReason> {
+    match field(member, name) {
+        Field::Text(text) => {
+            serde_json::from_value(serde_json::Value::String(text.to_owned())).ok()
+        }
+        _ => None,
+    }
 }
 
 /// The items' outcomes as one ([`Combined`]): `outcomes` lie item by item

@@ -100,6 +100,7 @@ fn items(list: &'static str, checks: Vec<ItemCheck>) -> FormCheck {
             at: None,
             once: false,
             combined: None,
+            reason: None,
         })),
         fail: "",
         undecided: "",

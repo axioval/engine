@@ -78,6 +78,13 @@ pub struct Items {
     /// Every item's outcome one outcome on the object ([`Combined`]).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub combined: Option<Combined>,
+    /// The text field naming the reason an item's open outcomes give
+    /// (`missing_service`, as a report writes it), where the item states
+    /// one: a placement whose body cannot be read, a search missing its
+    /// service. Without it, or where the item states none, incomplete
+    /// evidence.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<&'static str>,
 }
 
 /// The items' outcomes as one: where any item fails, one finding whose

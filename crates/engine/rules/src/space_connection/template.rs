@@ -102,6 +102,7 @@ fn connections() -> FormCheck {
             at: None,
             merged: false,
             combined: None,
+            reason: None,
         })),
         fail: "",
         undecided: "",

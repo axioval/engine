@@ -23,6 +23,10 @@ use axioval_engine::{
 use axioval_ir::contract::{ParameterValue, Selector, TableRow};
 use axioval_ir::{Evidence, NotEvaluatedReason, ObjectId};
 use axioval_rules::SpaceDistance;
+
+/// `space-distance` as it runs, held to the implementation it replaced on
+/// every evaluation.
+static HELD: common::Held = common::Held(&SpaceDistance, &axioval_rules::reference::SpaceDistance);
 use common::{
     Model, assert_deviation, boolean, deviation_of, findings, id, kind, number, rule, selector,
     source, string, strings, unevaluated,
@@ -42,7 +46,7 @@ fn evidence(lower: f64, upper: f64, locator: String) -> Evidence {
 }
 
 /// How a stubbed route between two spaces ends.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 enum Route {
     Reachable(f64, f64),
     Blocked,
@@ -122,6 +126,10 @@ impl PlanSpanService for Geometry {
             .spans
             .get(&key)
             .unwrap_or_else(|| panic!("unexpected span {key:?}"));
+        // A pair declared not a number cannot be measured.
+        if lower.is_nan() {
+            return Err(PlanSpanError::Unavailable("no footprint".into()));
+        }
         PlanLength::try_new(
             lower,
             upper,
@@ -179,6 +187,9 @@ impl ProximityService for Geometry {
             .gaps
             .get(&key)
             .unwrap_or_else(|| panic!("unexpected closest distance {key:?}"));
+        if lower.is_nan() {
+            return Err(ProximityError::Unavailable);
+        }
         #[allow(clippy::float_cmp)]
         let fidelity = if lower == upper {
             GeometryFidelity::Exact
@@ -342,13 +353,9 @@ fn run(
 ) -> CapabilityEvaluation {
     let mut parameters = vec![("distances", ParameterValue::Table { value: rows })];
     parameters.extend(extra);
-    model.evaluate_with(
-        &SpaceDistance,
-        &rule(ID, spaces(), parameters),
-        |services| {
-            geometry.register(services);
-        },
-    )
+    model.evaluate_with(&HELD, &rule(ID, spaces(), parameters), |services| {
+        geometry.register(services);
+    })
 }
 
 /// Offices `o1` to `o3` and toilets `t1`, `t2`.
@@ -393,6 +400,12 @@ fn the_nearest_destination_in_a_straight_line_is_judged_as_an_interval() {
     assert_eq!(
         unevaluated(&evaluation),
         [("o2".into(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+    assert_eq!(
+        evaluation.not_evaluated_outcomes()[0].message(),
+        "space-distance row 0: the nearest destination is at most 22 m in a straight line \
+         between centres, at most 20 m required, and it is known only to lie between 18 and \
+         22 m away"
     );
     assert!(
         evaluation.findings()[0]
@@ -715,6 +728,33 @@ fn declarations_that_cannot_be_judged_are_refused() {
 }
 
 #[test]
+fn a_distance_between_tessellated_bodies_is_cited_inexactly() {
+    // The measured list `distance_rows` states the nearest distance exact
+    // only on exact evidence: a gap between tessellated bodies is an
+    // interval whose finding is never exact, an exact one's always is.
+    let evaluate = |gap: (f64, f64)| {
+        run(
+            Model::default()
+                .object("o1", "office")
+                .object("t1", "toilet"),
+            Geometry::default().gap("o1", "t1", gap.0, gap.1),
+            vec![toilets("closest", &[("minimum", 0.5)])],
+            Vec::new(),
+        )
+    };
+    let tessellated = evaluate((0.1, 0.2));
+    assert_eq!(tessellated.findings().len(), 1);
+    assert!(
+        tessellated.findings()[0]
+            .evidence
+            .iter()
+            .any(|item| !item.exact)
+    );
+    let exact = evaluate((0.2, 0.2));
+    assert!(exact.findings()[0].evidence.iter().all(|item| item.exact));
+}
+
+#[test]
 fn the_closest_distance_is_measured_between_the_bodies() {
     // Two long rooms side by side: their centres lie 8 m apart, their bodies
     // only the 0.2 m wall between them.
@@ -801,7 +841,7 @@ fn without_the_services_it_is_not_evaluated() {
         .object("o1", "office")
         .object("t1", "toilet")
         .evaluate(
-            &SpaceDistance,
+            &HELD,
             &rule(
                 ID,
                 spaces(),
@@ -817,4 +857,92 @@ fn without_the_services_it_is_not_evaluated() {
         unevaluated(&evaluation),
         [("o1".into(), NotEvaluatedReason::MissingService)]
     );
+}
+
+/// Generated offices and toilets: every pair's span, gap and route exact,
+/// an interval or refused, toilets whose kind cannot be read, rows by each
+/// measure with random bounds, held to the reference.
+mod generated {
+    use super::*;
+    use proptest::prelude::*;
+
+    /// A pair's measurement: an interval, or not a number when refused.
+    fn measured() -> impl Strategy<Value = (f64, f64)> {
+        prop_oneof![
+            (0.0..40.0f64).prop_map(|value| (value, value)),
+            (0.0..40.0f64, 0.0..6.0f64).prop_map(|(lower, width)| (lower, lower + width)),
+            Just((f64::NAN, f64::NAN)),
+        ]
+    }
+
+    fn route() -> impl Strategy<Value = Route> {
+        prop_oneof![
+            (0.0..60.0f64, 0.0..4.0f64)
+                .prop_map(|(lower, width)| Route::Reachable(lower, lower + width)),
+            Just(Route::Blocked),
+            Just(Route::Refused),
+        ]
+    }
+
+    const OFFICES: [&str; 2] = ["o1", "o2"];
+    const TOILETS: [&str; 3] = ["t1", "t2", "t3"];
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(128))]
+
+        #[test]
+        fn generated_distances_hold_parity(
+            spans in proptest::collection::vec(measured(), 6),
+            gaps in proptest::collection::vec(measured(), 6),
+            routes in proptest::collection::vec(route(), 6),
+            unreadable in proptest::option::of(0..3usize),
+            measure in 0..3usize,
+            minimum in proptest::option::of(0.0..20.0f64),
+            maximum in proptest::option::of(10.0..45.0f64),
+            two_rows in any::<bool>(),
+        ) {
+            let mut model = Model::default()
+                .object("o1", "office")
+                .object("o2", "office")
+                .object("t1", "toilet")
+                .object("t2", "toilet")
+                .object("t3", "toilet");
+            if let Some(toilet) = unreadable {
+                model = model.unreadable(TOILETS[toilet]);
+            }
+            let mut geometry = Geometry::default();
+            for (index, (office, toilet)) in OFFICES
+                .iter()
+                .flat_map(|office| TOILETS.iter().map(move |toilet| (*office, *toilet)))
+                .enumerate()
+            {
+                geometry = geometry
+                    .span(office, toilet, spans[index].0, spans[index].1)
+                    .gap(office, toilet, gaps[index].0, gaps[index].1)
+                    .route(office, toilet, routes[index]);
+            }
+            let measure = ["straight", "closest", "walking"][measure];
+            let mut bounds = Vec::new();
+            if let Some(minimum) = minimum {
+                bounds.push(("minimum", minimum));
+            }
+            match maximum {
+                Some(maximum) if minimum.is_none_or(|minimum| minimum <= maximum) => {
+                    bounds.push(("maximum", maximum));
+                }
+                _ if bounds.is_empty() => bounds.push(("maximum", 30.0)),
+                _ => {}
+            }
+            let mut rows = vec![toilets(measure, &bounds)];
+            if two_rows {
+                rows.push(toilets("straight", &[("maximum", 25.0)]));
+            }
+            let extra = if measure == "walking" {
+                walking()
+            } else {
+                Vec::new()
+            };
+            run(model, geometry, rows, extra);
+        }
+    }
 }

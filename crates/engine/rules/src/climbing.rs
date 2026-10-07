@@ -12,6 +12,7 @@ use axioval_engine::{
 };
 use axioval_ir::ObjectId;
 use axioval_ir::contract::Selector;
+use axioval_ir::measured::MeasuredSelection;
 
 use crate::selection::{Selection, selector_matches};
 use crate::support::{Parameters, Unavailable, invalid};
@@ -27,9 +28,17 @@ pub(crate) fn descriptors() -> Vec<ParameterDescriptor> {
     ]
 }
 
+/// What picks the connectors of one kind: a rule's selector, evaluated
+/// per object, or the objects a measured value's argument bound from it.
+#[derive(Clone, Copy)]
+enum Pick<'a> {
+    Selector(&'a Selector),
+    Selected(&'a MeasuredSelection),
+}
+
 /// A rule's connector declaration.
 pub(crate) struct Climbing<'a> {
-    selectors: [(VerticalConnectorKind, Option<&'a Selector>); 3],
+    selectors: [(VerticalConnectorKind, Option<Pick<'a>>); 3],
     climb: ClimbLength,
 }
 
@@ -74,9 +83,26 @@ impl<'a> Climbing<'a> {
             return Ok(None);
         }
         Ok(Some(Self {
-            selectors: found,
+            selectors: found.map(|(kind, selector)| (kind, selector.map(Pick::Selector))),
             climb,
         }))
+    }
+
+    /// The same declaration, its connectors the objects measured values'
+    /// arguments bound from its selectors (stairs, ramps, lifts): the
+    /// connectors a template's search reads. A kind the rule does not
+    /// select stays unselected.
+    pub(crate) fn selected(self, bound: [Option<&'a MeasuredSelection>; 3]) -> Self {
+        let [stairs, ramps, lifts] = bound;
+        let [stair, ramp, lift] = self.selectors;
+        let pick = |(kind, declared): (VerticalConnectorKind, Option<Pick<'a>>),
+                    bound: Option<&'a MeasuredSelection>| {
+            (kind, declared.and(bound.map(Pick::Selected)))
+        };
+        Self {
+            selectors: [pick(stair, stairs), pick(ramp, ramps), pick(lift, lifts)],
+            climb: self.climb,
+        }
     }
 
     /// The connectors the rule selects, as a routing: every connector
@@ -92,10 +118,27 @@ impl<'a> Climbing<'a> {
         context: &RuleContext<'_>,
     ) -> Result<ConnectorRouting, Unavailable> {
         let mut kinds: BTreeMap<ObjectId, VerticalConnectorKind> = BTreeMap::new();
-        for (kind, selector) in &self.selectors {
-            let Some(selector) = selector else { continue };
+        for (kind, pick) in &self.selectors {
+            let Some(pick) = pick else { continue };
             for object in context.project.objects() {
-                match selector_matches(context, selector, object, &mut Vec::new()) {
+                let picked = match pick {
+                    Pick::Selector(selector) => {
+                        selector_matches(context, selector, object, &mut Vec::new())
+                    }
+                    Pick::Selected(selected) if selected.matched.contains(&object.id) => {
+                        Selection::Match
+                    }
+                    Pick::Selected(selected) if selected.undecided.contains(&object.id) => {
+                        let (reason, message) =
+                            selected.reasons.get(&object.id).cloned().unwrap_or((
+                                NotEvaluatedReason::IncompleteEvidence,
+                                "its selection is undecided".to_owned(),
+                            ));
+                        Selection::NotEvaluated(reason, message)
+                    }
+                    Pick::Selected(_) => Selection::NoMatch,
+                };
+                match picked {
                     Selection::Match => {
                         if let Some(other) = kinds.insert(object.id.clone(), *kind)
                             && other != *kind

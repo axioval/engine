@@ -1,26 +1,42 @@
 //! `space-distance`: how far each space lies from its nearest destination
-//! space, in a straight line or walking.
+//! space, in a straight line, between bodies or walking.
+//!
+//! The search stays here: each applicable row's destinations, which surely
+//! qualify and which might, and the nearest distance bounded from above by
+//! the sure ones and from below by every possible one (`Search::answer`).
+//! The capability runs as a template (`space_distance/template.rs`) judging
+//! that distance against the row's bounds through the measured list
+//! `distance_rows` (`space_distance/measured.rs`).
+
+mod measured;
+#[cfg(feature = "parity-reference")]
+pub(crate) mod reference;
+mod template;
+
+pub(crate) use measured::RowMeasures;
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::{LazyLock, Mutex, PoisonError};
 
+use axioval_engine::template::Template;
 use axioval_engine::{
-    CapabilityEvaluation, CentrePlacement, ColumnKind, CompiledRule, ConnectorRouting, Deviation,
-    MetricPoint, MetricRoutingServiceHandle, MobilityProfile, NearestTargetOutcome,
-    NearestTargetRequest, NotEvaluatedReason, ParameterDescriptor, ParameterType, PlanSpan,
-    PlanSpanServiceHandle, ProximityProjection, ProximityRequest, ProximityServiceHandle,
-    RuleCapability, RuleContext, TableColumn, VerticalExtentServiceHandle,
+    CapabilityEvaluation, CentrePlacement, ColumnKind, CompiledRule, ConnectorRouting, MetricPoint,
+    MetricRoutingServiceHandle, MobilityProfile, NearestTargetOutcome, NearestTargetRequest,
+    NotEvaluatedReason, ParameterDescriptor, ParameterType, PlanSpan, PlanSpanServiceHandle,
+    ProximityProjection, ProximityRequest, ProximityServiceHandle, RuleCapability, RuleContext,
+    TableColumn, VerticalExtentServiceHandle,
 };
-use axioval_ir::contract::Selector;
-use axioval_ir::{Evidence, Finding, Object, ObjectId};
+use axioval_ir::contract::{ParameterValue, Selector};
+use axioval_ir::{Evidence, Object, ObjectId};
 
 use crate::climbing::{self, Climbing};
 use crate::plan_area::shown;
-use crate::selection::{Selection, select_objects, selector_matches};
+use crate::selection::{Selection, selector_matches};
 use crate::space_access::{AccessDeclaration, AccessIndex, AccessType, Link, Partners};
 use crate::support::table::{Matched, RowSelection, RowTest, match_rows};
-use crate::support::{Parameters, Traversal, Unavailable, finding, invalid};
+use crate::support::{Parameters, Traversal, Unavailable, invalid};
 
-const COLUMNS: &[TableColumn] = &[
+pub(crate) const COLUMNS: &[TableColumn] = &[
     TableColumn::optional("label", ColumnKind::String),
     TableColumn::required("from", ColumnKind::Selector),
     TableColumn::required("to", ColumnKind::Selector),
@@ -30,6 +46,25 @@ const COLUMNS: &[TableColumn] = &[
     TableColumn::optional("minimum", ColumnKind::Number),
     TableColumn::optional("maximum", ColumnKind::Number),
 ];
+
+/// The capability's parameter descriptor.
+pub(crate) fn parameters() -> Vec<ParameterDescriptor> {
+    let mut parameters = vec![
+        ParameterDescriptor::required("distances", ParameterType::Table(COLUMNS)),
+        ParameterDescriptor::optional("storey_path", ParameterType::StringList),
+        ParameterDescriptor::optional("storey_selector", ParameterType::Selector),
+        ParameterDescriptor::optional("access_path", ParameterType::StringList),
+        ParameterDescriptor::optional("door_selector", ParameterType::Selector),
+        ParameterDescriptor::optional("opening_selector", ParameterType::Selector),
+        ParameterDescriptor::optional("space_selector", ParameterType::Selector),
+        ParameterDescriptor::optional("walking_radius", ParameterType::Number),
+        ParameterDescriptor::optional("walking_height", ParameterType::Number),
+        ParameterDescriptor::optional("walking_step", ParameterType::Number),
+        ParameterDescriptor::optional("walking_slope", ParameterType::Number),
+    ];
+    parameters.extend(climbing::descriptors());
+    parameters
+}
 
 /// Checks the distance from each selected space to its nearest destination.
 ///
@@ -71,15 +106,42 @@ const COLUMNS: &[TableColumn] = &[
 /// bound at zero.
 pub struct SpaceDistance;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-enum Measure {
+static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
+
+/// The plans of the rules bound to it, kept across runs.
+static PLANS: crate::templates::Plans = crate::templates::Plans::new();
+
+impl RuleCapability for SpaceDistance {
+    fn id(&self) -> &'static str {
+        TEMPLATE.id
+    }
+
+    fn grades_deviation(&self) -> bool {
+        TEMPLATE.grades
+    }
+
+    fn parameters(&self) -> Vec<ParameterDescriptor> {
+        TEMPLATE.parameters.clone()
+    }
+
+    fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
+        crate::templates::run((&TEMPLATE, &PLANS), context, rule)
+    }
+
+    fn template(&self) -> Option<&Template> {
+        Some(&TEMPLATE)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) enum Measure {
     Straight,
     Closest,
     Walking,
 }
 
 impl Measure {
-    fn parse(row: &str, stated: Option<&str>) -> Result<Self, Unavailable> {
+    pub(crate) fn parse(row: &str, stated: Option<&str>) -> Result<Self, Unavailable> {
         match stated.unwrap_or("straight") {
             "straight" => Ok(Self::Straight),
             "closest" => Ok(Self::Closest),
@@ -90,7 +152,7 @@ impl Measure {
         }
     }
 
-    fn describe(self) -> &'static str {
+    pub(crate) fn describe(self) -> &'static str {
         match self {
             Self::Straight => "in a straight line between centres",
             Self::Closest => "between the closest points of the bodies",
@@ -99,26 +161,35 @@ impl Measure {
     }
 }
 
-struct Row<'a> {
-    name: String,
-    from: &'a Selector,
-    to: &'a Selector,
+/// One row of `distances`.
+#[derive(Clone)]
+pub(crate) struct Row {
+    pub(crate) name: String,
+    from: Selector,
+    to: Selector,
     measure: Measure,
     same_storey: bool,
     direct_access: bool,
-    minimum: Option<f64>,
-    maximum: Option<f64>,
+    pub(crate) minimum: Option<f64>,
+    pub(crate) maximum: Option<f64>,
 }
 
-struct Declaration<'a> {
-    rows: Vec<Row<'a>>,
-    storeys: Option<(Traversal, &'a Selector)>,
-    access: Option<AccessDeclaration<'a>>,
-    profile: Option<MobilityProfile>,
-    climbing: Option<Climbing<'a>>,
+/// What a rule declares, read as the capability read it: the rows, then
+/// the storeys, the access, the walking profile and the connectors.
+pub(crate) struct Declared<'a> {
+    pub(crate) rows: Vec<Row>,
+    pub(crate) storeys: Option<Traversal>,
+    pub(crate) access: Option<AccessDeclaration<'a>>,
+    pub(crate) profile: Option<MobilityProfile>,
+    pub(crate) climbing: Option<Climbing<'a>>,
 }
 
-fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
+/// The rule's declaration, in the capability's order and words.
+///
+/// # Errors
+///
+/// An invalid declaration.
+pub(crate) fn declaration(rule: &CompiledRule) -> Result<Declared<'_>, Unavailable> {
     let parameters = Parameters(rule);
     let table = parameters
         .table("distances")?
@@ -151,10 +222,12 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
         rows.push(Row {
             from: row
                 .selector("from")?
-                .ok_or_else(|| invalid(format!("{name} has no `from`")))?,
+                .ok_or_else(|| invalid(format!("{name} has no `from`")))?
+                .clone(),
             to: row
                 .selector("to")?
-                .ok_or_else(|| invalid(format!("{name} has no `to`")))?,
+                .ok_or_else(|| invalid(format!("{name} has no `to`")))?
+                .clone(),
             measure,
             same_storey: row.boolean("same_storey")?.unwrap_or(false),
             direct_access: row.boolean("direct_access")?.unwrap_or(false),
@@ -167,7 +240,7 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
         parameters.strings("storey_path")?,
         parameters.selector("storey_selector")?,
     ) {
-        (Some(path), Some(selector)) => Some((Traversal::path(path)?, selector)),
+        (Some(path), Some(_)) => Some(Traversal::path(path)?),
         (None, None) => None,
         _ => return Err(invalid("`storey_path` and `storey_selector` go together")),
     };
@@ -205,7 +278,7 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
             "a walking row needs `walking_radius`, `walking_height` and `walking_step`",
         ));
     }
-    Ok(Declaration {
+    Ok(Declared {
         rows,
         storeys,
         access,
@@ -214,214 +287,57 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
     })
 }
 
-impl RuleCapability for SpaceDistance {
-    fn id(&self) -> &'static str {
-        "axioval:capability.space-distance"
-    }
-
-    fn grades_deviation(&self) -> bool {
-        true
-    }
-
-    fn parameters(&self) -> Vec<ParameterDescriptor> {
-        let mut parameters = vec![
-            ParameterDescriptor::required("distances", ParameterType::Table(COLUMNS)),
-            ParameterDescriptor::optional("storey_path", ParameterType::StringList),
-            ParameterDescriptor::optional("storey_selector", ParameterType::Selector),
-            ParameterDescriptor::optional("access_path", ParameterType::StringList),
-            ParameterDescriptor::optional("door_selector", ParameterType::Selector),
-            ParameterDescriptor::optional("opening_selector", ParameterType::Selector),
-            ParameterDescriptor::optional("space_selector", ParameterType::Selector),
-            ParameterDescriptor::optional("walking_radius", ParameterType::Number),
-            ParameterDescriptor::optional("walking_height", ParameterType::Number),
-            ParameterDescriptor::optional("walking_step", ParameterType::Number),
-            ParameterDescriptor::optional("walking_slope", ParameterType::Number),
-        ];
-        parameters.extend(climbing::descriptors());
-        parameters
-    }
-
-    fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
-        let declared = match declaration(rule) {
-            Ok(declared) => declared,
-            Err((reason, message)) => {
-                return CapabilityEvaluation::not_evaluated(
-                    reason,
-                    format!("space-distance: {message}"),
-                );
-            }
-        };
-        let storeys = declared.storeys.as_ref().map(|(climb, selector)| {
-            let (found, outcomes) = select_objects(context, selector);
-            let decided = outcomes.not_evaluated_outcomes().is_empty();
-            (
-                climb,
-                found.into_iter().map(|object| object.id.clone()).collect(),
-                decided,
-            )
-        });
-        let index = declared.access.as_ref().map(|access| access.index(context));
-        let (spaces, mut evaluation) = select_objects(context, &rule.selector);
-        let mut judge = Judge {
-            context,
-            rule,
-            profile: declared.profile,
-            storeys,
-            index: index.as_ref(),
-            targets: BTreeMap::new(),
-            climbed: BTreeMap::new(),
-            partners: BTreeMap::new(),
-            points: BTreeMap::new(),
-            lengths: BTreeMap::new(),
-            connectors: declared
-                .climbing
-                .as_ref()
-                .map(|climbing| climbing.routing(context)),
-        };
-        for space in spaces {
-            let matched = match_rows(
-                &declared.rows,
-                RowSelection::All,
-                |row| match selector_matches(context, row.from, space, &mut Vec::new()) {
-                    Selection::Match => RowTest::Match(0),
-                    Selection::NoMatch => RowTest::NoMatch,
-                    Selection::NotEvaluated(..) => RowTest::Undecided,
-                },
-            );
-            let Matched::Rows(applicable) = matched else {
-                evaluation.push_object_not_evaluated(
-                    space.id.clone(),
-                    NotEvaluatedReason::IncompleteEvidence,
-                    "space-distance: whether a row's `from` picks this space is undecided",
-                );
-                continue;
-            };
-            for (index, row) in applicable {
-                match judge.row(space, index, row) {
-                    Ok(Some((found, deviation))) => {
-                        evaluation.push_graded_finding(found, deviation);
-                    }
-                    Ok(None) => {}
-                    Err((reason, message)) => evaluation.push_object_not_evaluated(
-                        space.id.clone(),
-                        reason,
-                        format!("space-distance {}: {message}", row.name),
-                    ),
-                }
-            }
-        }
-        evaluation
-    }
+/// Checks the rule parameters `distance_rows` names, as the rule states
+/// them: the declaration the capability refused, in its order and words.
+///
+/// # Errors
+///
+/// An invalid declaration.
+pub(crate) fn check_arguments(
+    stated: &BTreeMap<String, ParameterValue>,
+) -> Result<(), Unavailable> {
+    let rule = crate::light_area::synthesised(stated.clone());
+    declaration(&rule).map(|_| ())
 }
 
 /// A measured distance between two spaces.
 #[derive(Clone, Debug, PartialEq)]
-enum Distance {
+pub(crate) enum Distance {
     /// Between `lower` and `upper` metres.
     Between(f64, f64, Evidence),
 }
 
 impl Distance {
-    fn lower(&self) -> f64 {
+    pub(crate) fn lower(&self) -> f64 {
         let Self::Between(lower, _, _) = self;
         *lower
     }
 
-    fn upper(&self) -> f64 {
+    pub(crate) fn upper(&self) -> f64 {
         let Self::Between(_, upper, _) = self;
         *upper
     }
 
-    fn evidence(&self) -> &Evidence {
+    pub(crate) fn evidence(&self) -> &Evidence {
         let Self::Between(_, _, evidence) = self;
         evidence
     }
 }
 
-/// A destination that surely qualifies, or might.
-struct Candidate {
-    id: ObjectId,
-    /// `None` when it surely qualifies, else why it might not.
-    doubt: Option<String>,
-    evidence: Vec<Evidence>,
-}
-
-/// The nearest distance, bounded by the destinations that surely qualify
-/// from above and by every one that might from below.
-struct Nearest {
-    most: f64,
-    least: f64,
-    /// The sure destination bounding `most` from above.
-    sure: Option<(ObjectId, Distance, Vec<Evidence>)>,
-    /// A possible destination at the least lower bound.
-    closest: Option<(ObjectId, Distance, Vec<Evidence>)>,
-    /// Evidence that destinations cannot be reached.
-    blocked: Vec<Evidence>,
-    doubts: Vec<String>,
-    reason: NotEvaluatedReason,
-}
-
-impl Nearest {
-    fn new() -> Self {
-        Self {
-            most: f64::INFINITY,
-            least: f64::INFINITY,
-            sure: None,
-            closest: None,
-            blocked: Vec::new(),
-            doubts: Vec::new(),
-            reason: NotEvaluatedReason::IncompleteEvidence,
-        }
-    }
-
-    fn doubt(&mut self, (why, message): Unavailable) {
-        if why == NotEvaluatedReason::MissingService {
-            self.reason = why;
-        }
-        self.doubts.push(message);
-    }
-}
-
-/// Nearest storeys, and the climb's evidence.
-type Climb = Result<(BTreeSet<ObjectId>, Vec<Evidence>), Unavailable>;
-
-/// What a nearest-destination query found.
-enum Walked {
-    Reached(usize, Distance),
-    Unreachable(Evidence),
-}
-
-struct Judge<'r, 'c> {
-    context: &'r RuleContext<'c>,
-    rule: &'r CompiledRule,
-    profile: Option<MobilityProfile>,
-    /// The climb, the storeys, and whether the storey selection decided
-    /// every object.
-    storeys: Option<(&'r Traversal, BTreeSet<ObjectId>, bool)>,
-    index: Option<&'r AccessIndex>,
-    targets: BTreeMap<(usize, ObjectId), Selection>,
-    climbed: BTreeMap<ObjectId, Climb>,
-    partners: BTreeMap<ObjectId, Partners>,
-    points: BTreeMap<ObjectId, Result<(MetricPoint, Vec<Evidence>), Unavailable>>,
-    lengths: BTreeMap<(Measure, ObjectId, ObjectId), Result<Distance, Unavailable>>,
-    /// The connectors walks may climb, when the rule selects any.
-    connectors: Option<Result<ConnectorRouting, Unavailable>>,
-}
-
-fn missing(service: &str) -> Unavailable {
+pub(crate) fn missing(service: &str) -> Unavailable {
     (
         NotEvaluatedReason::MissingService,
         format!("{service} service is not registered"),
     )
 }
 
-fn incomplete(message: String) -> Unavailable {
+pub(crate) fn incomplete(message: String) -> Unavailable {
     (NotEvaluatedReason::IncompleteEvidence, message)
 }
 
 /// Measures one pair of spaces between centres or between the closest
 /// points of their bodies.
-fn measure_pair(
+pub(crate) fn measure_pair(
     context: &RuleContext<'_>,
     measure: Measure,
     first: &ObjectId,
@@ -522,9 +438,191 @@ pub(crate) fn representative_point(
     ))
 }
 
+/// A destination that surely qualifies, or might.
+struct Candidate {
+    id: ObjectId,
+    /// `None` when it surely qualifies, else why it might not.
+    doubt: Option<String>,
+    evidence: Vec<Evidence>,
+}
+
+/// The nearest distance, bounded by the destinations that surely qualify
+/// from above and by every one that might from below.
+struct Nearest {
+    most: f64,
+    least: f64,
+    /// The sure destination bounding `most` from above.
+    sure: Option<(ObjectId, Distance, Vec<Evidence>)>,
+    /// A possible destination at the least lower bound.
+    closest: Option<(ObjectId, Distance, Vec<Evidence>)>,
+    /// Evidence that destinations cannot be reached.
+    blocked: Vec<Evidence>,
+    doubts: Vec<String>,
+    reason: NotEvaluatedReason,
+}
+
+impl Nearest {
+    fn new() -> Self {
+        Self {
+            most: f64::INFINITY,
+            least: f64::INFINITY,
+            sure: None,
+            closest: None,
+            blocked: Vec::new(),
+            doubts: Vec::new(),
+            reason: NotEvaluatedReason::IncompleteEvidence,
+        }
+    }
+
+    fn doubt(&mut self, (why, message): Unavailable) {
+        if why == NotEvaluatedReason::MissingService {
+            self.reason = why;
+        }
+        self.doubts.push(message);
+    }
+}
+
+/// Nearest storeys, and the climb's evidence.
+type Climb = Result<(BTreeSet<ObjectId>, Vec<Evidence>), Unavailable>;
+
+/// What a nearest-destination query found.
+enum Walked {
+    Reached(usize, Distance),
+    Unreachable(Evidence),
+}
+
+/// What a run of a rule reads once for all its spaces: its rows, storeys,
+/// access, walking profile and connectors, and what it measured so far.
+pub(crate) struct Search {
+    rows: Vec<Row>,
+    /// The climb, the storeys, and whether the storey selection decided
+    /// every object.
+    storeys: Option<(Traversal, BTreeSet<ObjectId>, bool)>,
+    index: Option<AccessIndex>,
+    profile: Option<MobilityProfile>,
+    /// The connectors walks may climb, when the rule selects any.
+    connectors: Option<Result<ConnectorRouting, Unavailable>>,
+    caches: Mutex<Caches>,
+}
+
+/// What a search measured, kept across its spaces.
+#[derive(Default)]
+struct Caches {
+    targets: BTreeMap<(usize, ObjectId), Selection>,
+    climbed: BTreeMap<ObjectId, Climb>,
+    partners: BTreeMap<ObjectId, Partners>,
+    points: BTreeMap<ObjectId, Result<(MetricPoint, Vec<Evidence>), Unavailable>>,
+    lengths: BTreeMap<(Measure, ObjectId, ObjectId), Result<Distance, Unavailable>>,
+}
+
+/// One finding a row's bounds may lead to: its words, the objects it
+/// relates and the evidence it cites.
+pub(crate) struct Finding {
+    pub(crate) words: String,
+    pub(crate) related: Vec<ObjectId>,
+    pub(crate) evidence: Vec<Evidence>,
+}
+
+/// What the search found for one row of one space: the nearest distance
+/// between `least` and `most` metres (either infinite where no destination
+/// bounds it), what lying beyond the maximum or within the minimum is
+/// worded as, and why the distance is not known better.
+pub(crate) struct Measured {
+    pub(crate) least: f64,
+    pub(crate) most: f64,
+    /// Lying beyond the row's maximum, where it states one.
+    pub(crate) above: Option<Finding>,
+    /// Lying within the row's minimum, where a sure destination bounds the
+    /// distance.
+    pub(crate) below: Option<Finding>,
+    /// The words and reason of a distance the bounds leave undecided.
+    pub(crate) open: Unavailable,
+}
+
+/// One applicable row of one space, and what the search found for it.
+pub(crate) struct Answer {
+    pub(crate) row: Row,
+    pub(crate) measured: Result<Measured, Unavailable>,
+}
+
+impl Search {
+    /// The search a rule declares, its selections those measured values'
+    /// arguments bound.
+    pub(crate) fn new(
+        context: &RuleContext<'_>,
+        declared: Declared<'_>,
+        storeys: Option<&axioval_ir::measured::MeasuredSelection>,
+    ) -> Self {
+        let storeys = declared.storeys.map(|climb| {
+            let (found, decided) = match storeys {
+                Some(selection) => (selection.matched.clone(), selection.undecided.is_empty()),
+                None => (BTreeSet::new(), false),
+            };
+            (climb, found, decided)
+        });
+        Self {
+            index: declared.access.as_ref().map(|access| access.index(context)),
+            connectors: declared
+                .climbing
+                .as_ref()
+                .map(|climbing| climbing.routing(context)),
+            rows: declared.rows,
+            storeys,
+            profile: declared.profile,
+            caches: Mutex::new(Caches::default()),
+        }
+    }
+
+    /// Every row that applies to `space`, each with what the search found.
+    ///
+    /// # Errors
+    ///
+    /// Whether a row's `from` picks the space is undecided.
+    pub(crate) fn answer(
+        &self,
+        context: &RuleContext<'_>,
+        space: &Object,
+    ) -> Result<Vec<Answer>, Unavailable> {
+        let matched = match_rows(&self.rows, RowSelection::All, |row| match selector_matches(
+            context,
+            &row.from,
+            space,
+            &mut Vec::new(),
+        ) {
+            Selection::Match => RowTest::Match(0),
+            Selection::NoMatch => RowTest::NoMatch,
+            Selection::NotEvaluated(..) => RowTest::Undecided,
+        });
+        let Matched::Rows(applicable) = matched else {
+            return Err(incomplete(
+                "space-distance: whether a row's `from` picks this space is undecided".into(),
+            ));
+        };
+        let mut caches = self.caches.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut judge = Judge {
+            context,
+            search: self,
+            caches: &mut caches,
+        };
+        Ok(applicable
+            .into_iter()
+            .map(|(index, row)| Answer {
+                row: row.clone(),
+                measured: judge.row(space, index, row),
+            })
+            .collect())
+    }
+}
+
+struct Judge<'s, 'c> {
+    context: &'s RuleContext<'c>,
+    search: &'s Search,
+    caches: &'s mut Caches,
+}
+
 impl Judge<'_, '_> {
     fn storey(&mut self, space: &ObjectId) -> Climb {
-        let Some((climb, storeys, decided)) = &self.storeys else {
+        let Some((climb, storeys, decided)) = &self.search.storeys else {
             return Err(invalid("`same_storey` needs `storey_path`"));
         };
         if !decided {
@@ -533,7 +631,8 @@ impl Judge<'_, '_> {
             ));
         }
         let context = self.context;
-        self.climbed
+        self.caches
+            .climbed
             .entry(space.clone())
             .or_insert_with(|| climb.nearest_containers(context, space, storeys))
             .clone()
@@ -541,7 +640,8 @@ impl Judge<'_, '_> {
 
     fn target(&mut self, index: usize, to: &Selector, object: &Object) -> Selection {
         let context = self.context;
-        self.targets
+        self.caches
+            .targets
             .entry((index, object.id.clone()))
             .or_insert_with(|| selector_matches(context, to, object, &mut Vec::new()))
             .clone()
@@ -552,7 +652,7 @@ impl Judge<'_, '_> {
         &mut self,
         space: &Object,
         index: usize,
-        row: &Row<'_>,
+        row: &Row,
     ) -> Result<Vec<Candidate>, Unavailable> {
         let context = self.context;
         let mine = if row.same_storey {
@@ -567,11 +667,14 @@ impl Judge<'_, '_> {
         } else {
             None
         };
-        if row.direct_access && !self.partners.contains_key(&space.id) {
+        if row.direct_access && !self.caches.partners.contains_key(&space.id) {
             let index = self
+                .search
                 .index
+                .as_ref()
                 .ok_or_else(|| invalid("`direct_access` needs `access_path`"))?;
-            self.partners
+            self.caches
+                .partners
                 .insert(space.id.clone(), index.partners(&space.id, AccessType::Any));
         }
         let mut candidates = Vec::new();
@@ -581,7 +684,7 @@ impl Judge<'_, '_> {
             }
             let mut doubts = Vec::new();
             let mut evidence = Vec::new();
-            match self.target(index, row.to, object) {
+            match self.target(index, &row.to, object) {
                 Selection::NoMatch => continue,
                 Selection::Match => {}
                 Selection::NotEvaluated(_, why) => {
@@ -604,7 +707,7 @@ impl Judge<'_, '_> {
                 }
             }
             if row.direct_access {
-                match self.partners[&space.id].with(&object.id) {
+                match self.caches.partners[&space.id].with(&object.id) {
                     Ok(None) => continue,
                     Ok(Some(Link::Sure {
                         evidence: cited, ..
@@ -640,21 +743,21 @@ impl Judge<'_, '_> {
         } else {
             (measure, from.clone(), to.clone())
         };
-        if let Some(known) = self.lengths.get(&key) {
+        if let Some(known) = self.caches.lengths.get(&key) {
             return known.clone();
         }
         let measured = measure_pair(self.context, measure, &key.1, &key.2);
-        self.lengths.insert(key, measured.clone());
+        self.caches.lengths.insert(key, measured.clone());
         measured
     }
 
     /// A space's representative point, cached.
     fn point(&mut self, space: &ObjectId) -> Result<(MetricPoint, Vec<Evidence>), Unavailable> {
-        if let Some(known) = self.points.get(space) {
+        if let Some(known) = self.caches.points.get(space) {
             return known.clone();
         }
         let located = representative_point(self.context, space);
-        self.points.insert(space.clone(), located.clone());
+        self.caches.points.insert(space.clone(), located.clone());
         located
     }
 
@@ -720,7 +823,7 @@ impl Judge<'_, '_> {
             nearest.doubt(missing("metric-routing"));
             return nearest;
         };
-        let Some(profile) = self.profile else {
+        let Some(profile) = self.search.profile else {
             nearest.least = 0.0;
             nearest.doubt(invalid("a walking row needs a walking profile"));
             return nearest;
@@ -750,7 +853,7 @@ impl Judge<'_, '_> {
                 }
             }
         }
-        let routing = match &self.connectors {
+        let routing = match &self.search.connectors {
             None => None,
             Some(Ok(routing)) => Some(routing.clone()),
             Some(Err(why)) => {
@@ -839,148 +942,138 @@ impl Judge<'_, '_> {
         nearest
     }
 
-    /// Judges one row for one space.
-    fn row(
-        &mut self,
-        space: &Object,
-        index: usize,
-        row: &Row<'_>,
-    ) -> Result<Option<(Finding, Deviation)>, Unavailable> {
-        let candidates = self.candidates(space, index, row)?;
+    /// What the search finds for one row of one space.
+    fn row(&mut self, space: &Object, index: usize, row: &Row) -> Result<Measured, Unavailable> {
+        let candidates = self
+            .candidates(space, index, row)
+            .map_err(|(reason, message)| {
+                (reason, format!("space-distance {}: {message}", row.name))
+            })?;
         let nearest = match row.measure {
             Measure::Straight | Measure::Closest => {
                 self.nearest_pairwise(row.measure, &space.id, &candidates)
             }
             Measure::Walking => self.nearest_walking(&space.id, &candidates),
         };
-        let (most, least) = (nearest.most, nearest.least);
-        let how = row.measure.describe();
-        if let Some(maximum) = row.maximum
-            && least > maximum
-        {
-            // No reachable destination is infinitely far.
-            return Ok(Some((
-                self.too_far(space, row, &candidates, &nearest, maximum),
-                Deviation::above(maximum, least, most),
-            )));
-        }
-        if let Some(minimum) = row.minimum
-            && most < minimum
-        {
-            let (id, distance, cited) = nearest
-                .sure
-                .as_ref()
-                .expect("a finite upper bound comes from a sure destination");
+        let above = row
+            .maximum
+            .map(|maximum| too_far(row, &candidates, &nearest, maximum));
+        let below = row.minimum.and_then(|minimum| {
+            let (id, distance, cited) = nearest.sure.as_ref()?;
             let mut evidence = cited.clone();
             evidence.push(distance.evidence().clone());
-            return Ok(Some((
-                finding(
-                    self.rule,
-                    &space.id,
-                    format!(
-                        "{id} is {} m away {how}; {} requires at least {minimum} m",
-                        shown(distance.lower(), distance.upper()),
-                        row.name
-                    ),
-                    evidence,
-                    vec![id.clone()],
-                ),
-                Deviation::below(minimum, least, most),
-            )));
-        }
-        let within = row.maximum.is_none_or(|maximum| most <= maximum);
-        let beyond = row.minimum.is_none_or(|minimum| least >= minimum);
-        if within && beyond {
-            return Ok(None);
-        }
-        let bounds = match (row.minimum, row.maximum) {
-            (Some(minimum), Some(maximum)) => format!("between {minimum} and {maximum} m"),
-            (Some(minimum), None) => format!("at least {minimum} m"),
-            (None, Some(maximum)) => format!("at most {maximum} m"),
-            (None, None) => unreachable!("a row states a bound"),
-        };
-        let shown_most = if most.is_finite() {
-            format!("at most {} m", shown(most, most))
-        } else {
-            "unknown".to_owned()
-        };
-        let mut doubts = nearest.doubts;
-        if doubts.is_empty() {
-            doubts.push(format!(
-                "it is known only to lie {} m away",
-                shown(least, most)
-            ));
-        }
-        doubts.sort();
-        doubts.dedup();
-        Err((
-            nearest.reason,
-            format!(
-                "the nearest destination is {shown_most} {how}, {bounds} required, and {}",
-                doubts.join("; ")
-            ),
-        ))
-    }
-
-    /// The finding for a space whose every possible destination lies
-    /// beyond `maximum`, or which has none.
-    fn too_far(
-        &self,
-        space: &Object,
-        row: &Row<'_>,
-        candidates: &[Candidate],
-        nearest: &Nearest,
-        maximum: f64,
-    ) -> Finding {
-        let how = row.measure.describe();
-        let mut filters = Vec::new();
-        if row.same_storey {
-            filters.push("on its storey");
-        }
-        if row.direct_access {
-            filters.push("with direct access");
-        }
-        let filters = if filters.is_empty() {
-            String::new()
-        } else {
-            format!(" {}", filters.join(" "))
-        };
-        let mut evidence = Vec::new();
-        let (message, related) = if candidates.is_empty() {
-            (
-                format!(
-                    "has no destination{filters}; {} requires one within {maximum} m {how}",
-                    row.name
-                ),
-                Vec::new(),
-            )
-        } else if let Some((id, distance, cited)) = &nearest.closest {
-            evidence.extend(cited.iter().cloned());
-            evidence.push(distance.evidence().clone());
-            (
-                format!(
-                    "the nearest destination{filters}, {id}, is {} m away {how}; {} allows at \
-                     most {maximum} m",
+            Some(Finding {
+                words: format!(
+                    "{id} is {} m away {}; {} requires at least {minimum} m",
                     shown(distance.lower(), distance.upper()),
+                    row.measure.describe(),
                     row.name
                 ),
-                vec![id.clone()],
-            )
-        } else {
-            evidence.extend(nearest.blocked.iter().cloned());
-            (
-                format!(
-                    "reaches none of its {} destination(s){filters} {how}; {} requires one \
-                     within {maximum} m",
-                    candidates.len(),
-                    row.name
-                ),
-                candidates
-                    .iter()
-                    .map(|candidate| candidate.id.clone())
-                    .collect(),
-            )
-        };
-        finding(self.rule, &space.id, message, evidence, related)
+                related: vec![id.clone()],
+                evidence,
+            })
+        });
+        Ok(Measured {
+            least: nearest.least,
+            most: nearest.most,
+            above,
+            below,
+            open: undecided(row, &nearest),
+        })
+    }
+}
+
+/// The words of a distance the row's bounds leave undecided, and its
+/// reason.
+fn undecided(row: &Row, nearest: &Nearest) -> Unavailable {
+    let (most, least) = (nearest.most, nearest.least);
+    let bounds = match (row.minimum, row.maximum) {
+        (Some(minimum), Some(maximum)) => format!("between {minimum} and {maximum} m"),
+        (Some(minimum), None) => format!("at least {minimum} m"),
+        (None, Some(maximum)) => format!("at most {maximum} m"),
+        (None, None) => unreachable!("a row states a bound"),
+    };
+    let shown_most = if most.is_finite() {
+        format!("at most {} m", shown(most, most))
+    } else {
+        "unknown".to_owned()
+    };
+    let mut doubts = nearest.doubts.clone();
+    if doubts.is_empty() {
+        doubts.push(format!(
+            "it is known only to lie {} m away",
+            shown(least, most)
+        ));
+    }
+    doubts.sort();
+    doubts.dedup();
+    (
+        nearest.reason.clone(),
+        format!(
+            "space-distance {}: the nearest destination is {shown_most} {}, {bounds} required, \
+             and {}",
+            row.name,
+            row.measure.describe(),
+            doubts.join("; ")
+        ),
+    )
+}
+
+/// The finding for a space whose every possible destination lies beyond
+/// `maximum`, or which has none.
+fn too_far(row: &Row, candidates: &[Candidate], nearest: &Nearest, maximum: f64) -> Finding {
+    let how = row.measure.describe();
+    let mut filters = Vec::new();
+    if row.same_storey {
+        filters.push("on its storey");
+    }
+    if row.direct_access {
+        filters.push("with direct access");
+    }
+    let filters = if filters.is_empty() {
+        String::new()
+    } else {
+        format!(" {}", filters.join(" "))
+    };
+    let mut evidence = Vec::new();
+    let (words, related) = if candidates.is_empty() {
+        (
+            format!(
+                "has no destination{filters}; {} requires one within {maximum} m {how}",
+                row.name
+            ),
+            Vec::new(),
+        )
+    } else if let Some((id, distance, cited)) = &nearest.closest {
+        evidence.extend(cited.iter().cloned());
+        evidence.push(distance.evidence().clone());
+        (
+            format!(
+                "the nearest destination{filters}, {id}, is {} m away {how}; {} allows at \
+                 most {maximum} m",
+                shown(distance.lower(), distance.upper()),
+                row.name
+            ),
+            vec![id.clone()],
+        )
+    } else {
+        evidence.extend(nearest.blocked.iter().cloned());
+        (
+            format!(
+                "reaches none of its {} destination(s){filters} {how}; {} requires one \
+                 within {maximum} m",
+                candidates.len(),
+                row.name
+            ),
+            candidates
+                .iter()
+                .map(|candidate| candidate.id.clone())
+                .collect(),
+        )
+    };
+    Finding {
+        words,
+        related,
+        evidence,
     }
 }

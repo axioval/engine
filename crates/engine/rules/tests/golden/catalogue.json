@@ -53449,7 +53449,286 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "grades": true,
+        "name": "space-distance",
+        "declaration": [
+          {
+            "kind": "arguments",
+            "when": [],
+            "value": "distance_rows;distances=@distances;storey_path=@storey_path;storey_selector=@storey_selector;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector;walking_radius=@walking_radius;walking_height=@walking_height;walking_step=@walking_step;walking_slope=@walking_slope;stair_selector=@stair_selector;ramp_selector=@ramp_selector;lift_selector=@lift_selector;stair_length=@stair_length;vertical_factor=@vertical_factor"
+          }
+        ],
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "judged",
+                "expression": {
+                  "kind": "literal",
+                  "value": {
+                    "type": "integer",
+                    "value": 1
+                  },
+                  "label": "the nearest destinations are measured"
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "judged",
+              "rounding": []
+            },
+            "fail": "",
+            "undecided": "",
+            "checks": [
+              {
+                "values": [],
+                "decision": {
+                  "kind": "items",
+                  "applies": {},
+                  "list": "distance_rows;distances=@distances;storey_path=@storey_path;storey_selector=@storey_selector;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector;walking_radius=@walking_radius;walking_height=@walking_height;walking_step=@walking_step;walking_slope=@walking_slope;stair_selector=@stair_selector;ramp_selector=@ramp_selector;lift_selector=@lift_selector;stair_length=@stair_length;vertical_factor=@vertical_factor",
+                  "refused": "{why}",
+                  "checks": [
+                    {
+                      "kind": "test",
+                      "judge": {
+                        "kind": "range",
+                        "value": "nearest",
+                        "unit": "length",
+                        "atMost": [
+                          {
+                            "name": "maximum",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "value",
+                                    "name": "maximum"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "allowance": {
+                          "kind": "none"
+                        },
+                        "grade": true,
+                        "null": {
+                          "kind": "skip"
+                        },
+                        "unmeasured": "{why}"
+                      },
+                      "fail": "{above_words}",
+                      "undecided": "{open_words}",
+                      "then": {
+                        "judge": {
+                          "kind": "range",
+                          "value": "nearest",
+                          "unit": "length",
+                          "atLeast": [
+                            {
+                              "name": "minimum",
+                              "options": [
+                                {
+                                  "bound": {
+                                    "kind": "operand",
+                                    "value": {
+                                      "kind": "value",
+                                      "name": "minimum"
+                                    }
+                                  }
+                                }
+                              ],
+                              "words": ""
+                            }
+                          ],
+                          "allowance": {
+                            "kind": "none"
+                          },
+                          "grade": true,
+                          "null": {
+                            "kind": "skip"
+                          },
+                          "unmeasured": "{why}"
+                        },
+                        "fail": "{below_words}",
+                        "undecided": "{open_words}",
+                        "related": "below_related"
+                      },
+                      "related": "above_related"
+                    }
+                  ],
+                  "reason": "reason"
+                },
+                "fail": "",
+                "undecided": ""
+              }
+            ]
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "aggregate",
+                  "function": "none",
+                  "over": {
+                    "kind": "measured",
+                    "name": "distance_rows;distances=@distances;storey_path=@storey_path;storey_selector=@storey_selector;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector;walking_radius=@walking_radius;walking_height=@walking_height;walking_step=@walking_step;walking_slope=@walking_slope;stair_selector=@stair_selector;ramp_selector=@ramp_selector;lift_selector=@lift_selector;stair_length=@stair_length;vertical_factor=@vertical_factor"
+                  },
+                  "value": {
+                    "kind": "not",
+                    "operand": {
+                      "kind": "and",
+                      "operands": [
+                        {
+                          "kind": "compare",
+                          "operator": "lessThanOrEquals",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "nearest"
+                          },
+                          "right": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "maximum"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "label": "no item fails"
+                },
+                {
+                  "kind": "isDefined",
+                  "operand": {
+                    "kind": "literal",
+                    "value": {
+                      "type": "integer",
+                      "value": 1
+                    },
+                    "label": "the nearest destinations are measured"
+                  },
+                  "label": "read"
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.aggregate",
+                      "label": "no item fails",
+                      "fields": {
+                        "function": "none"
+                      },
+                      "inputs": {
+                        "over": {
+                          "block": {
+                            "type": "members.distance_rows",
+                            "fields": {
+                              "access_path": "@access_path",
+                              "distances": "@distances",
+                              "door_selector": "@door_selector",
+                              "lift_selector": "@lift_selector",
+                              "opening_selector": "@opening_selector",
+                              "ramp_selector": "@ramp_selector",
+                              "space_selector": "@space_selector",
+                              "stair_length": "@stair_length",
+                              "stair_selector": "@stair_selector",
+                              "storey_path": "@storey_path",
+                              "storey_selector": "@storey_selector",
+                              "vertical_factor": "@vertical_factor",
+                              "walking_height": "@walking_height",
+                              "walking_radius": "@walking_radius",
+                              "walking_slope": "@walking_slope",
+                              "walking_step": "@walking_step"
+                            }
+                          }
+                        },
+                        "value": {
+                          "block": {
+                            "type": "expression.not",
+                            "inputs": {
+                              "operand": {
+                                "block": {
+                                  "type": "expression.and",
+                                  "inputs": {
+                                    "operands": {
+                                      "blocks": [
+                                        {
+                                          "type": "expression.compare",
+                                          "fields": {
+                                            "operator": "lessThanOrEquals"
+                                          },
+                                          "inputs": {
+                                            "left": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "nearest",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "maximum",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.isDefined",
+                      "label": "read",
+                      "inputs": {
+                        "operand": {
+                          "block": {
+                            "type": "expression.literal",
+                            "label": "the nearest destinations are measured",
+                            "fields": {
+                              "value": {
+                                "type": "integer",
+                                "value": 1
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.space-validation",
@@ -88754,6 +89033,602 @@
             {
               "language": "de",
               "text": "Warum das Element unentschieden ist, wo nicht wegen unvollständiger Belege, wie ein Bericht es schreibt (`missing_service`)."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
+      "name": "distance_rows",
+      "parameters": [
+        {
+          "key": "distances",
+          "kind": {
+            "type": "table"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rows of `space-distance`: `from` and `to` selectors, `measure`, `same_storey`, `direct_access`, `minimum`, `maximum` and `label`."
+            },
+            {
+              "language": "de",
+              "text": "Die Zeilen von `space-distance`: Selektoren `from` und `to`, `measure`, `same_storey`, `direct_access`, `minimum`, `maximum` und `label`."
+            }
+          ],
+          "references": "table"
+        },
+        {
+          "key": "storey_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps a space's storeys are climbed to."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte zu den Geschossen eines Raums."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "storey_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The storeys."
+            },
+            {
+              "language": "de",
+              "text": "Die Geschosse."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "access_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps from a door or opening to the spaces it opens onto."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte von einer Tür oder Öffnung zu den Räumen, in die sie führt."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "door_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The doors giving direct access."
+            },
+            {
+              "language": "de",
+              "text": "Die Türen, die direkten Zugang geben."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "opening_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The openings giving direct access."
+            },
+            {
+              "language": "de",
+              "text": "Die Öffnungen, die direkten Zugang geben."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "space_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The spaces the access path may reach; every object without it."
+            },
+            {
+              "language": "de",
+              "text": "Die Räume, die der Zugangsweg erreichen darf; ohne Angabe jedes Objekt."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "walking_radius",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The walking body's radius."
+            },
+            {
+              "language": "de",
+              "text": "Der Radius des gehenden Körpers."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "walking_height",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The walking body's height."
+            },
+            {
+              "language": "de",
+              "text": "Die Höhe des gehenden Körpers."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "walking_step",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The step the walking body takes over."
+            },
+            {
+              "language": "de",
+              "text": "Die Stufe, die der gehende Körper überwindet."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "walking_slope",
+          "kind": {
+            "type": "number",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The slope the walking body climbs; level by default."
+            },
+            {
+              "language": "de",
+              "text": "Die Neigung, die der gehende Körper steigt; standardmäßig eben."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "stair_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The stairs a walk may climb."
+            },
+            {
+              "language": "de",
+              "text": "Die Treppen, die ein Weg steigen darf."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "ramp_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The ramps a walk may climb."
+            },
+            {
+              "language": "de",
+              "text": "Die Rampen, die ein Weg steigen darf."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "lift_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The lifts a walk may ride."
+            },
+            {
+              "language": "de",
+              "text": "Die Aufzüge, die ein Weg nutzen darf."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "stair_length",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "How a climb counts: `slope` (the default) or `horizontal-plus-vertical`."
+            },
+            {
+              "language": "de",
+              "text": "Wie ein Aufstieg zählt: `slope` (Standard) oder `horizontal-plus-vertical`."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "vertical_factor",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "What a metre of rise counts (1 by default)."
+            },
+            {
+              "language": "de",
+              "text": "Was ein Meter Steigung zählt (standardmäßig 1)."
+            }
+          ],
+          "references": "number"
+        }
+      ],
+      "services": [
+        "plan-span",
+        "proximity",
+        "metric-routing",
+        "vertical-extent",
+        "relationship-selection"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "whether a row's `from` picks the space is undecided",
+        "a row's destinations cannot be listed"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Nearest destinations"
+        },
+        {
+          "language": "de",
+          "text": "Nächste Ziele"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "One item per row of `space-distance` whose `from` picks the space: the nearest destination's distance, bounded by every destination that might qualify from below and by the sure ones from above, as the capability measures it, with the row's bounds."
+        },
+        {
+          "language": "de",
+          "text": "Ein Element je Zeile von `space-distance`, deren `from` den Raum wählt: der Abstand zum nächsten Ziel, von unten durch jedes Ziel begrenzt, das in Frage kommen kann, von oben durch die sicheren, wie die Fähigkeit ihn misst, mit den Grenzen der Zeile."
+        }
+      ],
+      "fields": [
+        {
+          "name": "row",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Row"
+            },
+            {
+              "language": "de",
+              "text": "Zeile"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The row, as findings name it."
+            },
+            {
+              "language": "de",
+              "text": "Die Zeile, wie Befunde sie nennen."
+            }
+          ]
+        },
+        {
+          "name": "nearest",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Nearest distance"
+            },
+            {
+              "language": "de",
+              "text": "Nächster Abstand"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "From every destination that might qualify to the sure ones; infinite where none bounds it; undecided where the destinations cannot be listed."
+            },
+            {
+              "language": "de",
+              "text": "Von jedem Ziel, das in Frage kommen kann, bis zu den sicheren; unendlich, wo keines ihn begrenzt; unentschieden, wo die Ziele nicht aufzählbar sind."
+            }
+          ]
+        },
+        {
+          "name": "minimum",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Minimum"
+            },
+            {
+              "language": "de",
+              "text": "Minimum"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The row's minimum; `null` without one."
+            },
+            {
+              "language": "de",
+              "text": "Das Minimum der Zeile; `null` ohne."
+            }
+          ]
+        },
+        {
+          "name": "maximum",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Maximum"
+            },
+            {
+              "language": "de",
+              "text": "Maximum"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The row's maximum; `null` without one."
+            },
+            {
+              "language": "de",
+              "text": "Das Maximum der Zeile; `null` ohne."
+            }
+          ]
+        },
+        {
+          "name": "above_words",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Beyond the maximum"
+            },
+            {
+              "language": "de",
+              "text": "Jenseits des Maximums"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "How lying beyond the maximum is worded: the nearest possible destination, or none."
+            },
+            {
+              "language": "de",
+              "text": "Wie das Überschreiten des Maximums formuliert wird: das nächste mögliche Ziel oder keines."
+            }
+          ]
+        },
+        {
+          "name": "above_related",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Destinations beyond"
+            },
+            {
+              "language": "de",
+              "text": "Ziele jenseits"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The destinations lying beyond the maximum relates."
+            },
+            {
+              "language": "de",
+              "text": "Die Ziele, auf die sich das Überschreiten bezieht."
+            }
+          ]
+        },
+        {
+          "name": "below_words",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Within the minimum"
+            },
+            {
+              "language": "de",
+              "text": "Unter dem Minimum"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "How lying within the minimum is worded: the nearest sure destination."
+            },
+            {
+              "language": "de",
+              "text": "Wie das Unterschreiten des Minimums formuliert wird: das nächste sichere Ziel."
+            }
+          ]
+        },
+        {
+          "name": "below_related",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Destination within"
+            },
+            {
+              "language": "de",
+              "text": "Ziel darunter"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The sure destination lying within the minimum."
+            },
+            {
+              "language": "de",
+              "text": "Das sichere Ziel unter dem Minimum."
+            }
+          ]
+        },
+        {
+          "name": "open_words",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Undecided"
+            },
+            {
+              "language": "de",
+              "text": "Unentschieden"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Why the distance is not known better, for a row its bounds leave undecided."
+            },
+            {
+              "language": "de",
+              "text": "Warum der Abstand nicht genauer bekannt ist, für eine Zeile, die ihre Grenzen offenlassen."
+            }
+          ]
+        },
+        {
+          "name": "reason",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Reason"
+            },
+            {
+              "language": "de",
+              "text": "Grund"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Why an undecided distance is open, as a report writes it."
+            },
+            {
+              "language": "de",
+              "text": "Warum ein unentschiedener Abstand offen ist, wie ein Bericht es schreibt."
             }
           ]
         }

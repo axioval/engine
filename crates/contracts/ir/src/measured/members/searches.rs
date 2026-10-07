@@ -242,3 +242,291 @@ pub(super) const FREE_FLOOR_FIT: MemberDescriptor = MemberDescriptor {
         ),
     ],
 };
+
+const TEXT: MemberFieldKind = MemberFieldKind::Text;
+const LENGTH: MemberFieldKind = MemberFieldKind::Number {
+    dimension: Some(crate::QuantityDimension::Length),
+};
+
+const fn number(
+    key: &'static str,
+    minimum: f64,
+    help: &'static [LocalizedText],
+) -> MeasuredParameter {
+    MeasuredParameter {
+        key,
+        kind: MeasuredParameterKind::Number { minimum },
+        required: false,
+        default: None,
+        help,
+    }
+}
+
+const fn words(key: &'static str, help: &'static [LocalizedText]) -> MeasuredParameter {
+    MeasuredParameter {
+        key,
+        kind: MeasuredParameterKind::Text,
+        required: false,
+        default: None,
+        help,
+    }
+}
+
+/// The connectors a walk may climb, as `escape-route`, `space-distance`
+/// and `accessible-route` declare them.
+const STAIRS: MeasuredParameter = objects(
+    "stair_selector",
+    &en_de(
+        "The stairs a walk may climb.",
+        "Die Treppen, die ein Weg steigen darf.",
+    ),
+);
+const RAMPS: MeasuredParameter = objects(
+    "ramp_selector",
+    &en_de(
+        "The ramps a walk may climb.",
+        "Die Rampen, die ein Weg steigen darf.",
+    ),
+);
+const LIFTS: MeasuredParameter = objects(
+    "lift_selector",
+    &en_de(
+        "The lifts a walk may ride.",
+        "Die Aufzüge, die ein Weg nutzen darf.",
+    ),
+);
+const STAIR_LENGTH: MeasuredParameter = words(
+    "stair_length",
+    &en_de(
+        "How a climb counts: `slope` (the default) or `horizontal-plus-vertical`.",
+        "Wie ein Aufstieg zählt: `slope` (Standard) oder `horizontal-plus-vertical`.",
+    ),
+);
+const VERTICAL_FACTOR: MeasuredParameter = number(
+    "vertical_factor",
+    0.0,
+    &en_de(
+        "What a metre of rise counts (1 by default).",
+        "Was ein Meter Steigung zählt (standardmäßig 1).",
+    ),
+);
+
+const DISTANCES: [MeasuredParameter; 16] = [
+    MeasuredParameter {
+        key: "distances",
+        kind: MeasuredParameterKind::Table,
+        required: true,
+        default: None,
+        help: &en_de(
+            "The rows of `space-distance`: `from` and `to` selectors, `measure`, \
+             `same_storey`, `direct_access`, `minimum`, `maximum` and `label`.",
+            "Die Zeilen von `space-distance`: Selektoren `from` und `to`, `measure`, \
+             `same_storey`, `direct_access`, `minimum`, `maximum` und `label`.",
+        ),
+    },
+    path(
+        "storey_path",
+        &en_de(
+            "The relationship steps a space's storeys are climbed to.",
+            "Die Beziehungsschritte zu den Geschossen eines Raums.",
+        ),
+    ),
+    objects("storey_selector", &en_de("The storeys.", "Die Geschosse.")),
+    path(
+        "access_path",
+        &en_de(
+            "The relationship steps from a door or opening to the spaces it opens onto.",
+            "Die Beziehungsschritte von einer Tür oder Öffnung zu den Räumen, in die sie \
+             führt.",
+        ),
+    ),
+    objects(
+        "door_selector",
+        &en_de(
+            "The doors giving direct access.",
+            "Die Türen, die direkten Zugang geben.",
+        ),
+    ),
+    objects(
+        "opening_selector",
+        &en_de(
+            "The openings giving direct access.",
+            "Die Öffnungen, die direkten Zugang geben.",
+        ),
+    ),
+    objects(
+        "space_selector",
+        &en_de(
+            "The spaces the access path may reach; every object without it.",
+            "Die Räume, die der Zugangsweg erreichen darf; ohne Angabe jedes Objekt.",
+        ),
+    ),
+    length(
+        "walking_radius",
+        false,
+        &en_de(
+            "The walking body's radius.",
+            "Der Radius des gehenden Körpers.",
+        ),
+    ),
+    length(
+        "walking_height",
+        false,
+        &en_de(
+            "The walking body's height.",
+            "Die Höhe des gehenden Körpers.",
+        ),
+    ),
+    length(
+        "walking_step",
+        false,
+        &en_de(
+            "The step the walking body takes over.",
+            "Die Stufe, die der gehende Körper überwindet.",
+        ),
+    ),
+    number(
+        "walking_slope",
+        f64::NEG_INFINITY,
+        &en_de(
+            "The slope the walking body climbs; level by default.",
+            "Die Neigung, die der gehende Körper steigt; standardmäßig eben.",
+        ),
+    ),
+    STAIRS,
+    RAMPS,
+    LIFTS,
+    STAIR_LENGTH,
+    VERTICAL_FACTOR,
+];
+
+/// The nearest destination of each row of `space-distance` that applies to
+/// a space.
+pub(super) const DISTANCE_ROWS: MemberDescriptor = MemberDescriptor {
+    list: MeasuredDescriptor {
+        name: "distance_rows",
+        parameters: &DISTANCES,
+        dimension: None,
+        services: &[
+            "plan-span",
+            "proximity",
+            "metric-routing",
+            "vertical-extent",
+            "relationship-selection",
+        ],
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[
+            "whether a row's `from` picks the space is undecided",
+            "a row's destinations cannot be listed",
+        ],
+        label: &en_de("Nearest destinations", "Nächste Ziele"),
+        help: &en_de(
+            "One item per row of `space-distance` whose `from` picks the space: the nearest \
+             destination's distance, bounded by every destination that might qualify from \
+             below and by the sure ones from above, as the capability measures it, with the \
+             row's bounds.",
+            "Ein Element je Zeile von `space-distance`, deren `from` den Raum wählt: der \
+             Abstand zum nächsten Ziel, von unten durch jedes Ziel begrenzt, das in Frage \
+             kommen kann, von oben durch die sicheren, wie die Fähigkeit ihn misst, mit den \
+             Grenzen der Zeile.",
+        ),
+    },
+    fields: &[
+        field(
+            "row",
+            TEXT,
+            &en_de("Row", "Zeile"),
+            &en_de(
+                "The row, as findings name it.",
+                "Die Zeile, wie Befunde sie nennen.",
+            ),
+        ),
+        field(
+            "nearest",
+            LENGTH,
+            &en_de("Nearest distance", "Nächster Abstand"),
+            &en_de(
+                "From every destination that might qualify to the sure ones; infinite where \
+                 none bounds it; undecided where the destinations cannot be listed.",
+                "Von jedem Ziel, das in Frage kommen kann, bis zu den sicheren; unendlich, wo \
+                 keines ihn begrenzt; unentschieden, wo die Ziele nicht aufzählbar sind.",
+            ),
+        ),
+        field(
+            "minimum",
+            LENGTH,
+            &en_de("Minimum", "Minimum"),
+            &en_de(
+                "The row's minimum; `null` without one.",
+                "Das Minimum der Zeile; `null` ohne.",
+            ),
+        ),
+        field(
+            "maximum",
+            LENGTH,
+            &en_de("Maximum", "Maximum"),
+            &en_de(
+                "The row's maximum; `null` without one.",
+                "Das Maximum der Zeile; `null` ohne.",
+            ),
+        ),
+        field(
+            "above_words",
+            TEXT,
+            &en_de("Beyond the maximum", "Jenseits des Maximums"),
+            &en_de(
+                "How lying beyond the maximum is worded: the nearest possible destination, \
+                 or none.",
+                "Wie das Überschreiten des Maximums formuliert wird: das nächste mögliche Ziel \
+                 oder keines.",
+            ),
+        ),
+        field(
+            "above_related",
+            OBJECTS,
+            &en_de("Destinations beyond", "Ziele jenseits"),
+            &en_de(
+                "The destinations lying beyond the maximum relates.",
+                "Die Ziele, auf die sich das Überschreiten bezieht.",
+            ),
+        ),
+        field(
+            "below_words",
+            TEXT,
+            &en_de("Within the minimum", "Unter dem Minimum"),
+            &en_de(
+                "How lying within the minimum is worded: the nearest sure destination.",
+                "Wie das Unterschreiten des Minimums formuliert wird: das nächste sichere Ziel.",
+            ),
+        ),
+        field(
+            "below_related",
+            OBJECTS,
+            &en_de("Destination within", "Ziel darunter"),
+            &en_de(
+                "The sure destination lying within the minimum.",
+                "Das sichere Ziel unter dem Minimum.",
+            ),
+        ),
+        field(
+            "open_words",
+            TEXT,
+            &en_de("Undecided", "Unentschieden"),
+            &en_de(
+                "Why the distance is not known better, for a row its bounds leave undecided.",
+                "Warum der Abstand nicht genauer bekannt ist, für eine Zeile, die ihre Grenzen \
+                 offenlassen.",
+            ),
+        ),
+        field(
+            "reason",
+            TEXT,
+            &en_de("Reason", "Grund"),
+            &en_de(
+                "Why an undecided distance is open, as a report writes it.",
+                "Warum ein unentschiedener Abstand offen ist, wie ein Bericht es schreibt.",
+            ),
+        ),
+    ],
+};

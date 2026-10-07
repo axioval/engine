@@ -725,18 +725,28 @@
     "space_distance::measure_pair::measure_distance": {
       "count": 1,
       "providedBy": [
-        "distance"
+        "distance",
+        "distance_rows"
       ]
     },
     "space_distance::measure_pair::measure_span": {
       "count": 1,
       "providedBy": [
+        "distance_rows",
         "plan_diameter"
       ]
     },
     "space_distance::nearest_walking::nearest_target": {
       "count": 1,
       "providedBy": [
+        "distance_rows",
+        "travel_distance"
+      ]
+    },
+    "space_distance::reference::nearest_walking::nearest_target": {
+      "count": 1,
+      "providedBy": [
+        "distance_rows",
         "travel_distance"
       ]
     },

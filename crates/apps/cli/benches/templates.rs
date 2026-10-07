@@ -324,6 +324,11 @@ const PAIRS: &[Pair] = &[
         case: "floors",
         reference: |registry| registry.replace(axioval::rules::reference::FreeFloorRectangle),
     },
+    Pair {
+        capability: "axioval:capability.space-distance",
+        case: "routes",
+        reference: |registry| registry.replace(axioval::rules::reference::SpaceDistance),
+    },
 ];
 
 /// Warm-up runs per side before measuring.

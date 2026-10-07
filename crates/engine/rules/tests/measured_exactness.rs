@@ -155,6 +155,11 @@ const COVERED: &[(&str, &str, &str)] = &[
         "only_a_placement_found_exactly_is_exact",
     ),
     (
+        "distance_rows",
+        "tests/space_distance.rs",
+        "a_distance_between_tessellated_bodies_is_cited_inexactly",
+    ),
+    (
         "free_floor_fit",
         "tests/free_floor_circle.rs",
         "a_fit_is_exact_only_where_its_answer_rests_on_exact_evidence",

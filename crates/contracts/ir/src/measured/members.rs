@@ -2167,6 +2167,7 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             ),
         ],
     },
+    searches::DISTANCE_ROWS,
     MemberDescriptor {
         list: MeasuredDescriptor {
             name: "effective_missing",

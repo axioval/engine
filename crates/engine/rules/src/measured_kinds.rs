@@ -38,6 +38,7 @@ pub(crate) fn argument_check(name: &str) -> Option<ArgumentCheck> {
         "clash_pairs" => Some(crate::clash::check_arguments),
         "clash_matrix_pairs" => Some(crate::clash_matrix::check_arguments),
         "free_floor_fit" => Some(crate::free_floor::check_arguments),
+        "distance_rows" => Some(crate::space_distance::check_arguments),
         "well_requirements" => Some(crate::light_well::check_arguments),
         "opening_area" | "opening_count" => Some(crate::measured_openings::check_arguments),
         _ => None,
@@ -185,6 +186,26 @@ fn rule_parameter(argument: &MeasuredArgument) -> Option<axioval_ir::contract::P
         },
         _ => return None,
     })
+}
+
+/// The rule the arguments of `call` state, each by its key, as
+/// [`stated_rule`] reads them, its lengths stated as plain numbers of
+/// metres: a capability declaring its lengths as numbers (`width_metres`).
+pub(crate) fn stated_numbers_rule(call: &MeasuredCall) -> axioval_engine::CompiledRule {
+    use axioval_ir::contract::ParameterValue;
+    let stated = call
+        .descriptor
+        .parameters
+        .iter()
+        .filter_map(|declared| {
+            let value = match call.argument(declared.key)? {
+                MeasuredArgument::Length(value) => ParameterValue::Number { value: *value },
+                argument => rule_parameter(argument)?,
+            };
+            Some((declared.key.to_owned(), value))
+        })
+        .collect();
+    crate::light_area::synthesised(stated)
 }
 
 /// The rule the arguments of `call` state, each by its key: a capability's

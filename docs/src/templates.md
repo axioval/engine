@@ -56,7 +56,8 @@ the first wording everything one object leaves open in one outcome
 ([#285](https://github.com/axioval/engine/issues/285)).
 `free-floor-circle` and `free-floor-rectangle` are the first of the
 search capabilities, a template judging the answer of a search kept in
-built-in code ([#286](https://github.com/axioval/engine/issues/286)).
+built-in code ([#286](https://github.com/axioval/engine/issues/286)). `space-distance`
+follows, judging each row's nearest distance against the row's bounds.
 
 ## The outside contract
 
@@ -1940,6 +1941,33 @@ reaches it`, relating the merged spaces and the entrances (`related`) and
 citing the proof. `free_placements`, the count of placements an expression
 reads, lists the same answer.
 
+### `space-distance`
+
+One form, judged by one check over the measured list
+`distance_rows;distances=@distances;storey_path=@storey_path;…`, every
+parameter under its own name: the declaration is the list's argument check,
+refused once for the rule (`space-distance: …`). The search stays the
+capability's (`space_distance::Search::answer`): for each row whose `from`
+picks the space, in the table's order, the destinations that surely
+qualify and those that might (`to`, storeys, direct access), and the
+nearest distance bounded by the sure ones from above and every possible one
+from below, straight, between bodies or walking. Each row is one item:
+
+| Field | What it holds |
+| --- | --- |
+| `nearest` | the nearest distance's bounds (either end infinite where nothing bounds it), undecided where the row's destinations cannot be listed |
+| `minimum`, `maximum` | the row's bounds, `null` where it states none |
+| `above_words`, `above_related` | lying beyond the maximum: the nearest possible destination, or none reached, or none at all |
+| `below_words`, `below_related` | lying within the minimum: the nearest sure destination |
+| `open_words`, `reason` | why the distance is not known better, and the reason a report gives |
+
+The template judges `nearest` at most `maximum` (an item number, through
+`Operand::Value`), a graded finding worded `{above_words}`; where that
+holds, at least `minimum`, worded `{below_words}`; a distance either leaves
+undecided is open once per row with `{open_words}`. A space whose rows
+cannot be told is one undecided item. A finding cites the measurements of
+the destination bounding the distance beyond the bound it misses.
+
 ## Binding and running a rule
 
 The rules crate's `templates` module runs a template
@@ -2624,6 +2652,14 @@ requests the tests inspect are the template's; by generated searches over
 blocking obstacles, doors and entrance paths, undecided selections,
 unknown leaves, bands, merged spaces and entrance widths; and by the rules
 of the case `floors`, recorded before the switch. They are never forked.
+
+`space-distance` is held to `space_distance/reference.rs`
+(`axioval_rules::reference::SpaceDistance`) on every fixture of
+`tests/space_distance.rs` under `Parity::contract()`; by generated offices
+and toilets whose spans, gaps and routes are exact, intervals or refused,
+some toilets' kind unreadable, under rows of every measure with random
+bounds; and by the `space-distance` rules of the case `routes`, recorded
+before the switch. It is never forked.
 
 The reference is kept, rather than deleted, because generated inputs need
 a live implementation to compare with; recorded outcomes outlive it on the

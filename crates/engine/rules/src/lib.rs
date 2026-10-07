@@ -229,6 +229,7 @@ pub mod reference {
     pub use crate::space_boundary_coverage::reference::SpaceBoundaryCoverage;
     pub use crate::space_connection::reference::SpaceConnection;
     pub use crate::space_validation::reference::SpaceValidation;
+    pub use crate::space_distance::reference::SpaceDistance;
     pub use crate::stair_geometry::reference::RampGeometryReference as RampGeometry;
     pub use crate::stair_geometry::reference::StairGeometryReference as StairGeometry;
     pub use crate::triangle_count::reference::TriangleCountLimit;
@@ -345,6 +346,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(escape_route::TravelMeasures))
         .and_then(|registry| registry.register_measured(free_floor::PlacementMeasures))
         .and_then(|registry| registry.register_measured(free_floor::FitMeasures))
+        .and_then(|registry| registry.register_measured(space_distance::RowMeasures))
         .and_then(|registry| registry.register_measured(parking_bay::BayMeasures))
         .and_then(|registry| registry.register_measured(parking_bay::BayItems))
         .and_then(|registry| registry.register_measured(wall_spacing::SpacingMeasures))

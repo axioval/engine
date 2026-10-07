@@ -3,13 +3,12 @@
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
-use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::LazyLock;
 
 use axioval_engine::{
-    CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ParameterDescriptor, ParameterType,
-    RuleCapability, RuleContext,
+    CapabilityEvaluation, CompiledRule, MeasuredMemo, NotEvaluatedReason, ParameterDescriptor,
+    ParameterType, RuleCapability, RuleContext,
 };
 use axioval_ir::contract::{ParameterValue, Selector};
 use axioval_ir::{Evidence, Object, ObjectId, QuantityDimension};
@@ -333,7 +332,19 @@ struct Judge<'r, 'c> {
     supports: Option<Supports<'r, 'c>>,
     /// The selections of each row of the dimensioning table.
     dimensions: &'r dimensions::Selections,
+    /// Whether each host's body and each opening's solid are read once
+    /// per run, shared by the rules (the template), or once per rule, as
+    /// the capability read them (the reference).
+    once_per_run: bool,
 }
+
+/// A host's body as read, kept for a run.
+#[derive(Hash, PartialEq, Eq)]
+struct HostRead(ObjectId);
+
+/// An opening's solid as read, kept for a run.
+#[derive(Hash, PartialEq, Eq)]
+struct SolidRead(ObjectId);
 
 /// The hosts `traversal` reaches from `object` among `hosts`, none when it
 /// reaches none.
@@ -370,9 +381,24 @@ impl Judge<'_, '_> {
         if let Some(known) = self.bodies.get(host) {
             return known.clone();
         }
-        let read = read_host(self.context, host).map(Arc::new);
+        let read = || read_host(self.context, host).map(Arc::new);
+        let read = if self.once_per_run {
+            MeasuredMemo::of(self.context.services, HostRead(host.clone()), read)
+        } else {
+            read()
+        };
         self.bodies.to_mut().insert(host.clone(), read.clone());
         read
+    }
+
+    /// The opening's solid, read once per run where bodies are.
+    fn solid(&self, opening: &Object) -> Result<Arc<Solid>, Unavailable> {
+        let read = || Solid::opening(self.context, opening).map(Arc::new);
+        if self.once_per_run {
+            MeasuredMemo::of(self.context.services, SolidRead(opening.id.clone()), read)
+        } else {
+            read()
+        }
     }
 
     fn place(&mut self, opening: &Object) -> Placement {
@@ -380,7 +406,7 @@ impl Judge<'_, '_> {
         if hosts.is_empty() {
             return Ok(Vec::new());
         }
-        let solid = Solid::opening(self.context, opening).map(Rc::new);
+        let solid = self.solid(opening);
         Ok(hosts
             .into_iter()
             .map(|host| {

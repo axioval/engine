@@ -58,6 +58,7 @@ impl RuleCapability for OpeningZone {
         let dimension_selections = super::dimensions::Selections::of(context, &config.dimensions);
         let supports_read = SupportsRead::default();
         let mut judge = Judge {
+            once_per_run: false,
             dimensions: &dimension_selections,
             context,
             rule,

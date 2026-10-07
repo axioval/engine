@@ -209,6 +209,7 @@ impl PlacementMeasures {
         let config = Config::parse(&rule)?;
         let hosts = Population::of(context, config.host_selector);
         let mut judge = Judge {
+            once_per_run: true,
             dimensions: &dimensions::Selections::of(context, &config.dimensions),
             context,
             #[cfg(feature = "parity-reference")]

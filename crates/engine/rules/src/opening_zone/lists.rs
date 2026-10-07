@@ -98,6 +98,7 @@ fn measure(call: &MeasuredCall, context: &RuleContext<'_>) -> Result<Run, Unavai
         };
         let dimensions = Selections::of(context, &config.dimensions);
         let mut judge = Judge {
+            once_per_run: true,
             dimensions: &dimensions,
             context,
             #[cfg(feature = "parity-reference")]
@@ -135,6 +136,7 @@ fn checks(run: &Run, opening: &Object, context: &RuleContext<'_>) -> Checks {
     let config = Config::parse(&run.rule)?;
     let judge =
         Judge {
+            once_per_run: true,
             dimensions: &run.dimensions,
             context,
             #[cfg(feature = "parity-reference")]

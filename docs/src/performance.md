@@ -61,6 +61,23 @@ selection. A provider keeping its own measurements keys them by an
 `ArgumentsKey` (hashed once, compared argument by argument, never by
 formatting the arguments), and the memo's tables hash with `foldhash`.
 
+**No fixed cost per object or rule a capability did not pay**
+([#292](https://github.com/axioval/engine/issues/292)). A rule's bound
+plan keeps each measured name it reads for every run
+(`measured_arguments::Planned`): parsed and bound once, a selection's
+other arguments bound once and only the selection per run, a name naming
+the anchor prepared once for each object's read to bind
+(`PreparedRead::anchored`). Which checks and `unless` values apply,
+constants as messages show them, and a selector parameter's shared key
+are decided once per plan. An object's checks read on from one buffer
+instead of a copy each; a refusal is cut in place, never formatted to be
+stripped again; check values are read ahead with the form's. Entity types
+combined in a shared selection (`anyOf` slab and roof) are decided once
+per run for every selection of it. What only one rule reads (a provider's
+rows, patterns or whole-rule lists) is kept for that rule
+(`MeasuredMemo::of_rule`) and dropped once it is evaluated, never held for
+the whole run.
+
 **Aggregates over one pass of the relationship index.** Not done yet: no
 template reads an aggregate, so nothing measures what it would cost. An
 aggregate still walks its relationship path per object. The first rebuild
@@ -445,3 +462,31 @@ one model under the floor (three objects, no pair) the template runs
 1.72× (`clash`) and 1.29× (`clash-matrix`): about 9 µs per rule of the
 runner's fixed cost (selecting, binding the list's two selections and
 references, finding its provider), which no pair outweighs there.
+
+The runner work of [#292](https://github.com/axioval/engine/issues/292),
+measured by the same gate on the inputs it targeted (time / peak heap,
+before on the integration head, after with it):
+
+| capability | input | before | after |
+| --- | --- | --- | --- |
+| space-validation | building architecture (IFC4) | 1.75× / 1.73× | 1.23× / 1.37× |
+| space-validation | building architecture (IFC2x3) | 1.75× / 1.73× | 1.22× / 1.37× |
+| space-validation | building architecture (IFC4x3) | 1.68× / 1.73× | 1.28× / 1.37× |
+| door-swing | generated fixture, 400 walls | 1.45× / 1.01× | 1.27× / 1.02× |
+| property-predicate | generated fixture, 400 walls | 1.47× / 1.03× | 1.23× / 1.03× |
+| external-wall-validation | generated fixture, 400 walls | 1.26× / 1.00× | 1.13× / 1.00× |
+| opening-spaces | building structural (IFC2x3) | 1.27× / 1.20× | 1.15× / 1.19× |
+| keyed-limit | wall with opening and window | 1.61× / 1.89× | 1.29× / 1.04× |
+| opening-zone | wall with opening and window | 1.53× / 1.53× | 1.37× / 1.22× |
+| opening-zone | building structural (IFC2x3) | 0.85× / 1.72× | 0.76× / 1.73× |
+| containment | generated fixture, 400 walls | 1.38× / 1.65× | 1.17× / 1.65× |
+
+Still over the budget: `door-swing` on the fixture, `keyed-limit` and
+`opening-zone` on the wall model and `space-validation` on one
+architecture model by a few hundredths of run time (each measurement
+varies by about as much); `opening-zone`'s heap on the structural model,
+which holds a whole rule's checks, about 2 KiB an item, until its
+openings read them; `containment`'s heap, a count list per wall; and the
+small models under the floor (`distance`, `containment`), whose rules
+select almost nothing and leave the runner's fixed cost per rule alone.
+

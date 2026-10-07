@@ -218,6 +218,9 @@ pub enum MeasuredParameterKind {
     /// A word naming something the source declares, such as a discipline,
     /// as written.
     Text,
+    /// A pattern, such as an XML Schema pattern a rule states, exactly as
+    /// written: never trimmed, since its spaces match spaces.
+    Pattern,
     /// A simple polygon in a section plane: at least three `lateral:up`
     /// vertices in metres, `,`-separated, enclosing an area and never
     /// crossing or touching itself.
@@ -250,7 +253,9 @@ impl MeasuredParameterKind {
         match self {
             Self::Length { .. } => Some(ParameterReference::Length),
             Self::Path | Self::Choices { .. } => Some(ParameterReference::StringList),
-            Self::Choice { .. } | Self::Text | Self::SourceKind => Some(ParameterReference::String),
+            Self::Choice { .. } | Self::Text | Self::Pattern | Self::SourceKind => {
+                Some(ParameterReference::String)
+            }
             Self::Objects => Some(ParameterReference::Selector),
             Self::Property => Some(ParameterReference::Property),
             Self::Table => Some(ParameterReference::Table),
@@ -401,7 +406,10 @@ impl MeasuredCall {
                     MeasuredParameterKind::Choices { .. },
                     MeasuredArgument::Choices(_)
                 )
-                | (MeasuredParameterKind::Text, MeasuredArgument::Text(_))
+                | (
+                    MeasuredParameterKind::Text | MeasuredParameterKind::Pattern,
+                    MeasuredArgument::Text(_)
+                )
                 | (
                     MeasuredParameterKind::SourceKind | MeasuredParameterKind::Objects,
                     MeasuredArgument::SourceKind(_)
@@ -844,7 +852,7 @@ fn argument(kind: MeasuredParameterKind, value: &str) -> Result<MeasuredArgument
         MeasuredParameterKind::Choices { options } => {
             MeasuredArgument::Choices(choices(options, value.split(','))?)
         }
-        MeasuredParameterKind::Text => {
+        MeasuredParameterKind::Text | MeasuredParameterKind::Pattern => {
             if value.is_empty() {
                 return Err("it is empty".into());
             }

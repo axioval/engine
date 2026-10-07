@@ -336,6 +336,13 @@ fn bound(
         (MeasuredParameterKind::Path | MeasuredParameterKind::Choices { .. }, _) => {
             return Err(not("a string list"));
         }
+        // A pattern binds exactly as stated: its spaces match spaces.
+        (MeasuredParameterKind::Pattern, ParameterValue::String { value: text }) => {
+            if text.is_empty() {
+                return Err(invalid(format!("{reference} is empty")));
+            }
+            MeasuredArgument::Text(text.clone())
+        }
         (
             MeasuredParameterKind::Choice { .. }
             | MeasuredParameterKind::Text
@@ -360,6 +367,7 @@ fn bound(
         (
             MeasuredParameterKind::Choice { .. }
             | MeasuredParameterKind::Text
+            | MeasuredParameterKind::Pattern
             | MeasuredParameterKind::SourceKind,
             _,
         ) => return Err(not("a string")),

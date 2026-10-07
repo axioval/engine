@@ -4,504 +4,498 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+Composable rules ([#225](https://github.com/axioval/engine/issues/225)).
+Rules are now built from shared parts: **measured values** registered with
+typed descriptors, a total and pure **expression** language over intervals
+with Kleene three-valued truth, selectors, and **generic judges**. 58 of the
+70 built-in capabilities, every generic judge and every geometric and
+search capability among them, run as **templates**: each a preconfigured composition of those parts behind
+an unchanged outside contract, pinned by a descriptor golden and held to the
+implementation it replaced by a differential parity harness on fixtures,
+generated inputs and pinned public IFC models, and by a benchmark judged
+with a 99% interval. Searches (routes, pairings, free-floor fits, sight
+lines) stay in Rust and are judged as measured lists. Editors get a
+versioned, localized authoring catalogue, JSON Schemas of the package
+contract, draft validation with positioned diagnostics, an editor-neutral
+block mapping and forks of a template into an editable `expression` rule.
+Beside that work, this release adds IDS export, BCF import and BCF API
+exchange, HTML and spreadsheet reports, exact boundaries for curved and
+boolean IFC bodies, alignment measurements, derived groups, classes and
+relations, and moves to the current IFC and Axiolid crates.
+
+**Breaking changes** (details in the entries below):
+
+- *Package contract.* `Selector` gains `Expression`, `DerivedGroup` and
+  `DerivedClass`; `ParameterValue` gains `Expression` and `TableFile`;
+  `ParameterKind` gains `Expression`; `RuleSetPackage` gains `values`,
+  `relations` and `groupings`; `ClassificationDefinition` gains `classes`;
+  `RuleFolder` gains `annotations`; `PropertyValue::Measured`'s
+  `dimension` becomes optional. None of these enums is `#[non_exhaustive]`,
+  so exhaustive matches and struct literals must be updated.
+- *Engine API.* `EngineError` gains `InvalidExpression`, `InvalidMeasured`,
+  `InvalidValue`, `InvalidProvider`, `InvalidTableFile`, `InvalidGrouping`
+  and `InvalidRelation`; a malformed `axioval:measured` name now fails
+  compilation with `InvalidMeasured`, not `UnknownConcept` (#239).
+  `ParameterType` gains `Expression` and `NumberExpression`, and
+  `ParameterDescriptor` the public fields `per_object` and
+  `expression_text`. `Finding` and `NotEvaluated` gain the public field
+  `explanation`. `ReportColumn` gains the public fields `unit` and
+  `exactness`. `Derivation` gains `AdjacentAcross`; the comparison's
+  `Measure` gains `Mesh` and `Boundary`, and `Measurement` the field
+  `witness`.
+- *Service and adapter API.* `ProximityError` gains `Refused`, and
+  `ProximityEvidence::try_new` and `plan_overlap_square_metres` take and
+  return `Option<f64>` (#210). `SpaceError` gains `Unmeasured` and is no
+  longer `Copy` (#212). The Axiolid adapter's exact boundary is an
+  `ExactBody`: `AxiolidGeometry::exact_boundary` returns one,
+  `ExactBoundary::brep` returns `Option`, and `ExactBoundary::into_brep`
+  is replaced by `into_body`. `IfcSessionError` gains `Xml`.
+- *IDS, BCF and decisions.* `axioval_ids::translate` returns
+  `TranslateError` and refuses a whole document that fails the schema
+  audit; `Export::to_xml` returns `DocumentError`; `Options` gains `filter`
+  and is no longer `Eq`. `Decision::comment` and `FindingDecision::comment`
+  become `comments`, both gain public review fields, `DecisionError` gains
+  `Blank`, `axioval_bcf::import` and `import_topics` take `rule_labels`,
+  and the BCF `Export` gains `unrendered`.
+- *Removed.* `axioval_rules::GuardDiagnosis` is removed (`GuardDefect`
+  stays), and `axioval-spec` is retired (see Removed).
+- *Capability signatures.* A definitions package that declares a
+  capability's signature by hand must declare its new optional parameters:
+  `model-comparison` (`geometry`, `tolerance_metres`,
+  `compare_relationships`), `ramp-geometry` (four), `stair-geometry`
+  (`landing_clear_width_minimum`, `total_clear_width_minimum`),
+  `opening-zone`, `local-circulation`, `component-clearance`,
+  `keyed-limit` (`pair_key`, `door_type_defaults`, the `limits` column
+  `other_side`), `quantity-takeoff`, `name-sequence`,
+  `property-comparison` and `consistent-value`. Since #278 the
+  descriptors are pinned (`crates/engine/rules/tests/golden/descriptors.json`),
+  and no template changed one.
+- *Outcomes of built-in capabilities.* `property-comparison` compares a
+  stated `-0` equal to `0` (D20, #287). A range bound that is no number
+  leaves the interval undecided instead of passing it (#287). Templates
+  fail closed where a selection they bind cannot be listed whole, where
+  the capability judged the objects it could list: `plan-coverage` (D23),
+  `component-visibility` (D29), `external-wall-validation` (D30),
+  `exit-separation` (D31), `numbering-consistency` (D33), `wall-spacing`
+  (D34), `parking-bay` (D35), `distance` (D36), `containment` (D37),
+  `clash` and `clash-matrix` (D38, which also refuse an empty
+  `system_path`). `counterpart-coverage` and `effective-coverage` count
+  every near counterpart of the subject's own kind (D27). Smaller scope,
+  wording, rounding and evidence differences are recorded as D19, D21,
+  D22, D24 to D26, D28, D32, D39 and D40 in the parity chapter.
+- *Measured values.* A point a measurement answers is no longer exact by
+  default: every value states the exactness of its evidence, so a point
+  measured on a tessellation is cited inexact, and `boundary_area` and
+  `bottom_above_level` round outward (#271).
+- *Geometry and sources.* A curved mesh whose deviation the mesh compiler
+  does not certify is unmeasured instead of judged on an unproven 1 mm; a
+  warped authored face is no longer exact (#213); federated models that do
+  not share the first model's frame are unmeasured instead of combined;
+  derived linear placements follow IFC4.3 (a positive `OffsetLateral` lies
+  left); an unstated `MapUnit` is the project length unit; ifcXML in the
+  codec's own layout refuses positional attribute names; an IFC4X1 or
+  IFC4X2 header is refused as unsupported. Exported IDS documents change
+  byte-wise (the `openbim-ids` writer).
+
 ### Added
 
-- `inUnit` restates a value in a written unit (#277): `{"kind": "inUnit",
-  "operand": …, "unit": "mm"}` keeps the value, in coherent units, and
-  shows it in that unit in explanations and in a message's `{label}`
-  (`0.3 m` shows `300 mm`). The type checker refuses a unit of another
-  dimension (`UnitMismatch`, "it restates …") or one that does not parse;
-  an operand known only when read is checked when evaluated. `%` is a unit
-  symbol (scale 0.01, a plain number). The node is catalogued (the new
-  field reference `unit` and result rule `namedUnit`), mapped to blocks, in
-  the JSON Schema and has a golden fixture.
+- **Expressions** (#226 to #238). `axioval_ir::contract::Expression` is a
+  typed tree tagged by `kind` (unknown kinds and fields refused, every node
+  optionally labelled): literals and `null`; property, parameter, derived,
+  measured and table `lookup` reads; `not`, `and`, `or`, `implies`, `xor`;
+  `compare`, `between`, `oneOf`, `noneOf`, `isDefined`, `isUndefined`;
+  `if`, `coalesce`; arithmetic, `abs`, `min`, `max`, `round`, `floor`,
+  `ceil`, `sqrt`, trigonometry, `convertSlope`, `inUnit`; text functions;
+  `aggregate`; `ruleOutcome`, `selected`, `findingCount` and `deviation`.
+  The language is total: no loops, recursion, user-defined functions or
+  package code. `axioval_engine::expression` type and unit checks a tree
+  when the ruleset is compiled (`EngineError::InvalidExpression` naming
+  the path) and evaluates it per object: numbers are intervals with units,
+  rounded outward where a float operation rounds; a straddling comparison,
+  or an `if` on an undecided condition whose branches disagree, is not
+  evaluated, named by its path; every leaf read is cited as evidence. The
+  unit algebra and interval type are shared with takeoff. A decimal
+  quantity literal is the double nearest the decimal it states (`30 mm`
+  equals a stated `0.030 m`), and `round` with a decimal step yields the
+  double nearest the decimal multiple.
+  - **Truth** is Kleene's three-valued logic over true, false and `null`,
+    with not evaluated kept apart and outranking `null` (#269): a
+    comparison with `null` is `null`, so `not(x == 5)`, `x != 5` and
+    `between` are `null` for an object stating no `x`; `null` stays `null`
+    through `not`, `and`, `or`, `implies` and `xor`; an `if` on a `null`
+    condition is `null` unless its branches agree; `noneOf` is `not oneOf`
+    in every state; `any`, `all` and `none` read a `null` member as
+    unknown, and `sum`, `min`, `max`, `average` and `distinctCount` are
+    `null` when a member's value is. An expression requirement that is
+    `null` is a missing-information finding (`requirement cannot be
+    confirmed: … is null`), never a pass; a selector expression that is
+    `null` selects nothing. `selected(r)` states whether another rule
+    selected the object, so `implies(selected(r), ruleOutcome(r))` guards
+    a rule's `null` outcome instead of passing vacuously; `coalesce(x,
+    false)` or an `isDefined` guard states where `null` means false. The
+    book's Expressions chapter has the truth table of every operator.
+  - **Comparisons** decide through the one comparison every rule uses
+    (#287, see Changed): dates on XML Schema's timeline
+    (`2026-09-28+12:00` equals `2026-09-27-12:00`; a zoned and an unzoned
+    date within 14 hours differ while their order is not evaluated), and
+    case-insensitive `like` and `matches` fold case in the pattern, so
+    `\D` stays a non-digit.
+  - **Units.** `inUnit` restates a value in a written unit of its
+    dimension (`{"kind": "inUnit", "operand": …, "unit": "mm"}`): the value
+    is unchanged in coherent units and shown in that unit in explanations
+    and in a message's `{label}` (`0.3 m` shows `300 mm`); a unit of
+    another dimension (`UnitMismatch`, "it restates …") or one that does not
+    parse is refused, and an operand known only when read is checked when
+    evaluated. `%` is a unit symbol (scale 0.01, a plain number). A `sum`
+    over no member is 0 in the unit its members' value is typed in, so
+    `sum(…) ≤ 3 m²` holds with 0 m² for a wall without openings (#277):
+    the compiled plan carries the ruleset's declared property and
+    derived-value types (`expression::DeclaredTypes`), which the runtime
+    installs for every run; only a value no declaration types sums to a
+    plain 0.
+  - **The `expression` capability** (`axioval:capability.expression`,
+    #229, #235, #236) evaluates its `requirement` per selected object:
+    true passes, false is a finding naming the failing subexpression and
+    every value read with its interval, not evaluated leaves the object
+    open with the reason and path. It takes an optional `deviation` (a
+    plain number graded by the rule's severity bands) and a `message`
+    whose `{label}` placeholders show labelled subexpressions, and takes
+    the parameters its definition declares (`takes_authored_parameters`:
+    scalars, string lists and tables with declared columns, read through
+    `parameter` and `lookup`). Findings and not-evaluated outcomes carry an
+    optional `explanation` (absent on the wire for every other rule): the
+    subexpressions evaluated, each with its path, kind, label and value or
+    reason, the deciding path always kept and at most 64 other steps; the
+    HTML report and BCF topics show it.
+  - **Derived values** (#230): a ruleset's `values` name expressions
+    evaluated at most once per object and read as the reserved set
+    `axioval:value` by selectors, expressions, property capabilities,
+    takeoff columns, groupings and classifications; the compiler orders
+    them and refuses an undeclared reference or a cycle.
+  - **Expression selectors** (#231): `{"kind": "expression"}` selects the
+    objects a truth expression holds for; `false` and `null` do not select,
+    an undecidable one leaves the object not evaluated in every rule using
+    it. It reads properties, measured and derived values, but no rule
+    parameter.
+  - **Computed parameters** (#232): a parameter a capability declares
+    `per_object` may be an expression of its kind, and a per-object table
+    may hold expression cells; the shared dispatch groups objects whose
+    computed literals agree and runs the capability once per group. An
+    object whose parameters cannot be computed, or compute an interval, is
+    not evaluated. `property-predicate`, `distance`, `keyed-limit` and
+    `stair-geometry` take computed bounds. `CapabilityRegistry::ids` and
+    `CapabilityEvaluation::absorb` serve hosts.
+  - **Aggregates** (#233): `count`, `sum`, `min`, `max`, `average`,
+    `distinctCount`, `any`, `all` and `none` over the objects a
+    relationship path, a derived group, a selector or a measured member
+    list reaches, filtered by `where`, with `of: subject` reading the
+    rule's checked object. An undecided member is never dropped: counts,
+    sums and extrema widen to intervals, quantifiers hold or fail only when
+    every possible membership agrees, averages are not evaluated.
+  - **Other rules' outcomes** (#234): `ruleOutcome`, `findingCount` and
+    `deviation` read how another rule judged the object (`null` where it did
+    not select it, not evaluated where it left it open), ordered and
+    cycle-checked as `ruleOutcome` selectors are.
+  - **Text form** (#237): `parse_text` reads the canonical text form
+    (arithmetic, comparisons, `and`, `or`, `not`, text literals, `if`,
+    `coalesce`, `abs`, `sqrt`, `floor`, `ceil`, `round`). Takeoff's
+    computed columns are parsed into the tree, or given as one, and checked
+    and evaluated by the engine, so they may branch and read properties,
+    derived classes and values, and aggregates; takeoff's own parser and
+    evaluator are gone, every takeoff test passing unchanged. A descriptor
+    marks a string parameter holding an expression's text
+    (`expression_text`).
+  - **Limits** (#238): a tree of more than 2048 nodes, aggregates nested
+    more than two deep or excessive depth is refused; a run's expressions
+    share an evaluation budget (`Runtime::with_evaluation_budget`, 100
+    million nodes by default), after which every further expression leaves
+    its object not evaluated as a resource limit. Seeded fuzz tests run the
+    parser, checker and evaluator over thousands of random inputs: no
+    panic, no reversed or infinite interval.
 
-- A golden test pins the outside contract of every built-in capability
-  (`crates/engine/rules/tests/golden/descriptors.json`): its id, every
-  parameter's name, package kind, requirement, per-object and
-  expression-text flags and table columns, and whether it grades
-  deviations or takes authored parameters (#278). A capability rebuilt on
-  shared parts must keep it unchanged.
-- Sections and clearance envelopes along alignments (#253). The new
-  measured values `station_section_area` and
-  `station_section_thickness[;direction=up|lateral]`
-  (`;alignment=<kinds>[;path=<steps>];station=<m>`) measure the object's own
-  body in the vertical section normal to an alignment at a station, as
-  intervals derived in the engine from the section's interval region
-  (`BodySection`: the mesh's oriented cut, the band of mesh pieces within
-  the deviation and the frame's error of the plane, and that radius).
-  `envelope_intrusions;bodies=<kinds>;envelope=<lateral:up,…>;from=<m>;to=<m>;step=<m>`,
-  measured on an alignment, counts the bodies reaching into a clearance
-  envelope swept along a station range, from the sure to the possible
-  intrusions. The sweep is sound between its samples: each step bounds how
-  far the envelope moves from the centreline's certified derivative bounds
-  and tests the meshes in 3D against the envelope grown by that bound, so a
-  body crossing the envelope between two samples is found or left possible
-  with the reason, never passed. They are answered through the new
-  `AlignmentService::measure_section` and `measure_envelope`
-  (`SectionRequest`, `Section`, `BodySection`, `SectionAxis`,
-  `SectionPolygon`, `EnvelopeRequest`, `EnvelopeSweep`, `Intrusion`), which
-  refuse by default. Measured parameters gain the `polygon` kind. With
-  `--geometry` the CLI cuts the bridge's closed meshes; an unmeasured or
-  open body, a body measured through its parts (for a section) and an
-  alignment placed off the identity (openbimrs/ifc#357) are refused by name.
+- **Measured values** (#239 to #255, #275, #289). `axioval_ir::measured`
+  registers every `axioval:measured` name once: typed parameters,
+  dimension and unit, the services it needs, its exactness, what leaves it
+  not evaluated, whose value it is (`subject`: each object's, each
+  source's or the project's) and English and German labels. Values are
+  answered by trusted `MeasuredProvider`s (a capability's `measured.rs`,
+  reusing the capability's own code) beside the registered capabilities;
+  `measured_value` reads one outside a run and
+  `CapabilityRegistry::measured_providers` lists what each measures. The
+  registry now holds, among others, slopes, falls and tilts (`slope`,
+  `slope_along`, `cross_fall`, `gradient_direction`, `inclination`, each
+  per face piece or filtered by `face=facing`), angles (`angle_to`,
+  `skew`, `bearing`), dimensions (`extent`, `length`, `thickness`,
+  `perimeter`), clearances (`headroom`, `clearance_below`,
+  `clear_width`, `clear_height`), distances (`distance`,
+  `count_within`), areas, shares and coverage, door and window values
+  (`door_clear_width`, `sill_height`, `threshold_step`, `swing_area`, …),
+  profile dimensions and sections, space aspects, plan spans, levels
+  (`level_elevation`, `level_index`, `height_above_ground`), stacks,
+  shelving, coordinate systems, building envelopes, search results
+  (`travel_distance`, `free_placements`, `plan_coverage`, …) and alignment
+  stations and sections (below). **Measured member lists** (`steps`,
+  `runs`, `guard_edges`, `face_pieces`, `recesses`, `axes_within`, …)
+  are ranged over by an aggregate `over` a `measured` list and read their
+  typed fields in `axioval:member`. A parameter may name the reading
+  rule's parameters (`doors=@door_selector`, property references, tables,
+  numbers, truths, angles) or the anchor (`@anchor`), bound once per rule
+  before anything is measured (#289); `MeasuredParameterKind` gains
+  `Choice`, `Choices`, `Vector`, `Polygon`, `Table`, `Number`, `Truth` and
+  `Angle`. The reserved set `axioval:source` states a session's
+  declared discipline and source metadata. A run memoizes measurements in
+  a `MeasuredMemo` and reads values in batches
+  (`MeasuredProvider::measure_batch`); `Measurement::Rounded` cites an
+  exactly measured interval holding only rounding as exact,
+  `Measurement::Approximate` an approximation as inexact even where it is a
+  point, and `Citation` what a value was measured against. `axes_within` members state `centre_angle`, the angle `parking-bay`
+  infers a bay's orientation by (#273). A value never states an undecided
+  handrail side, landing depth or width as definite, and profile section
+  values widen an unset fillet, flange edge or corner radius over every
+  radius the family allows; an I-section stating no flange slope is not
+  evaluated (#270). Measuring stays
+  in built-in code: a package only names values. The Derived properties
+  chapter lists every name; `tests/measured_exactness.rs` holds every
+  provider to approximate evidence.
 
-- Stations, offsets and heights along alignments (#252). The new
-  measured values `station`, `offset[;side=left|right]` and
-  `height_above_gradient` (`;alignment=<kinds>[;path=<steps>]`) locate an
-  object's reference point along an alignment: the plan distance to its
-  foot labelled through the alignment's station equations, its signed
-  plan offset (left positive, IFC4.3's tangent, left, up) and its height
-  above the gradient line, each an interval sure to hold the exact value.
-  `alignment_curvature`, `alignment_radius`, `alignment_gradient` and
-  `alignment_cant` read the alignment at that station for station-dependent
-  limits; an alignment stating no cant has none. They are answered through
-  the new source-neutral `AlignmentService` (`AlignmentServiceHandle`,
-  `AlignmentRequest`, `AlignmentPosition`, `AlignmentParameterRequest`,
-  `AlignmentParameterValue`), whose parameter method refuses by default.
-  A point whose nearest foot lies before the start or beyond the end is
-  not evaluated as off the alignment's range with the reason, never
-  clamped; two feet that cannot be told apart are ambiguous; several
-  alignments selected are refused; none is an exact absence; without the
-  service the values are a missing service. With `--geometry` the CLI
-  registers an IFC implementation over each `IfcAlignment`'s centreline
-  (its `Axis` curve, or the gradient curve `ifc-alignment` 0.6 composes
-  from its layouts), certifying the foot of the plan perpendicular with
-  `axiolid-evaluate`'s derivative bounds, and reading stationing from
-  `Pset_Stationing` referents and cant from `IfcAlignmentCant`.
+- **Capability templates** (#278, #280 to #287, #289 to #291). A built-in
+  capability is defined as data, `axioval_engine::template::Template`: its
+  outside contract (id, parameter descriptor, defaults) beside a
+  composition of declaration checks in the capability's order and words,
+  the host services it needs, message texts with placeholders, forms of
+  values read by the shared evaluator, and a decision by a generic judge:
+  `Within` (the range judge), `Compare`, `Unique`, `Consistent`,
+  `Conforms`, `Proportion`, `Facets`, `Requirements`, `Compared`, `Each`,
+  `Near`, `Items` (the items of a measured list), `Parts`, `Joined`,
+  `Holds` (a composed truth) and `Pairs` (pairs by class), with group and
+  scope forms (per source, per project, over members, two populations
+  and derived ratios, graded findings). `RuleCapability::template`
+  exposes it; `axioval_rules::templates` binds a rule into a flat plan
+  and runs it. 58 capabilities run as templates: the generic judges
+  (`object-count`, `related-count`, `unique-value`, `consistent-value`,
+  `selector-conformance`, `relative-count`, `property-value`,
+  `property-requirements`, `property-comparison`, `property-predicate`)
+  and the capabilities of the rebuild issues: stairs and ramps (#280),
+  doors, windows and openings (#281), plan, area, level and extent checks
+  (#282), plan spans, distances and layouts (#283), guards and spaces
+  (#284), clashes (#285), and the decision part of the search capabilities
+  (#286), whose searches stay in built-in code and state their answers as
+  measured lists (`free_floor_fit`, `route_verdicts`,
+  `escape_verdicts`, `circulation_verdicts`, `allocations`, …). The
+  remaining twelve (`expression`, `quantity-takeoff`, `model-comparison`,
+  `manual-issue` and the simple property, profile, classification and
+  container checks) are implementations as before. A golden test pins the outside
+  contract of all 70 (`crates/engine/rules/tests/golden/descriptors.json`:
+  id, parameter names, kinds, requirement, per-object and expression-text
+  flags, table columns, grading and authored parameters). The catalogue
+  lists each template with every form as one expression and its block
+  tree (**expand**), and `axioval_rules::templates::fork` copies a rule
+  bound to a template into the `expression` rule it composes (**fork**),
+  carrying the rule parameters its measured values name; forms deciding
+  per scope, per group or over a search's answer are not forked
+  (`ForkError::Inexpressible`). A rule bound to a template exports exactly
+  as before; a forked rule exports only where a profile states every node.
+  The replaced implementations are kept as `axioval_rules::reference::*`,
+  compiled only with the rules crate's `parity-reference` feature.
 
-- Products along alignments are placed by their linear placement (#224).
-  With `--geometry`, an `IfcLinearPlacement` is derived from its basis
-  curve through `ifc-geometry` 0.10's evaluator-taking lowering
+- **Parity harness** (#256, #276). `axioval_rules::parity` runs a
+  capability and its re-expression over one model and lines their outcomes
+  up per object, source and project: verdicts, severities, evidence
+  exactness, finding counts, categories, rule summaries and measured
+  values within a declared rounding, and for a template its messages,
+  related objects and graded deviations too (`Parity::contract()`).
+  `Runtime::run_recorded` and `run_session_recorded` return each rule's
+  `RuleRecord` with its selection, so an object a rule passed is told from
+  one it never selected (`RuleRecord::object_verdict`). Every template is
+  held to its replaced implementation on every fixture, on generated
+  inputs and on the outcomes recorded before its switch on ten pinned
+  buildingSMART sample models (`fixtures/parity/models.json`, CC BY 4.0,
+  fetched by `scripts/parity_models.py` into a cache outside tmpfs and kept
+  only at their pinned SHA-256); CI runs that in its own `parity` job,
+  which `check` requires. Private cases run under `AXIOVAL_PARITY_CASES`
+  and fail closed once it is set. Every accepted divergence is classified
+  in the book (D1 to D40) with its reason and decision, and a recorded one
+  no longer shown fails.
+
+- **Template benchmark** (#279, #292 to #294, #296).
+  `crates/apps/cli/benches/templates.rs` runs each template against its
+  replaced implementation on a generated fixture and every public model of
+  its case, interleaved, and `scripts/bench.py` judges the records against
+  `scripts/bench_budget.json`: at most 1.25 times the run time and 1.5
+  times the peak heap per input, judged by Student's t interval at 99%
+  over rounds of the bench at planned looks (2, 3 and 20 rounds), an input
+  still undecided at the last look failing; inputs whose reference takes
+  under 100 µs are judged together with 50 µs of slack each, and the heap
+  with 64 KiB. The runner keeps a template's fixed cost close to the
+  capability's: plans bound once per rule, measurements memoized per run,
+  values read in batches, selections shared between rules, nothing
+  formatted that a run does not show. Ten inputs hold a recorded exception
+  with its own ceiling: `triangle-count` (1.6×) and `property-predicate`
+  (1.45×) on the generated fixture, and eight known misses of 1.25 to
+  1.30× accepted on 2026-10-07 with ceilings of 1.35× (1.4×) and tracked
+  for removal in #296 (`door-swing` on the fixture, `keyed-limit` on the
+  wall model, `space-validation` on three architecture models,
+  `table-allocation` on three small models). CI runs the benchmark as a
+  report; the gate is run locally under the build lock.
+
+- **Authoring** (#261 to #265, #266, #268).
+  - `axioval catalogue` (`axioval::catalogue`,
+    `axioval_rules::catalogue::catalogue`) emits one deterministic JSON
+    document a rule editor is generated from: every registered capability
+    with its parameters and template, the measured values and member
+    lists, expression node kinds with their fields and result rules,
+    comparison operators, aggregate functions and sources, slope forms,
+    selector kinds, relationships, units and the concepts of the
+    definition packages given (`--definitions`). Every entry is labelled
+    and explained in English and German; `--locale de`
+    (`catalogue::localized`) writes one language, falling back to English
+    deterministically and listing what fell back, and refuses an
+    unsupported locale. The document carries `schemaVersion` (1.2.0 in this
+    release) with stated compatibility rules; the engine refuses to build a
+    catalogue missing a text, and a golden copy makes every change visible
+    in review.
+  - JSON Schemas of the package contract (#262): `definitions.schema.json`
+    and `ruleset.schema.json` (draft 2020-12), generated from the
+    `axioval-ir` types by `axioval_ir::schema` behind the opt-in `schema`
+    feature, published with the documentation under `schema/` and
+    versioned with the crate. A test regenerates them byte for byte and
+    validates every package and expression fixture against them.
+  - Rule drafts (#263): `draft::validate_rule` and `validate_expression`
+    compile one rule, or one expression placed into a rule, in its ruleset
+    context exactly as a check does, and report a refusal as a diagnostic:
+    a stable code, the message, the expression path, a JSON pointer, line
+    and column for a draft that does not parse, and the nearest known name
+    for an unknown one. `axioval validate --rule`/`--expression` print them
+    as JSON, `--serve` answers drafts as JSON lines, and with `--model` a
+    valid draft is dry-run, the opt-in `ExpressionTraces` service recording
+    every object's verdict and trace.
+  - Block editors (#264): `axioval_ir::blocks` maps expressions, selectors,
+    aggregate sources and canonical measured reads onto an editor-neutral
+    block tree (`to_blocks`, `from_blocks`, driven by the catalogue's
+    field tables, malformed trees refused with the block path). A generator
+    emits rule JSON or `.mcs` only, never code.
+  - IDS and export profiles (#266): profiles declare the expression node
+    kinds they state (`ExportProfile::expression_kinds`, default none), and
+    `axioval_export::precheck::unsupported_expression_node` names the first
+    node one leaves out. IDS import writes an `expression` rule for a
+    `totalDigits` or `fractionDigits` facet on an integer attribute
+    (formerly a gap), and IDS export states such a rule as the facet it
+    came from and refuses every other expression rule with
+    `Refusal::Expression { path, kind, why }`; the conformance round trip
+    stays 307 of 307.
+  - The Pkl schema and `.mcs` of `axioval/mcs` mirror expressions and
+    derived values (axioval/mcs#7).
+  - The book's Composing rules chapter (#268) walks through four worked
+    examples, each a tracked package under `docs/examples/composing` that
+    `tests/composing_examples.rs` runs.
+
+- **Architecture gates** (#267, #272, #274, #295). `scripts/architecture.py`
+  (mutation-proven by `--self-test`) fails a capability without catalogue
+  texts and holds the layering call site by call site: service trait
+  methods are marked `// gate: measures <kinds>` or `// gate: reads`, and
+  every call of a measuring method or piece of inline geometry in the
+  rules crate is keyed in `scripts/measurement_ledger.json` to the
+  registered values that provide it or to a reviewed search kind;
+  `unregistered` entries are capped by a budget that only falls, now
+  zero. It refuses a tolerance constant defined twice with one name and
+  value across the engine crates, and a `cfg_attr` allowing dead or unused
+  code under `parity-reference`; the lint section also runs clippy on the
+  libraries and binaries without that feature, as a release builds them.
+
+- **Alignments** (#252, #253). The measured values `station`,
+  `offset[;side=left|right]` and `height_above_gradient`
+  (`;alignment=<kinds>[;path=<steps>]`) locate an object's reference point
+  along an alignment: the plan distance to its foot labelled through the
+  alignment's station equations, its signed plan offset (left positive,
+  IFC4.3's tangent, left, up) and its height above the gradient line, each
+  an interval sure to hold the exact value. `alignment_curvature`,
+  `alignment_radius`, `alignment_gradient` and `alignment_cant` read the
+  alignment at that station; an alignment stating no cant has none.
+  `station_section_area` and
+  `station_section_thickness[;direction=up|lateral]` (with `;station=<m>`)
+  measure the object's body in the vertical section normal to the
+  alignment, as intervals derived in the engine from the section's
+  interval region (the mesh's oriented cut, the band of mesh pieces within
+  the deviation and the frame's error of the plane, and that radius), and
+  `envelope_intrusions;bodies=<kinds>;envelope=<lateral:up,…>;from=<m>;to=<m>;step=<m>`
+  counts the bodies reaching into a clearance envelope swept along a
+  station range, from the sure to the possible intrusions. The sweep is
+  sound between its samples: each step bounds how far the envelope moves
+  from the centreline's certified derivative bounds and tests the meshes
+  in 3D against the envelope grown by that bound, so a body crossing the
+  envelope between two samples is found or left possible with the reason,
+  never passed. They are answered by the new source-neutral
+  `AlignmentService` (`AlignmentRequest`, `AlignmentPosition`,
+  `AlignmentParameterRequest`, `AlignmentParameterValue`,
+  `measure_section`, `measure_envelope`, `SectionRequest`, `Section`,
+  `BodySection`, `SectionAxis`, `SectionPolygon`, `EnvelopeRequest`,
+  `EnvelopeSweep`, `Intrusion`), whose parameter, section and envelope
+  methods refuse by default. A foot before the start or beyond the end is
+  not evaluated as off the alignment's range, never clamped; feet that
+  cannot be told apart are ambiguous; several alignments selected are
+  refused; none is an exact absence; without the service the values are a
+  missing service. With `--geometry` the CLI registers an IFC
+  implementation over each `IfcAlignment`'s centreline (its `Axis` curve,
+  or the gradient curve `ifc-alignment` 0.6 composes), certifying the foot
+  of the plan perpendicular with `axiolid-evaluate`'s derivative bounds,
+  reading stationing from `Pset_Stationing` referents and cant from
+  `IfcAlignmentCant`, and cutting the bridge's closed meshes; an unmeasured
+  or open body, a body measured through its parts (for a section) and an
+  alignment placed off the identity (openbimrs/ifc#357) are refused by
+  name.
+
+- **Products along alignments are placed by their linear placement**
+  (#224). With `--geometry`, an `IfcLinearPlacement` is derived from its
+  basis curve through `ifc-geometry` 0.10's evaluator-taking lowering
   (openbimrs/ifc#353) with the Axiolid reference curve evaluator, so a
-  product placed by distance alone is measured instead of unmeasured as
-  having no `CartesianPosition`. A cached `CartesianPosition` is checked
-  against the derived position (`CachedPositionPolicy::Verify`, #354): one
-  farther than the model's precision leaves the product unmeasured with
-  both positions named, never placed by the cache. An `IfcParameterValue`
-  along an alignment stays refused by name (#347). Where the derivation
-  would ignore a stated frame, a `PlacementRelTo` or an alignment placed
-  off the identity (openbimrs/ifc#357), the product is unmeasured with that
-  reason, never misplaced.
+  product placed by distance alone is measured instead of unmeasured. A
+  cached `CartesianPosition` is checked against the derived position
+  (`CachedPositionPolicy::Verify`): one farther than the model's precision
+  leaves the product unmeasured with both positions named. An
+  `IfcParameterValue` along an alignment stays refused by name; where the
+  derivation would ignore a stated frame, a `PlacementRelTo` or an
+  alignment placed off the identity (openbimrs/ifc#357), the product is
+  unmeasured with that reason, never misplaced.
 
-- Hosts of Reference View openings are measured (#218). With `--geometry`,
-  an `IfcOpeningElement` whose every representation is `Reference` is taken
-  as already applied to its host in an IFC4 or IFC4X3 file
-  (`ifc-geometry` 0.10, openbimrs/ifc#351), as IFC4 states such a
-  representation "is not subtracted": the host is measured from its `Body`
-  as authored instead of being unmeasured, and the opening's `Reference`
-  solid is its void. The result's additive
-  `geometry.openings_taken_as_applied` lists each host, opening and reason,
-  and the evidence of every measurement of the host names the openings
-  (`;applied-openings:<host>=<opening>+...`, `AxiolidGeometry::
-  with_applied_openings`). An opening with no representation or another
-  representation beside `Reference`, and any such opening in an IFC2X3
-  file, still leaves its host unmeasured.
+- **Hosts of Reference View openings are measured** (#218). With
+  `--geometry`, an `IfcOpeningElement` whose every representation is
+  `Reference` is taken as already applied to its host in an IFC4 or
+  IFC4X3 file (`ifc-geometry` 0.10, openbimrs/ifc#351), as IFC4 states such
+  a representation "is not subtracted": the host is measured from its
+  `Body` as authored, and the opening's `Reference` solid is its void. The
+  result's additive `geometry.openings_taken_as_applied` lists each host,
+  opening and reason, and the evidence of every measurement of the host
+  names the openings (`;applied-openings:<host>=<opening>+...`,
+  `AxiolidGeometry::with_applied_openings`). An opening with no
+  representation or another beside `Reference`, and any such opening in an
+  IFC2X3 file, still leaves its host unmeasured.
 
-- JSON Schemas of the package contract (#262): `definitions.schema.json`
-  and `ruleset.schema.json` (draft 2020-12), generated from the
-  `axioval-ir` types by `axioval_ir::schema` behind the new opt-in
-  `schema` feature, are published with the documentation under `schema/`
-  and versioned with the crate. They state the serde wire form, selectors,
-  expressions and parameter values included; a test regenerates them byte
-  for byte and validates every package and expression fixture against
-  them.
-- Wholes measured through their parts (#211): with `--geometry`, a
+- **Wholes measured through their parts** (#211). With `--geometry`, a
   physical product with no `Body` of its own that is decomposed into parts
-  (`IfcRelAggregates`, at any depth: stairs into flights and landings,
+  (`IfcRelAggregates` at any depth: stairs into flights and landings,
   roofs into slabs, curtain walls into members and plates, walls into
   layers, element assemblies) is measured as the union of its parts'
-  bodies instead of being unmeasured as `no body representation`. It is
-  exact when every part is, tessellated within the largest deviation of
-  its parts otherwise, and has an exact body where every part has one
-  (`AxiolidGeometry::compose`, `ComposedBody`, `with_composed_body`,
-  `ExactBody::union`). Any unmeasured part leaves the whole unmeasured
-  with a reason naming that part; a product with neither body nor parts
-  stays `no body representation`. Evidence about such a whole states it
-  (`;union:<whole>=<n>-parts`), its volumes are bounded piece by piece so
+  bodies. It is exact when every part is, tessellated within the largest
+  deviation of its parts otherwise, and has an exact body where every part
+  has one (`AxiolidGeometry::compose`, `ComposedBody`,
+  `with_composed_body`, `ExactBody::union`). Any unmeasured part leaves the
+  whole unmeasured with a reason naming it; a product with neither body
+  nor parts stays `no body representation`. Evidence states it
+  (`;union:<whole>=<n>-parts`), volumes are bounded piece by piece so
   overlapping parts are never counted twice, and the result's additive
   `geometry.composed` counts the wholes. A whole and its own parts share
-  material (`ProximityService::shares_body`, default `false`), so
-  `clash`, `clash-matrix`, `containment` and `distance` never pair them.
+  material (`ProximityService::shares_body`, default `false`), so `clash`,
+  `clash-matrix`, `containment` and `distance` never pair them.
 
-- Not-evaluated inventory (#186): `scripts/not_evaluated_inventory.py`
+- **Not-evaluated inventory** (#186). `scripts/not_evaluated_inventory.py`
   ranks the causes of not-evaluated outcomes and unmeasured objects across
-  saved check results. It attributes an outcome to the unmeasured object it
-  involves, and its output is deterministic. `scripts/inventory/` holds a
-  broad geometric rule set bound to IFC2X3, IFC4 and IFC4X3. The ranking
-  over 14 real models and its follow-up issues are in the new
-  `not-evaluated-inventory` page. A second ranking after #210 to #214
-  shows each cause before and after: 3,424 outcomes on 13 models instead
-  of 28,631 on 14, with the new top causes filed (#217, #218, #219, #221,
-  #222) and the two models that exceed the time limit (#220).
-- Exact boundaries of walls clipped by roof planes (axiolid/kernel#234,
-  `axiolid-mesh-compile` 0.3.10): `exact_boundary` builds a clip by a
-  half-space, bounded by a polygon or not (`IfcBooleanClippingResult` of
-  `IfcHalfSpaceSolid` or `IfcPolygonalBoundedHalfSpace`), in any order
-  with the body's openings. Its extent is read from its edges, so a
-  clipped wall's agrees with its mesh. Unions and other intersections are
-  still refused by name.
-- Exact differences are exact where the kernel decided nothing within its
-  tolerance (axiolid/kernel#236, `axiolid-brep-boolean` 0.1.3): differences
-  and clips are built with the compiler's `BooleanReport`. An empty report
-  is the exact boolean of the operands as given, so a wall less openings
-  placed along the axes, or crossing a turned wall's faces, is exact: it
-  certifies plan overlaps and is compared between its boundaries. A
-  non-empty report (an opening flush with a turned wall's face) perturbs
-  the body by the reported magnitudes (a few femtometres there) instead
-  of the micrometre tolerance. Every boolean body also carries the
-  rounding its boolean merges points within, `2^-40` of its operands'
-  largest coordinate per boolean (`ExactBody::rounding_metres`,
-  `widening_metres`), which widens its certified distances and leaves it
-  exact.
-- Plan relations of bodies of several items (axiolid/kernel#237,
-  `axiolid-measure` 0.3.9): `Horizontal` distance, plan overlap and the
-  footprint relation of vertical distances of a column on its footing are
-  certified over every item pair (`body_plan_boundary_distance`,
-  `body_plan_boundary_clearance`, `body_plan_overlap`) instead of keeping
-  the mesh's.
-- Exact boundaries of walls and slabs less their openings
-  (axiolid/kernel#228, `axiolid-mesh-compile` 0.3.9): `exact_boundary`
-  builds a difference of placed extrusions (`IfcOpeningElement` voids,
-  `IfcBooleanResult` differences, several nested) with the kernel's
-  `ReferenceExactCompiler`. Its general boolean decides faces that agree
-  only up to rounding within the tolerance it is given, so a difference is
-  first built with none and, where that is refused (operands under their
-  own placements always are), within a micrometre: the body is then marked
-  perturbed (`ExactBody::perturbation_metres`, the linear tolerance plus
-  the angular one over the body's extent), every certified distance on it
-  is widened by that, it never certifies a plan overlap and a comparison
-  measures its meshes instead. Unions, intersections and operands that are
-  no extrusions are refused by name. `axioval check --geometry` certifies
-  a pipe's distance through a window that its mesh leaves open.
-- Exact bodies of several items (axiolid/kernel#229, `axiolid-measure`
-  0.3.8): a body of several solids (a column on its footing) is built item
-  by item in its own frame with the placement above kept apart
-  (`ExactBody`, `AxiolidGeometry::with_exact_body`), and measured with the
-  kernel's `body_boundary_distance` and, between revisions,
-  `one_sided_body_boundary_hausdorff_with_budget`. Items the kernel cannot
-  unite (overlapping, nearly sharing a face, touching on a plane no axis
-  is normal to) keep the mesh for the surface distance; plan relations,
-  which the kernel measures for one solid only, keep the mesh's.
-- ifcXML in the buildingSMART XSD configuration is read, for IFC4 ADD2 TC1
-  and IFC4X3 ADD2, into the same model and so the same report as its STEP
-  form (`ifc-xml` 0.4's XSD reader). Its objects are numbered in document
-  order. Closes #190.
-- A REAL written without the decimal point ISO 10303-21 requires (`1E-05`),
-  common in real exports, is read as the real it spells instead of
-  refusing the file, and each such token is reported as a
-  `step.real-without-decimal-point` integrity warning
-  (`REAL_WITHOUT_DECIMAL_POINT`). Every other malformed record still
-  refuses the file. `read_ifc_step` reads a STEP file into the model the
-  session reads; the CLI's geometry bridge uses it.
-- IFC4X3 geometry families (`ifc-geometry` 0.6.1): alignment and gradient
-  curves, open cross profiles and triangulated irregular networks are
-  measured; sectioned solids and surfaces, segmented reference curves and
-  distance-along-curve geometry leave their objects unmeasured with the
-  lowering's named reason.
-- `MapConversion::with_map_unit_by_default` and `map_unit_by_default`
-  mark a map unit the source leaves to its standard's default. The
-  `coordinate-consistency` finding names it (`map offset moved by
-  1.0000 m (this source's map unit is the standard's default, not
-  stated)`).
-
-### Changed
-
-- One comparison for every rule (#287): `axioval_engine::comparison`
-  decides numbers (intervals, exact or under a declared `Tolerance`),
-  integers, truths, text (folded and trimmed as declared), whole-value
-  `like` and `matches` patterns and dates for the expression evaluator,
-  the property selectors, `property-predicate`, `property-comparison`,
-  `property-value` and the templates' range judge (`plan_area::judge`).
-  `property-predicate` runs as a template: its stated property read by
-  the expression evaluator and judged by the new generic comparison judge
-  (`Decision::Compare`), its outside contract held to the replaced
-  implementation on every fixture, on generated predicates and on the
-  public models. Three outcomes change with the one implementation:
-  - **Behaviour:** expression comparisons of dates follow XML Schema's
-    timeline, as property comparisons always did: `2026-09-28+12:00`
-    equals `2026-09-27-12:00`, and a zoned and an unzoned date within 14
-    hours differ while their order is not evaluated.
-  - **Behaviour:** an expression's case-insensitive `like` or `matches`
-    folds case in the pattern instead of lowercasing it, so `\D` stays a
-    non-digit.
-  - **Behaviour:** `property-comparison` compares a stated `-0` equal to
-    `0`, as every other rule does (it ordered it below).
-- **Behaviour:** a `sum` over no member is 0 in the unit the type checker
-  types its members' value in (#277), instead of a plain 0 that a quantity
-  bound refused as a unit mismatch and left not evaluated: `sum(…) ≤ 3 m²`
-  holds with 0 m² for a wall without openings. The compiled plan carries
-  the ruleset's declared property and derived-value types
-  (`expression::DeclaredTypes`), which the runtime installs for every run,
-  so a declared property's dimension types the empty sum as at compile
-  time. Only a value no declaration types sums to a plain 0; `inUnit`
-  states its unit.
-
-- **Behaviour:** a stated-absent value never passes an expression
-  silently (#269). Truth is Kleene's three-valued logic over true, false
-  and `null`, with not evaluated apart and outranking `null`: a comparison
-  with `null` is `null` (no longer false), so `not(x == 5)`, `x != 5` and
-  `between` are `null` for an object stating no `x`; `null` in a truth's
-  place stays `null` through `not`, `and`, `or`, `implies` and `xor`; an
-  `if` on a `null` condition is `null` unless its branches agree.
-  `noneOf` is `not oneOf` in every state, both `null` on a `null` operand.
-  `any`, `all` and `none` read a `null` member as unknown, not false, and
-  `sum`, `min`, `max`, `average` and `distinctCount` are `null` when a
-  member's value is, instead of skipping it. An expression requirement
-  that is `null` is a missing-information finding (`requirement cannot be
-  confirmed: … is null`), never a pass; a selector expression that is
-  `null` selects nothing, as before. The new `selected` node (catalogue,
-  blocks, JSON Schema) states whether another rule selected the object, so
-  `ruleOutcome`'s `null` for an object it did not select is guarded
-  explicitly (`implies(selected(r), ruleOutcome(r))`) instead of making an
-  implication pass vacuously. Truth tables for every operator are in the
-  book's Expressions chapter. Expressions relying on `null` as false say
-  so with `coalesce(x, false)` or an `isDefined` guard; the composing
-  cover example now does.
-
-- **Behaviour:** derived linear placements follow IFC4.3 (`ifc-geometry`
-  0.10, openbimrs/ifc#355): a positive `OffsetLateral` lies to the left of
-  the basis curve's direction and the product's local Z is up, with an
-  explicit `Axis`/`RefDirection` composed in that frame. Products placed by
-  a cached `CartesianPosition` are now placed at the derived position when
-  the two agree and unmeasured when they do not.
-- The IFC crates move to `ifc-geometry` 0.10, `openbim-ifc` 0.16,
-  `ifc-properties` 0.8.1 and `ifc-schema` 0.3.2. The IFC adapter's property
-  service resolves through `ifc-properties`' `PropertyIndex`
-  (openbimrs/ifc#352), built once per session, instead of free functions
-  that validate every property relationship on each call: the same answers
-  and refusals, linear instead of quadratic over a model (one property of
-  each of 3,000 walls: 4.4 s before, 42 ms after).
-- The IFC crates move to `ifc-geometry` 0.9 and `openbim-ifc` 0.15 (its
-  new `authoring` feature stays off). IFC4X3 stations
-  (`IfcPointByDistanceExpression`, `IfcAxis2PlacementLinear` with `Axis`
-  and `RefDirection`), `IfcOffsetCurveByDistances`,
-  `IfcSectionedSolidHorizontal` and `IfcSectionedSurface` now lower exactly
-  onto stations (openbimrs/ifc#307), and a sectioned solid's body is a
-  `sectioned-spine` item. A sectioned solid stays unmeasured
-  with geometry, now with the reason that the mesh compiler certifies no
-  bound between stations instead of the lowering's refusal. A station given
-  as `IfcParameterValue`, on a tangent discontinuity of its basis or on a
-  plain `IfcCompositeCurve` basis is refused by name (openbimrs/ifc#346). A
-  test pins the 0.8.2 fix (openbimrs/ifc#347): deriving a linear
-  placement's frame refuses an `IfcParameterValue` along an alignment by
-  name and places an `IfcLengthMeasure` (with geometry such products are
-  placed since #224).
-- **Breaking:** IDS documents are audited against the IFC schemas of their
-  listed releases on import and export (`openbim-ids` 0.2.1 with its
-  `audit-schema` feature; no template data, `cargo deny` unchanged).
-  `axioval_ids::translate` returns `TranslateError` (`Options`, or
-  `Invalid` with every audit finding) and refuses the whole document on
-  any audit error: an entity a release does not define, a mixed-case
-  entity name, an attribute the entity lacks, a value no IFC value of its
-  type could equal, requirements on a prohibited specification, and the
-  rest of the buildingSMART `invalid-` cases, all 27 of which are now
-  refused. Audit warnings refuse nothing and come in
-  `Translation::warnings`; `axioval_ids::audit` runs the audit alone.
-  `check --ids` and `ids translate` exit 1 and list every finding;
-  warnings are listed on stderr and in the `ids` field's additive
-  `warnings`. On export, a rule or folder that reads as a specification
-  the audit refuses is not exported (`Refusal::Invalid`), and
-  `Export::to_xml` returns `DocumentError` (`Write`, or `Invalid` when the
-  whole document fails the audit) and never writes an invalid IDS. A
-  rule over a class one release lacks is no longer exported on its own
-  (#216). An IFC2X3 document requiring a mapped class (`IFCAIRTERMINAL`)
-  of the applicable occurrence class (`IFCFLOWTERMINAL`) is refused until
-  the audit maps IFC2X3 names (#215).
-
-- **Breaking:** space measurements refuse only for the unmeasured objects
-  that could change them, and name them (#212). One unmeasured slab or roof
-  anywhere used to refuse every space measurement of the model with
-  "unavailable for the requested aspect". `SpaceError` gains
-  `Unmeasured(UnmeasuredObjects)` (the `SpaceAspect` and the objects, its
-  message naming five and counting the rest) and is no longer `Copy`.
-  `AxiolidGeometry::with_unmeasured_bound` states a box an unmeasured body
-  lies within; `AxiolidSpaceService` then refuses a space's overlaps,
-  duplicates, caps and boundary gaps only for unmeasured candidates whose
-  box reaches the space (its cap plane for caps, its plan extent for
-  boundary gaps), and the clear height only for the space itself. An object
-  without a box may be anywhere and still refuses every space. Support
-  counts read no body and no longer refuse. The CLI bounds each unmeasured
-  product for the space service: a whole whose parts could not be composed
-  by its parts' boxes and bounds (`AxiolidGeometry::parts_bound`, none if
-  any part is unbounded), otherwise by the box its `Box` representation
-  states, placed like its body.
-- Moved to `axiolid-mesh-compile` 0.3.12, `axiolid-construct` 0.3.13 and
-  `axiolid-brep-boolean` 0.1.4. A disk swept round a sharp polyline corner
-  without a fillet radius is mitred again and certified within the chord
-  budget (axiolid/kernel#245), so such pipes are measured instead of
-  unmeasured; a closed polyline, a fillet radius equal to the disk radius,
-  a corner beside an arc and a mitre past its leg stay refused by name
-  (#248). A boolean body's rounding allowance is the kernel's reported
-  rounding floor (`BooleanReport::rounding_floor`, #244) per boolean,
-  instead of a mirrored copy of its private factor and extent reading.
-- Moved to `axiolid-mesh-compile` 0.3.13, `axiolid-construct` 0.3.14,
-  `axiolid-brep-boolean` 0.1.5, `axiolid-model` 0.3.5, `axiolid-evaluate`
-  0.3.5, `axiolid-reference` 0.3.6, `axiolid-contracts` 0.3.3 and
-  `axiolid-mesh-boolean-boolmesh` 0.3.4. A round hole touching a planar
-  face (a web hole touching an I-beam's flange, root fillets included, a
-  window touching a wall's top) is built by the exact compiler
-  (axiolid/kernel#243, #249): exact where the contact is exact, perturbed
-  by the reported `PlaneTouchesCylinder` reading under a general
-  placement, and its mesh certified, so such a beam is measured and the
-  openings in it are decided. I sections of decimal (IPE, HEA) sizes are
-  built at no tolerance (#250); the fallback to a positive tolerance stays
-  for contacts that hold only up to rounding, which the kernel now refuses
-  at no tolerance (#251). Any non-empty boolean report still marks a body
-  perturbed. Space boundaries whose curve-bounded plane is bounded by a
-  composite or trimmed curve are meshed and measured (#255, closes #214).
-  The engine sets no memory budget, so boolmesh's per-worker scratch bound
-  (#226) changes nothing here.
-- Moved to `axiolid-mesh-compile` 0.3.14, `axiolid-construct` 0.3.15,
-  `axiolid-evaluate` 0.3.6 and `axiolid-reference` 0.3.7 (all additive).
-  A warped authored face, a polygon face set's or a faceted B-rep's (a face
-  given only by its loops), is now reported by the mesh compiler as the
-  width of the slab its corners span about its fit plane (#257, #261),
-  which covers every reading of the face: a quad with one corner lifted
-  5 cm is declared within about 2.5 cm, the gap between its two
-  triangulations, and a saddle with corners at `±h` within `2 h`. The CLI
-  declares that reported bound instead of computing twice the largest
-  corner distance itself; a warped face under a boolean still leaves the
-  body unmeasured, since the compiler bounds no boolean of a polygon mesh
-  or B-rep. Planar faces and B-rep faces are triangulated by the kernel's
-  certified ear clipper instead of earcut (#260): triangle sets differ,
-  areas, closure and deviations do not, and rings that bound no region
-  (folding back, crossing by rounding, overlapping trims), which earcut
-  covered partly without a word, are refused by name, so such a body is
-  unmeasured with the reason. A ring touching another at a vertex is
-  accepted in a face (#262); where the touching vertex lies inside a
-  neighbouring face's edge the mesh keeps a T-junction there, and the mesh
-  audit every service reads then counts the body an open surface, never a
-  closed solid. A disk swept along an `IfcGradientCurve` (an elevated
-  directrix) is built and certified against the exact tube (#252), so such
-  a pipe is measured. Plan regions are unchanged: the engine never hands
-  overlay output to the kernel's ring triangulator, whose plain
-  `triangulate` now refuses pinched rings (#253), and free floor and
-  unallocated floor whose pieces touch at a point are measured (tests pin
-  two rooms meeting at a corner, an L round a column and a corridor
-  narrowed to a point).
-
-- The IFC crates move to `openbim-ifc` 0.13, `ifc-geometry` 0.8,
-  `ifc-alignment` 0.6, `ifc-spatial` 0.5, `ifc-properties` 0.8,
-  `ifc-classification` 0.4, `ifc-material` 0.5, `ifc-systems` 0.4 and
-  `ifc-georef` 0.6, with `axiolid-curve` 0.3.3 and `axiolid-model` 0.3.4.
-  The crates now link only the release tables a build names; the workspace
-  names IFC2X3, IFC4 and IFC4X3, the releases the adapter reads, so models
-  read as before, and a release whose table were not linked would be
-  refused with its reason. `CUBIC` transitions and vertical circular arcs
-  and clothoids of IFC4X3 alignments now lower exactly instead of being
-  refused by name; a solid swept along such a gradient curve is measured
-  since `axiolid-mesh-compile` 0.3.14 (above).
-- `axioval-ids` and the CLI read and write IDS with `openbim-ids` 0.2.0.
-  Its reader and writer are unchanged, so translation, export and the
-  conformance corpus are too. Its new `audit` feature is left off: it
-  depends on `ifc-template-catalog`, whose embedded buildingSMART
-  property and quantity set templates are CC BY-ND 4.0, a licence
-  `cargo deny` does not allow. Documents are not audited yet.
-
-- The IFC coordinate system's map conversion is read by `ifc-georef` 0.5.1
-  (without its `transform` feature, so no Axiolid crate is linked) instead
-  of the adapter's own reader. An unstated `MapUnit` is now the project
-  length unit, as IFC prescribes, so such a georeference is compared
-  instead of not evaluated; the conversion is marked
-  (`map_unit_by_default`) and its evidence locator carries
-  `map-unit-project-default`. What `ifc-georef` refuses (a dangling,
-  mistyped or shared `SourceCRS`, a stated `MapUnit` it cannot resolve, an
-  IFC4 `IfcProjectedCRS` without a name) makes the coordinate system
-  unreadable with its reason, so the source is not evaluated. IFC4X3
-  `IfcMapConversionScaled` (equal factors fold into the scale; unequal
-  ones are refused by name, since a map conversion holds one scale) and
-  `IfcRigidOperation` with length coordinates (a translation) are now read
-  and compared.
-- Geometry moves to `axiolid-mesh-compile` 0.3.10, `axiolid-measure` 0.3.9
-  and `axiolid-brep-boolean` 0.1.3. `plan_overlap` now shows a level face
-  over part of another's shadow, so a round column reaching a sliver over
-  a slab's edge is certified over it where the relation stayed open.
-- `axioval check --geometry` certifies curved booleans (axiolid/kernel#235):
-  the mesh compiler measures a boolean's mesh against the exact compiler's
-  result, so a wall with a round window, a beam cut by round holes and a
-  roof-clipped wall with one are tessellated within the bound it returns
-  instead of unmeasured; booleans the exact compiler refuses (a hole
-  tangent to a flange's face) stay unmeasured with that reason. Planar
-  bodies are meshed without a deviation report, and a polygonally bounded
-  half-space with a polyline boundary counts as planar, so walls clipped
-  by one (two upper walls of a small sample house) are exact again.
-- ifcXML in the `ifc-xml` codec's own layout is read schema-strict: a
-  value is typed from its attribute's declaration, never its text, so
-  `Name="1"` is the label `1` where it was refused before. Positional
-  attribute names (`a0`, ...) are refused, since they do not say which
-  attribute a value is; write the layout with the release's attribute
-  names. The adapter's own pre-scan and type check are gone, now that the
-  codec refuses those documents itself, and so is the `ifc-validate`
-  dependency.
-- The IFC crates move to `openbim-ifc` 0.11, `ifc-step` 0.5 (on
-  `openbim-step` 0.11), `ifc-spatial` 0.4, `ifc-xml` 0.4.1, `ifc-geometry`
-  0.6.1 and `ifc-schema` 0.3.1. The ifcXML tests now also round-trip a STEP
-  model through the XSD configuration `ifc-xml` writes.
-- The IFC adapter moves to the 0.3 line of the IFC crates: `openbim-ifc`
-  0.10, `ifc-schema` 0.3, `ifc-model` 0.3, `ifc-step` 0.4, `ifc-geometry`
-  0.6, `ifc-properties` 0.7, `ifc-validate` 0.5, `ifc-xml` 0.4,
-  `ifc-classification` 0.3, `ifc-material` 0.4, `ifc-spatial` 0.3,
-  `ifc-style` 0.4 and `ifc-systems` 0.3. Models read as before. A header
-  declaring IFC4X1 or IFC4X2, which the schema crate now bundles, is
-  refused as an unsupported schema like any release no reader here is
-  verified against. The integrity scan's spatial-containment warnings are
-  now read with the IFC4X3 table for IFC4X3 files, and the scan reports
-  itself unavailable rather than silently empty should the systems reader
-  refuse the header.
-- Geometry moves to `axiolid-overlay` 0.3.10 and `axiolid-route` 0.3.7,
-  lifting the bound below overlay 0.3.5: coverage through an opening and
-  cost regions cut flush with a turned wall measure correctly again.
-- Geometry moves to `axiolid-mesh-compile` 0.3.8, `axiolid-construct`
-  0.3.10, `axiolid-measure` 0.3.7 and `axiolid-reference` 0.3.3.
-  Revolutions (tapered too), spheres, tori and disks swept along one circle
-  or ellipse arc now keep every surface point within the 1 mm declared for
-  their meshes (axiolid/kernel#231): a torus's exact boundary passes its
-  check at 1 mm, where it needed 2 mm before. A body whose turn needs more
-  than 4096 steps to meet the tolerance is refused by the kernel instead
-  of meshed coarser, and `axioval check --geometry` reports it unmeasured
-  with a reason naming the tolerance and the exhausted budget, so the
-  measurements it could affect are not evaluated. Sweeps along polyline,
-  composite or B-spline directrices, curved B-rep faces, primitive
-  cylinders and cones, and ellipse or spline profiles are declared as
-  before, but their tolerance is not yet certified (axiolid/kernel#232).
-- Comparing exact boundaries is bounded per pair. A moved copy is matched
-  as a translate (axiolid/kernel#227) and closes to the accuracy asked: a
-  round column moved by 1 mm measures 1 mm to within a micrometre instead
-  of 1.0 to 1.6 mm, and in milliseconds instead of a minute (debug build).
-  A turned copy, which closes only at first order, now stops after 4096
-  splits a direction (`proximity::BOUNDARY_HAUSDORFF_SPLITS`) with a sound,
-  wider interval judged by the straddle rule, instead of the kernel's whole
-  budget of 200,000.
-- `exact_boundary` reads a swept disk's directrix with the kernel's public
-  `exact_directrix` (axiolid/kernel#230) instead of a copy of it.
-- Geometry moves to `axiolid-mesh-compile` 0.3.9, `axiolid-construct`
-  0.3.11, `axiolid-measure` 0.3.8 and `axiolid-evaluate` 0.3.3 (with
-  `axiolid-brep-boolean` 0.1.2 and `axiolid-reference` 0.3.4 through the
-  compiler). **Breaking** for the adapter's API: an exact boundary is an
-  `ExactBody` (items, placement, perturbation); `AxiolidGeometry::
-  exact_boundary` returns one, `ExactBoundary::brep` returns the solid of
-  a one-item body only (`Option`), and `ExactBoundary::into_brep` is
-  replaced by `into_body` for `AxiolidGeometry::with_exact_body`.
-  `with_exact_boundary` still registers one exact solid.
-- `axioval check --geometry` declares every curved mesh with the deviation
-  the mesh compiler certifies for it (`compile_mesh_with_deviation`,
-  axiolid/kernel#232) instead of the 1 mm budget everywhere: the budget
-  where the construction proves it (now also cylinders, cones and pipes
-  along segments, arcs, composites and filleted polylines), the computed
-  bound otherwise (curved B-rep faces, sweeps along B-splines and
-  ellipses, ellipse and spline profiles). **Behaviour change:** a curved
-  mesh the compiler certifies no bound for is unmeasured with the paths
-  it names, so its measurements are not evaluated where they were judged
-  on an unproven 1 mm: booleans whose result is curved (a beam cut by
-  round holes, a wall clipped by a bounded half-space), tapered
-  extrusions, sectioned spines. A disk swept round a polyline corner
-  without a fillet radius is refused by name and unmeasured; with a fillet
-  radius (`IfcSweptDiskSolidPolygonal`) each corner is a tangent arc.
-  Opening voids and space-boundary surfaces are declared the same way.
-
-### Added
-
+  saved check results, attributing an outcome to the unmeasured object it
+  involves, deterministically; `scripts/inventory/` holds a broad
+  geometric rule set bound to IFC2X3, IFC4 and IFC4X3. The book's
+  not-evaluated inventory ranks 14 real models and, after #210 to #214,
+  each cause before and after: 3,424 outcomes on 13 models instead of
+  28,631 on 14, with the new top causes filed (#217, #218, #219, #221,
+  #222) and the two models over the time limit (#220).
 - **Geometry comparison between exact boundaries.** (Refs #163) The mesh
   mode of model comparison (`geometry: mesh`, `axioval compare
   --geometry-mode mesh`) now measures a body between the two revisions'
@@ -523,28 +517,75 @@ All notable changes are documented here. This project follows Semantic Versionin
   compare --geometry-mode mesh` now builds exact boundaries as `check
   --geometry` does; `--no-exact-boundaries` meshes only.
   **Breaking:** `Measure` gains the variant `Boundary`.
-- **Exact boundaries for IFC bodies.** (Closes #195) `axioval check
-  --geometry` now also builds the exact boundary of every body whose
-  construction is exact and registers it beside the mesh, so distances
-  between curved bodies are certified on IFC models: a round column 0.8 m
-  from a wall, or a tilted round member, clears a 0.79999 m minimum that
-  its mesh, within 1 mm, leaves open. The new
-  `axioval_axiolid::exact_boundary` builds the solid from the same Axiolid
-  geometry graph the mesh is compiled from: extrusions of rectangle,
-  circle, ellipse, section and line-and-arc profiles with any number of
-  voids, revolutions of the same profiles (an ellipse excepted), and disks
-  swept along one segment or one arc, under any rigid placement (tilted,
-  horizontal, turned, mirrored, mapped items composed), placed once with
-  the kernel's `ExactBRep::transformed` (axiolid/kernel#223). A scale or
-  shear, an ellipse revolved, a directrix with corners, booleans
-  (openings, clippings) and bodies of several items keep their mesh alone,
-  with the reason. `AxiolidGeometry::check_exact_boundary` refuses a
-  boundary whose closed-form extent differs from the mesh's by more than
-  its chord deviation. A boundary is registered only when some tessellated
-  body has one. `--no-exact-boundaries` meshes only; the result's
-  additive `geometry.exact_boundaries` counts them. `axioval-axiolid` now
-  depends on `axiolid-construct`, `axiolid-curve`, `axiolid-evaluate`,
-  `axiolid-model` and `axiolid-profile`.
+- **Exact boundaries for IFC bodies.** (Closes #195; axiolid/kernel#223,
+  #228, #229, #230, #234, #236, #237, #243, #244, #251) `axioval check
+  --geometry` builds the exact boundary of every body whose construction is
+  exact and registers it beside the mesh, so distances between curved
+  bodies are certified on IFC models: a round column 0.8 m from a wall, or
+  a tilted round member, clears a 0.79999 m minimum that its mesh, within
+  1 mm, leaves open. The new `axioval_axiolid::exact_boundary` builds the
+  solid from the same Axiolid geometry graph the mesh is compiled from:
+  extrusions of rectangle, circle, ellipse, section and line-and-arc
+  profiles with any number of voids, revolutions of the same profiles (an
+  ellipse excepted), and disks swept along one segment or one arc (the
+  directrix read with the kernel's public `exact_directrix`), under any
+  rigid placement (tilted, horizontal, turned, mirrored, mapped items
+  composed), placed once with the kernel's `ExactBRep::transformed`. A
+  scale or shear, an ellipse revolved and a directrix with corners keep
+  their mesh alone, with the reason.
+  - **Bodies of several items** (a column on its footing) are built item by
+    item in their own frame with the placement above kept apart
+    (`ExactBody`, `AxiolidGeometry::with_exact_body`), measured with the
+    kernel's `body_boundary_distance` and, between revisions,
+    `one_sided_body_boundary_hausdorff_with_budget`, and certified in plan
+    over every item pair (`body_plan_boundary_distance`,
+    `body_plan_boundary_clearance`, `body_plan_overlap`). Items the kernel
+    cannot unite (overlapping, nearly sharing a face, touching on a plane no
+    axis is normal to) keep the mesh for the surface distance.
+  - **Booleans.** A difference of placed extrusions (`IfcOpeningElement`
+    voids, `IfcBooleanResult` differences, several nested) and a clip by a
+    half-space, bounded by a polygon or not (`IfcBooleanClippingResult` of
+    `IfcHalfSpaceSolid` or `IfcPolygonalBoundedHalfSpace`), in any order
+    with the body's openings, are built with the kernel's
+    `ReferenceExactCompiler` and its `BooleanReport`; a clipped body's
+    extent is read from its edges, so a clipped wall's agrees with its mesh.
+    A boolean is first built at no tolerance and, where that is refused (a
+    contact that holds only up to rounding), within a micrometre. An empty
+    report is the exact boolean of the operands as given, so a wall less
+    openings placed along the axes, or crossing a turned wall's faces, a
+    round hole touching a planar face (a web hole touching an I-beam's
+    flange, root fillets included; a window touching a wall's top) and I
+    sections of decimal (IPE, HEA) sizes are exact (a round hole under a general placement is perturbed
+    by the reported `PlaneTouchesCylinder` reading, its mesh certified, so
+    such a beam is measured and its openings decided); exact bodies certify
+    plan overlaps and are compared between their boundaries. A non-empty report
+    marks the body perturbed (`ExactBody::perturbation_metres`) by at least
+    the reported magnitudes (a few femtometres for an opening flush with a
+    turned wall's face), even where every magnitude is zero
+    (`ExactBody::with_perturbation` marks a body inexact whatever the
+    value): every certified distance on it is widened by that, it never
+    certifies a plan overlap, and a comparison measures its meshes instead.
+    Every boolean body also carries the kernel's reported rounding floor
+    per boolean (`BooleanReport::rounding_floor`,
+    `ExactBody::rounding_metres`, `widening_metres`), which widens its
+    certified distances and leaves it exact. Unions, intersections and
+    operands that are no extrusions are refused by name. `axioval check
+    --geometry` certifies a pipe's distance through a window that its mesh
+    leaves open.
+
+  `AxiolidGeometry::check_exact_boundary` refuses a boundary whose
+  closed-form extent differs from the mesh's by more than its chord
+  deviation. A boundary is registered only when some tessellated body has
+  one. `--no-exact-boundaries` meshes only; the result's additive
+  `geometry.exact_boundaries` counts them. `axioval-axiolid` now depends on
+  `axiolid-construct`, `axiolid-curve`, `axiolid-evaluate`, `axiolid-model`
+  and `axiolid-profile`.
+  **Breaking** for the adapter's API: an exact boundary is an `ExactBody`
+  (items, placement, perturbation); `AxiolidGeometry::exact_boundary`
+  returns one, `ExactBoundary::brep` returns the solid of a one-item body
+  only (`Option`), and `ExactBoundary::into_brep` is replaced by
+  `into_body` for `AxiolidGeometry::with_exact_body`.
+  `with_exact_boundary` still registers one exact solid.
 - **Ramp rails that obstruct an adjoining accessible surface.** (Closes #154)
   `ramp-geometry` gains `check_rails_obstruction` with
   `accessible_surface_selector`: the ramp's rails (those measured along
@@ -609,7 +650,6 @@ All notable changes are documented here. This project follows Semantic Versionin
   `relation-object-unknown`.
   BREAKING CHANGE: `RuleSetPackage` gains `relations` and `EngineError`
   the variant `InvalidRelation`.
-
 - **Rule parameter tables from data files in the package.** (Refs #180)
   A `table` parameter may name a CSV file, or a named sheet of an xlsx
   workbook, shipped in the package (`{"type": "tableFile", "path",
@@ -624,7 +664,6 @@ All notable changes are documented here. This project follows Semantic Versionin
   beside each package file.
   BREAKING CHANGE: `ParameterValue` gains `TableFile` and `EngineError`
   `InvalidTableFile`.
-
 - **HTML reports of a check run, from templates.** (Refs #178)
   The new sink `axioval-html` (facade feature `html`) renders a report as
   one self-contained HTML file: a cover with the overall status, the
@@ -639,7 +678,6 @@ All notable changes are documented here. This project follows Semantic Versionin
   `compare` write it with `--html FILE`, `--html-template FILE` and
   `--html-title TEXT`, dated `SOURCE_DATE_EPOCH` when set. PDF is left to
   printing the HTML in a browser.
-
 - **Spreadsheet output for findings and takeoff tables.** (Closes #177)
   The new sink `axioval-xlsx` (facade feature `xlsx`) writes a report as
   an `.xlsx` workbook through `rust_xlsxwriter`: a `Findings` sheet with
@@ -651,20 +689,28 @@ All notable changes are documented here. This project follows Semantic Versionin
   The caller supplies the creation time, so identical input writes
   identical bytes. `axioval check` and `compare` write it with
   `--xlsx FILE`, created at `SOURCE_DATE_EPOCH` when set.
-- **ifcXML models.** (Refs #190) `import_ifc_xml_session` reads an
-  ifcXML document through `ifc-xml` into the model its STEP form parses to
-  and binds it by the STEP reader's own session path, so it answers every
-  rule as the STEP file does; `read_ifc_xml` and `is_ifc_xml` serve hosts.
-  A read is accepted only when provably as stated: one supported schema,
-  every entity declared, every value named by an attribute of its entity,
-  and every value of its declared type (`ifc-validate`); a document in
-  another arrangement is refused (`IfcSessionError::Xml`), never misread.
-  A start tag of more than 256 attributes or 8 namespace declarations is
-  refused before `ifc-xml` (0.2.2, on quick-xml 0.42) parses it.
-  `axioval check` reads ifcXML models, and meshes them, as STEP ones; the
-  source is `ifc-xml:<file>`. **Breaking:** `IfcSessionError` gains the
-  variant `Xml`.
-
+- **ifcXML models.** (Closes #190) `import_ifc_xml_session` reads an
+  ifcXML document through `ifc-xml` 0.4 into the model its STEP form parses
+  to and binds it by the STEP reader's own session path, so it answers
+  every rule, and is meshed, as the STEP file is; `read_ifc_xml` and
+  `is_ifc_xml` serve hosts, and `axioval check` reads ifcXML models with
+  the source `ifc-xml:<file>`. Both the buildingSMART XSD configuration
+  (IFC4 ADD2 TC1 and IFC4X3 ADD2, objects numbered in document order) and
+  the codec's own layout are read. The codec's own layout is read
+  schema-strict: a value is typed from its attribute's declaration, never
+  its text, so `Name="1"` is the label `1`; positional attribute names
+  (`a0`, ...) are refused, since they do not say which attribute a value
+  is. A document in another arrangement is refused
+  (`IfcSessionError::Xml`), never misread, and a start tag of more than
+  256 attributes or 8 namespace declarations is refused before the codec
+  parses it. **Breaking:** `IfcSessionError` gains the variant `Xml`.
+- A REAL written without the decimal point ISO 10303-21 requires (`1E-05`),
+  common in real exports, is read as the real it spells instead of
+  refusing the file, and each such token is reported as a
+  `step.real-without-decimal-point` integrity warning
+  (`REAL_WITHOUT_DECIMAL_POINT`). Every other malformed record still
+  refuses the file. `read_ifc_step` reads a STEP file into the model the
+  session reads; the CLI's geometry bridge uses it.
 - **Coordinate consistency across federated models.** (Closes #194)
   The new `coordinate-consistency` capability compares every source's
   coordinate system with a reference source's (`reference`, a discipline,
@@ -701,7 +747,6 @@ All notable changes are documented here. This project follows Semantic Versionin
   hold leaves the compartments it could merge undecided, and faces that
   cannot be read leave every compartment undecided. **Breaking:**
   `GroupingKey` gains the variant `Compartment`.
-
 - **Derived groups by property value or classification.** (Closes #183)
   A ruleset's `groupings` group selected `members` by equal values of a
   property (`by: {kind: property}`, a derived class included) or equal
@@ -721,7 +766,6 @@ All notable changes are documented here. This project follows Semantic Versionin
   `ResourceObjects` the method `with_groups`, and `OutcomeRefiner` the
   defaulted method `read_property`; `is_derived_set` holds for
   `axioval:group`.
-
 - **Spaces adjacent across a wall or slab without stated boundaries.**
   (Closes #160) The derived relationship
   `axioval:derived.adjacent-across;tolerance=<m>;overlap=<m>` (defaults
@@ -740,7 +784,6 @@ All notable changes are documented here. This project follows Semantic Versionin
   `AxiolidDerivedRelationshipService::with_separating_element` declares
   walls and slabs; the CLI declares every `IfcWall` and `IfcSlab`.
   **Breaking:** `Derivation` gains the variant `AdjacentAcross`.
-
 - **Geometry differences by certified surface distance.** (Closes #163)
   `model-comparison` gains `geometry` (`bounds` or `mesh`) and
   `tolerance_metres`: with `geometry: mesh` each matched pair is compared by
@@ -763,7 +806,6 @@ All notable changes are documented here. This project follows Semantic Versionin
   bound to `model-comparison` must declare the optional parameters
   `geometry` (`string`) and `tolerance_metres` (`number`); `Measurement`
   gains the public field `witness` and `Measure` the variant `Mesh`.
-
 - **Opening distance from supports scaled by the beam.** (Closes #156)
   `opening-zone` gains `support_distance_ratio` and
   `support_distance_reference` (`span` or `depth`): the distance an opening
@@ -949,7 +991,6 @@ All notable changes are documented here. This project follows Semantic Versionin
   (committed with its source), streams built by hand, and truncated,
   corrupted and random input. The one refusal is externalizable data
   written with protocol version 1, which only its class can delimit.
-
 - **Exporting rules as IDS.** (Closes #196; with it #165)
   `axioval_ids::export` and `axioval ids export --definitions d.json
   --ruleset r.json --out rules.ids` write the rules IDS 1.0 states exactly
@@ -971,7 +1012,6 @@ All notable changes are documented here. This project follows Semantic Versionin
   **Breaking:** `RuleFolder` has an `annotations` field (namespaced keys,
   text values, omitted when empty), which a struct literal must name; the
   engine never reads it.
-
 - **Certified distance for curved bodies.** (Closes #187) A host registers
   an object's exact B-rep beside its mesh with
   `AxiolidGeometry::with_exact_boundary`. For a tessellated pair whose
@@ -1007,7 +1047,6 @@ All notable changes are documented here. This project follows Semantic Versionin
   cannot be read is not evaluated. The adapter already stated that absence
   exactly; tests now pin it for sites, and the migration table no longer
   lists it as undecidable.
-
 - **Storey name sequence by placement height.** (Closes #159)
   `name-sequence` takes `order_fallback: placement_height`: a member whose
   order value is absent or null is ordered by the height of its placement
@@ -1017,7 +1056,6 @@ All notable changes are documented here. This project follows Semantic Versionin
   the behaviour is unchanged. **Breaking:** a definition bound to
   `name-sequence` declares `order_fallback` (`string`) beside its other
   optional parameters.
-
 - **Date windows in property comparison.** (Closes #157)
   `property-comparison`'s `between` takes date and date-time bounds
   (`minimum_date`, `maximum_date`, `minimum_date_time`,
@@ -1029,7 +1067,6 @@ All notable changes are documented here. This project follows Semantic Versionin
   otherwise not evaluated. Constant bounds of mixed kinds are refused at
   binding. **Breaking:** a definition bound to `property-comparison`
   declares the six new optional parameters.
-
 - **Consistent values within a tolerance.** (Closes #158)
   `consistent-value` takes `tolerance` (a number, applied to numbers and
   to quantities in SI units) or `tolerance_quantity` (a quantity, applied
@@ -1062,6 +1099,9 @@ All notable changes are documented here. This project follows Semantic Versionin
   `ruleOutcome` prefilter is refused. The CLI takes it as `--ids-filter
   selector.json` for `check --ids` and `ids translate`. Without a
   prefilter translations are unchanged.
+  **Breaking:** `axioval_ids::Options` gains the public field `filter` and
+  is no longer `Eq`; construct it with `Options::new`, or add
+  `filter: None`.
 - **BCF import.** (Closes #169) `axioval_bcf::import` reads a BCF 2.1 or
   3.0 archive back and maps each topic whose GUID is a finding's identity
   onto a review decision: a closed, resolved, done or accepted topic
@@ -1130,7 +1170,6 @@ All notable changes are documented here. This project follows Semantic Versionin
   feature adds HTTPS. The facade gains `bcf-api` and `bcf-api-tls`, and
   the CLI `axioval bcf push` and `axioval bcf pull` (with a `tls`
   feature).
-
 - **Relationship differences in model comparison.** (Closes #164)
   `axioval_engine::RelationshipKind` names eight source-neutral kinds of
   stated relationship (`containment`, `aggregation`, `voids`, `fills`,
@@ -1155,51 +1194,269 @@ All notable changes are documented here. This project follows Semantic Versionin
   the matched related objects, naming it. `axioval compare` compares
   relationship kinds always, and `model-comparison` with
   `compare_relationships`.
+  **Breaking:** a definition bound to `model-comparison` must declare the
+  new optional parameter `compare_relationships`.
 
 ### Changed
 
-- **Breaking:** `model-comparison` gains the optional parameter
-  `compare_relationships`; a definition bound to it must declare the new
-  parameter.
-- **Breaking:** `axioval_ids::Options` gains the public field `filter` and
-  is no longer `Eq`; construct it with `Options::new`, or add
-  `filter: None`.
-- The workspace moves to `axiolid-measure` 0.3.4 (certified plan
-  measurements); the lockfile follows with matching patch releases of the
-  other `axiolid-*` crates.
-- The workspace moves to `axiolid-measure` 0.3.5. `axiolid-overlay` stays
-  below 0.3.5: 0.3.9 fixes axiolid/kernel#219 (collinear rings left out of
-  every boolean, the accessible-route results as on 0.3.4) but still
-  turns coverage through an opening into a false finding and leaves a
-  sliver along a turned wall when cutting cost regions. As defence in
-  depth the Axiolid adapter leaves plan shadows without area (every vertex
-  on one line, up to the rounding of the coordinates, such as a vertical
-  face's) out of every footprint, coverage and space-boundary union itself
-  (`planar::collinear`).
-- The BCF sink and the CLI move to `openbim-bcf` 0.5, which reads and writes
-  through zip 8, so the workspace carries a single zip version. Archives are
-  byte-identical to those written with 0.4.
-- **IDS is written by the `openbim-ids` writer.** The workspace moves to
-  `openbim-ids` 0.1.4, whose `to_string` writes IDS 1.0 that validates
-  against `ids.xsd`, and `axioval-ids` drops its stand-in writer. Exported
-  documents change byte-wise (two-space indentation, `minOccurs` and
-  `maxOccurs` only where they differ from 1) and read back to the same
-  specifications; the corpus round trip stays 307 of 307 with identical
-  findings. The `ids:specification` annotation is now the element as the
-  upstream writer writes it, across lines; annotations the stand-in wrote
-  still read. A specification the writer refuses (a restriction without
-  facets) is refused as `Refusal::Unwritable` with its location, and its
-  translated folder keeps `ids:unwritable` instead of the specification,
-  so its rules are refused rather than exported one by one. A rule read as
-  one specification lists its applicability facets in the schema's order.
-  `Export::to_xml` returns `Result<Option<String>,
-  openbim_ids::WriteError>`, failing when the kept `<info>` cannot be
-  written; the `ids` profile then writes no document and refuses every
-  rule with the writer's location.
-- The BCF crates move to `openbim-bcf` 0.6, whose reader parses with
-  quick-xml 0.42 (RUSTSEC-2026-0194 and RUSTSEC-2026-0195 fixed), so
-  `deny.toml` no longer ignores either advisory. Archives written without
-  the new writer fields are byte-identical.
+- **One comparison for every rule** (#287). `axioval_engine::comparison`
+  decides numbers (intervals, exact or under a declared `Tolerance`, decided
+  only where every pair of values agrees), integers, truths, text (folded
+  and trimmed as declared), whole-value `like` and `matches` patterns and
+  dates on XML Schema's timeline (`temporal_order`, `temporal_holds`) for
+  the expression evaluator, the property selectors, `property-predicate`,
+  `property-comparison`, `property-value`, `property-requirements` and
+  the range judge behind `Decision::Within` and every capability judging a
+  measured interval (`plan_area::judge`). `Tolerance`, `round_decimal`,
+  `interval_verdict`, `exact_f64` and the temporal helpers move there from
+  the rules crate's `support` module, which re-exports them. Messages are
+  unchanged, and the IDS conformance corpus reports every case word for
+  word as before. **Behaviour:** `property-comparison` compares a stated
+  `-0` equal to `0`, as every other rule does (it ordered exact numbers by
+  their bit pattern, D20); a range bound that is no number leaves the
+  interval undecided instead of passing it. The range judge's bound
+  arithmetic stays plain binary, as the capabilities computed it.
+
+- **Templates' outcomes** (#280 to #287, #291). A rebuilt capability keeps
+  its descriptor, declaration checks, findings, wording, related objects
+  and grades; the parity chapter records every accepted difference.
+  **Behaviour:** where a selection a template binds into a measured value
+  cannot be listed whole (its source's resource objects cannot be listed),
+  the template leaves the objects it could change open, worded ``the
+  objects `@<parameter>` selects cannot all be listed: …``, where the
+  capability judged the objects it could list: `plan-coverage` (D23),
+  `component-visibility` (D29), `external-wall-validation` (D30),
+  `exit-separation` (D31), `numbering-consistency` (D33), `wall-spacing`
+  (D34), `parking-bay` (D35), `distance` (D36), `containment` (D37) and
+  `clash`/`clash-matrix` (D38); `ramp-geometry`, `stair-geometry` (D24),
+  `slab-contact` (D25), `centre-line-distance` (D28) and `name-sequence`
+  (D32) fail closed as before, worded so. `counterpart-coverage` and
+  `effective-coverage` count every counterpart (or source) whose plan box
+  lies near each element, where one broad phase reported a pair of two
+  checked elements only from the lesser (D27). `clash-matrix` refuses an
+  empty `system_path` while `exclude_same_system` is off, and a clash
+  finding cites what its pair was measured from (D38). `slab-contact`'s
+  share is the sound interval of contact over face, so a quotient within a
+  unit in the last place of a bound is left open (D25), and
+  `slab-stack-spacing` cites the prevailing distance it compared with,
+  inexactly between tessellated slabs (D26). `plan-area` member sums and
+  `area-ratio` areas are exact intervals one unit in the last place wider
+  than a rounded sum, `area-ratio` showing a sum on a message's rounding
+  midpoint as its interval (D19, D21), and an `area-ratio` anchor reaching
+  no member needs no area service (D22). `component-clearance` with
+  `front_axis` `against-wall` on a host without the plan-span service
+  leaves each component open rather than the rule (D39), and
+  `group-composition` over derived groups whose membership cannot be read
+  leaves the rule open for the project (D40). A template's boolean or
+  integer parameter stated as another kind is refused in the capability's
+  words, as before.
+
+- **Measured exactness is stated, never inferred from a point** (#271).
+  Every measurement states its exactness: the engine's own values carry
+  their service evidence's (a thickness square to a face also its
+  normals'), and a provider states it by the variant it answers
+  (`Measurement::Value` never exact, `Rounded` always, `Cited` as stated, a
+  member's fields as the member states). Sums, differences and shares
+  round outward instead of claiming a float result exact: `boundary_area`,
+  a total `plan_overlap`, boundary-gap totals, cap coverage and
+  unallocated shares, contact and effect shares and `bottom_above_level`,
+  and in built-in code well heights and gaps, leaf width totals, opening
+  area sums and coordinate departures. **Behaviour:** a measured point on
+  a tessellation is cited inexact where it was an exact quantity, and a
+  ruleset value computed from an approximate read is a measured value.
+  The audit of every site citing a value exact is in the Derived
+  properties chapter. The space contract owns the overlap epsilon and the
+  storey share (`SpaceOverlap::intersects`,
+  `UnallocatedRegion::storey_share`, summed and divided outward), so
+  `space-validation` leaves a share only rounding straddles not evaluated
+  (#272).
+
+- **Behaviour:** derived linear placements follow IFC4.3 (`ifc-geometry`
+  0.10, openbimrs/ifc#355): a positive `OffsetLateral` lies to the left of
+  the basis curve's direction and the product's local Z is up, with an
+  explicit `Axis`/`RefDirection` composed in that frame. Products placed by
+  a cached `CartesianPosition` are now placed at the derived position when
+  the two agree and unmeasured when they do not.
+
+- **IFC crates.** The IFC adapter moves to the 0.3 line of the IFC crates
+  and then to `openbim-ifc` 0.16, `ifc-geometry` 0.10, `ifc-alignment`
+  0.6, `ifc-step` 0.5 (on `openbim-step` 0.11), `ifc-xml` 0.4.1,
+  `ifc-spatial` 0.5, `ifc-properties` 0.8.1, `ifc-classification` 0.4,
+  `ifc-material` 0.5, `ifc-systems` 0.4, `ifc-style` 0.4, `ifc-georef` 0.6,
+  `ifc-model` 0.3.1 and `ifc-schema` 0.3.2 (`openbim-ifc`'s `authoring`
+  feature stays off), with `axiolid-curve` 0.3.3. Models read as before.
+  - The crates link only the release tables a build names; the workspace
+    names IFC2X3, IFC4 and IFC4X3, the releases the adapter reads. A header
+    declaring IFC4X1 or IFC4X2, which the schema crate bundles, is refused
+    as an unsupported schema like any release no reader here is verified
+    against.
+  - The property service resolves through `ifc-properties`'
+    `PropertyIndex` (openbimrs/ifc#352), built once per session, instead of
+    free functions validating every property relationship on each call:
+    the same answers and refusals, linear instead of quadratic over a model
+    (one property of each of 3,000 walls: 4.4 s before, 42 ms after).
+  - IFC4X3 geometry: alignment and gradient curves (`CUBIC` transitions,
+    vertical circular arcs and clothoids included), open cross profiles
+    and triangulated irregular networks are measured. Stations
+    (`IfcPointByDistanceExpression`, `IfcAxis2PlacementLinear` with `Axis`
+    and `RefDirection`), `IfcOffsetCurveByDistances`,
+    `IfcSectionedSolidHorizontal` and `IfcSectionedSurface` lower exactly
+    onto stations (openbimrs/ifc#307); a sectioned solid's body is a
+    `sectioned-spine` item and stays unmeasured, the mesh compiler
+    certifying no bound between stations. A station given as
+    `IfcParameterValue`, on a tangent discontinuity of its basis or on a
+    plain `IfcCompositeCurve` basis, and segmented reference curves, are
+    refused by name (openbimrs/ifc#346, #347); a solid swept along a
+    gradient curve is measured.
+  - The integrity scan's spatial-containment warnings are read with the
+    IFC4X3 table for IFC4X3 files, and the scan reports itself unavailable
+    rather than silently empty should the systems reader refuse the header.
+  - The adapter's own ifcXML pre-scan and type check are gone, now that
+    the codec refuses such documents itself, and so is the `ifc-validate`
+    dependency; the ifcXML tests round-trip a STEP model through the XSD
+    configuration `ifc-xml` writes.
+
+- **Map conversions** are read by `ifc-georef` (without its `transform`
+  feature, so no Axiolid crate is linked) instead of the adapter's own
+  reader. **Behaviour:** an unstated `MapUnit` is the project length unit,
+  as IFC prescribes, so such a georeference is compared instead of not
+  evaluated; `MapConversion::with_map_unit_by_default` and
+  `map_unit_by_default` mark it, its evidence locator carries
+  `map-unit-project-default`, and the `coordinate-consistency` finding
+  names it (`map offset moved by 1.0000 m (this source's map unit is the
+  standard's default, not stated)`). What `ifc-georef` refuses (a
+  dangling, mistyped or shared `SourceCRS`, a stated `MapUnit` it cannot
+  resolve, an IFC4 `IfcProjectedCRS` without a name) makes the coordinate
+  system unreadable with its reason. IFC4X3 `IfcMapConversionScaled`
+  (equal factors fold into the scale; unequal ones are refused by name)
+  and `IfcRigidOperation` with length coordinates are read and compared.
+
+- **IDS** is read and written with `openbim-ids` 0.2.1 and audited against
+  the IFC schemas of its listed releases on import and export (its
+  `audit-schema` feature, which embeds no template data, so `cargo deny` is
+  unchanged). **Breaking:** `axioval_ids::translate` returns
+  `TranslateError` (`Options`, or `Invalid` with every audit finding) and
+  refuses the whole document on any audit error: an entity a release does
+  not define, a mixed-case entity name, an attribute the entity lacks, a
+  value no IFC value of its type could equal, requirements on a prohibited
+  specification and the rest of the buildingSMART `invalid-` cases, all 27
+  of which are now refused. Audit warnings refuse nothing and come in
+  `Translation::warnings`; `axioval_ids::audit` runs the audit alone.
+  `check --ids` and `ids translate` exit 1 and list every finding;
+  warnings are listed on stderr and in the `ids` field's additive
+  `warnings`. Documents are written by the upstream writer, which writes
+  IDS 1.0 valid against `ids.xsd`, and the stand-in writer is gone:
+  exported documents change byte-wise (two-space indentation, `minOccurs`
+  and `maxOccurs` only where they differ from 1) and read back to the same
+  specifications, the corpus round trip staying 307 of 307 with identical
+  findings. The `ids:specification` annotation is the element as the
+  upstream writer writes it; annotations the stand-in wrote still read. On
+  export, a specification the writer refuses (a restriction without
+  facets) is `Refusal::Unwritable` with its location, its translated
+  folder keeping `ids:unwritable`; a rule or folder that reads as a
+  specification the audit refuses is not exported (`Refusal::Invalid`);
+  `Export::to_xml` returns `DocumentError` (`Write`, or `Invalid` when the
+  whole document fails the audit) and never writes an invalid IDS. A rule
+  read as one specification lists its applicability facets in the
+  schema's order, and a rule over a class one release lacks is no longer
+  exported on its own (#216). An IFC2X3 document requiring a mapped class
+  (`IFCAIRTERMINAL`) of the applicable occurrence class
+  (`IFCFLOWTERMINAL`) is refused until the audit maps IFC2X3 names (#215).
+
+- **Breaking:** space measurements refuse only for the unmeasured objects
+  that could change them, and name them (#212). One unmeasured slab or roof
+  anywhere used to refuse every space measurement of the model with
+  "unavailable for the requested aspect". `SpaceError` gains
+  `Unmeasured(UnmeasuredObjects)` (the `SpaceAspect` and the objects, its
+  message naming five and counting the rest) and is no longer `Copy`.
+  `AxiolidGeometry::with_unmeasured_bound` states a box an unmeasured body
+  lies within; `AxiolidSpaceService` then refuses a space's overlaps,
+  duplicates, caps and boundary gaps only for unmeasured candidates whose
+  box reaches the space (its cap plane for caps, its plan extent for
+  boundary gaps), and the clear height only for the space itself. An object
+  without a box may be anywhere and still refuses every space. Support
+  counts read no body and no longer refuse. The CLI bounds each unmeasured
+  product for the space service: a whole whose parts could not be composed
+  by its parts' boxes and bounds (`AxiolidGeometry::parts_bound`, none if
+  any part is unbounded), otherwise by the box its `Box` representation
+  states, placed like its body.
+
+- **Geometry kernel crates.** Geometry moves to `axiolid-mesh-compile`
+  0.3.14, `axiolid-construct` 0.3.15, `axiolid-measure` 0.3.9,
+  `axiolid-brep-boolean` 0.1.5, `axiolid-model` 0.3.5, `axiolid-evaluate`
+  0.3.6, `axiolid-reference` 0.3.7, `axiolid-contracts` 0.3.3,
+  `axiolid-mesh-boolean-boolmesh` 0.3.4, `axiolid-overlay` 0.3.10 and
+  `axiolid-route` 0.3.7. The engine sets no memory budget, so boolmesh's
+  per-worker scratch bound changes nothing here.
+  - **Curved meshes carry a certified deviation.** `axioval check
+    --geometry` declares every curved mesh with the deviation the mesh
+    compiler certifies for it (`compile_mesh_with_deviation`,
+    axiolid/kernel#232) instead of the 1 mm budget everywhere: the budget
+    where the construction proves it (cylinders, cones, revolutions tapered
+    too, spheres, tori, and pipes along segments, arcs, composites,
+    filleted polylines and `IfcGradientCurve` directrices), the computed
+    bound otherwise (curved B-rep faces, sweeps along B-splines and
+    ellipses, ellipse and spline profiles). Revolutions and disks swept
+    along one circle or ellipse arc keep every surface point within the
+    1 mm declared (axiolid/kernel#231), and a body whose turn needs more
+    than 4096 steps is refused by the kernel and reported unmeasured with a
+    reason naming the tolerance and the exhausted budget. A boolean's mesh
+    is measured against the exact compiler's result (axiolid/kernel#235),
+    so a wall with a round window, a beam cut by round holes and a
+    roof-clipped wall with one are tessellated within the bound it returns;
+    booleans the exact compiler refuses stay unmeasured with that reason.
+    A disk swept round a sharp polyline corner without a fillet radius is
+    mitred and certified within the chord budget (axiolid/kernel#245),
+    with a fillet radius (`IfcSweptDiskSolidPolygonal`) each corner is a
+    tangent arc; a closed polyline, a fillet radius equal to the disk
+    radius, a corner beside an arc and a mitre past its leg are refused by
+    name. Planar bodies are meshed without a deviation report, and a
+    polygonally bounded half-space with a polyline boundary counts as
+    planar, so walls clipped by one are exact. Opening voids and
+    space-boundary surfaces are declared the same way. **Behaviour:** a
+    curved mesh the compiler certifies no bound for (a tapered extrusion, a
+    sectioned spine) is unmeasured with the paths it names, so its
+    measurements are not evaluated where they were judged on an unproven
+    1 mm.
+  - **Faces are triangulated by the kernel's certified ear clipper**
+    instead of earcut (#260): triangle sets differ, areas, closure and
+    deviations do not, and rings that bound no region (folding back,
+    crossing by rounding, overlapping trims), which earcut covered partly
+    without a word, are refused by name, so such a body is unmeasured with
+    the reason. A ring touching another at a vertex is accepted in a face
+    (#262); where the touching vertex lies inside a neighbouring face's
+    edge the mesh keeps a T-junction there, and the mesh audit every
+    service reads counts the body an open surface. Space boundaries whose
+    curve-bounded plane is bounded by a composite or trimmed curve are
+    meshed and measured (#255, closes #214). Plan regions are unchanged:
+    the engine never hands overlay output to the kernel's ring
+    triangulator, whose plain `triangulate` refuses pinched rings (#253),
+    and free floor and unallocated floor whose pieces touch at a point are
+    measured (tests pin two rooms meeting at a corner, an L round a column
+    and a corridor narrowed to a point).
+  - **Plan relations.** `plan_overlap` shows a level face over part of
+    another's shadow, so a round column reaching a sliver over a slab's
+    edge is certified over it where the relation stayed open. Overlay
+    0.3.9 and later fix collinear rings left out of every boolean
+    (axiolid/kernel#219), and 0.3.10 cuts coverage through an opening and
+    cost regions flush with a turned wall correctly. As defence in depth the
+    Axiolid adapter leaves plan shadows without area (every vertex on one
+    line, up to the rounding of the coordinates, such as a vertical
+    face's) out of every footprint, coverage and space-boundary union
+    (`planar::collinear`).
+- Comparing exact boundaries is bounded per pair. A moved copy is matched
+  as a translate (axiolid/kernel#227) and closes to the accuracy asked: a
+  round column moved by 1 mm measures 1 mm to within a micrometre instead
+  of 1.0 to 1.6 mm, and in milliseconds instead of a minute (debug build).
+  A turned copy, which closes only at first order, now stops after 4096
+  splits a direction (`proximity::BOUNDARY_HAUSDORFF_SPLITS`) with a sound,
+  wider interval judged by the straddle rule, instead of the kernel's whole
+  budget of 200,000.
+
+- **BCF.** The BCF sink and the CLI move to `openbim-bcf` 0.6, which reads
+  and writes through zip 8, so the workspace carries a single zip version.
+  Archives written without the new writer fields are byte-identical to
+  those written before.
 
 ### Removed
 
@@ -1212,14 +1469,16 @@ All notable changes are documented here. This project follows Semantic Versionin
   notice (`axioval-spec` 0.4.0, `attic/axioval-spec-notice`) pointing at
   `axioval-ir` and `axioval-export`; 0.3.0 stays the last release with code
   and is not yanked.
+- **Breaking:** `axioval_rules::GuardDiagnosis` is removed; `GuardDefect`
+  stays. The implementations the templates replaced are no longer built
+  into release binaries: they are kept as `axioval_rules::reference::*`,
+  compiled only with the rules crate's `parity-reference` feature, which
+  the crate's own tests turn on (#295).
+- Takeoff's own expression parser and evaluator are gone: computed columns
+  are parsed, checked and evaluated by the engine's expression language
+  (#237).
 
 ### Fixed
-
-- `axes_within` members state `centre_angle`, the angle between a bay's
-  long axis and the direction to the member's centre, which `parking-bay`
-  infers a bay's orientation from its neighbours by (#273). The long-axis
-  `angle` alone cannot tell a neighbour beside the bay from one end to end
-  with it; both read the one shared computation.
 
 - A faceted B-rep or polygon face set whose authored faces leave their
   plane by more than the 1 mm tolerance is no longer declared exact (#213).
@@ -1227,8 +1486,13 @@ All notable changes are documented here. This project follows Semantic Versionin
   width of the slab the warped face's corners span about its fit plane,
   which `axiolid-mesh-compile` 0.3.14 reports for polygon mesh and faceted
   B-rep faces alike (axiolid/kernel#254, #257, #261) and which holds every
-  reading of the face, such as a quad's two triangulations; a body in which
-  such a face is an operand of a boolean is unmeasured, with the reason.
+  reading of the face: a quad with one corner lifted 5 cm is declared
+  within about 2.5 cm, the gap between its two triangulations, and a
+  saddle with corners at `±h` within `2 h`. The CLI declares that reported
+  bound instead of computing twice the largest corner distance itself. A
+  body in which such a face is an operand of a boolean is unmeasured, with
+  the reason, since the compiler bounds no boolean of a polygon mesh or
+  B-rep.
 - Clash and containment pairs between two meshed bodies are no longer left
   unmeasured when the plan overlay refuses a sliver of their footprints
   (#210), the most frequent not-evaluated case of the inventory. The
@@ -1248,13 +1512,13 @@ All notable changes are documented here. This project follows Semantic Versionin
   object". **Breaking:** `ProximityError` gains the variant
   `Refused(&'static str)`, and `ProximityEvidence::try_new` and
   `plan_overlap_square_metres` take and return `Option<f64>`.
-- A boolean body whose kernel report is not empty is never exact, even
-  when every reported magnitude is zero (axiolid/kernel#251: a decision at
-  `Tolerance::ZERO` can report none). It was counted exact and could
-  certify a plan overlap or feed a comparison's exact surface distance.
-  Such a body is now perturbed by at least the reported magnitudes and
-  never less than its rounding floor. `ExactBody::with_perturbation` marks
-  a body inexact whatever the value, zero included.
+
+### Security
+
+- The BCF reader parses with quick-xml 0.42 (`openbim-bcf` 0.6), which
+  fixes RUSTSEC-2026-0194 and RUSTSEC-2026-0195, so `deny.toml` no longer
+  ignores either advisory. The lockfile moves `yoke-derive` off the yanked
+  0.8.3.
 
 ## [0.3.0] - 2026-09-28
 

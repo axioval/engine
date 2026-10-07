@@ -1,0 +1,1191 @@
+{
+  "schemaVersion": "0.1.0",
+  "package": {
+    "id": "axioval:parity.public.routes",
+    "name": {
+      "default": "Public parity ruleset, routes",
+      "translations": {}
+    },
+    "version": "0.1.0",
+    "description": {
+      "default": "space-distance, accessible-route and escape-route, recorded before their decisions became templates.",
+      "translations": {}
+    },
+    "authors": []
+  },
+  "definitionPackages": [
+    "axioval:parity.public.routes.definitions"
+  ],
+  "root": {
+    "id": "root",
+    "name": {
+      "default": "Routes",
+      "translations": {}
+    },
+    "rules": [
+      {
+        "id": "sd-straight",
+        "definitionId": "axioval:parity.public.routes.space-distance",
+        "name": {
+          "default": "sd-straight",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.routes.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "distances": {
+            "type": "table",
+            "value": [
+              {
+                "from": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.routes.space",
+                    "includeSubtypes": true
+                  }
+                },
+                "to": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.routes.space",
+                    "includeSubtypes": true
+                  }
+                },
+                "maximum": {
+                  "type": "number",
+                  "value": 3.0
+                },
+                "label": {
+                  "type": "string",
+                  "value": "near"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "sd-straight-far",
+        "definitionId": "axioval:parity.public.routes.space-distance",
+        "name": {
+          "default": "sd-straight-far",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.routes.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "distances": {
+            "type": "table",
+            "value": [
+              {
+                "from": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.routes.space",
+                    "includeSubtypes": true
+                  }
+                },
+                "to": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.routes.space",
+                    "includeSubtypes": true
+                  }
+                },
+                "minimum": {
+                  "type": "number",
+                  "value": 2.0
+                },
+                "maximum": {
+                  "type": "number",
+                  "value": 50.0
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "sd-closest",
+        "definitionId": "axioval:parity.public.routes.space-distance",
+        "name": {
+          "default": "sd-closest",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.routes.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "distances": {
+            "type": "table",
+            "value": [
+              {
+                "from": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.routes.space",
+                    "includeSubtypes": true
+                  }
+                },
+                "to": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.routes.space",
+                    "includeSubtypes": true
+                  }
+                },
+                "measure": {
+                  "type": "string",
+                  "value": "closest"
+                },
+                "minimum": {
+                  "type": "number",
+                  "value": 0.5
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "sd-walking",
+        "definitionId": "axioval:parity.public.routes.space-distance",
+        "name": {
+          "default": "sd-walking",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.routes.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "distances": {
+            "type": "table",
+            "value": [
+              {
+                "from": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.routes.space",
+                    "includeSubtypes": true
+                  }
+                },
+                "to": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.routes.space",
+                    "includeSubtypes": true
+                  }
+                },
+                "measure": {
+                  "type": "string",
+                  "value": "walking"
+                },
+                "maximum": {
+                  "type": "number",
+                  "value": 20.0
+                }
+              }
+            ]
+          },
+          "walking_radius": {
+            "type": "number",
+            "value": 0.3
+          },
+          "walking_height": {
+            "type": "number",
+            "value": 2.0
+          },
+          "walking_step": {
+            "type": "number",
+            "value": 0.2
+          }
+        }
+      },
+      {
+        "id": "sd-storey",
+        "definitionId": "axioval:parity.public.routes.space-distance",
+        "name": {
+          "default": "sd-storey",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.routes.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "distances": {
+            "type": "table",
+            "value": [
+              {
+                "from": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.routes.space",
+                    "includeSubtypes": true
+                  }
+                },
+                "to": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.routes.space",
+                    "includeSubtypes": true
+                  }
+                },
+                "same_storey": {
+                  "type": "boolean",
+                  "value": true
+                },
+                "maximum": {
+                  "type": "number",
+                  "value": 100.0
+                }
+              }
+            ]
+          },
+          "storey_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelAggregates:backward"
+            ]
+          },
+          "storey_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.routes.storey",
+              "includeSubtypes": true
+            }
+          }
+        }
+      },
+      {
+        "id": "sd-access",
+        "definitionId": "axioval:parity.public.routes.space-distance",
+        "name": {
+          "default": "sd-access",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.routes.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "distances": {
+            "type": "table",
+            "value": [
+              {
+                "from": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.routes.space",
+                    "includeSubtypes": true
+                  }
+                },
+                "to": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.routes.space",
+                    "includeSubtypes": true
+                  }
+                },
+                "direct_access": {
+                  "type": "boolean",
+                  "value": true
+                },
+                "maximum": {
+                  "type": "number",
+                  "value": 10.0
+                }
+              }
+            ]
+          },
+          "access_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.adjacent-space"
+            ]
+          },
+          "door_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.routes.door",
+              "includeSubtypes": true
+            }
+          }
+        }
+      },
+      {
+        "id": "sd-furniture",
+        "definitionId": "axioval:parity.public.routes.space-distance",
+        "name": {
+          "default": "sd-furniture",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.routes.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "distances": {
+            "type": "table",
+            "value": [
+              {
+                "from": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.routes.space",
+                    "includeSubtypes": true
+                  }
+                },
+                "to": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.routes.furniture",
+                    "includeSubtypes": true
+                  }
+                },
+                "maximum": {
+                  "type": "number",
+                  "value": 1.0
+                }
+              },
+              {
+                "from": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.routes.space",
+                    "includeSubtypes": true
+                  }
+                },
+                "to": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.routes.wall",
+                    "includeSubtypes": true
+                  }
+                },
+                "measure": {
+                  "type": "string",
+                  "value": "closest"
+                },
+                "minimum": {
+                  "type": "number",
+                  "value": 0.1
+                },
+                "maximum": {
+                  "type": "number",
+                  "value": 30.0
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "sd-invalid",
+        "definitionId": "axioval:parity.public.routes.space-distance",
+        "name": {
+          "default": "sd-invalid",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.routes.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "distances": {
+            "type": "table",
+            "value": [
+              {
+                "from": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.routes.space",
+                    "includeSubtypes": true
+                  }
+                },
+                "to": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.routes.space",
+                    "includeSubtypes": true
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "ar-basic",
+        "definitionId": "axioval:parity.public.routes.accessible-route",
+        "name": {
+          "default": "ar-basic",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.routes.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "route_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.routes.space",
+              "includeSubtypes": true
+            }
+          },
+          "start_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.routes.slab",
+              "includeSubtypes": true
+            }
+          },
+          "width_metres": {
+            "type": "number",
+            "value": 0.9
+          },
+          "clear_height_metres": {
+            "type": "number",
+            "value": 2.0
+          }
+        }
+      },
+      {
+        "id": "ar-portals",
+        "definitionId": "axioval:parity.public.routes.accessible-route",
+        "name": {
+          "default": "ar-portals",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.routes.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "route_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.routes.space",
+              "includeSubtypes": true
+            }
+          },
+          "start_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.routes.door",
+              "includeSubtypes": true
+            }
+          },
+          "portal_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.routes.door",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.routes.opening",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "width_metres": {
+            "type": "number",
+            "value": 0.9
+          },
+          "door_width_metres": {
+            "type": "number",
+            "value": 0.8
+          },
+          "obstacle_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.routes.furniture",
+              "includeSubtypes": true
+            }
+          },
+          "forbid_stairs": {
+            "type": "boolean",
+            "value": true
+          },
+          "stair_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.routes.stair",
+              "includeSubtypes": true
+            }
+          }
+        }
+      },
+      {
+        "id": "ar-passing",
+        "definitionId": "axioval:parity.public.routes.accessible-route",
+        "name": {
+          "default": "ar-passing",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.routes.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "route_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.routes.space",
+              "includeSubtypes": true
+            }
+          },
+          "start_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.routes.furniture",
+              "includeSubtypes": true
+            }
+          },
+          "width_metres": {
+            "type": "number",
+            "value": 0.9
+          },
+          "clear_height_metres": {
+            "type": "number",
+            "value": 2.0
+          },
+          "passing_width_metres": {
+            "type": "number",
+            "value": 1.5
+          },
+          "passing_length_metres": {
+            "type": "number",
+            "value": 1.5
+          },
+          "passing_spacing_metres": {
+            "type": "number",
+            "value": 10.0
+          }
+        }
+      },
+      {
+        "id": "ar-invalid",
+        "definitionId": "axioval:parity.public.routes.accessible-route",
+        "name": {
+          "default": "ar-invalid",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.routes.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "route_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.routes.space",
+              "includeSubtypes": true
+            }
+          },
+          "start_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.routes.space",
+              "includeSubtypes": true
+            }
+          },
+          "width_metres": {
+            "type": "number",
+            "value": 0.9
+          },
+          "passing_width_metres": {
+            "type": "number",
+            "value": 1.5
+          }
+        }
+      },
+      {
+        "id": "er-travel",
+        "definitionId": "axioval:parity.public.routes.escape-route",
+        "name": {
+          "default": "er-travel",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.routes.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "uses": {
+            "type": "table",
+            "value": [
+              {
+                "spaces": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.routes.space",
+                    "includeSubtypes": true
+                  }
+                },
+                "maximum_travel": {
+                  "type": "number",
+                  "value": 30.0
+                },
+                "label": {
+                  "type": "string",
+                  "value": "rooms"
+                }
+              }
+            ]
+          },
+          "exit_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelAggregates:backward",
+              "IfcRelContainedInSpatialStructure:forward"
+            ]
+          },
+          "exit_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.routes.wall",
+              "includeSubtypes": true
+            }
+          },
+          "walking_height": {
+            "type": "number",
+            "value": 2.0
+          },
+          "walking_step": {
+            "type": "number",
+            "value": 0.2
+          }
+        }
+      },
+      {
+        "id": "er-short",
+        "definitionId": "axioval:parity.public.routes.escape-route",
+        "name": {
+          "default": "er-short",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.routes.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "uses": {
+            "type": "table",
+            "value": [
+              {
+                "spaces": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.routes.space",
+                    "includeSubtypes": true
+                  }
+                },
+                "maximum_travel": {
+                  "type": "number",
+                  "value": 0.5
+                }
+              }
+            ]
+          },
+          "exit_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelAggregates:backward",
+              "IfcRelContainedInSpatialStructure:forward"
+            ]
+          },
+          "exit_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.routes.wall",
+              "includeSubtypes": true
+            }
+          },
+          "walking_height": {
+            "type": "number",
+            "value": 2.0
+          },
+          "walking_step": {
+            "type": "number",
+            "value": 0.2
+          }
+        }
+      },
+      {
+        "id": "er-exits",
+        "definitionId": "axioval:parity.public.routes.escape-route",
+        "name": {
+          "default": "er-exits",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.routes.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "uses": {
+            "type": "table",
+            "value": [
+              {
+                "spaces": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.routes.space",
+                    "includeSubtypes": true
+                  }
+                },
+                "exits": {
+                  "type": "integer",
+                  "value": 9
+                }
+              }
+            ]
+          },
+          "exit_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelAggregates:backward",
+              "IfcRelContainedInSpatialStructure:forward"
+            ]
+          },
+          "exit_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.routes.wall",
+              "includeSubtypes": true
+            }
+          }
+        }
+      },
+      {
+        "id": "er-widths",
+        "definitionId": "axioval:parity.public.routes.escape-route",
+        "name": {
+          "default": "er-widths",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.routes.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "uses": {
+            "type": "table",
+            "value": [
+              {
+                "spaces": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.routes.space",
+                    "includeSubtypes": true
+                  }
+                },
+                "area_per_occupant": {
+                  "type": "number",
+                  "value": 2.0
+                },
+                "exits": {
+                  "type": "integer",
+                  "value": 1
+                }
+              }
+            ]
+          },
+          "widths": {
+            "type": "table",
+            "value": [
+              {
+                "occupants": {
+                  "type": "integer",
+                  "value": 50
+                },
+                "width": {
+                  "type": "number",
+                  "value": 0.9
+                },
+                "total_width": {
+                  "type": "number",
+                  "value": 1.8
+                }
+              },
+              {
+                "occupants": {
+                  "type": "integer",
+                  "value": 500
+                },
+                "width": {
+                  "type": "number",
+                  "value": 1.2
+                }
+              }
+            ]
+          },
+          "exit_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelAggregates:backward",
+              "IfcRelContainedInSpatialStructure:forward"
+            ]
+          },
+          "exit_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.routes.wall",
+              "includeSubtypes": true
+            }
+          }
+        }
+      },
+      {
+        "id": "er-passages",
+        "definitionId": "axioval:parity.public.routes.escape-route",
+        "name": {
+          "default": "er-passages",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.routes.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "uses": {
+            "type": "table",
+            "value": [
+              {
+                "spaces": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.routes.space",
+                    "includeSubtypes": true
+                  }
+                },
+                "area_per_occupant": {
+                  "type": "number",
+                  "value": 5.0
+                },
+                "exits": {
+                  "type": "integer",
+                  "value": 1
+                }
+              }
+            ]
+          },
+          "widths": {
+            "type": "table",
+            "value": [
+              {
+                "occupants": {
+                  "type": "integer",
+                  "value": 100
+                },
+                "width": {
+                  "type": "number",
+                  "value": 0.8
+                },
+                "passage_width": {
+                  "type": "number",
+                  "value": 1.2
+                }
+              }
+            ]
+          },
+          "passage_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.routes.space",
+              "includeSubtypes": true
+            }
+          },
+          "exit_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelAggregates:backward",
+              "IfcRelContainedInSpatialStructure:forward"
+            ]
+          },
+          "exit_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.routes.wall",
+              "includeSubtypes": true
+            }
+          }
+        }
+      },
+      {
+        "id": "er-heights",
+        "definitionId": "axioval:parity.public.routes.escape-route",
+        "name": {
+          "default": "er-heights",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.routes.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "uses": {
+            "type": "table",
+            "value": [
+              {
+                "spaces": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.routes.space",
+                    "includeSubtypes": true
+                  }
+                },
+                "maximum_travel": {
+                  "type": "number",
+                  "value": 40.0
+                }
+              }
+            ]
+          },
+          "minimum_clear_height": {
+            "type": "number",
+            "value": 2.1
+          },
+          "exit_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelAggregates:backward",
+              "IfcRelContainedInSpatialStructure:forward"
+            ]
+          },
+          "exit_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.routes.wall",
+              "includeSubtypes": true
+            }
+          },
+          "walking_height": {
+            "type": "number",
+            "value": 2.0
+          },
+          "walking_step": {
+            "type": "number",
+            "value": 0.2
+          }
+        }
+      },
+      {
+        "id": "er-sections",
+        "definitionId": "axioval:parity.public.routes.escape-route",
+        "name": {
+          "default": "er-sections",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.routes.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "uses": {
+            "type": "table",
+            "value": [
+              {
+                "spaces": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.routes.space",
+                    "includeSubtypes": true
+                  }
+                },
+                "maximum_travel": {
+                  "type": "number",
+                  "value": 25.0
+                }
+              }
+            ]
+          },
+          "sections": {
+            "type": "table",
+            "value": [
+              {
+                "objects": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.routes.furniture",
+                    "includeSubtypes": true
+                  }
+                },
+                "factor": {
+                  "type": "number",
+                  "value": 2.0
+                }
+              }
+            ]
+          },
+          "exit_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelAggregates:backward",
+              "IfcRelContainedInSpatialStructure:forward"
+            ]
+          },
+          "exit_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.routes.wall",
+              "includeSubtypes": true
+            }
+          },
+          "walking_height": {
+            "type": "number",
+            "value": 2.0
+          },
+          "walking_step": {
+            "type": "number",
+            "value": 0.2
+          }
+        }
+      },
+      {
+        "id": "er-invalid",
+        "definitionId": "axioval:parity.public.routes.escape-route",
+        "name": {
+          "default": "er-invalid",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.routes.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "uses": {
+            "type": "table",
+            "value": [
+              {
+                "spaces": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.routes.space",
+                    "includeSubtypes": true
+                  }
+                }
+              }
+            ]
+          },
+          "exit_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelAggregates:backward",
+              "IfcRelContainedInSpatialStructure:forward"
+            ]
+          },
+          "exit_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.routes.wall",
+              "includeSubtypes": true
+            }
+          }
+        }
+      }
+    ]
+  }
+}

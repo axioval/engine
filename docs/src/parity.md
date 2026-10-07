@@ -272,7 +272,21 @@ invalid side) and `local-circulation` on the spaces (reaching, required
 entrances, path ends, linked components, passing spaces and an invalid
 declaration). The free-space search cannot map the public models' spaces
 (their footprints repeat a vertex), so most rules record its refusals;
-one area off the slabs is found unsupported and the spaces without an entrance are found.
+one area off the slabs is found unsupported and the spaces without an
+entrance are found.
+
+The case `routes` records the route capabilities before their decisions
+become templates over their searches (#286): `space-distance` (straight,
+between bodies, walking, on one storey, with direct access, to other
+kinds of destination and an invalid row), `accessible-route` (from the
+slabs and the furniture, through doors with obstacles and forbidden
+stairs, with passing spaces, and an invalid declaration) and
+`escape-route` (travel, a travel too short, exits, exit and passage
+widths, clear heights, multiplied sections and an invalid use). The
+public models' two spaces lie side by side without a door, so the bodies
+are found too close, no destination has direct access, the exits are too
+few, and the walks, the walkability snapshot and the footprints the
+services cannot read leave the rest open.
 
 Each pair's evidence prints as one JSON line. That line is what the
 migration ledger records as a proof item, tagged `"kind": "parity"`; the

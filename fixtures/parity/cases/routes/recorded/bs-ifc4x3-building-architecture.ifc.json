@@ -1,0 +1,794 @@
+{
+  "findings": [
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:relationship-scan:IfcRelAggregates:6",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:relationship-scan:IfcRelContainedInSpatialStructure:4",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:relationship:#67",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:relationship:#86",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "aadfba5e-c3a6-53c9-884d-1c58999a0a61",
+      "message": "has 4 exit(s) via IfcRelAggregates then IfcRelContainedInSpatialStructure; use 0 requires at least 9",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#158",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#182",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#201",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#228",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "er-exits",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:relationship-scan:IfcRelAggregates:6",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:relationship-scan:IfcRelContainedInSpatialStructure:4",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:relationship:#67",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:relationship:#86",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "4a8d094c-a6b3-5e49-884d-97ac26b26189",
+      "message": "has 4 exit(s) via IfcRelAggregates then IfcRelContainedInSpatialStructure; use 0 requires at least 9",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#158",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#182",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#201",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#228",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "er-exits",
+      "severity": "warning"
+    },
+    {
+      "evidence": [],
+      "id": "5f6340a2-4027-588c-bc9d-46f8fa15e5a2",
+      "message": "has no destination with direct access; row 0 requires one within 10 m in a straight line between centres",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "sd-access",
+      "severity": "warning"
+    },
+    {
+      "evidence": [],
+      "id": "c9631d8b-3274-5e20-8007-c20b2190b9e7",
+      "message": "has no destination with direct access; row 0 requires one within 10 m in a straight line between centres",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "sd-access",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:minimum_3d:ifc-step:bs-ifc4x3-building-architecture.ifc/#135:ifc-step:bs-ifc4x3-building-architecture.ifc/#85",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "bc6a7634-2e64-5689-9956-0949402df8c8",
+      "message": "ifc-step:bs-ifc4x3-building-architecture.ifc/#85 is 0.2 m away between the closest points of the bodies; row 0 requires at least 0.5 m",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#85",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "sd-closest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:minimum_3d:ifc-step:bs-ifc4x3-building-architecture.ifc/#135:ifc-step:bs-ifc4x3-building-architecture.ifc/#85",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "ebb75b4a-3eb1-5d5e-a5ca-aeaff5213fa7",
+      "message": "ifc-step:bs-ifc4x3-building-architecture.ifc/#135 is 0.2 m away between the closest points of the bodies; row 0 requires at least 0.5 m",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#135",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "sd-closest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:minimum_3d:ifc-step:bs-ifc4x3-building-architecture.ifc/#135:ifc-step:bs-ifc4x3-building-architecture.ifc/#158",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "e0514a6a-77c2-595d-a1bd-c401275e208b",
+      "message": "ifc-step:bs-ifc4x3-building-architecture.ifc/#158 is 0 m away between the closest points of the bodies; row 1 requires at least 0.1 m",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#158",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "sd-furniture",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:minimum_3d:ifc-step:bs-ifc4x3-building-architecture.ifc/#201:ifc-step:bs-ifc4x3-building-architecture.ifc/#85",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "298ecec6-9680-5f30-b4e7-d3e33851170c",
+      "message": "ifc-step:bs-ifc4x3-building-architecture.ifc/#201 is 0 m away between the closest points of the bodies; row 1 requires at least 0.1 m",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#201",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "sd-furniture",
+      "severity": "warning"
+    }
+  ],
+  "not_evaluated": [
+    {
+      "message": "no walkability snapshot: walkability unavailable: walkable surface ifc-step:bs-ifc4x3-building-architecture.ifc/#261 is not a closed solid",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "ar-basic"
+    },
+    {
+      "message": "no walkability snapshot: walkability unavailable: walkable surface ifc-step:bs-ifc4x3-building-architecture.ifc/#261 is not a closed solid",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "ar-basic"
+    },
+    {
+      "message": "accessible-route: `passing_width_metres`, `passing_length_metres` and `passing_spacing_metres` go together",
+      "object_id": null,
+      "reason": "invalid_declaration",
+      "rule_id": "ar-invalid"
+    },
+    {
+      "message": "no walkability snapshot: walkability unavailable: walkable surface ifc-step:bs-ifc4x3-building-architecture.ifc/#116 is not a closed solid",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "ar-passing"
+    },
+    {
+      "message": "no walkability snapshot: walkability unavailable: walkable surface ifc-step:bs-ifc4x3-building-architecture.ifc/#116 is not a closed solid",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "ar-passing"
+    },
+    {
+      "message": "the start selector selects no start point",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ar-portals"
+    },
+    {
+      "message": "the start selector selects no start point",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ar-portals"
+    },
+    {
+      "message": "escape-route: `route_door_direction` and `minimum_clear_height` need `door_path`, `door_selector`, `walking_height` and `walking_step`",
+      "object_id": null,
+      "reason": "invalid_declaration",
+      "rule_id": "er-heights"
+    },
+    {
+      "message": "escape-route: use 0 states no requirement",
+      "object_id": null,
+      "reason": "invalid_declaration",
+      "rule_id": "er-invalid"
+    },
+    {
+      "message": "escape-route use 0: plan area unavailable: the footprint of ifc-step:bs-ifc4x3-building-architecture.ifc/#135 cannot be computed; the occupants relying on passage ifc-step:bs-ifc4x3-building-architecture.ifc/#135 are unknown: ifc-step:bs-ifc4x3-building-architecture.ifc/#135: its footprint is not measured",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "er-passages"
+    },
+    {
+      "message": "escape-route use 0: plan area unavailable: the footprint of ifc-step:bs-ifc4x3-building-architecture.ifc/#85 cannot be computed; the occupants relying on passage ifc-step:bs-ifc4x3-building-architecture.ifc/#85 are unknown: ifc-step:bs-ifc4x3-building-architecture.ifc/#85: its footprint is not measured",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "er-passages"
+    },
+    {
+      "message": "escape-route use 0: the farthest point of ifc-step:bs-ifc4x3-building-architecture.ifc/#135 from an exit: metric routing query unavailable: ifc-step:bs-ifc4x3-building-architecture.ifc/#220 has a body that was not measured, so free space is unknown: no body representation; the longest travel to the nearest exit is at least 0 m walking, and use 0 allows at most 25 m of travel",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "er-sections"
+    },
+    {
+      "message": "escape-route use 0: the farthest point of ifc-step:bs-ifc4x3-building-architecture.ifc/#85 from an exit: metric routing query unavailable: ifc-step:bs-ifc4x3-building-architecture.ifc/#220 has a body that was not measured, so free space is unknown: no body representation; the longest travel to the nearest exit is at least 0 m walking, and use 0 allows at most 25 m of travel",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "er-sections"
+    },
+    {
+      "message": "escape-route use 0: the farthest point of ifc-step:bs-ifc4x3-building-architecture.ifc/#135 from an exit: metric routing query unavailable: ifc-step:bs-ifc4x3-building-architecture.ifc/#220 has a body that was not measured, so free space is unknown: no body representation; the longest travel to the nearest exit is at least 0 m walking, and use 0 allows at most 0.5 m of travel",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "er-short"
+    },
+    {
+      "message": "escape-route use 0: the farthest point of ifc-step:bs-ifc4x3-building-architecture.ifc/#85 from an exit: metric routing query unavailable: ifc-step:bs-ifc4x3-building-architecture.ifc/#220 has a body that was not measured, so free space is unknown: no body representation; the longest travel to the nearest exit is at least 0 m walking, and use 0 allows at most 0.5 m of travel",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "er-short"
+    },
+    {
+      "message": "escape-route use 0 (rooms): the farthest point of ifc-step:bs-ifc4x3-building-architecture.ifc/#135 from an exit: metric routing query unavailable: ifc-step:bs-ifc4x3-building-architecture.ifc/#220 has a body that was not measured, so free space is unknown: no body representation; the longest travel to the nearest exit is at least 0 m walking, and use 0 (rooms) allows at most 30 m of travel",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "er-travel"
+    },
+    {
+      "message": "escape-route use 0 (rooms): the farthest point of ifc-step:bs-ifc4x3-building-architecture.ifc/#85 from an exit: metric routing query unavailable: ifc-step:bs-ifc4x3-building-architecture.ifc/#220 has a body that was not measured, so free space is unknown: no body representation; the longest travel to the nearest exit is at least 0 m walking, and use 0 (rooms) allows at most 30 m of travel",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "er-travel"
+    },
+    {
+      "message": "escape-route use 0: plan area unavailable: the footprint of ifc-step:bs-ifc4x3-building-architecture.ifc/#135 cannot be computed",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "er-widths"
+    },
+    {
+      "message": "escape-route use 0: plan area unavailable: the footprint of ifc-step:bs-ifc4x3-building-architecture.ifc/#85 cannot be computed",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "er-widths"
+    },
+    {
+      "message": "space-distance row 0: the nearest destination is unknown in a straight line between centres, at most 1 m required, and ifc-step:bs-ifc4x3-building-architecture.ifc/#116 to ifc-step:bs-ifc4x3-building-architecture.ifc/#135: plan span unavailable: the footprint of ifc-step:bs-ifc4x3-building-architecture.ifc/#135 cannot be computed",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "sd-furniture"
+    },
+    {
+      "message": "space-distance row 0: the nearest destination is unknown in a straight line between centres, at most 1 m required, and ifc-step:bs-ifc4x3-building-architecture.ifc/#116 to ifc-step:bs-ifc4x3-building-architecture.ifc/#85: plan span unavailable: the footprint of ifc-step:bs-ifc4x3-building-architecture.ifc/#85 cannot be computed",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "sd-furniture"
+    },
+    {
+      "message": "space-distance: row 0 states no `minimum` or `maximum`",
+      "object_id": null,
+      "reason": "invalid_declaration",
+      "rule_id": "sd-invalid"
+    },
+    {
+      "message": "space-distance row 0: the nearest destination is unknown in a straight line between centres, at most 100 m required, and ifc-step:bs-ifc4x3-building-architecture.ifc/#135 to ifc-step:bs-ifc4x3-building-architecture.ifc/#85: plan span unavailable: the footprint of ifc-step:bs-ifc4x3-building-architecture.ifc/#135 cannot be computed",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "sd-storey"
+    },
+    {
+      "message": "space-distance row 0: the nearest destination is unknown in a straight line between centres, at most 100 m required, and ifc-step:bs-ifc4x3-building-architecture.ifc/#135 to ifc-step:bs-ifc4x3-building-architecture.ifc/#85: plan span unavailable: the footprint of ifc-step:bs-ifc4x3-building-architecture.ifc/#135 cannot be computed",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "sd-storey"
+    },
+    {
+      "message": "space-distance row 0 (near): the nearest destination is unknown in a straight line between centres, at most 3 m required, and ifc-step:bs-ifc4x3-building-architecture.ifc/#135 to ifc-step:bs-ifc4x3-building-architecture.ifc/#85: plan span unavailable: the footprint of ifc-step:bs-ifc4x3-building-architecture.ifc/#135 cannot be computed",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "sd-straight"
+    },
+    {
+      "message": "space-distance row 0 (near): the nearest destination is unknown in a straight line between centres, at most 3 m required, and ifc-step:bs-ifc4x3-building-architecture.ifc/#135 to ifc-step:bs-ifc4x3-building-architecture.ifc/#85: plan span unavailable: the footprint of ifc-step:bs-ifc4x3-building-architecture.ifc/#135 cannot be computed",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "sd-straight"
+    },
+    {
+      "message": "space-distance row 0: the nearest destination is unknown in a straight line between centres, between 2 and 50 m required, and ifc-step:bs-ifc4x3-building-architecture.ifc/#135 to ifc-step:bs-ifc4x3-building-architecture.ifc/#85: plan span unavailable: the footprint of ifc-step:bs-ifc4x3-building-architecture.ifc/#135 cannot be computed",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "sd-straight-far"
+    },
+    {
+      "message": "space-distance row 0: the nearest destination is unknown in a straight line between centres, between 2 and 50 m required, and ifc-step:bs-ifc4x3-building-architecture.ifc/#135 to ifc-step:bs-ifc4x3-building-architecture.ifc/#85: plan span unavailable: the footprint of ifc-step:bs-ifc4x3-building-architecture.ifc/#135 cannot be computed",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "sd-straight-far"
+    },
+    {
+      "message": "space-distance row 0: the nearest destination is unknown walking, at most 20 m required, and the centre of ifc-step:bs-ifc4x3-building-architecture.ifc/#135: plan span unavailable: the footprint of ifc-step:bs-ifc4x3-building-architecture.ifc/#135 cannot be computed",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "sd-walking"
+    },
+    {
+      "message": "space-distance row 0: the nearest destination is unknown walking, at most 20 m required, and the centre of ifc-step:bs-ifc4x3-building-architecture.ifc/#85: plan span unavailable: the footprint of ifc-step:bs-ifc4x3-building-architecture.ifc/#85 cannot be computed",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "sd-walking"
+    }
+  ],
+  "rules": [
+    {
+      "checked": 2,
+      "failed": 0,
+      "not_evaluated": 2,
+      "rule_id": "ar-basic",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 2,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "ar-invalid",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 2,
+      "failed": 0,
+      "not_evaluated": 2,
+      "rule_id": "ar-passing",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 2,
+      "failed": 0,
+      "not_evaluated": 2,
+      "rule_id": "ar-portals",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 2,
+      "failed": 2,
+      "not_evaluated": 0,
+      "rule_id": "er-exits",
+      "status": "failed"
+    },
+    {
+      "checked": 2,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "er-heights",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 2,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "er-invalid",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 2,
+      "failed": 0,
+      "not_evaluated": 2,
+      "rule_id": "er-passages",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 2,
+      "failed": 0,
+      "not_evaluated": 2,
+      "rule_id": "er-sections",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 2,
+      "failed": 0,
+      "not_evaluated": 2,
+      "rule_id": "er-short",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 2,
+      "failed": 0,
+      "not_evaluated": 2,
+      "rule_id": "er-travel",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 2,
+      "failed": 0,
+      "not_evaluated": 2,
+      "rule_id": "er-widths",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 2,
+      "failed": 2,
+      "not_evaluated": 0,
+      "rule_id": "sd-access",
+      "status": "failed"
+    },
+    {
+      "checked": 2,
+      "failed": 2,
+      "not_evaluated": 0,
+      "rule_id": "sd-closest",
+      "status": "failed"
+    },
+    {
+      "checked": 2,
+      "failed": 2,
+      "not_evaluated": 2,
+      "rule_id": "sd-furniture",
+      "status": "failed"
+    },
+    {
+      "checked": 2,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "sd-invalid",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 2,
+      "failed": 0,
+      "not_evaluated": 2,
+      "rule_id": "sd-storey",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 2,
+      "failed": 0,
+      "not_evaluated": 2,
+      "rule_id": "sd-straight",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 2,
+      "failed": 0,
+      "not_evaluated": 2,
+      "rule_id": "sd-straight-far",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 2,
+      "failed": 0,
+      "not_evaluated": 2,
+      "rule_id": "sd-walking",
+      "status": "not_evaluated"
+    }
+  ]
+}

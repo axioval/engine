@@ -1,0 +1,108 @@
+{
+  "description": "The route capabilities over every public model, meshed, recorded before their decisions become templates over their searches (#286).",
+  "models": "*",
+  "pairs": [],
+  "recorded": [
+    {
+      "rule": "sd-straight",
+      "comparison": "contract",
+      "reason": "space-distance splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "sd-straight-far",
+      "comparison": "contract",
+      "reason": "space-distance splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "sd-closest",
+      "comparison": "contract",
+      "reason": "space-distance splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "sd-walking",
+      "comparison": "contract",
+      "reason": "space-distance splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "sd-storey",
+      "comparison": "contract",
+      "reason": "space-distance splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "sd-access",
+      "comparison": "contract",
+      "reason": "space-distance splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "sd-furniture",
+      "comparison": "contract",
+      "reason": "space-distance splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "sd-invalid",
+      "comparison": "contract",
+      "reason": "space-distance splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "ar-basic",
+      "comparison": "contract",
+      "reason": "accessible-route splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "ar-portals",
+      "comparison": "contract",
+      "reason": "accessible-route splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "ar-passing",
+      "comparison": "contract",
+      "reason": "accessible-route splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "ar-invalid",
+      "comparison": "contract",
+      "reason": "accessible-route splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "er-travel",
+      "comparison": "contract",
+      "reason": "escape-route splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "er-short",
+      "comparison": "contract",
+      "reason": "escape-route splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "er-exits",
+      "comparison": "contract",
+      "reason": "escape-route splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "er-widths",
+      "comparison": "contract",
+      "reason": "escape-route splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "er-passages",
+      "comparison": "contract",
+      "reason": "escape-route splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "er-heights",
+      "comparison": "contract",
+      "reason": "escape-route splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "er-sections",
+      "comparison": "contract",
+      "reason": "escape-route splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "er-invalid",
+      "comparison": "contract",
+      "reason": "escape-route splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    }
+  ],
+  "divergences": []
+}

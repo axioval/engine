@@ -1,0 +1,1208 @@
+{
+  "schemaVersion": "0.1.0",
+  "package": {
+    "id": "axioval:parity.public.routes.definitions",
+    "name": {
+      "default": "Public parity definitions, routes",
+      "translations": {}
+    },
+    "version": "0.1.0",
+    "description": {
+      "default": "Terms for holding the route capabilities to the outcomes recorded before their decisions became templates.",
+      "translations": {}
+    },
+    "authors": []
+  },
+  "objectTypes": {
+    "axioval:parity.public.routes.space": {
+      "id": "axioval:parity.public.routes.space",
+      "name": {
+        "default": "space",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcSpace"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcSpace"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcSpace"
+        }
+      ]
+    },
+    "axioval:parity.public.routes.storey": {
+      "id": "axioval:parity.public.routes.storey",
+      "name": {
+        "default": "storey",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcBuildingStorey"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcBuildingStorey"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcBuildingStorey"
+        }
+      ]
+    },
+    "axioval:parity.public.routes.wall": {
+      "id": "axioval:parity.public.routes.wall",
+      "name": {
+        "default": "wall",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcWall"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcWall"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcWall"
+        }
+      ]
+    },
+    "axioval:parity.public.routes.slab": {
+      "id": "axioval:parity.public.routes.slab",
+      "name": {
+        "default": "slab",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcSlab"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcSlab"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcSlab"
+        }
+      ]
+    },
+    "axioval:parity.public.routes.furniture": {
+      "id": "axioval:parity.public.routes.furniture",
+      "name": {
+        "default": "furniture",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcFurnishingElement"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcFurnishingElement"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcFurnishingElement"
+        }
+      ]
+    },
+    "axioval:parity.public.routes.door": {
+      "id": "axioval:parity.public.routes.door",
+      "name": {
+        "default": "door",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcDoor"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcDoor"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcDoor"
+        }
+      ]
+    },
+    "axioval:parity.public.routes.opening": {
+      "id": "axioval:parity.public.routes.opening",
+      "name": {
+        "default": "opening",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcOpeningElement"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcOpeningElement"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcOpeningElement"
+        }
+      ]
+    },
+    "axioval:parity.public.routes.window": {
+      "id": "axioval:parity.public.routes.window",
+      "name": {
+        "default": "window",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcWindow"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcWindow"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcWindow"
+        }
+      ]
+    },
+    "axioval:parity.public.routes.stair": {
+      "id": "axioval:parity.public.routes.stair",
+      "name": {
+        "default": "stair",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcStair"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcStair"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcStair"
+        }
+      ]
+    },
+    "axioval:parity.public.routes.ramp": {
+      "id": "axioval:parity.public.routes.ramp",
+      "name": {
+        "default": "ramp",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcRamp"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcRamp"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcRamp"
+        }
+      ]
+    }
+  },
+  "properties": {
+    "axioval:parity.public.routes.name": {
+      "id": "axioval:parity.public.routes.name",
+      "name": {
+        "default": "name",
+        "translations": {}
+      },
+      "valueKind": "string",
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "Name"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "Name"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "Name"
+        }
+      ]
+    },
+    "axioval:parity.public.routes.long-name": {
+      "id": "axioval:parity.public.routes.long-name",
+      "name": {
+        "default": "long-name",
+        "translations": {}
+      },
+      "valueKind": "string",
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "LongName"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "LongName"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "LongName"
+        }
+      ]
+    }
+  },
+  "propertySets": {},
+  "definitions": {
+    "axioval:parity.public.routes.space-distance": {
+      "id": "axioval:parity.public.routes.space-distance",
+      "name": {
+        "default": "space-distance",
+        "translations": {}
+      },
+      "capability": "axioval:capability.space-distance",
+      "parameters": {
+        "distances": {
+          "id": "distances",
+          "name": {
+            "default": "distances",
+            "translations": {}
+          },
+          "kind": "table",
+          "required": true,
+          "columns": [
+            {
+              "id": "label",
+              "name": {
+                "default": "label",
+                "translations": {}
+              },
+              "kind": "string",
+              "required": false
+            },
+            {
+              "id": "from",
+              "name": {
+                "default": "from",
+                "translations": {}
+              },
+              "kind": "selector",
+              "required": true
+            },
+            {
+              "id": "to",
+              "name": {
+                "default": "to",
+                "translations": {}
+              },
+              "kind": "selector",
+              "required": true
+            },
+            {
+              "id": "measure",
+              "name": {
+                "default": "measure",
+                "translations": {}
+              },
+              "kind": "string",
+              "required": false
+            },
+            {
+              "id": "same_storey",
+              "name": {
+                "default": "same_storey",
+                "translations": {}
+              },
+              "kind": "boolean",
+              "required": false
+            },
+            {
+              "id": "direct_access",
+              "name": {
+                "default": "direct_access",
+                "translations": {}
+              },
+              "kind": "boolean",
+              "required": false
+            },
+            {
+              "id": "minimum",
+              "name": {
+                "default": "minimum",
+                "translations": {}
+              },
+              "kind": "number",
+              "required": false
+            },
+            {
+              "id": "maximum",
+              "name": {
+                "default": "maximum",
+                "translations": {}
+              },
+              "kind": "number",
+              "required": false
+            }
+          ]
+        },
+        "storey_path": {
+          "id": "storey_path",
+          "name": {
+            "default": "storey_path",
+            "translations": {}
+          },
+          "kind": "stringList",
+          "required": false
+        },
+        "storey_selector": {
+          "id": "storey_selector",
+          "name": {
+            "default": "storey_selector",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "access_path": {
+          "id": "access_path",
+          "name": {
+            "default": "access_path",
+            "translations": {}
+          },
+          "kind": "stringList",
+          "required": false
+        },
+        "door_selector": {
+          "id": "door_selector",
+          "name": {
+            "default": "door_selector",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "opening_selector": {
+          "id": "opening_selector",
+          "name": {
+            "default": "opening_selector",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "space_selector": {
+          "id": "space_selector",
+          "name": {
+            "default": "space_selector",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "walking_radius": {
+          "id": "walking_radius",
+          "name": {
+            "default": "walking_radius",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": false
+        },
+        "walking_height": {
+          "id": "walking_height",
+          "name": {
+            "default": "walking_height",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": false
+        },
+        "walking_step": {
+          "id": "walking_step",
+          "name": {
+            "default": "walking_step",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": false
+        },
+        "walking_slope": {
+          "id": "walking_slope",
+          "name": {
+            "default": "walking_slope",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": false
+        },
+        "stair_selector": {
+          "id": "stair_selector",
+          "name": {
+            "default": "stair_selector",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "ramp_selector": {
+          "id": "ramp_selector",
+          "name": {
+            "default": "ramp_selector",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "lift_selector": {
+          "id": "lift_selector",
+          "name": {
+            "default": "lift_selector",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "stair_length": {
+          "id": "stair_length",
+          "name": {
+            "default": "stair_length",
+            "translations": {}
+          },
+          "kind": "string",
+          "required": false
+        },
+        "vertical_factor": {
+          "id": "vertical_factor",
+          "name": {
+            "default": "vertical_factor",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": false
+        }
+      }
+    },
+    "axioval:parity.public.routes.accessible-route": {
+      "id": "axioval:parity.public.routes.accessible-route",
+      "name": {
+        "default": "accessible-route",
+        "translations": {}
+      },
+      "capability": "axioval:capability.accessible-route",
+      "parameters": {
+        "route_selector": {
+          "id": "route_selector",
+          "name": {
+            "default": "route_selector",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": true
+        },
+        "start_selector": {
+          "id": "start_selector",
+          "name": {
+            "default": "start_selector",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": true
+        },
+        "portal_selector": {
+          "id": "portal_selector",
+          "name": {
+            "default": "portal_selector",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "lift_selector": {
+          "id": "lift_selector",
+          "name": {
+            "default": "lift_selector",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "ramp_selector": {
+          "id": "ramp_selector",
+          "name": {
+            "default": "ramp_selector",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "stair_selector": {
+          "id": "stair_selector",
+          "name": {
+            "default": "stair_selector",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "obstacle_selector": {
+          "id": "obstacle_selector",
+          "name": {
+            "default": "obstacle_selector",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "subtract_door_swings": {
+          "id": "subtract_door_swings",
+          "name": {
+            "default": "subtract_door_swings",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "width_metres": {
+          "id": "width_metres",
+          "name": {
+            "default": "width_metres",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": true
+        },
+        "clear_height_metres": {
+          "id": "clear_height_metres",
+          "name": {
+            "default": "clear_height_metres",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": false
+        },
+        "door_width_metres": {
+          "id": "door_width_metres",
+          "name": {
+            "default": "door_width_metres",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": false
+        },
+        "ramp_width_metres": {
+          "id": "ramp_width_metres",
+          "name": {
+            "default": "ramp_width_metres",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": false
+        },
+        "stair_width_metres": {
+          "id": "stair_width_metres",
+          "name": {
+            "default": "stair_width_metres",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": false
+        },
+        "forbid_stairs": {
+          "id": "forbid_stairs",
+          "name": {
+            "default": "forbid_stairs",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        },
+        "clear_width_property": {
+          "id": "clear_width_property",
+          "name": {
+            "default": "clear_width_property",
+            "translations": {}
+          },
+          "kind": "propertyReference",
+          "required": false
+        },
+        "obstruction_depth_metres": {
+          "id": "obstruction_depth_metres",
+          "name": {
+            "default": "obstruction_depth_metres",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": false
+        },
+        "surface_gap_metres": {
+          "id": "surface_gap_metres",
+          "name": {
+            "default": "surface_gap_metres",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": false
+        },
+        "passing_width_metres": {
+          "id": "passing_width_metres",
+          "name": {
+            "default": "passing_width_metres",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": false
+        },
+        "passing_length_metres": {
+          "id": "passing_length_metres",
+          "name": {
+            "default": "passing_length_metres",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": false
+        },
+        "passing_spacing_metres": {
+          "id": "passing_spacing_metres",
+          "name": {
+            "default": "passing_spacing_metres",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": false
+        },
+        "passing_reach_metres": {
+          "id": "passing_reach_metres",
+          "name": {
+            "default": "passing_reach_metres",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": false
+        }
+      }
+    },
+    "axioval:parity.public.routes.escape-route": {
+      "id": "axioval:parity.public.routes.escape-route",
+      "name": {
+        "default": "escape-route",
+        "translations": {}
+      },
+      "capability": "axioval:capability.escape-route",
+      "parameters": {
+        "uses": {
+          "id": "uses",
+          "name": {
+            "default": "uses",
+            "translations": {}
+          },
+          "kind": "table",
+          "required": true,
+          "columns": [
+            {
+              "id": "label",
+              "name": {
+                "default": "label",
+                "translations": {}
+              },
+              "kind": "string",
+              "required": false
+            },
+            {
+              "id": "spaces",
+              "name": {
+                "default": "spaces",
+                "translations": {}
+              },
+              "kind": "selector",
+              "required": true
+            },
+            {
+              "id": "maximum_travel",
+              "name": {
+                "default": "maximum_travel",
+                "translations": {}
+              },
+              "kind": "number",
+              "required": false
+            },
+            {
+              "id": "route_start",
+              "name": {
+                "default": "route_start",
+                "translations": {}
+              },
+              "kind": "string",
+              "required": false
+            },
+            {
+              "id": "exits",
+              "name": {
+                "default": "exits",
+                "translations": {}
+              },
+              "kind": "integer",
+              "required": false
+            },
+            {
+              "id": "area_per_occupant",
+              "name": {
+                "default": "area_per_occupant",
+                "translations": {}
+              },
+              "kind": "number",
+              "required": false
+            }
+          ]
+        },
+        "widths": {
+          "id": "widths",
+          "name": {
+            "default": "widths",
+            "translations": {}
+          },
+          "kind": "table",
+          "required": false,
+          "columns": [
+            {
+              "id": "occupants",
+              "name": {
+                "default": "occupants",
+                "translations": {}
+              },
+              "kind": "integer",
+              "required": true
+            },
+            {
+              "id": "width",
+              "name": {
+                "default": "width",
+                "translations": {}
+              },
+              "kind": "number",
+              "required": true
+            },
+            {
+              "id": "total_width",
+              "name": {
+                "default": "total_width",
+                "translations": {}
+              },
+              "kind": "number",
+              "required": false
+            },
+            {
+              "id": "passage_width",
+              "name": {
+                "default": "passage_width",
+                "translations": {}
+              },
+              "kind": "number",
+              "required": false
+            },
+            {
+              "id": "door_width",
+              "name": {
+                "default": "door_width",
+                "translations": {}
+              },
+              "kind": "number",
+              "required": false
+            },
+            {
+              "id": "total_door_width",
+              "name": {
+                "default": "total_door_width",
+                "translations": {}
+              },
+              "kind": "number",
+              "required": false
+            }
+          ]
+        },
+        "exit_path": {
+          "id": "exit_path",
+          "name": {
+            "default": "exit_path",
+            "translations": {}
+          },
+          "kind": "stringList",
+          "required": true
+        },
+        "exit_selector": {
+          "id": "exit_selector",
+          "name": {
+            "default": "exit_selector",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": true
+        },
+        "door_path": {
+          "id": "door_path",
+          "name": {
+            "default": "door_path",
+            "translations": {}
+          },
+          "kind": "stringList",
+          "required": false
+        },
+        "door_selector": {
+          "id": "door_selector",
+          "name": {
+            "default": "door_selector",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "clear_width_property": {
+          "id": "clear_width_property",
+          "name": {
+            "default": "clear_width_property",
+            "translations": {}
+          },
+          "kind": "propertyReference",
+          "required": false
+        },
+        "walking_height": {
+          "id": "walking_height",
+          "name": {
+            "default": "walking_height",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": false
+        },
+        "walking_step": {
+          "id": "walking_step",
+          "name": {
+            "default": "walking_step",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": false
+        },
+        "sections": {
+          "id": "sections",
+          "name": {
+            "default": "sections",
+            "translations": {}
+          },
+          "kind": "table",
+          "required": false,
+          "columns": [
+            {
+              "id": "label",
+              "name": {
+                "default": "label",
+                "translations": {}
+              },
+              "kind": "string",
+              "required": false
+            },
+            {
+              "id": "objects",
+              "name": {
+                "default": "objects",
+                "translations": {}
+              },
+              "kind": "selector",
+              "required": true
+            },
+            {
+              "id": "factor",
+              "name": {
+                "default": "factor",
+                "translations": {}
+              },
+              "kind": "number",
+              "required": true
+            },
+            {
+              "id": "shared_by",
+              "name": {
+                "default": "shared_by",
+                "translations": {}
+              },
+              "kind": "integer",
+              "required": false
+            }
+          ]
+        },
+        "section_path": {
+          "id": "section_path",
+          "name": {
+            "default": "section_path",
+            "translations": {}
+          },
+          "kind": "stringList",
+          "required": false
+        },
+        "passage_path": {
+          "id": "passage_path",
+          "name": {
+            "default": "passage_path",
+            "translations": {}
+          },
+          "kind": "stringList",
+          "required": false
+        },
+        "passage_selector": {
+          "id": "passage_selector",
+          "name": {
+            "default": "passage_selector",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "passage_width_property": {
+          "id": "passage_width_property",
+          "name": {
+            "default": "passage_width_property",
+            "translations": {}
+          },
+          "kind": "propertyReference",
+          "required": false
+        },
+        "exit_door_direction": {
+          "id": "exit_door_direction",
+          "name": {
+            "default": "exit_door_direction",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        },
+        "walked_passages": {
+          "id": "walked_passages",
+          "name": {
+            "default": "walked_passages",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        },
+        "no_escape_selector": {
+          "id": "no_escape_selector",
+          "name": {
+            "default": "no_escape_selector",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "compartment_selector": {
+          "id": "compartment_selector",
+          "name": {
+            "default": "compartment_selector",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "compartment_path": {
+          "id": "compartment_path",
+          "name": {
+            "default": "compartment_path",
+            "translations": {}
+          },
+          "kind": "stringList",
+          "required": false
+        },
+        "compartment_overlap": {
+          "id": "compartment_overlap",
+          "name": {
+            "default": "compartment_overlap",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": false
+        },
+        "zones": {
+          "id": "zones",
+          "name": {
+            "default": "zones",
+            "translations": {}
+          },
+          "kind": "table",
+          "required": false,
+          "columns": [
+            {
+              "id": "label",
+              "name": {
+                "default": "label",
+                "translations": {}
+              },
+              "kind": "string",
+              "required": false
+            },
+            {
+              "id": "objects",
+              "name": {
+                "default": "objects",
+                "translations": {}
+              },
+              "kind": "selector",
+              "required": true
+            },
+            {
+              "id": "rank",
+              "name": {
+                "default": "rank",
+                "translations": {}
+              },
+              "kind": "integer",
+              "required": true
+            }
+          ]
+        },
+        "exit_count": {
+          "id": "exit_count",
+          "name": {
+            "default": "exit_count",
+            "translations": {}
+          },
+          "kind": "string",
+          "required": false
+        },
+        "route_door_selector": {
+          "id": "route_door_selector",
+          "name": {
+            "default": "route_door_selector",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "common_path_factor": {
+          "id": "common_path_factor",
+          "name": {
+            "default": "common_path_factor",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": false
+        },
+        "route_door_direction": {
+          "id": "route_door_direction",
+          "name": {
+            "default": "route_door_direction",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        },
+        "minimum_clear_height": {
+          "id": "minimum_clear_height",
+          "name": {
+            "default": "minimum_clear_height",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": false
+        },
+        "clear_height_property": {
+          "id": "clear_height_property",
+          "name": {
+            "default": "clear_height_property",
+            "translations": {}
+          },
+          "kind": "propertyReference",
+          "required": false
+        },
+        "overall_height": {
+          "id": "overall_height",
+          "name": {
+            "default": "overall_height",
+            "translations": {}
+          },
+          "kind": "propertyReference",
+          "required": false
+        },
+        "lining_thickness": {
+          "id": "lining_thickness",
+          "name": {
+            "default": "lining_thickness",
+            "translations": {}
+          },
+          "kind": "propertyReference",
+          "required": false
+        },
+        "threshold_thickness": {
+          "id": "threshold_thickness",
+          "name": {
+            "default": "threshold_thickness",
+            "translations": {}
+          },
+          "kind": "propertyReference",
+          "required": false
+        },
+        "stair_selector": {
+          "id": "stair_selector",
+          "name": {
+            "default": "stair_selector",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "ramp_selector": {
+          "id": "ramp_selector",
+          "name": {
+            "default": "ramp_selector",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "lift_selector": {
+          "id": "lift_selector",
+          "name": {
+            "default": "lift_selector",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "stair_length": {
+          "id": "stair_length",
+          "name": {
+            "default": "stair_length",
+            "translations": {}
+          },
+          "kind": "string",
+          "required": false
+        },
+        "vertical_factor": {
+          "id": "vertical_factor",
+          "name": {
+            "default": "vertical_factor",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": false
+        }
+      }
+    }
+  }
+}

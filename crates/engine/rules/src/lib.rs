@@ -216,6 +216,7 @@ pub mod reference {
     pub use crate::slab_contact::reference::SlabContact;
     pub use crate::slab_stack::reference::SlabStackSpacing;
     pub use crate::space_boundary_coverage::reference::SpaceBoundaryCoverage;
+    pub use crate::space_connection::reference::SpaceConnection;
     pub use crate::stair_geometry::reference::RampGeometryReference as RampGeometry;
     pub use crate::stair_geometry::reference::StairGeometryReference as StairGeometry;
     pub use crate::triangle_count::reference::TriangleCountLimit;
@@ -309,6 +310,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(measured_openings::OpeningMeasures))
         .and_then(|registry| registry.register_measured(keyed_limit::DoorMeasures))
         .and_then(|registry| registry.register_measured(door_swing_direction::SwingMeasures))
+        .and_then(|registry| registry.register_measured(space_connection::ConnectionMeasures))
         .and_then(|registry| registry.register_measured(corridor_end_openings::CorridorEndSearch))
         .and_then(|registry| registry.register_measured(opening_zone::PlacementMeasures))
         .and_then(|registry| registry.register_measured(allowed_profile::ProfileMeasures))

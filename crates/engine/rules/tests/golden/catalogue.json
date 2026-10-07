@@ -45848,7 +45848,306 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "space-connection",
+        "declaration": [
+          {
+            "kind": "arguments",
+            "when": [],
+            "value": "space_connections;connections=@connections;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector"
+          }
+        ],
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "space",
+                "expression": {
+                  "kind": "literal",
+                  "value": {
+                    "type": "boolean",
+                    "value": true
+                  }
+                }
+              }
+            ],
+            "decision": {
+              "kind": "holds",
+              "value": "space"
+            },
+            "fail": "",
+            "undecided": "",
+            "checks": [
+              {
+                "values": [],
+                "decision": {
+                  "kind": "items",
+                  "applies": {},
+                  "list": "space_connections;connections=@connections;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector",
+                  "refused": "space-connection: {why}",
+                  "checks": [
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "field",
+                          "field": "access",
+                          "value": true
+                        },
+                        {
+                          "kind": "field",
+                          "field": "required",
+                          "value": true
+                        }
+                      ],
+                      "judge": {
+                        "kind": "truth",
+                        "value": "linked",
+                        "finding": false
+                      },
+                      "fail": "has no direct access through a {kind} to a space {row} requires (via {via})",
+                      "undecided": "space-connection {row}: {why}",
+                      "related": "related"
+                    },
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "field",
+                          "field": "access",
+                          "value": true
+                        },
+                        {
+                          "kind": "field",
+                          "field": "required",
+                          "value": false
+                        }
+                      ],
+                      "judge": {
+                        "kind": "truth",
+                        "value": "linked",
+                        "finding": true
+                      },
+                      "fail": "has direct access to {links}, which {row} forbids for a {kind}",
+                      "undecided": "space-connection {row}: {why}",
+                      "related": "related"
+                    },
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "field",
+                          "field": "access",
+                          "value": false
+                        },
+                        {
+                          "kind": "field",
+                          "field": "required",
+                          "value": true
+                        }
+                      ],
+                      "judge": {
+                        "kind": "truth",
+                        "value": "linked",
+                        "finding": false
+                      },
+                      "fail": "has no {kind} directly to the outside, which {row} requires",
+                      "undecided": "space-connection {row}: {why}",
+                      "related": "related"
+                    },
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "field",
+                          "field": "access",
+                          "value": false
+                        },
+                        {
+                          "kind": "field",
+                          "field": "required",
+                          "value": false
+                        }
+                      ],
+                      "judge": {
+                        "kind": "truth",
+                        "value": "linked",
+                        "finding": true
+                      },
+                      "fail": "opens directly to the outside through {links}, which {row} forbids for a {kind}",
+                      "undecided": "space-connection {row}: {why}",
+                      "related": "related"
+                    }
+                  ]
+                },
+                "fail": "",
+                "undecided": ""
+              }
+            ]
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "aggregate",
+                  "function": "none",
+                  "over": {
+                    "kind": "measured",
+                    "name": "space_connections;connections=@connections;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector"
+                  },
+                  "value": {
+                    "kind": "not",
+                    "operand": {
+                      "kind": "and",
+                      "operands": [
+                        {
+                          "kind": "property",
+                          "propertySet": "axioval:member",
+                          "property": "linked"
+                        },
+                        {
+                          "kind": "not",
+                          "operand": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "linked"
+                          }
+                        },
+                        {
+                          "kind": "property",
+                          "propertySet": "axioval:member",
+                          "property": "linked"
+                        },
+                        {
+                          "kind": "not",
+                          "operand": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "linked"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "label": "no item fails"
+                },
+                {
+                  "kind": "literal",
+                  "value": {
+                    "type": "boolean",
+                    "value": true
+                  }
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.aggregate",
+                      "label": "no item fails",
+                      "fields": {
+                        "function": "none"
+                      },
+                      "inputs": {
+                        "over": {
+                          "block": {
+                            "type": "members.space_connections",
+                            "fields": {
+                              "access_path": "@access_path",
+                              "connections": "@connections",
+                              "door_selector": "@door_selector",
+                              "opening_selector": "@opening_selector",
+                              "space_selector": "@space_selector"
+                            }
+                          }
+                        },
+                        "value": {
+                          "block": {
+                            "type": "expression.not",
+                            "inputs": {
+                              "operand": {
+                                "block": {
+                                  "type": "expression.and",
+                                  "inputs": {
+                                    "operands": {
+                                      "blocks": [
+                                        {
+                                          "type": "expression.property",
+                                          "fields": {
+                                            "property": "linked",
+                                            "propertySet": "axioval:member"
+                                          }
+                                        },
+                                        {
+                                          "type": "expression.not",
+                                          "inputs": {
+                                            "operand": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "linked",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "type": "expression.property",
+                                          "fields": {
+                                            "property": "linked",
+                                            "propertySet": "axioval:member"
+                                          }
+                                        },
+                                        {
+                                          "type": "expression.not",
+                                          "inputs": {
+                                            "operand": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "linked",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.literal",
+                      "fields": {
+                        "value": {
+                          "type": "boolean",
+                          "value": true
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.space-distance",
@@ -81455,6 +81754,339 @@
             {
               "language": "de",
               "text": "Ob jeder Lauf gemessen ist und keiner fehlen kann."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
+      "name": "space_connections",
+      "parameters": [
+        {
+          "key": "connections",
+          "kind": {
+            "type": "table"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "Rows of a `from` selector (the spaces a row applies to), an optional `to` selector, `access` and `exit` (`allowed`, `required` or `forbidden`), an `access_type` (`any`, `doors` or `openings`) and an optional `label`, as `space-connection` reads them."
+            },
+            {
+              "language": "de",
+              "text": "Zeilen aus einem Selektor `from` (die Räume, für die eine Zeile gilt), einem optionalen Selektor `to`, `access` und `exit` (`allowed`, `required` oder `forbidden`), einem `access_type` (`any`, `doors` oder `openings`) und einem optionalen `label`, wie `space-connection` sie liest."
+            }
+          ],
+          "references": "table"
+        },
+        {
+          "key": "access_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps from each door or opening to the spaces it connects."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte von jeder Tür oder Öffnung zu den Räumen, die sie verbindet."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "door_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The doors: source kinds, `,`-separated, or `@` a selector parameter of the rule, whose undecided objects may be doors."
+            },
+            {
+              "language": "de",
+              "text": "Die Türen: Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel, dessen unentschiedene Objekte Türen sein können."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "opening_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The openings, as `door_selector` names the doors."
+            },
+            {
+              "language": "de",
+              "text": "Die Öffnungen, wie `door_selector` die Türen nennt."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "space_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The spaces a door or opening may connect; every object without it."
+            },
+            {
+              "language": "de",
+              "text": "Die Räume, die eine Tür oder Öffnung verbinden kann; ohne Angabe jedes Objekt."
+            }
+          ],
+          "references": "selector"
+        }
+      ],
+      "services": [
+        "relationship-selection"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "whether a row's `from` picks the space is undecided"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Space connections"
+        },
+        {
+          "language": "de",
+          "text": "Raumverbindungen"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "Each requirement of each row of `connections` whose `from` picks the space, its `access` and then its `exit`: whether the space is surely linked as the row asks, surely not, or undecided."
+        },
+        {
+          "language": "de",
+          "text": "Jede Anforderung jeder Zeile von `connections`, deren `from` den Raum trifft, erst ihr `access`, dann ihr `exit`: ob der Raum sicher wie verlangt verbunden ist, sicher nicht, oder unentschieden."
+        }
+      ],
+      "fields": [
+        {
+          "name": "row",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Row"
+            },
+            {
+              "language": "de",
+              "text": "Zeile"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The row, as messages name it: `row 0 (label)`."
+            },
+            {
+              "language": "de",
+              "text": "Die Zeile, wie Meldungen sie nennen: `row 0 (label)`."
+            }
+          ]
+        },
+        {
+          "name": "access",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Access"
+            },
+            {
+              "language": "de",
+              "text": "Zugang"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the item is the row's `access` requirement; its `exit` otherwise."
+            },
+            {
+              "language": "de",
+              "text": "Ob das Element die Anforderung `access` der Zeile ist; sonst ihr `exit`."
+            }
+          ]
+        },
+        {
+          "name": "required",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Required"
+            },
+            {
+              "language": "de",
+              "text": "Verlangt"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the row requires the link; it forbids it otherwise."
+            },
+            {
+              "language": "de",
+              "text": "Ob die Zeile die Verbindung verlangt; sonst verbietet sie sie."
+            }
+          ]
+        },
+        {
+          "name": "kind",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Element type"
+            },
+            {
+              "language": "de",
+              "text": "Elementart"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The elements the row counts: `door`, `opening` or `door or opening`."
+            },
+            {
+              "language": "de",
+              "text": "Die Elemente, die die Zeile zählt: `door`, `opening` oder `door or opening`."
+            }
+          ]
+        },
+        {
+          "name": "via",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Relationship"
+            },
+            {
+              "language": "de",
+              "text": "Beziehung"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship the access path follows."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehung, der der Zugangspfad folgt."
+            }
+          ]
+        },
+        {
+          "name": "links",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Links"
+            },
+            {
+              "language": "de",
+              "text": "Verbindungen"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The sure links found: each space and the element it is reached through, or the element opening to the outside; empty where none."
+            },
+            {
+              "language": "de",
+              "text": "Die sicheren Verbindungen: je Raum und das Element, durch das er erreicht wird, oder das Element ins Freie; leer, wo keine."
+            }
+          ]
+        },
+        {
+          "name": "linked",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Linked"
+            },
+            {
+              "language": "de",
+              "text": "Verbunden"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the space is surely linked as the row asks; undecided where an element or a space the row may pick could change it."
+            },
+            {
+              "language": "de",
+              "text": "Ob der Raum sicher wie verlangt verbunden ist; unentschieden, wo ein Element oder ein Raum, den die Zeile treffen kann, es ändern könnte."
+            }
+          ]
+        },
+        {
+          "name": "related",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Related"
+            },
+            {
+              "language": "de",
+              "text": "Bezogen"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The linked spaces and elements where linked; otherwise the elements reaching the space."
+            },
+            {
+              "language": "de",
+              "text": "Die verbundenen Räume und Elemente, wo verbunden; sonst die Elemente, die den Raum erreichen."
             }
           ]
         }

@@ -70,6 +70,19 @@ fn spaces() -> Selector {
     }
 }
 
+/// The template's evaluation of `rule` over `model`, held to the
+/// implementation it replaced under `Parity::contract()`.
+fn held(model: Model, rule: &axioval_engine::CompiledRule) -> axioval_engine::CapabilityEvaluation {
+    model.holding_contract(
+        &SpaceConnection,
+        &axioval_rules::reference::SpaceConnection,
+        rule,
+        |_| {},
+        &[],
+        0.0,
+    )
+}
+
 fn row(cells: &[(&str, ParameterValue)]) -> TableRow {
     cells
         .iter()
@@ -88,8 +101,8 @@ fn parameters(path: &str, rows: Vec<TableRow>) -> Vec<(&'static str, ParameterVa
 
 #[test]
 fn a_forbidden_connection_and_a_missing_exit_are_found() {
-    let evaluation = flat().evaluate(
-        &SpaceConnection,
+    let evaluation = held(
+        flat(),
         &rule(
             ID,
             spaces(),
@@ -169,8 +182,8 @@ fn a_forbidden_connection_and_a_missing_exit_are_found() {
 
 #[test]
 fn a_forbidden_exit_is_found_and_openings_count_as_access() {
-    let evaluation = flat().evaluate(
-        &SpaceConnection,
+    let evaluation = held(
+        flat(),
         &rule(
             ID,
             spaces(),
@@ -213,8 +226,8 @@ fn spaces_on_one_face_of_a_door_are_not_connected_through_it() {
         .cite(ADJACENT, "d4", &edge("d4", "b", '+'))
         .edge(ADJACENT, "d4", "h")
         .cite(ADJACENT, "d4", &edge("d4", "h", '+'));
-    let evaluation = model.evaluate(
-        &SpaceConnection,
+    let evaluation = held(
+        model,
         &rule(
             ID,
             kind("hall"),
@@ -273,7 +286,7 @@ fn an_undecided_door_leaves_what_it_could_change_not_evaluated() {
         ],
     );
     parameters[2] = ("door_selector", selector(declared_door()));
-    let evaluation = model.evaluate(&SpaceConnection, &rule(ID, spaces(), parameters));
+    let evaluation = held(model, &rule(ID, spaces(), parameters));
     assert_eq!(
         findings(&evaluation)
             .into_iter()
@@ -302,8 +315,8 @@ fn stated_boundaries_connect_spaces_but_cannot_show_the_outside() {
         ("to", selector(kind("kitchen"))),
         ("access", string("forbidden")),
     ]);
-    let evaluation = boundaries().evaluate(
-        &SpaceConnection,
+    let evaluation = held(
+        boundaries(),
         &rule(
             ID,
             spaces(),
@@ -321,8 +334,8 @@ fn stated_boundaries_connect_spaces_but_cannot_show_the_outside() {
         ("from", selector(kind("bedroom"))),
         ("exit", string("required")),
     ]);
-    let evaluation = boundaries().evaluate(
-        &SpaceConnection,
+    let evaluation = held(
+        boundaries(),
         &rule(
             ID,
             spaces(),
@@ -359,18 +372,15 @@ fn declarations_that_cannot_be_judged_are_refused() {
             ("access_type", string("windows")),
         ])],
     ] {
-        let evaluation = flat().evaluate(
-            &SpaceConnection,
-            &rule(ID, spaces(), parameters(ADJACENT, rows)),
-        );
+        let evaluation = held(flat(), &rule(ID, spaces(), parameters(ADJACENT, rows)));
         assert_eq!(
             unevaluated(&evaluation),
             [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
         );
     }
     // Doors cannot be told apart without a door selector.
-    let evaluation = flat().evaluate(
-        &SpaceConnection,
+    let evaluation = held(
+        flat(),
         &rule(
             ID,
             spaces(),
@@ -394,4 +404,159 @@ fn declarations_that_cannot_be_judged_are_refused() {
         unevaluated(&evaluation),
         [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
     );
+}
+
+/// A space's connections are never read from adjacency measured on a
+/// tessellation: such evidence is refused, which leaves the link the
+/// requirement turns on undecided, never an exact verdict; from exact
+/// adjacency the finding cites exact evidence.
+#[test]
+fn connections_read_from_approximate_adjacency_are_never_exact() {
+    let rows = || {
+        vec![row(&[
+            ("from", selector(kind("kitchen"))),
+            ("to", selector(kind("bedroom"))),
+            ("access", string("forbidden")),
+        ])]
+    };
+    let approximate = flat().cite_approximate(ADJACENT, "d2", "mesh:d2");
+    let evaluation = held(
+        approximate,
+        &rule(ID, spaces(), parameters(ADJACENT, rows())),
+    );
+    assert!(evaluation.findings().is_empty(), "{evaluation:?}");
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("k".into(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+    let evaluation = held(flat(), &rule(ID, spaces(), parameters(ADJACENT, rows())));
+    let [found] = evaluation.findings() else {
+        panic!("{evaluation:?}");
+    };
+    assert!(found.evidence.iter().all(|evidence| evidence.exact));
+}
+
+mod generated {
+    use super::*;
+    use proptest::prelude::*;
+
+    /// A space kind, or none.
+    fn spaces_of() -> impl Strategy<Value = Option<&'static str>> {
+        proptest::option::of(prop_oneof![Just("kitchen"), Just("bedroom"), Just("hall")])
+    }
+
+    fn requirement() -> impl Strategy<Value = Option<&'static str>> {
+        proptest::option::of(prop_oneof![
+            Just("allowed"),
+            Just("required"),
+            Just("forbidden")
+        ])
+    }
+
+    fn access_type() -> impl Strategy<Value = Option<&'static str>> {
+        proptest::option::of(prop_oneof![Just("any"), Just("doors"), Just("openings")])
+    }
+
+    /// One row: `from` (a kind, or a stated use), `to`, access, access
+    /// type, exit, and whether it is labelled.
+    type Stated = (
+        (&'static str, bool),
+        Option<&'static str>,
+        Option<&'static str>,
+        Option<&'static str>,
+        Option<&'static str>,
+        bool,
+    );
+
+    fn stated_row() -> impl Strategy<Value = Stated> {
+        (
+            (
+                prop_oneof![Just("kitchen"), Just("bedroom"), Just("hall")],
+                any::<bool>(),
+            ),
+            spaces_of(),
+            requirement(),
+            access_type(),
+            requirement(),
+            any::<bool>(),
+        )
+    }
+
+    fn table_row(index: usize, stated: Stated) -> TableRow {
+        let ((from, by_use), to, access, access_type, exit, labelled) = stated;
+        let mut cells = vec![(
+            "from",
+            if by_use {
+                selector(
+                    serde_json::from_value(serde_json::json!({
+                        "kind": "property", "propertySet": "Pset", "property": "Use",
+                        "operator": "equals", "value": {"type": "string", "value": from}}))
+                    .unwrap(),
+                )
+            } else {
+                selector(kind(from))
+            },
+        )];
+        if let Some(to) = to {
+            cells.push(("to", selector(kind(to))));
+        }
+        if let Some(access) = access {
+            cells.push(("access", string(access)));
+        }
+        if let Some(access_type) = access_type {
+            cells.push(("access_type", string(access_type)));
+        }
+        if let Some(exit) = exit {
+            cells.push(("exit", string(exit)));
+        }
+        if labelled {
+            cells.push(("label", string(&format!("rule {index}"))));
+        }
+        row(&cells)
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(96))]
+
+        #[test]
+        fn generated_connections_hold_parity(
+            rows in proptest::collection::vec(stated_row(), 1..4),
+            unreadable in proptest::option::of(prop_oneof![Just("d1"), Just("d2"), Just("o1")]),
+            uses in proptest::collection::vec(0u8..3, 3),
+            declared in any::<bool>(),
+            openings in any::<bool>(),
+        ) {
+            let mut model = flat();
+            for ((room, named), stated) in
+                [("k", "kitchen"), ("b", "bedroom"), ("h", "hall")].into_iter().zip(uses)
+            {
+                model = match stated {
+                    0 => model.text(room, "Pset", "Use", named),
+                    1 => model.unreadable_value(room, "Pset", "Use", "IFCLABEL"),
+                    _ => model,
+                };
+            }
+            if declared {
+                for door in ["d1", "d2", "d3"] {
+                    model = model.value(door, "Door", "Kind", PropertyValue::String("swing".into()));
+                }
+            }
+            if let Some(unreadable) = unreadable {
+                model = model.unreadable(unreadable);
+            }
+            let rows = rows
+                .into_iter()
+                .enumerate()
+                .map(|(index, stated)| table_row(index, stated))
+                .collect();
+            let mut parameters = parameters(ADJACENT, rows);
+            if declared {
+                parameters[2] = ("door_selector", selector(declared_door()));
+            }
+            if !openings {
+                parameters.remove(3);
+            }
+            held(model, &rule(ID, spaces(), parameters));
+        }
+    }
 }

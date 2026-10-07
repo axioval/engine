@@ -102,7 +102,9 @@ pub struct Model {
     unreadable: BTreeSet<ObjectId>,
     /// relationship -> (anchor, locator): further evidence an answer from
     /// that anchor cites.
-    citations: BTreeMap<String, Vec<(ObjectId, String)>>,
+    /// Each relationship's citations: the anchor, the locator and whether
+    /// the evidence is exact.
+    citations: BTreeMap<String, Vec<(ObjectId, String, bool)>>,
     /// Whether the source can enumerate an object's properties.
     enumerable: bool,
     /// Sets an object carries without any member.
@@ -219,7 +221,17 @@ impl Model {
         self.citations
             .entry(relationship.into())
             .or_default()
-            .push((id(anchor), locator.into()));
+            .push((id(anchor), locator.into(), true));
+        self
+    }
+
+    /// Cites `locator`, measured approximately (on a tessellation), in
+    /// every answer about `relationship` from `anchor`.
+    pub fn cite_approximate(mut self, relationship: &str, anchor: &str, locator: &str) -> Self {
+        self.citations
+            .entry(relationship.into())
+            .or_default()
+            .push((id(anchor), locator.into(), false));
         self
     }
 
@@ -632,8 +644,12 @@ impl RelationshipSelectionService for Model {
                 .get(relationship.as_str())
                 .into_iter()
                 .flatten()
-                .filter(|(anchor, _)| anchor == request.anchor())
-                .map(|(_, locator)| Evidence::exact(source(), locator.clone())),
+                .filter(|(anchor, _, _)| anchor == request.anchor())
+                .map(|(_, locator, exact)| {
+                    let mut evidence = Evidence::exact(source(), locator.clone());
+                    evidence.exact = *exact;
+                    evidence
+                }),
         );
         CompleteRelationshipSelection::try_new(request.clone(), candidates, evidence)
     }

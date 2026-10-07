@@ -1369,6 +1369,34 @@ declaration checks the path, the selector and both margins (`nonNegative`),
 in the capability's order and words; an unstated margin is the search's
 default (0.5 m deep, 0.1 m facing).
 
+### `space-connection`
+
+One form, judged by its check over the measured list
+`space_connections;connections=@connections;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector`:
+one item per requirement of each row whose `from` picks the space, its
+`access` and then its `exit` (an `allowed` one is no item), each stating
+whether the space is surely linked as the row asks (`linked`: to a space
+`to` surely picks through an element surely of the row's type, or to the
+outside; undecided where an element of undecided type, one whose spaces
+cannot be read, or a linked space `to` cannot decide could change it), the
+row's words (`row`, `kind`, `via`), the sure links (`links`) and the
+objects a finding relates (`related`: the links' spaces and elements, or
+the elements reaching the space).
+
+| Test | When | Judgement |
+| --- | --- | --- |
+| required access | `access`, `required` | `linked` false is a finding (`has no direct access through a {kind} to a space {row} requires (via {via})`) |
+| forbidden access | `access`, not `required` | `linked` true is a finding (`has direct access to {links}, which {row} forbids for a {kind}`) |
+| required exit | not `access`, `required` | `linked` false is a finding (`has no {kind} directly to the outside, which {row} requires`) |
+| forbidden exit | neither | `linked` true is a finding (`opens directly to the outside through {links}, which {row} forbids for a {kind}`) |
+
+An undecided `linked` leaves the row open (`space-connection {row}: {why}`),
+each row its own outcome as the capability reported them, and a space
+whose rows cannot be told (a row's `from` that cannot decide it) is open
+once with the list's refusal. The declaration is the list's own argument
+check (`Check::Arguments`): the access path and selectors, then the rows,
+in the capability's order and words.
+
 ### `door-swing`
 
 One form, judged by its checks, both over the measured list
@@ -1937,6 +1965,18 @@ ends (each a wall or undecided) and three windows of random gap and
 facing, selected by kind or by a kind that may not be read, under random
 margins; and by the `corridor-end-openings` rules of the case `openings`,
 recorded before the switch. It is never forked.
+
+`space-connection` is held to `space_connection/reference.rs`
+(`axioval_rules::reference::SpaceConnection`) on every fixture of
+`tests/space_connection.rs` under `Parity::contract()`, its messages
+asserted literally (forbidden and missing links and exits, faces of a
+door, undecided doors, stated boundaries, refused declarations); by
+generated tables of up to three rows over the flat of three rooms (a
+`from` by kind or by a use stated, unreadable or absent; random `to`,
+requirements, access types, exits and labels, refused ones included) with
+doors of declared or undecided type and an unreadable element; and by the
+`space-connection` rules of the case `openings`, recorded before the
+switch. It is never forked.
 
 `door-swing` is held to `door_swing_direction/reference.rs`
 (`axioval_rules::reference::DoorSwing`) on every fixture of

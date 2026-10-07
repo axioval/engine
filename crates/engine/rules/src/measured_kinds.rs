@@ -19,6 +19,7 @@ pub(crate) type ArgumentCheck = fn(
 pub(crate) fn argument_check(name: &str) -> Option<ArgumentCheck> {
     match name {
         "light_area" | "light_size" | "light_step" => Some(crate::light_area::check_arguments),
+        "space_connections" => Some(crate::space_connection::check_arguments),
         "effective_reaching" | "effective_area" | "effective_covered" | "effective_share"
         | "effective_capacity" | "effective_unread" | "effective_missing" => {
             Some(crate::effective_coverage::check_arguments)

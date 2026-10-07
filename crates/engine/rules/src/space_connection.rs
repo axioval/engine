@@ -2,20 +2,26 @@
 //! directly, and whether it may, must or must not open to the outside.
 
 use std::collections::BTreeMap;
+use std::sync::LazyLock;
 
+use axioval_engine::template::Template;
 use axioval_engine::{
-    CapabilityEvaluation, ColumnKind, CompiledRule, NotEvaluatedReason, ParameterDescriptor,
-    ParameterType, RuleCapability, RuleContext, TableColumn,
+    CapabilityEvaluation, ColumnKind, CompiledRule, ParameterDescriptor, RuleCapability,
+    RuleContext, TableColumn,
 };
-use axioval_ir::contract::Selector;
-use axioval_ir::{Evidence, Finding, Object, ObjectId};
+use axioval_ir::contract::{ParameterValue, Selector};
 
-use crate::selection::{Selection, select_objects, selector_matches};
-use crate::space_access::{AccessDeclaration, AccessIndex, AccessType, Exit, Link, unknown};
-use crate::support::table::{Matched, RowSelection, RowTest, match_rows};
-use crate::support::{Parameters, Unavailable, finding, invalid};
+use crate::space_access::{AccessDeclaration, AccessType};
+use crate::support::{Parameters, Unavailable, invalid};
 
-const COLUMNS: &[TableColumn] = &[
+mod measured;
+#[cfg(feature = "parity-reference")]
+pub(crate) mod reference;
+mod template;
+
+pub(crate) use measured::ConnectionMeasures;
+
+pub(crate) const COLUMNS: &[TableColumn] = &[
     TableColumn::optional("label", ColumnKind::String),
     TableColumn::required("from", ColumnKind::Selector),
     TableColumn::optional("to", ColumnKind::Selector),
@@ -44,11 +50,39 @@ const COLUMNS: &[TableColumn] = &[
 /// the asked type to spaces `to` surely picks. An element of undecided type,
 /// one whose spaces cannot be read, or a linked space `to` cannot decide
 /// leaves a verdict it could change not evaluated.
+///
+/// It runs as a template ([`axioval_engine::template`]): each applicable
+/// row's requirements of a space, as the measured list
+/// `space_connections` reads them (whether the space is surely linked,
+/// surely not, or undecided), judged one by one.
 pub struct SpaceConnection;
+
+static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
+
+/// The plans of the rules bound to it, kept across runs.
+static PLANS: crate::templates::Plans = crate::templates::Plans::new();
+
+impl RuleCapability for SpaceConnection {
+    fn id(&self) -> &'static str {
+        template::ID
+    }
+
+    fn parameters(&self) -> Vec<ParameterDescriptor> {
+        TEMPLATE.parameters.clone()
+    }
+
+    fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
+        crate::templates::run((&TEMPLATE, &PLANS), context, rule)
+    }
+
+    fn template(&self) -> Option<&Template> {
+        Some(&TEMPLATE)
+    }
+}
 
 /// What a row asks of a connection.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Requirement {
+pub(crate) enum Requirement {
     Allowed,
     Required,
     Forbidden,
@@ -67,19 +101,23 @@ impl Requirement {
     }
 }
 
-struct Row<'a> {
-    name: String,
-    from: &'a Selector,
-    to: Option<&'a Selector>,
-    access: Requirement,
-    access_type: AccessType,
-    exit: Requirement,
+/// One row of `connections`, as read.
+pub(crate) struct Row {
+    pub(crate) name: String,
+    pub(crate) from: Selector,
+    pub(crate) to: Option<Selector>,
+    pub(crate) access: Requirement,
+    pub(crate) access_type: AccessType,
+    pub(crate) exit: Requirement,
 }
 
-fn rows<'a>(
-    parameters: &Parameters<'a>,
-    access: &AccessDeclaration<'_>,
-) -> Result<Vec<Row<'a>>, Unavailable> {
+/// The rows of `connections`, each refused as the capability refused it
+/// and, given `access`, checked against it row by row in the capability's
+/// order (a provider reads rows its declaration check let through).
+pub(crate) fn rows(
+    parameters: &Parameters<'_>,
+    access: Option<&AccessDeclaration<'_>>,
+) -> Result<Vec<Row>, Unavailable> {
     let table = parameters
         .table("connections")?
         .ok_or_else(|| invalid("parameter `connections` is required"))?;
@@ -93,28 +131,31 @@ fn rows<'a>(
             };
             let from = row
                 .selector("from")?
-                .ok_or_else(|| invalid(format!("{name} has no `from`")))?;
-            let to = row.selector("to")?;
-            let requirement = Requirement::parse("access", row.text("access")?)?;
+                .ok_or_else(|| invalid(format!("{name} has no `from`")))?
+                .clone();
+            let to = row.selector("to")?.cloned();
+            let required = Requirement::parse("access", row.text("access")?)?;
             let exit = Requirement::parse("exit", row.text("exit")?)?;
             let access_type = AccessType::parse(row.text("access_type")?)?;
-            access.admits(access_type)?;
-            if requirement != Requirement::Allowed && to.is_none() {
-                return Err(invalid(format!(
-                    "{name} requires or forbids access without `to`"
-                )));
-            }
-            if exit != Requirement::Allowed && !access.sided {
-                return Err(invalid(format!(
-                    "{name} judges an exit to the outside, which only \
-                     `axioval:derived.adjacent-space` records"
-                )));
+            if let Some(access) = access {
+                access.admits(access_type)?;
+                if required != Requirement::Allowed && to.is_none() {
+                    return Err(invalid(format!(
+                        "{name} requires or forbids access without `to`"
+                    )));
+                }
+                if exit != Requirement::Allowed && !access.sided {
+                    return Err(invalid(format!(
+                        "{name} judges an exit to the outside, which only \
+                         `axioval:derived.adjacent-space` records"
+                    )));
+                }
             }
             Ok(Row {
                 name,
                 from,
                 to,
-                access: requirement,
+                access: required,
                 access_type,
                 exit,
             })
@@ -122,205 +163,16 @@ fn rows<'a>(
         .collect()
 }
 
-impl RuleCapability for SpaceConnection {
-    fn id(&self) -> &'static str {
-        "axioval:capability.space-connection"
-    }
-
-    fn parameters(&self) -> Vec<ParameterDescriptor> {
-        vec![
-            ParameterDescriptor::required("connections", ParameterType::Table(COLUMNS)),
-            ParameterDescriptor::required("access_path", ParameterType::StringList),
-            ParameterDescriptor::optional("door_selector", ParameterType::Selector),
-            ParameterDescriptor::optional("opening_selector", ParameterType::Selector),
-            ParameterDescriptor::optional("space_selector", ParameterType::Selector),
-        ]
-    }
-
-    fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
-        let parameters = Parameters(rule);
-        let declared = AccessDeclaration::parse(&parameters).and_then(|access| {
-            let access = access.ok_or_else(|| invalid("parameter `access_path` is required"))?;
-            let rows = rows(&parameters, &access)?;
-            Ok((access, rows))
-        });
-        let (access, rows) = match declared {
-            Ok(declared) => declared,
-            Err((reason, message)) => {
-                return CapabilityEvaluation::not_evaluated(
-                    reason,
-                    format!("space-connection: {message}"),
-                );
-            }
-        };
-        let index = access.index(context);
-        let (spaces, mut evaluation) = select_objects(context, &rule.selector);
-        let mut judge = Judge {
-            context,
-            rule,
-            index: &index,
-            targets: BTreeMap::new(),
-        };
-        for space in spaces {
-            let matched = match_rows(&rows, RowSelection::All, |row| {
-                match selector_matches(context, row.from, space, &mut Vec::new()) {
-                    Selection::Match => RowTest::Match(0),
-                    Selection::NoMatch => RowTest::NoMatch,
-                    Selection::NotEvaluated(..) => RowTest::Undecided,
-                }
-            });
-            let Matched::Rows(applicable) = matched else {
-                evaluation.push_object_not_evaluated(
-                    space.id.clone(),
-                    NotEvaluatedReason::IncompleteEvidence,
-                    "space-connection: whether a row's `from` picks this space is undecided",
-                );
-                continue;
-            };
-            for (index, row) in applicable {
-                for outcome in [judge.access(space, index, row), judge.exit(space, row)] {
-                    match outcome {
-                        Ok(Some(found)) => evaluation.push_finding(found),
-                        Ok(None) => {}
-                        Err((reason, message)) => evaluation.push_object_not_evaluated(
-                            space.id.clone(),
-                            reason,
-                            format!("space-connection {}: {message}", row.name),
-                        ),
-                    }
-                }
-            }
-        }
-        evaluation
-    }
-}
-
-struct Judge<'r, 'c> {
-    context: &'r RuleContext<'c>,
-    rule: &'r CompiledRule,
-    index: &'r AccessIndex,
-    /// Whether a row's `to` picks a space, by row and space.
-    targets: BTreeMap<(usize, ObjectId), Selection>,
-}
-
-impl Judge<'_, '_> {
-    fn target(&mut self, index: usize, to: &Selector, space: &ObjectId) -> Selection {
-        let context = self.context;
-        self.targets
-            .entry((index, space.clone()))
-            .or_insert_with(|| match context.project.object(space) {
-                Some(object) => selector_matches(context, to, object, &mut Vec::new()),
-                None => Selection::NotEvaluated(
-                    NotEvaluatedReason::InvalidEvidence,
-                    format!("{space} is not in the project"),
-                ),
-            })
-            .clone()
-    }
-
-    /// Judges the row's `access` requirement for `space`.
-    fn access(
-        &mut self,
-        space: &Object,
-        index: usize,
-        row: &Row<'_>,
-    ) -> Result<Option<Finding>, Unavailable> {
-        let (Some(to), true) = (row.to, row.access != Requirement::Allowed) else {
-            return Ok(None);
-        };
-        let partners = self.index.partners(&space.id, row.access_type);
-        let mut sure: Vec<(ObjectId, ObjectId, Vec<Evidence>)> = Vec::new();
-        let mut maybe: Vec<String> = partners.unknown.clone();
-        for (other, link) in &partners.linked {
-            match (self.target(index, to, other), link) {
-                (Selection::NoMatch, _) => {}
-                (Selection::Match, Link::Sure { via, evidence }) => {
-                    sure.push((other.clone(), via.clone(), evidence.clone()));
-                }
-                (Selection::NotEvaluated(_, why), Link::Sure { via, .. }) => maybe.push(format!(
-                    "{other}, reached through {via}, may be a space `to` picks: {why}"
-                )),
-                (_, Link::Maybe(why)) => maybe.push(format!("{other} may be linked: {why}")),
-            }
-        }
-        let kind = row.access_type.describe();
-        let via = &self.index.relationship;
-        match row.access {
-            Requirement::Required if !sure.is_empty() => Ok(None),
-            Requirement::Forbidden if sure.is_empty() && maybe.is_empty() => Ok(None),
-            Requirement::Required if maybe.is_empty() => {
-                let (elements, evidence) = self.index.cited(&space.id);
-                Ok(Some(finding(
-                    self.rule,
-                    &space.id,
-                    format!(
-                        "has no direct access through a {kind} to a space {} requires \
-                         (via {via})",
-                        row.name
-                    ),
-                    evidence,
-                    elements,
-                )))
-            }
-            Requirement::Forbidden if !sure.is_empty() => {
-                let links = sure
-                    .iter()
-                    .map(|(other, element, _)| format!("{other} through {element}"))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                let mut evidence = Vec::new();
-                let mut related = Vec::new();
-                for (other, element, cited) in sure {
-                    evidence.extend(cited);
-                    related.push(other);
-                    related.push(element);
-                }
-                Ok(Some(finding(
-                    self.rule,
-                    &space.id,
-                    format!(
-                        "has direct access to {links}, which {} forbids for a {kind}",
-                        row.name
-                    ),
-                    evidence,
-                    related,
-                )))
-            }
-            _ => Err(unknown(maybe.join("; "))),
-        }
-    }
-
-    /// Judges the row's `exit` requirement for `space`.
-    fn exit(&self, space: &Object, row: &Row<'_>) -> Result<Option<Finding>, Unavailable> {
-        let kind = row.access_type.describe();
-        match (row.exit, self.index.exit(&space.id, row.access_type)) {
-            (Requirement::Allowed, _)
-            | (Requirement::Required, Exit::Sure { .. })
-            | (Requirement::Forbidden, Exit::None) => Ok(None),
-            (_, Exit::Unknown(why)) => Err(unknown(why)),
-            (Requirement::Required, Exit::None) => {
-                let (elements, evidence) = self.index.cited(&space.id);
-                Ok(Some(finding(
-                    self.rule,
-                    &space.id,
-                    format!(
-                        "has no {kind} directly to the outside, which {} requires",
-                        row.name
-                    ),
-                    evidence,
-                    elements,
-                )))
-            }
-            (Requirement::Forbidden, Exit::Sure { via, evidence }) => Ok(Some(finding(
-                self.rule,
-                &space.id,
-                format!(
-                    "opens directly to the outside through {via}, which {} forbids for a {kind}",
-                    row.name
-                ),
-                evidence,
-                vec![via],
-            ))),
-        }
-    }
+/// The declaration the capability refused, in its order and words: the
+/// access path and selectors, then the rows. `stated` holds the rule's
+/// parameters the list names, by the list's keys (the parameters' own
+/// names).
+pub(crate) fn check_arguments(
+    stated: &BTreeMap<String, ParameterValue>,
+) -> Result<(), Unavailable> {
+    let rule = crate::light_area::synthesised(stated.clone());
+    let parameters = Parameters(&rule);
+    let access = AccessDeclaration::parse(&parameters)?
+        .ok_or_else(|| invalid("parameter `access_path` is required"))?;
+    rows(&parameters, Some(&access)).map(|_| ())
 }

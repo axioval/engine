@@ -941,6 +941,7 @@ sites that cite a value exact:
 | `door_clear_width`, `door_clear_height`, `sill_height`, `threshold_step` | every extent, leaf and stated value read is exact | rounding of the differences, widened outward |
 | `leaf_count`, `leaf_width`, `swings_into`, `hinged_leaves` | the leaves (stated, exact by contract) and every probe are exact | a total width summed outward |
 | `swing_spaces` (members) | the leaves and every containment probe are exact (both exact by contract) | nothing |
+| `space_connections` (members) | the relationship evidence of every link and element read is exact (refused otherwise, which leaves the link undecided) | nothing |
 | `profile_dimension`, `profile_slope`, `section_area`, `section_modulus` | every dimension the formula reads is stated | rounding, π included; an unset radius widens the value and makes it inexact |
 | `flight_*`, `landing_*`, `stair_rise`, `end_width`, `walking_line_turns` | the flight's, run's or landing's evidence is exact | rounding of derived positions |
 | `steps`, `runs`, `handrails` (members) | the flight's, runs' and landings' evidence is (handrails never are) | rounding |
@@ -1108,6 +1109,7 @@ and declare their parameters and typed fields:
 | `axes_within` (`of`, `reach`) | the objects of the kinds named within reach of the footprint in plan | `angle`, `centre_angle` |
 | `parallel_pairs` (`members`, `member_path`, `angle_tolerance`, `reach`) | the parallel pairs of members the object reaches, as `wall-spacing` pairs them | `distance` |
 | `swing_spaces` (`path`, `kinds`) | the spaces a door opens onto, probed as `door-swing` probes them | `into`, `away` |
+| `space_connections` (`connections`, `access_path`, `door_selector`, `opening_selector`, `space_selector`) | each requirement of each row of `connections` whose `from` picks the space, its access then its exit, as `space-connection` reads them | `row`, `access`, `required`, `kind`, `via`, `links`, `linked`, `related` |
 | `opening_placements` (`host_path`, `hosts`, `length_axis`, `height_axis`, `zone`, `minimum`) | an opening's placement in each host its path reaches, as `opening-zone` places it | `inside`, `end_distance`, `edge_distance`, `bottom_distance`, `top_distance` |
 | `clearances` (`of`, `side`, `obstacles`) | the headroom above a flight or ramp, or the clearance below it over the floors of the spaces `obstacles` names: one item | `clearance` (`null` where nothing governs it), `governing`, `noun` |
 | `landings` (`of`, `walking_line_offset`, `landing`) | the landing at each end of a flight, or at both ends of each of a ramp's runs | `label`, `noun`, `present`, `depth`, `width`, `carrier`, `carriers`, `walking`, `outermost`, `scale` |

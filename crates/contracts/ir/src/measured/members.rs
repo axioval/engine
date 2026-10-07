@@ -2026,6 +2026,173 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
     walking::STAIRS,
     MemberDescriptor {
         list: MeasuredDescriptor {
+            name: "space_connections",
+            parameters: &[
+                MeasuredParameter {
+                    key: "connections",
+                    kind: MeasuredParameterKind::Table,
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "Rows of a `from` selector (the spaces a row applies to), an \
+                         optional `to` selector, `access` and `exit` (`allowed`, `required` \
+                         or `forbidden`), an `access_type` (`any`, `doors` or `openings`) \
+                         and an optional `label`, as `space-connection` reads them.",
+                        "Zeilen aus einem Selektor `from` (die Räume, für die eine Zeile \
+                         gilt), einem optionalen Selektor `to`, `access` und `exit` \
+                         (`allowed`, `required` oder `forbidden`), einem `access_type` \
+                         (`any`, `doors` oder `openings`) und einem optionalen `label`, wie \
+                         `space-connection` sie liest.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "access_path",
+                    kind: MeasuredParameterKind::Path,
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The relationship steps from each door or opening to the spaces it \
+                         connects.",
+                        "Die Beziehungsschritte von jeder Tür oder Öffnung zu den Räumen, \
+                         die sie verbindet.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "door_selector",
+                    kind: MeasuredParameterKind::Objects,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The doors: source kinds, `,`-separated, or `@` a selector parameter \
+                         of the rule, whose undecided objects may be doors.",
+                        "Die Türen: Quellarten, durch `,` getrennt, oder mit `@` ein \
+                         Selektorparameter der Regel, dessen unentschiedene Objekte Türen \
+                         sein können.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "opening_selector",
+                    kind: MeasuredParameterKind::Objects,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The openings, as `door_selector` names the doors.",
+                        "Die Öffnungen, wie `door_selector` die Türen nennt.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "space_selector",
+                    kind: MeasuredParameterKind::Objects,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The spaces a door or opening may connect; every object without it.",
+                        "Die Räume, die eine Tür oder Öffnung verbinden kann; ohne Angabe \
+                         jedes Objekt.",
+                    ),
+                },
+            ],
+            dimension: None,
+            services: &["relationship-selection"],
+            exactness: MeasuredExactness::Measured,
+            subject: MeasuredSubject::Object,
+            not_evaluated: &["whether a row's `from` picks the space is undecided"],
+            label: &en_de("Space connections", "Raumverbindungen"),
+            help: &en_de(
+                "Each requirement of each row of `connections` whose `from` picks the \
+                 space, its `access` and then its `exit`: whether the space is surely \
+                 linked as the row asks, surely not, or undecided.",
+                "Jede Anforderung jeder Zeile von `connections`, deren `from` den Raum \
+                 trifft, erst ihr `access`, dann ihr `exit`: ob der Raum sicher wie \
+                 verlangt verbunden ist, sicher nicht, oder unentschieden.",
+            ),
+        },
+        fields: &[
+            field(
+                "row",
+                MemberFieldKind::Text,
+                &en_de("Row", "Zeile"),
+                &en_de(
+                    "The row, as messages name it: `row 0 (label)`.",
+                    "Die Zeile, wie Meldungen sie nennen: `row 0 (label)`.",
+                ),
+            ),
+            field(
+                "access",
+                TRUTH,
+                &en_de("Access", "Zugang"),
+                &en_de(
+                    "Whether the item is the row's `access` requirement; its `exit` \
+                     otherwise.",
+                    "Ob das Element die Anforderung `access` der Zeile ist; sonst ihr \
+                     `exit`.",
+                ),
+            ),
+            field(
+                "required",
+                TRUTH,
+                &en_de("Required", "Verlangt"),
+                &en_de(
+                    "Whether the row requires the link; it forbids it otherwise.",
+                    "Ob die Zeile die Verbindung verlangt; sonst verbietet sie sie.",
+                ),
+            ),
+            field(
+                "kind",
+                MemberFieldKind::Text,
+                &en_de("Element type", "Elementart"),
+                &en_de(
+                    "The elements the row counts: `door`, `opening` or `door or opening`.",
+                    "Die Elemente, die die Zeile zählt: `door`, `opening` oder \
+                     `door or opening`.",
+                ),
+            ),
+            field(
+                "via",
+                MemberFieldKind::Text,
+                &en_de("Relationship", "Beziehung"),
+                &en_de(
+                    "The relationship the access path follows.",
+                    "Die Beziehung, der der Zugangspfad folgt.",
+                ),
+            ),
+            field(
+                "links",
+                MemberFieldKind::Text,
+                &en_de("Links", "Verbindungen"),
+                &en_de(
+                    "The sure links found: each space and the element it is reached \
+                     through, or the element opening to the outside; empty where none.",
+                    "Die sicheren Verbindungen: je Raum und das Element, durch das er \
+                     erreicht wird, oder das Element ins Freie; leer, wo keine.",
+                ),
+            ),
+            field(
+                "linked",
+                TRUTH,
+                &en_de("Linked", "Verbunden"),
+                &en_de(
+                    "Whether the space is surely linked as the row asks; undecided where an \
+                     element or a space the row may pick could change it.",
+                    "Ob der Raum sicher wie verlangt verbunden ist; unentschieden, wo ein \
+                     Element oder ein Raum, den die Zeile treffen kann, es ändern könnte.",
+                ),
+            ),
+            field(
+                "related",
+                MemberFieldKind::Objects,
+                &en_de("Related", "Bezogen"),
+                &en_de(
+                    "The linked spaces and elements where linked; otherwise the elements \
+                     reaching the space.",
+                    "Die verbundenen Räume und Elemente, wo verbunden; sonst die Elemente, \
+                     die den Raum erreichen.",
+                ),
+            ),
+        ],
+    },
+    MemberDescriptor {
+        list: MeasuredDescriptor {
             name: "steps",
             parameters: &[WALKING_LINE_OFFSET],
             dimension: None,

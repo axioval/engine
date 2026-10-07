@@ -9872,8 +9872,8 @@
                           "kind": "skip"
                         }
                       },
-                      "fail": "{fewer_words}",
-                      "undecided": "{between_words}",
+                      "fail": "holds {held:count} inner elements, fewer than the minimum {minimum_count:count}",
+                      "undecided": "holds between {held:count} and {may:count} inner elements, so its count cannot be judged",
                       "related": "related"
                     },
                     {
@@ -9914,8 +9914,8 @@
                           "kind": "skip"
                         }
                       },
-                      "fail": "{more_words}",
-                      "undecided": "{between_words}",
+                      "fail": "holds {held:count} inner elements, more than the maximum {maximum_count:count}",
+                      "undecided": "holds between {held:count} and {may:count} inner elements, so its count cannot be judged",
                       "related": "related"
                     },
                     {
@@ -79641,80 +79641,54 @@
           ]
         },
         {
-          "name": "fewer_words",
+          "name": "held",
           "kind": {
-            "type": "text"
+            "type": "number"
           },
           "label": [
             {
               "language": "en",
-              "text": "Fewer"
+              "text": "Held"
             },
             {
               "language": "de",
-              "text": "Weniger"
+              "text": "Gehalten"
             }
           ],
           "help": [
             {
               "language": "en",
-              "text": "The finding of fewer than the minimum, worded."
+              "text": "The inner elements it surely holds."
             },
             {
               "language": "de",
-              "text": "Der Befund von weniger als dem Minimum, in Worten."
+              "text": "Die inneren Elemente, die es sicher hält."
             }
           ]
         },
         {
-          "name": "more_words",
+          "name": "may",
           "kind": {
-            "type": "text"
+            "type": "number"
           },
           "label": [
             {
               "language": "en",
-              "text": "More"
+              "text": "May hold"
             },
             {
               "language": "de",
-              "text": "Mehr"
+              "text": "Kann halten"
             }
           ],
           "help": [
             {
               "language": "en",
-              "text": "The finding of more than the maximum, worded."
+              "text": "Every inner element it may hold."
             },
             {
               "language": "de",
-              "text": "Der Befund von mehr als dem Maximum, in Worten."
-            }
-          ]
-        },
-        {
-          "name": "between_words",
-          "kind": {
-            "type": "text"
-          },
-          "label": [
-            {
-              "language": "en",
-              "text": "Between"
-            },
-            {
-              "language": "de",
-              "text": "Zwischen"
-            }
-          ],
-          "help": [
-            {
-              "language": "en",
-              "text": "Why the count cannot be judged, worded."
-            },
-            {
-              "language": "de",
-              "text": "Warum die Zählung nicht beurteilt werden kann, in Worten."
+              "text": "Jedes innere Element, das es halten kann."
             }
           ]
         },

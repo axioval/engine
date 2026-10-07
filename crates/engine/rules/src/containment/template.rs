@@ -27,6 +27,13 @@ const COUNTS: &str = "containment_counts;counterparts=@counterparts;\
                       minimum_count=@minimum_count;maximum_count=@maximum_count;\
                       report_orphans=@report_orphans;selection=@selection";
 
+const FEWER: &str = "holds {held:count} inner elements, fewer than the minimum \
+                     {minimum_count:count}";
+const MORE: &str = "holds {held:count} inner elements, more than the maximum \
+                    {maximum_count:count}";
+const BETWEEN: &str = "holds between {held:count} and {may:count} inner elements, so its count \
+                       cannot be judged";
+
 fn bound(name: &'static str, operand: Operand) -> Vec<Requirement> {
     vec![Requirement {
         name,
@@ -134,7 +141,7 @@ fn outer() -> Vec<ItemCheck> {
                     Vec::new(),
                 ),
             ),
-            ("{fewer_words}", "{between_words}", Some("related")),
+            (FEWER, BETWEEN, Some("related")),
         ),
         test(
             "count_checked",
@@ -146,7 +153,7 @@ fn outer() -> Vec<ItemCheck> {
                     bound("maximum", Operand::Parameter("maximum_count")),
                 ),
             ),
-            ("{more_words}", "{between_words}", Some("related")),
+            (MORE, BETWEEN, Some("related")),
         ),
         open(),
     ]

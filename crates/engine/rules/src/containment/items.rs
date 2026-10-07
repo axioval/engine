@@ -330,38 +330,28 @@ fn counts(
     if declared.minimum_count.is_some() || declared.maximum_count.is_some() {
         for (outer, held) in &assessed.held {
             let (sure, possible) = held.counts();
+            // Holding nothing, surely, it meets any maximum: only a minimum
+            // judges it.
+            if possible == 0 && declared.minimum_count.is_none() {
+                continue;
+            }
             #[allow(clippy::cast_precision_loss)]
-            let count = interval(
-                (sure as f64, possible as f64),
-                None,
-                true,
-                format!("{COUNTS}:{outer}"),
-            );
+            let number = |(low, high): (usize, usize)| {
+                MemberValue::Measured(interval(
+                    (low as f64, high as f64),
+                    None,
+                    true,
+                    format!("{COUNTS}:{outer}"),
+                ))
+            };
             members.push(member(
                 true,
                 vec![
                     ("count_checked", truth(true)),
                     ("object", objects(outer)),
-                    ("count", MemberValue::Measured(count)),
-                    (
-                        "fewer_words",
-                        text(declared.minimum_count.map_or_else(String::new, |minimum| {
-                            format!("holds {sure} inner elements, fewer than the minimum {minimum}")
-                        })),
-                    ),
-                    (
-                        "more_words",
-                        text(declared.maximum_count.map_or_else(String::new, |maximum| {
-                            format!("holds {sure} inner elements, more than the maximum {maximum}")
-                        })),
-                    ),
-                    (
-                        "between_words",
-                        text(format!(
-                            "holds between {sure} and {possible} inner elements, so its count \
-                             cannot be judged"
-                        )),
-                    ),
+                    ("count", number((sure, possible))),
+                    ("held", number((sure, sure))),
+                    ("may", number((possible, possible))),
                     (
                         "related",
                         MemberValue::Objects {

@@ -1461,7 +1461,7 @@ band: `{below_words}`, `{above_words}`, a straddle `{straddle_words}`,
 relating the outer element) and why something of it is not checked
 (`open`). The project's items: each outer element's count (`count`, from
 sure to possible, at least `minimum_count`, then at most `maximum_count`:
-`{fewer_words}`, `{more_words}`, open `{between_words}`, relating what it
+`holds {held:count} inner elements, fewer than the minimum …`, `… more than the maximum …`, open `holds between {held:count} and {may:count} …`, relating what it
 surely holds), where the rule bounds counts, and each object the
 selections and the broad phase leave open beyond the inner elements. The
 declaration is the capability's own (`arguments`,

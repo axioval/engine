@@ -1073,30 +1073,21 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
                 ),
             ),
             field(
-                "fewer_words",
-                MemberFieldKind::Text,
-                &en_de("Fewer", "Weniger"),
+                "held",
+                RATIO,
+                &en_de("Held", "Gehalten"),
                 &en_de(
-                    "The finding of fewer than the minimum, worded.",
-                    "Der Befund von weniger als dem Minimum, in Worten.",
+                    "The inner elements it surely holds.",
+                    "Die inneren Elemente, die es sicher hält.",
                 ),
             ),
             field(
-                "more_words",
-                MemberFieldKind::Text,
-                &en_de("More", "Mehr"),
+                "may",
+                RATIO,
+                &en_de("May hold", "Kann halten"),
                 &en_de(
-                    "The finding of more than the maximum, worded.",
-                    "Der Befund von mehr als dem Maximum, in Worten.",
-                ),
-            ),
-            field(
-                "between_words",
-                MemberFieldKind::Text,
-                &en_de("Between", "Zwischen"),
-                &en_de(
-                    "Why the count cannot be judged, worded.",
-                    "Warum die Zählung nicht beurteilt werden kann, in Worten.",
+                    "Every inner element it may hold.",
+                    "Jedes innere Element, das es halten kann.",
                 ),
             ),
             field(

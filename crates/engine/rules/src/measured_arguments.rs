@@ -43,6 +43,9 @@ pub(crate) struct Arguments {
     /// as a value (`[0]`) and as a list (`[1]`): the rule's parameters
     /// bound, the anchor left for each object.
     anchored: RefCell<[BTreeMap<String, Anchored>; 2]>,
+    /// Each member list naming a selection, bound for the rule and shared
+    /// by every object reading it ([`Arguments::planned_list`]).
+    lists: RefCell<BTreeMap<String, Option<Arc<MeasuredCall>>>>,
 }
 
 /// What a template's bound plan keeps of each measured name its values and
@@ -419,6 +422,21 @@ impl Arguments {
     ) -> Option<Arc<MeasuredCall>> {
         match self.planned.as_ref()?.kept(context, parameters, name, true) {
             Kept::Anchored(Ok(call), _) => Some(call),
+            // Its selections bound once for the rule; one that does not bind
+            // is read as before, to be refused there.
+            Kept::Parsed(call) => {
+                if let Some(bound) = self.lists.borrow().get(name) {
+                    return bound.clone();
+                }
+                let mut bound = (*call).clone();
+                let bound = bind_references(context, parameters, Some(self), None, &mut bound)
+                    .ok()
+                    .map(|()| Arc::new(bound));
+                self.lists
+                    .borrow_mut()
+                    .insert(name.to_owned(), bound.clone());
+                bound
+            }
             _ => None,
         }
     }

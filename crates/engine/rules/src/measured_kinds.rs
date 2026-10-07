@@ -435,9 +435,29 @@ where
     M: std::hash::Hash + Eq + Send + 'static,
     T: Send + Sync + 'static,
 {
-    axioval_engine::MeasuredMemo::of_rule(
-        context.services,
-        (marker, axioval_engine::ArgumentsKey::of(call)),
-        || std::sync::Arc::new(read()),
-    )
+    // One slot per provider for the rule, holding the latest call's
+    // arguments: each object's call is compared to them, never copied.
+    type Slot<T> = std::sync::Arc<
+        std::sync::Mutex<
+            Option<(
+                std::collections::BTreeMap<&'static str, MeasuredArgument>,
+                std::sync::Arc<T>,
+            )>,
+        >,
+    >;
+    let slot: Slot<T> = axioval_engine::MeasuredMemo::of_rule(context.services, marker, || {
+        std::sync::Arc::new(std::sync::Mutex::new(None))
+    });
+    let mut held = slot
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some((arguments, value)) = held.as_ref()
+        && *arguments == call.arguments
+    {
+        return value.clone();
+    }
+    *held = None;
+    let value = std::sync::Arc::new(read());
+    *held = Some((call.arguments.clone(), value.clone()));
+    value
 }

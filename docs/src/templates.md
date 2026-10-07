@@ -1971,6 +1971,37 @@ undecided is open once per row with `{open_words}`. A space whose rows
 cannot be told is one undecided item. A finding cites the measurements of
 the destination bounding the distance beyond the bound it misses.
 
+### `table-allocation`
+
+One form, judged by one check of the project (`Form::project`) over the
+measured list `allocations;rows=@rows;…;selection=@selection`: the
+capability's allocation (`table_allocation::allocate`), every object of the
+rule's selection assigned to one row and each row counted and summed per
+group (a source, the project, or an anchor). Each item names where its
+outcome goes (`Items::at`: the object, the anchor, or a source's or the
+project's stand-in). An object no row matches is a finding
+(`no row matches ({keys})`), one left open is open for its reason; a row's
+`found` objects (from those surely assigned to every one that may belong)
+must be exactly its `count`, graded, worded `… matched no object…` where it
+is `empty`; a row without a count that matched nothing is a finding of its
+own; its summed area must lie within `low` and `high`, graded, and where
+objects may still belong to it (`more`) only a sum above `high` is decided.
+The count and the area are separate items, each citing what it read. The
+declaration is the list's argument check, refused for the rule.
+
+### `group-composition`
+
+One form, judged by one check of the project over the measured list
+`compositions;requirements=@requirements;…;selection=@selection`: the
+capability's maximum matching (`group_composition::compose`), split into
+what every maximum matching agrees on. A part left short holds `filled`
+members of its `places` (at least `places` required), a surplus `found`
+members for its `places` (at most `places`), each a finding on the group
+relating the members; a group no row matches, a row no group matches (on
+the project's stand-in) and an object no group reaches are findings of
+their own; what the matching cannot decide is open on the group, the member
+or the project for its reason.
+
 ## Binding and running a rule
 
 The rules crate's `templates` module runs a template
@@ -2663,6 +2694,15 @@ and toilets whose spans, gaps and routes are exact, intervals or refused,
 some toilets' kind unreadable, under rows of every measure with random
 bounds; and by the `space-distance` rules of the case `routes`, recorded
 before the switch. It is never forked.
+
+`table-allocation` and `group-composition` are held to their
+`reference.rs` (`axioval_rules::reference::TableAllocation`,
+`…::GroupComposition`) on every fixture of `tests/table_allocation.rs` and
+`tests/group_composition.rs` under `Parity::contract()`; by generated
+storeys of spaces of random types and areas, some unreadable, under random
+rows, modes and groupings, and generated groups of members, some undecided,
+under random entries and switches; and by the rules of the case
+`programmes`, recorded before the switch. They are never forked.
 
 The reference is kept, rather than deleted, because generated inputs need
 a live implementation to compare with; recorded outcomes outlive it on the

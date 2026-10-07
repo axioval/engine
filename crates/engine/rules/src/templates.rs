@@ -228,6 +228,34 @@ impl std::ops::Deref for Plan<'_> {
 }
 
 impl Plan<'_> {
+    /// Whether one decision of the form alone reads the member list
+    /// `list`: then nothing reads its items again once they are judged.
+    fn reads_list_once(&self, list: &str) -> bool {
+        let reads = |decision: &Decision| match decision {
+            Decision::Items(items) => {
+                usize::from(items.list == list)
+                    + usize::from(
+                        items
+                            .passing
+                            .as_ref()
+                            .and_then(|passing| passing.groups.as_ref())
+                            .is_some_and(|groups| groups.list == list),
+                    )
+            }
+            Decision::Joined(joined) => usize::from(joined.list == list),
+            _ => 0,
+        };
+        reads(&self.form.decision)
+            + self
+                .form
+                .checks
+                .iter()
+                .chain(&self.form.project)
+                .map(|check| reads(&check.decision))
+                .sum::<usize>()
+            == 1
+    }
+
     /// Each value step with its expression, the rule's parameters bound in.
     fn values(&self) -> impl Iterator<Item = (&TemplateValue, &Expression)> {
         self.form.values.iter().zip(&self.bound.expressions)

@@ -284,6 +284,18 @@ impl<'a> ObjectLeaves<'a> {
         listed
     }
 
+    /// The member list `list` for one reader alone: handed over where it
+    /// was read already, measured and not kept otherwise, so its members
+    /// can be dropped as they are judged.
+    pub(crate) fn members_once(&self, list: &str) -> Arc<Listed> {
+        let mut lists = self.lists.borrow_mut();
+        if let Some(index) = lists.iter().position(|(written, _)| &**written == list) {
+            return lists.swap_remove(index).1;
+        }
+        drop(lists);
+        Arc::new(self.measure_members(list))
+    }
+
     fn measure_members(&self, list: &str) -> Listed {
         // A list naming no anchor is read as the plan keeps it, uncopied.
         let shared = self

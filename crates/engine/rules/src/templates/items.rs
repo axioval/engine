@@ -614,7 +614,14 @@ pub(super) fn judge_items(
         unit: ItemUnit::Length,
     };
     let list = plan.written_list(items.list);
-    let listed = leaves.bound_members(&list);
+    // A list no other check reads, its items not combined afterwards: each
+    // item is dropped once judged, as a capability judged one at a time.
+    let release = items.combined.is_none() && plan.reads_list_once(items.list);
+    let mut listed = if release {
+        leaves.members_once(&list)
+    } else {
+        leaves.bound_members(&list)
+    };
     let (members, evidence) = match listed.as_ref() {
         Ok((members, evidence)) => (members, evidence),
         Err((reason, why)) => {
@@ -655,10 +662,20 @@ pub(super) fn judge_items(
             TogetherJudge::Any(any) => judge_any(&scope, any, &present, evidence, object),
         }];
     }
+    let taken = if release {
+        std::sync::Arc::get_mut(&mut listed)
+            .and_then(|listed| listed.as_mut().ok())
+            .map(|(members, _)| std::mem::take(members))
+    } else {
+        None
+    };
+    let Ok((members, evidence)) = listed.as_ref() else {
+        return Vec::new();
+    };
     let mut outcomes = Vec::new();
     // The key of each item's outcomes, for grouped passing.
     let mut keyed: Vec<(Option<f64>, bool)> = Vec::new();
-    let count = members.len();
+    let count = taken.as_ref().map_or(members.len(), Vec::len);
     let key = items
         .passing
         .as_ref()
@@ -666,7 +683,7 @@ pub(super) fn judge_items(
         .map(|groups| groups.key);
     // Where each item's outcomes lie, for combining them.
     let mut ranges: Vec<(usize, usize)> = Vec::with_capacity(count);
-    for (index, member) in members.iter().enumerate() {
+    let mut judge = |index: usize, member: &MeasuredMember, evidence: &[Evidence]| {
         let mut item = scope.with(Some(member));
         item.place = Some((index + 1, count));
         let before = outcomes.len();
@@ -707,6 +724,15 @@ pub(super) fn judge_items(
             .any(|outcome| !matches!(outcome, Outcome::Passed));
         keyed.push((key, failed));
         ranges.push((before, outcomes.len()));
+    };
+    if let Some(taken) = taken {
+        for (index, member) in taken.into_iter().enumerate() {
+            judge(index, &member, evidence);
+        }
+    } else {
+        for (index, member) in members.iter().enumerate() {
+            judge(index, member, evidence);
+        }
     }
     if let Some(combined) = &items.combined {
         return combine(&scope, combined, members, &ranges, outcomes);

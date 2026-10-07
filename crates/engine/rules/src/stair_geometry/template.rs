@@ -103,6 +103,7 @@ fn items(applies: Applies, list: &'static str) -> Items {
         passing: None,
         texts: Vec::new(),
         merged: false,
+        at: None,
     }
 }
 
@@ -118,6 +119,7 @@ fn check(items: Items) -> FormCheck {
         related: None,
         unless: None,
         quiet: false,
+        ungraded: false,
     }
 }
 
@@ -1304,6 +1306,7 @@ pub(crate) fn ramp(parameters: Vec<ParameterDescriptor>) -> Template {
             checks,
             once: Vec::new(),
             joined: None,
+            project: Vec::new(),
         }],
     }
 }
@@ -2090,6 +2093,7 @@ pub(crate) fn stair(parameters: Vec<ParameterDescriptor>) -> Template {
         checks,
         once: Vec::new(),
         joined: None,
+        project: Vec::new(),
     };
     Template {
         id: STAIR,

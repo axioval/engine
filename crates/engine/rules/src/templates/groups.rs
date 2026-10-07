@@ -95,7 +95,7 @@ pub(super) fn run(
                 evaluation.push_finding(finding(rule, &object.id, message, evidence, vec![]));
                 continue;
             }
-            Some(Outcome::Passed) => continue,
+            Some(Outcome::Passed | Outcome::Placed(..)) => continue,
         }
         let stated = read.stated.get(value).cloned().flatten();
         if undefined(stated.as_ref()) {
@@ -380,7 +380,7 @@ pub(super) fn consistent(
                 evaluation.push_finding(finding(rule, &object.id, message, evidence, vec![]));
                 continue;
             }
-            Some(Outcome::Passed) => continue,
+            Some(Outcome::Passed | Outcome::Placed(..)) => continue,
         }
         let (scope, mut evidence) = match scope_key(context, traversal.as_ref(), across, object) {
             Ok(scope) => scope,

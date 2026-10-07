@@ -218,6 +218,7 @@ fn checks() -> Vec<FormCheck> {
             }),
             unless: None,
             quiet: false,
+            ungraded: false,
         });
         checks.push(FormCheck {
             derived: Vec::new(),
@@ -244,6 +245,7 @@ fn checks() -> Vec<FormCheck> {
             }),
             unless: None,
             quiet: false,
+            ungraded: false,
         });
     }
     checks
@@ -299,6 +301,7 @@ pub(crate) fn template() -> Template {
             checks: checks(),
             once: Vec::new(),
             joined: None,
+            project: Vec::new(),
         }],
     }
 }

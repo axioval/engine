@@ -64,6 +64,11 @@ pub struct Items {
     /// once): one finding per distinct defect, not one per item.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub merged: bool,
+    /// The objects field naming the object each item's outcomes are on (its
+    /// first object), where not the object checked: a storey's region of
+    /// floor judged in a check of the project.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub at: Option<&'static str>,
 }
 
 /// A named message part of [`Items`].

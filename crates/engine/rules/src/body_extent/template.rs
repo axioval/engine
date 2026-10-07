@@ -113,6 +113,7 @@ fn stated_form() -> Form {
         checks: Vec::new(),
         once: Vec::new(),
         joined: None,
+        project: Vec::new(),
     }
 }
 
@@ -146,6 +147,7 @@ fn range_form() -> Form {
         checks: Vec::new(),
         once: Vec::new(),
         joined: None,
+        project: Vec::new(),
     }
 }
 

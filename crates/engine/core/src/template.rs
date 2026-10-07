@@ -437,6 +437,13 @@ pub enum Check {
     /// negative ``, or `` `<parameter>` is not a length `` for a quantity of
     /// another dimension (a wrong type refused as the reader words it).
     FiniteLength { parameter: &'static str },
+    /// `check`, only where the rule states `parameter` (of any kind): an
+    /// optional parameter's declaration judged as stated, a value of
+    /// another kind refused in `check`'s words.
+    IfStated {
+        parameter: &'static str,
+        check: &'static Check,
+    },
     /// Every string a string-list parameter lists is, as stated, one of
     /// `options` (`unknown` otherwise) and listed once (`repeated`
     /// otherwise), judged string by string in the list's order; `{value}`
@@ -509,6 +516,7 @@ pub enum Service {
     EnvelopeMembership,
     BoundaryCoverage,
     Guard,
+    Space,
 }
 
 impl Service {
@@ -539,6 +547,7 @@ impl Service {
                 .get::<crate::BoundaryCoverageServiceHandle>()
                 .is_some(),
             Self::Guard => services.get::<crate::GuardServiceHandle>().is_some(),
+            Self::Space => services.get::<crate::SpaceServiceHandle>().is_some(),
         }
     }
 }
@@ -676,6 +685,13 @@ pub struct Form {
     /// Values read once per rule, before any scope or object ([`Once`]).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub once: Vec<Once>,
+    /// Checks judged once for the rule after every selected object, of the
+    /// project: their values and lists measured of the project
+    /// ([`axioval_ir::measured::MeasuredSubject::Project`]), their outcomes
+    /// on the objects their items name ([`Items::at`]) or the rule's own,
+    /// whatever the rule selects (the storeys' unallocated floor).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub project: Vec<FormCheck>,
     /// Where stated, everything the form and its checks leave open on an
     /// object is one not-evaluated outcome, their messages joined by this
     /// separator in order, for the first one's reason, after the object's
@@ -692,7 +708,9 @@ pub struct Form {
 /// It is read only where `applies` holds (its parameters).
 ///
 /// A refusal leaves the whole rule open, once, with `refused` (`{why}` the
-/// refusal): where the value is `required`, nothing else is judged; where
+/// refusal), or, where [`Template::refusals`] reports refusals for each
+/// selected object, each of them: where the value is `required`, nothing
+/// else is judged; where
 /// it is not, the rule is judged on, and what reads it is gated by
 /// [`Condition::Measured`]. A value read is available to every scope's and
 /// object's messages and conditions under its name, its citations too
@@ -789,6 +807,11 @@ pub struct FormCheck {
     /// outcome, since another check reading it reports it.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub quiet: bool,
+    /// Whether its finding states no deviation where the template grades
+    /// deviations ([`Template::grades`]): a check whose capability reported
+    /// it at a fixed severity beside others it graded.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub ungraded: bool,
 }
 
 /// A value derived from values already read, in plain binary arithmetic
@@ -2612,11 +2635,13 @@ mod tests {
                 grading: None,
                 unless: None,
                 quiet: false,
+                ungraded: false,
             }],
             unless: Vec::new(),
             grading: None,
             once: Vec::new(),
             joined: None,
+            project: Vec::new(),
         };
         let Expression::And { operands, .. } = form.requirement() else {
             panic!("an `and` of the checks and the form's decision");

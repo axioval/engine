@@ -326,6 +326,7 @@ fn edges() -> FormCheck {
             passing: None,
             texts: Vec::new(),
             merged: true,
+            at: None,
         })),
         fail: "",
         undecided: "",
@@ -342,6 +343,7 @@ fn edges() -> FormCheck {
         applies: None,
         unless: None,
         quiet: false,
+        ungraded: false,
     }
 }
 
@@ -409,6 +411,7 @@ pub(crate) fn template() -> Template {
                 refused: "{why}",
                 required: true,
             }],
+            project: Vec::new(),
         }],
     }
 }

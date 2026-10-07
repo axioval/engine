@@ -108,6 +108,7 @@ fn members_form() -> Form {
         checks: Vec::new(),
         once: Vec::new(),
         joined: None,
+        project: Vec::new(),
     }
 }
 
@@ -129,6 +130,7 @@ fn own_form() -> Form {
         checks: Vec::new(),
         once: Vec::new(),
         joined: None,
+        project: Vec::new(),
     }
 }
 

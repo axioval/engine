@@ -418,7 +418,8 @@ impl<'t> Bound<'t> {
                     Outcome::Finding { message, .. } => {
                         (NotEvaluatedReason::IncompleteEvidence, message)
                     }
-                    Outcome::Passed => continue,
+                    // Read values are never placed elsewhere.
+                    Outcome::Passed | Outcome::Placed(..) => continue,
                 };
                 if nested.errors_open_member {
                     return Err((reason, message));

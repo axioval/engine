@@ -138,6 +138,7 @@ fn share() -> FormCheck {
         applies: Some(stated(&["minimum_covered_share"])),
         unless: None,
         quiet: false,
+        ungraded: false,
     }
 }
 
@@ -166,6 +167,7 @@ fn uncovered() -> FormCheck {
         applies: Some(stated(&["maximum_uncovered_area"])),
         unless: None,
         quiet: false,
+        ungraded: false,
     }
 }
 
@@ -190,6 +192,7 @@ fn overlap() -> FormCheck {
         applies: Some(stated(&["maximum_overlap_area"])),
         unless: None,
         quiet: false,
+        ungraded: false,
     }
 }
 
@@ -254,6 +257,7 @@ pub(crate) fn template() -> Template {
             grading: None,
             joined: Some("; "),
             once: Vec::new(),
+            project: Vec::new(),
         }],
     }
 }

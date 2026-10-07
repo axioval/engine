@@ -102,6 +102,7 @@ fn form(when: &'static [&'static str], existence: bool) -> Form {
         checks: Vec::new(),
         once: Vec::new(),
         joined: None,
+        project: Vec::new(),
     }
 }
 

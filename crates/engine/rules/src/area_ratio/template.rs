@@ -308,6 +308,7 @@ fn form(light_areas: bool, members: bool) -> Form {
         checks: Vec::new(),
         once: Vec::new(),
         joined: None,
+        project: Vec::new(),
     }
 }
 

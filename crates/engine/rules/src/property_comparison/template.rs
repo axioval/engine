@@ -106,6 +106,7 @@ pub(crate) fn template() -> Template {
             checks: Vec::new(),
             once: Vec::new(),
             joined: None,
+            project: Vec::new(),
         }],
     }
 }

@@ -160,6 +160,7 @@ fn sides() -> FormCheck {
                 },
             ],
             merged: false,
+            at: None,
         })),
         fail: "",
         undecided: "",
@@ -168,6 +169,7 @@ fn sides() -> FormCheck {
         applies: None,
         unless: None,
         quiet: false,
+        ungraded: false,
     }
 }
 
@@ -269,6 +271,7 @@ pub(crate) fn template() -> Template {
             checks: vec![sides()],
             once: Vec::new(),
             joined: None,
+            project: Vec::new(),
         }],
     }
 }

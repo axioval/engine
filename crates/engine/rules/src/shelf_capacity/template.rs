@@ -192,8 +192,10 @@ fn form() -> Form {
             grading: None,
             unless: None,
             quiet: false,
+            ungraded: false,
         }],
         once: Vec::new(),
         joined: None,
+        project: Vec::new(),
     }
 }

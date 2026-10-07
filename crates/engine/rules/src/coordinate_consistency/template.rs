@@ -169,5 +169,6 @@ fn form() -> Form {
             required: true,
         }],
         joined: None,
+        project: Vec::new(),
     }
 }

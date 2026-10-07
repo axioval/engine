@@ -139,6 +139,7 @@ fn form(
         checks: Vec::new(),
         once: Vec::new(),
         joined: None,
+        project: Vec::new(),
     }
 }
 

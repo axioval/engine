@@ -182,6 +182,9 @@ struct Bound {
     grading: Vec<Vec<Expression>>,
     /// The expressions of the values read once per rule, bound likewise.
     once: Vec<Expression>,
+    /// Each of the form's checks of the project's value expressions, bound
+    /// likewise.
+    project: Vec<Vec<Expression>>,
 }
 
 impl std::ops::Deref for Plan<'_> {
@@ -746,6 +749,16 @@ fn check(check: &Check, rule: &CompiledRule, template: &Template) -> Result<(), 
             ))),
             Some(_) => Err(invalid(format!("`{parameter}` is not a length"))),
         },
+        Check::IfStated {
+            parameter,
+            check: inner,
+        } => {
+            if stated(rule, parameter) {
+                self::check(inner, rule, template)
+            } else {
+                Ok(())
+            }
+        }
         Check::When { flags, check: then } => {
             let mut on = false;
             for flag in *flags {
@@ -1317,6 +1330,7 @@ fn bind(template: &Template, rule: &CompiledRule) -> Result<Bound, Unavailable> 
         .collect();
     let grading = std::iter::once(&form.grading)
         .chain(form.checks.iter().map(|check| &check.grading))
+        .chain(form.project.iter().map(|check| &check.grading))
         .map(|grading| {
             grading
                 .iter()
@@ -1329,6 +1343,17 @@ fn bind(template: &Template, rule: &CompiledRule) -> Result<Bound, Unavailable> 
         .once
         .iter()
         .map(|once| bound(&once.value.expression, &constants))
+        .collect();
+    let project = form
+        .project
+        .iter()
+        .map(|check| {
+            check
+                .values
+                .iter()
+                .map(|step| bound(&step.expression, &constants))
+                .collect()
+        })
         .collect();
     Ok(Bound {
         form: index,
@@ -1343,6 +1368,7 @@ fn bind(template: &Template, rule: &CompiledRule) -> Result<Bound, Unavailable> 
         unless,
         grading,
         once,
+        project,
     })
 }
 
@@ -1822,6 +1848,18 @@ fn placeholder(plan: &Plan<'_>, read: &Read, key: &str) -> Option<String> {
             }
             _ => None,
         },
+        // A share a hundredfold: a value's lower end or a constant with a
+        // fixed number of decimals (`hundred3`), or a constant as Rust
+        // shows it (`hundred`).
+        _ if format.starts_with("hundred") => match read.values.get(name) {
+            Some(Value::Number { value, .. }) => formatted(format, (value.lower, value.upper)),
+            Some(_) => None,
+            None => plan
+                .constants
+                .get(name)
+                .and_then(Constant::number)
+                .and_then(|value| formatted(format, (value, value))),
+        },
         // A number with a fixed number of decimals (`fixed3`): a constant,
         // or a value known as one point; or a value's lower or upper end,
         // or a constant (`lower4`, `upper3`): what a value surely below a
@@ -1883,6 +1921,27 @@ fn square_metres(value: f64) -> String {
 /// A share as a percentage, rounded to two decimals: `87.29%`.
 fn percent(share: f64) -> String {
     format!("{}%", (share * 1e4).round() / 1e2)
+}
+
+/// A number shown by a numeric format: `fixedN` (a point, N decimals),
+/// `lowerN` or `upperN` (that end), `hundredN` (the lower end a
+/// hundredfold, N decimals) or `hundred` (a point a hundredfold, as Rust
+/// shows it); `None` for any other format, or `fixed` or `hundred` of an
+/// interval.
+pub(super) fn formatted(format: &str, (lower, upper): (f64, f64)) -> Option<String> {
+    if let Some(places) = format.strip_prefix("hundred") {
+        if places.is_empty() {
+            return (lower.to_bits() == upper.to_bits()).then(|| (lower * 100.0).to_string());
+        }
+        let places = places.parse::<usize>().ok().filter(|places| *places <= 9)?;
+        return Some(format!("{:.places$}", lower * 100.0));
+    }
+    let (end, places) = decimals(format)?;
+    match end {
+        "fixed" if lower.to_bits() != upper.to_bits() => None,
+        "lower" | "fixed" => Some(format!("{lower:.places$}")),
+        _ => Some(format!("{upper:.places$}")),
+    }
 }
 
 /// A format showing a number with a fixed number of decimals, `fixed3`,
@@ -2005,6 +2064,9 @@ enum Outcome {
         severity: Option<Severity>,
     },
     Open(NotEvaluatedReason, String),
+    /// An outcome on another object than the one judged: an item's, on the
+    /// object it names ([`axioval_engine::template::Items::at`]).
+    Placed(ObjectId, Box<Outcome>),
 }
 
 impl Outcome {
@@ -2261,7 +2323,7 @@ fn grade(
     let grading = if index == 0 {
         plan.form.grading.as_ref()
     } else {
-        plan.form.checks[index - 1].grading.as_ref()
+        checked_grading(plan, index)
     };
     let Some(grading) = grading else {
         return Ok(None);
@@ -2294,7 +2356,7 @@ fn word_undecided(
     let grading = if index == 0 {
         plan.form.grading.as_ref()
     } else {
-        plan.form.checks[index - 1].grading.as_ref()
+        checked_grading(plan, index)
     };
     let Some(grading) = grading else {
         return Ok(());
@@ -2384,10 +2446,9 @@ fn judge_checks_in(
     leaves: &mut ObjectLeaves<'_>,
 ) -> Vec<Outcome> {
     let mut outcomes = Vec::new();
-    // The form's own checks are graded; checks of an item are not.
-    let graded_checks = std::ptr::eq(checks, plan.form.checks.as_slice());
+    let offset = graded_from(plan, checks);
     for (position, (check, bound)) in checks.iter().zip(values).enumerate() {
-        let index = graded_checks.then_some(position + 1);
+        let index = offset.map(|offset| position + offset);
         if let Some(applies) = &check.applies
             && !each::applies_reading(plan, applies, read)
         {
@@ -2473,18 +2534,69 @@ fn judge_checks_in(
             }
             _ => None,
         };
-        outcomes.push(graded(
-            ranged_as(
-                plan,
-                &mut checked,
-                &judged,
-                related,
-                (check.fail, check.undecided),
-            ),
-            severity,
-        ));
+        let outcome = ranged_as(
+            plan,
+            &mut checked,
+            &judged,
+            related,
+            (check.fail, check.undecided),
+        );
+        let outcome = graded(outcome, severity);
+        outcomes.push(if check.ungraded {
+            ungraded(outcome)
+        } else {
+            outcome
+        });
     }
     outcomes
+}
+
+/// Where the gradings of `checks` begin among the form's (its own at 0):
+/// the form's own checks are graded, and its checks of the project after
+/// them; checks of an item are not.
+fn graded_from(plan: &Plan<'_>, checks: &[axioval_engine::template::FormCheck]) -> Option<usize> {
+    if std::ptr::eq(checks, plan.form.checks.as_slice()) {
+        Some(1)
+    } else if std::ptr::eq(checks, plan.form.project.as_slice()) {
+        Some(1 + plan.form.checks.len())
+    } else {
+        None
+    }
+}
+
+/// The grading of the form's check `index − 1`, its checks of the project
+/// numbered after them.
+fn checked_grading<'p>(
+    plan: &'p Plan<'_>,
+    index: usize,
+) -> Option<&'p axioval_engine::template::Grading> {
+    let checks = plan.form.checks.len();
+    if index <= checks {
+        plan.form.checks[index - 1].grading.as_ref()
+    } else {
+        plan.form.project[index - 1 - checks].grading.as_ref()
+    }
+}
+
+/// `outcome` stating no deviation.
+fn ungraded(outcome: Outcome) -> Outcome {
+    match outcome {
+        Outcome::Finding {
+            message,
+            evidence,
+            related,
+            severity,
+            ..
+        } => Outcome::Finding {
+            message,
+            evidence,
+            related,
+            deviation: None,
+            severity,
+        },
+        Outcome::Placed(placed, outcome) => Outcome::Placed(placed, Box::new(ungraded(*outcome))),
+        outcome => outcome,
+    }
 }
 
 /// The findings of a check's items graded by the check's grading (`index`
@@ -2498,10 +2610,12 @@ fn graded_items(
     leaves: &mut ObjectLeaves<'_>,
     read: &mut Read,
 ) -> Vec<Outcome> {
-    if !found
-        .iter()
-        .any(|outcome| matches!(outcome, Outcome::Finding { .. }))
-    {
+    let found_one = |outcome: &Outcome| match outcome {
+        Outcome::Finding { .. } => true,
+        Outcome::Placed(_, outcome) => matches!(**outcome, Outcome::Finding { .. }),
+        _ => false,
+    };
+    if !found.iter().any(found_one) {
         return found;
     }
     match grade(plan, index, object, leaves, read) {
@@ -2532,6 +2646,10 @@ fn graded(outcome: Outcome, severity: Option<Severity>) -> Outcome {
             deviation,
             severity: Some(severity),
         },
+        // An outcome placed on another object, graded alike.
+        (Outcome::Placed(placed, outcome), severity) => {
+            Outcome::Placed(placed, Box::new(graded(*outcome, severity)))
+        }
         (outcome, _) => outcome,
     }
 }
@@ -3166,7 +3284,95 @@ fn push(
         Outcome::Open(reason, message) => {
             evaluation.push_object_not_evaluated(object.id.clone(), reason, message);
         }
+        Outcome::Placed(placed, outcome) => push_on(evaluation, rule, &placed, *outcome),
     }
+}
+
+/// Pushes one outcome about the object `id` into `evaluation`.
+fn push_on(
+    evaluation: &mut CapabilityEvaluation,
+    rule: &CompiledRule,
+    id: &ObjectId,
+    outcome: Outcome,
+) {
+    match outcome {
+        Outcome::Passed => {}
+        Outcome::Finding {
+            message,
+            evidence,
+            related,
+            deviation,
+            severity,
+        } => {
+            let mut cited: Vec<Evidence> = Vec::with_capacity(evidence.len());
+            for evidence in evidence {
+                if !cited.contains(&evidence) {
+                    cited.push(evidence);
+                }
+            }
+            let mut found = finding(rule, id, message, cited, related);
+            if let Some(severity) = severity {
+                found.severity = severity;
+            }
+            evaluation.push_finding_deviating(found, deviation);
+        }
+        Outcome::Open(reason, message) => {
+            evaluation.push_object_not_evaluated(id.clone(), reason, message);
+        }
+        Outcome::Placed(placed, outcome) => push_on(evaluation, rule, &placed, *outcome),
+    }
+}
+
+/// Judges the form's checks of the project ([`Form::project`]) once for
+/// the rule: an outcome its items place on an object there, any other the
+/// rule's own.
+fn judge_project(
+    plan: &Plan<'_>,
+    (context, arguments): (&RuleContext<'_>, &Arguments),
+    rule: &CompiledRule,
+    evaluation: &mut CapabilityEvaluation,
+) {
+    if plan.form.project.is_empty() {
+        return;
+    }
+    let project = project_object();
+    let mut leaves = ObjectLeaves::new(context, &project, Some(&plan.bound.parameters))
+        .with_arguments(arguments);
+    let outcomes = judge_checks_in(
+        plan,
+        (&plan.form.project, &plan.bound.project),
+        &Read::default(),
+        context,
+        &project,
+        &mut leaves,
+    );
+    for outcome in outcomes {
+        match outcome {
+            Outcome::Passed => {}
+            Outcome::Placed(placed, outcome) => push_on(evaluation, rule, &placed, *outcome),
+            Outcome::Open(reason, message) => evaluation.push_not_evaluated(reason, message),
+            Outcome::Finding { message, .. } => evaluation.push_not_evaluated(
+                NotEvaluatedReason::InvalidEvidence,
+                format!(
+                    "{}: a finding of the project names no object: {message}",
+                    plan.template.name
+                ),
+            ),
+        }
+    }
+}
+
+/// The project as the object a value of the project is read of: no object
+/// of the model, so a value of the project reads none.
+fn project_object() -> Object {
+    Object::new(
+        ObjectId::new(
+            axioval_ir::SourceId::new("axioval", "project").expect("a valid source id"),
+            axioval_engine::template::SELECTION,
+        )
+        .expect("a valid object id"),
+        axioval_engine::template::SELECTION,
+    )
 }
 
 /// What a run read before judging scopes and objects: the values read once
@@ -3422,9 +3628,18 @@ pub(crate) fn run(
             selected,
         },
         Err((reason, message)) => {
-            let (_, mut evaluation) = selected.unwrap_or_default();
-            evaluation.push_not_evaluated(reason, message);
-            return evaluation;
+            return match template.refusals {
+                // Each selected object open, as the capability reported a
+                // refusal of what all its objects needed.
+                Refusals::Objects | Refusals::Prefixed { .. } | Refusals::ServicesPerObject => {
+                    refused(template, context, rule, reason, message)
+                }
+                _ => {
+                    let (_, mut evaluation) = selected.unwrap_or_default();
+                    evaluation.push_not_evaluated(reason, message);
+                    evaluation
+                }
+            };
         }
     };
     if let Some(mut evaluation) = run_apart(&plan, context, rule, &mut ran) {
@@ -3483,6 +3698,7 @@ pub(crate) fn run(
             );
         }
     }
+    judge_project(&plan, (context, &arguments), rule, &mut evaluation);
     if let Some(table) = table {
         evaluation.push_table(table);
     }

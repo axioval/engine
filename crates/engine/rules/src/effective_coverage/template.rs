@@ -335,6 +335,7 @@ fn coverage() -> FormCheck {
         applies: None,
         unless: None,
         quiet: false,
+        ungraded: false,
     }
 }
 
@@ -385,6 +386,7 @@ fn capacity() -> FormCheck {
         applies: Some(CAPACITY),
         unless: None,
         quiet: false,
+        ungraded: false,
     }
 }
 
@@ -416,6 +418,7 @@ fn missing() -> FormCheck {
             passing: None,
             texts: Vec::new(),
             merged: false,
+            at: None,
         })),
         fail: "",
         undecided: "",
@@ -424,6 +427,7 @@ fn missing() -> FormCheck {
         applies: Some(CAPACITY),
         unless: None,
         quiet: false,
+        ungraded: false,
     }
 }
 
@@ -464,6 +468,7 @@ pub(crate) fn template() -> Template {
             grading: None,
             once: Vec::new(),
             joined: None,
+            project: Vec::new(),
         }],
     }
 }

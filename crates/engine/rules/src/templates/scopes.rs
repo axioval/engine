@@ -353,7 +353,7 @@ fn judge(
         },
     };
     match outcome {
-        Outcome::Passed => {}
+        Outcome::Passed | Outcome::Placed(..) => {}
         Outcome::Finding {
             message,
             evidence,
@@ -478,6 +478,7 @@ mod tests {
                 checks: Vec::new(),
                 once: Vec::new(),
                 joined: None,
+                project: Vec::new(),
             }],
         }
     }

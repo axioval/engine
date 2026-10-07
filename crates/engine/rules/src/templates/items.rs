@@ -179,6 +179,13 @@ impl<'p, 't> Scope<'_, 'p, 't> {
             }
         }
         let unit = unit_of(format);
+        // A number with a fixed number of decimals, or a hundredfold.
+        if let Some(member) = self.member
+            && let Field::Number(span) = field(member, name)
+            && let Some(shown) = super::formatted(format, span)
+        {
+            return Some(shown);
+        }
         if let Some((_, span)) = self.chosen.iter().find(|(chosen, _)| *chosen == name) {
             return Some(show(*span, unit.unwrap_or(self.unit)));
         }
@@ -615,6 +622,17 @@ pub(super) fn judge_items(
         let before = outcomes.len();
         for check in &items.checks {
             check_item(&item, check, evidence, object, &mut outcomes);
+        }
+        // An item's outcomes on the object it names, where it names one.
+        if let Some(at) = items.at
+            && let Field::Objects([placed, ..]) = field(member, at)
+        {
+            for outcome in &mut outcomes[before..] {
+                if !matches!(outcome, Outcome::Passed) {
+                    let held = std::mem::replace(outcome, Outcome::Passed);
+                    *outcome = Outcome::Placed(placed.clone(), Box::new(held));
+                }
+            }
         }
         let key = key.and_then(|key| match field(member, key) {
             Field::Number((low, _)) => Some(low),

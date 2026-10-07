@@ -92,6 +92,7 @@ fn template() -> Template {
             checks: Vec::new(),
             once: Vec::new(),
             joined: None,
+            project: Vec::new(),
         }],
     }
 }
@@ -645,6 +646,7 @@ mod graded {
                 checks: Vec::new(),
                 once: Vec::new(),
                 joined: None,
+                project: Vec::new(),
             }],
         }
     }
@@ -898,9 +900,11 @@ mod near {
                     }),
                     unless: None,
                     quiet: false,
+                    ungraded: false,
                 }],
                 once: Vec::new(),
                 joined: None,
+                project: Vec::new(),
             }],
         }
     }
@@ -1157,9 +1161,11 @@ mod thresholds {
                     }),
                     unless: None,
                     quiet: false,
+                    ungraded: false,
                 }],
                 once: Vec::new(),
                 joined: None,
+                project: Vec::new(),
             }],
         }
     }
@@ -1483,11 +1489,13 @@ mod open_sums {
                     }),
                     unless: None,
                     quiet: false,
+                    ungraded: false,
                 }],
                 unless: Vec::new(),
                 grading: None,
                 once: Vec::new(),
                 joined: None,
+                project: Vec::new(),
             }],
         }
     }
@@ -1650,6 +1658,7 @@ mod joined {
             }),
             unless: None,
             quiet: false,
+            ungraded: false,
         }
     }
 
@@ -1713,6 +1722,7 @@ mod joined {
                 grading: None,
                 joined: Some("; "),
                 once: Vec::new(),
+                project: Vec::new(),
             }],
         }
     }
@@ -1882,5 +1892,156 @@ mod joined {
         );
         named.declaration.remove(0);
         assert_eq!(message(-20.0, named), "joined: the share is far too small");
+    }
+}
+
+mod stated {
+    use super::*;
+    use axioval_engine::template::{Check, FormCheck, Refusals};
+    use axioval_ir::PropertyValue;
+    use axioval_ir::contract::ScalarValue;
+
+    const ID: &str = "test:stated";
+
+    static LIMIT: Check = Check::Finite {
+        parameters: &["limit"],
+        above: None,
+        at_least: Some(0.0),
+        message: "stated declaration is not realisable",
+    };
+
+    /// A panel's share at most `limit`, graded but for the ungraded check,
+    /// the limit checked only where stated.
+    fn template(ungraded: bool) -> Template {
+        let share = TemplateValue {
+            name: "share",
+            expression: Expression::Property {
+                property_set: Some("Pset".into()),
+                property: "Share".into(),
+                of: None,
+                label: None,
+            },
+            expect: None,
+            absent: None,
+            mismatch: None,
+        };
+        let zero = TemplateValue {
+            name: "zero",
+            expression: Expression::Literal {
+                value: ScalarValue::Number { value: 0.0 },
+                label: None,
+            },
+            expect: None,
+            absent: None,
+            mismatch: None,
+        };
+        Template {
+            id: ID,
+            parameters: vec![ParameterDescriptor::optional(
+                "limit",
+                ParameterType::Number,
+            )],
+            grades: true,
+            name: "stated",
+            refusals: Refusals::Rule,
+            defaults: vec![axioval_engine::template::ParameterDefault {
+                parameter: "limit",
+                value: ScalarValue::Number { value: 0.5 },
+                from: &[],
+            }],
+            declaration: vec![Check::IfStated {
+                parameter: "limit",
+                check: &LIMIT,
+            }],
+            services: None,
+            texts: Vec::new(),
+            forms: vec![Form {
+                when: &[],
+                values: vec![zero],
+                decision: Decision::Within {
+                    value: "zero",
+                    minimum: None,
+                    maximum: None,
+                    rounding: Vec::new(),
+                },
+                fail: "",
+                undecided: "",
+                members: None,
+                table: None,
+                scope: None,
+                derived: Vec::new(),
+                related: None,
+                checks: vec![FormCheck {
+                    values: vec![share],
+                    derived: Vec::new(),
+                    decision: Decision::Within {
+                        value: "share",
+                        minimum: None,
+                        maximum: Some(vec![Term::plus(Operand::Parameter("limit"))]),
+                        rounding: Vec::new(),
+                    },
+                    fail: "{share:hundred1}% of the panel, at most {limit:hundred}%",
+                    undecided: "",
+                    related: None,
+                    grading: None,
+                    applies: None,
+                    unless: None,
+                    quiet: false,
+                    ungraded,
+                }],
+                unless: Vec::new(),
+                grading: None,
+                once: Vec::new(),
+                project: Vec::new(),
+                joined: None,
+            }],
+        }
+    }
+
+    fn panels() -> Model {
+        Model::default().object("a", "panel").value(
+            "a",
+            "Pset",
+            "Share",
+            PropertyValue::Decimal(0.875),
+        )
+    }
+
+    /// A parameter checked only where stated: unstated, its default
+    /// applies; stated of another kind, the check's own words.
+    #[test]
+    fn a_check_applies_only_where_its_parameter_is_stated() {
+        let evaluation = panels().evaluate(
+            &Templated::new(template(false)),
+            &rule(ID, kind("panel"), Vec::new()),
+        );
+        assert_eq!(
+            findings(&evaluation),
+            [("a".to_owned(), "87.5% of the panel, at most 50%".to_owned())]
+        );
+        let refused = panels().evaluate(
+            &Templated::new(template(false)),
+            &rule(ID, kind("panel"), vec![("limit", string("half"))]),
+        );
+        assert_eq!(
+            refused.not_evaluated_outcomes()[0].message(),
+            "stated declaration is not realisable"
+        );
+    }
+
+    /// A graded template's check states its deviation unless ungraded.
+    #[test]
+    fn an_ungraded_check_states_no_deviation() {
+        let graded = panels().evaluate(
+            &Templated::new(template(false)),
+            &rule(ID, kind("panel"), Vec::new()),
+        );
+        assert!(graded.deviation(0).is_some());
+        let ungraded = panels().evaluate(
+            &Templated::new(template(true)),
+            &rule(ID, kind("panel"), Vec::new()),
+        );
+        assert!(ungraded.deviation(0).is_none());
+        assert_eq!(ungraded.findings().len(), 1);
     }
 }

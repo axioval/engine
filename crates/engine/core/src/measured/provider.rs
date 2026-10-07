@@ -287,6 +287,26 @@ pub trait MeasuredProvider: Send + Sync + 'static {
         )))
     }
 
+    /// The members `call`, a list whose subject is the project
+    /// ([`MeasuredSubject::Project`](axioval_ir::measured::MeasuredSubject::Project)),
+    /// lists, with the evidence of the measurement they come from: what a
+    /// template's checks of the project read. By default it lists none.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::measure`].
+    fn members_of_project(
+        &self,
+        call: &MeasuredCall,
+        context: &RuleContext<'_>,
+    ) -> Result<(Vec<MeasuredMember>, Vec<Evidence>), PropertyResolutionError> {
+        let _ = context;
+        Err(PropertyResolutionError::MissingService(format!(
+            "no built-in code measures `{}` of the project",
+            call.name()
+        )))
+    }
+
     /// Measures `call` of each of `objects`, one answer per object in
     /// order, each exactly what [`Self::measure`] answers for it: the batch
     /// entry point a run's resolver calls when a template reads one value of
@@ -394,8 +414,15 @@ pub fn measured_members_bound(
         services,
     };
     // A source's list is the list of each of its objects.
-    if call.descriptor.subject == axioval_ir::measured::MeasuredSubject::Source {
-        return provider.members_of_source(call, &object.source, &context);
+    match call.descriptor.subject {
+        axioval_ir::measured::MeasuredSubject::Source => {
+            return provider.members_of_source(call, &object.source, &context);
+        }
+        // The project's list, whatever object it is read of.
+        axioval_ir::measured::MeasuredSubject::Project => {
+            return provider.members_of_project(call, &context);
+        }
+        axioval_ir::measured::MeasuredSubject::Object => {}
     }
     provider.members_cited(call, object, &context)
 }

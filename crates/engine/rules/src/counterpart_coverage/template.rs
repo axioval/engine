@@ -424,6 +424,7 @@ fn check(
         }),
         unless: None,
         quiet: false,
+        ungraded: false,
     }
 }
 
@@ -509,6 +510,7 @@ pub(crate) fn template() -> Template {
             grading: None,
             once: Vec::new(),
             joined: None,
+            project: Vec::new(),
         }],
     }
 }

@@ -126,6 +126,7 @@ fn federation() -> Template {
                 required: true,
             }],
             joined: None,
+            project: Vec::new(),
         }],
     }
 }
@@ -512,6 +513,7 @@ fn walls() -> Template {
             }),
             quiet,
             derived: Vec::new(),
+            ungraded: false,
         }
     };
     Template {
@@ -599,6 +601,7 @@ fn walls() -> Template {
                 required: false,
             }],
             joined: None,
+            project: Vec::new(),
         }],
     }
 }

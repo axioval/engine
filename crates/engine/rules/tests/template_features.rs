@@ -1846,4 +1846,41 @@ mod joined {
             2
         );
     }
+
+    /// A refusal naming the capability itself is not named again; any other
+    /// is worded after the name.
+    #[test]
+    fn a_refusal_naming_the_capability_is_not_named_again() {
+        let mut named = template();
+        named.declaration = vec![
+            axioval_engine::template::Check::Finite {
+                parameters: &["maximum_share"],
+                above: None,
+                at_least: Some(0.0),
+                message: "joined declaration is not realisable",
+            },
+            axioval_engine::template::Check::Finite {
+                parameters: &["maximum_share"],
+                above: None,
+                at_least: Some(-10.0),
+                message: "the share is far too small",
+            },
+        ];
+        let message = |share: f64, template: Template| {
+            panels()
+                .evaluate(
+                    &Templated::new(template),
+                    &rule(ID, kind("panel"), vec![("maximum_share", number(share))]),
+                )
+                .not_evaluated_outcomes()[0]
+                .message()
+                .to_owned()
+        };
+        assert_eq!(
+            message(-1.0, named.clone()),
+            "joined declaration is not realisable"
+        );
+        named.declaration.remove(0);
+        assert_eq!(message(-20.0, named), "joined: the share is far too small");
+    }
 }

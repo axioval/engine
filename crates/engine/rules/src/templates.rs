@@ -3310,6 +3310,17 @@ fn read_once(
     Ok((read, opened))
 }
 
+/// A refusal of the rule worded after the template's name, unless the
+/// check's message names the capability itself (`horizontal-guard
+/// declaration is …`), as a capability wording one refusal so did.
+fn named(template: &Template, message: String) -> String {
+    if message.starts_with(&format!("{} ", template.name)) {
+        message
+    } else {
+        format!("{}: {message}", template.name)
+    }
+}
+
 /// Pushes an object's outcomes into `evaluation`: each as it is, or, with
 /// a `joined` separator, everything left open as one outcome after the
 /// findings, its messages joined in order, for the first one's reason.
@@ -3368,17 +3379,14 @@ pub(crate) fn run(
             // A rule-scoped refusal names the capability; one reported per
             // object is worded as the check states it.
             let message = match template.refusals {
-                Refusals::Rule => format!("{}: {message}", template.name),
+                Refusals::Rule => named(template, message),
                 Refusals::Selected => {
                     let (_, mut evaluation) = selected.unwrap_or_default();
-                    evaluation.push_not_evaluated(reason, format!("{}: {message}", template.name));
+                    evaluation.push_not_evaluated(reason, named(template, message));
                     return evaluation;
                 }
                 Refusals::ServicesPerObject => {
-                    return CapabilityEvaluation::not_evaluated(
-                        reason,
-                        format!("{}: {message}", template.name),
-                    );
+                    return CapabilityEvaluation::not_evaluated(reason, named(template, message));
                 }
                 Refusals::Objects | Refusals::Worded => message,
                 Refusals::Prefixed { prefix } => format!("{prefix}: {message}"),

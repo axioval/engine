@@ -244,8 +244,11 @@ impl<'a> ObjectLeaves<'a> {
     }
 
     fn measure_members(&self, list: &str) -> Listed {
-        let mut call = axioval_ir::measured::parse_members(list)
-            .map_err(|error| (NotEvaluatedReason::InvalidDeclaration, error.to_string()))?;
+        let mut call = match self.anchored(list, true) {
+            Some(call) => call?,
+            None => axioval_ir::measured::parse_members(list)
+                .map_err(|error| (NotEvaluatedReason::InvalidDeclaration, error.to_string()))?,
+        };
         bind(
             self.context,
             self.parameters,
@@ -272,6 +275,18 @@ impl<'a> ObjectLeaves<'a> {
                 });
                 (reason, message.to_owned())
             })
+    }
+
+    /// The measured name `name` (a list where `list`) parsed and the
+    /// rule's parameters bound once per rule, the anchor left to bind:
+    /// `None` outside a rule or where it does not parse or binds nothing.
+    fn anchored(
+        &self,
+        name: &str,
+        list: bool,
+    ) -> Option<Result<axioval_ir::measured::MeasuredCall, (NotEvaluatedReason, String)>> {
+        self.arguments?
+            .anchored(self.context, self.parameters, name, list)
     }
 
     /// Whether the rule's selector parameter `parameter` leaves objects
@@ -602,12 +617,21 @@ impl<'a> ObjectLeaves<'a> {
         value: Option<&Expression>,
         path: &str,
     ) -> Result<Vec<Member>, String> {
-        let mut call = axioval_ir::measured::parse_members(list).map_err(|error| {
-            self.reasons
-                .borrow_mut()
-                .push(NotEvaluatedReason::InvalidDeclaration);
-            error.to_string()
-        })?;
+        // Parsed and its parameters bound once per rule where it can be.
+        let anchored = self.anchored(list, true);
+        let mut call = match anchored {
+            Some(Ok(call)) => call,
+            Some(Err((reason, why))) => {
+                self.reasons.borrow_mut().push(reason);
+                return Err(format!("`{list}` of {}: {why}", self.object.id));
+            }
+            None => axioval_ir::measured::parse_members(list).map_err(|error| {
+                self.reasons
+                    .borrow_mut()
+                    .push(NotEvaluatedReason::InvalidDeclaration);
+                error.to_string()
+            })?,
+        };
         // The rule's parameters and the anchor the list names, bound as a
         // measured value's are.
         if let Err((reason, why)) = bind(
@@ -789,10 +813,26 @@ impl ExpressionContext for ObjectLeaves<'_> {
             {
                 return self.bound_measured_with(name, bound);
             }
-            if let Ok(call) = axioval_ir::measured::parse(name)
-                && !call.is_bound()
-            {
-                return self.bound_measured(name, call);
+            match self.anchored(name, false) {
+                Some(Ok(call)) => return self.bound_measured(name, call),
+                Some(Err((reason, why))) => {
+                    let read = Err((
+                        reason,
+                        format!(
+                            "`{}` of {}: {why}",
+                            name.split(';').next().unwrap_or(name),
+                            self.object.id
+                        ),
+                    ));
+                    return self.bound_leaf(name, read);
+                }
+                None => {
+                    if let Ok(call) = axioval_ir::measured::parse(name)
+                        && !call.is_bound()
+                    {
+                        return self.bound_measured(name, call);
+                    }
+                }
             }
         }
         // The value as the source states it (`None`: stated absent) and

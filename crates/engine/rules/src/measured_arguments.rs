@@ -33,8 +33,22 @@ pub(crate) struct Arguments {
     /// The rule's own selector, which `@selection` names in a template.
     selector: Option<Selector>,
     selections: RefCell<BTreeMap<String, Result<Arc<MeasuredSelection>, Unavailable>>>,
-    calls: RefCell<BTreeMap<String, Result<axioval_engine::PreparedRead, Unavailable>>>,
+    /// Each name read through [`Arguments::call`]: `None` where it is not
+    /// prepared once for the rule (it names the anchor, binds nothing or
+    /// does not parse), kept so it is parsed once.
+    calls: RefCell<BTreeMap<String, Prepared>>,
+    /// Each name naming a reference read through [`Arguments::anchored`],
+    /// as a value and as a list: the rule's parameters bound, the anchor
+    /// left for each object.
+    anchored: RefCell<BTreeMap<(bool, String), Anchored>>,
 }
+
+/// A name prepared once for the rule; `None` where it is not.
+type Prepared = Option<Result<axioval_engine::PreparedRead, Unavailable>>;
+
+/// A name parsed with the rule's parameters bound, the anchor left; `None`
+/// where it does not parse or names no reference.
+type Anchored = Option<Result<MeasuredCall, Unavailable>>;
 
 /// The objects `selector`, the rule's parameter `parameter`, picks: those
 /// surely picked and those it cannot decide, each sorted. A source whose
@@ -140,8 +154,21 @@ impl Arguments {
         name: &str,
     ) -> Option<Result<axioval_engine::PreparedRead, Unavailable>> {
         if let Some(bound) = self.calls.borrow().get(name) {
-            return Some(bound.clone());
+            return bound.clone();
         }
+        let bound = Self::prepared(context, parameters, self, name);
+        self.calls
+            .borrow_mut()
+            .insert(name.to_owned(), bound.clone());
+        bound
+    }
+
+    fn prepared(
+        context: &RuleContext<'_>,
+        parameters: Option<&BTreeMap<String, ParameterValue>>,
+        arguments: &Self,
+        name: &str,
+    ) -> Option<Result<axioval_engine::PreparedRead, Unavailable>> {
         let mut call = axioval_ir::measured::parse(name).ok()?;
         if call.is_bound()
             || call
@@ -152,12 +179,38 @@ impl Arguments {
         }
         // No anchor named: any object binds it alike.
         let anchor = context.project.objects().next()?.id.clone();
-        let bound = bind(context, parameters, Some(self), &anchor, &mut call)
-            .map(|()| axioval_engine::PreparedRead::of(name, &call));
-        self.calls
-            .borrow_mut()
-            .insert(name.to_owned(), bound.clone());
-        Some(bound)
+        Some(
+            bind(context, parameters, Some(arguments), &anchor, &mut call)
+                .map(|()| axioval_engine::PreparedRead::of(name, &call)),
+        )
+    }
+
+    /// The measured name `name` (a member list where `list`) parsed, the
+    /// rule's parameters it names bound, once per rule; each object binds
+    /// the anchor it names ([`bind`]) alike. `None` where it does not
+    /// parse or names no reference; a parameter that does not bind is
+    /// refused as [`bind`] refuses it.
+    pub(crate) fn anchored(
+        &self,
+        context: &RuleContext<'_>,
+        parameters: Option<&BTreeMap<String, ParameterValue>>,
+        name: &str,
+        list: bool,
+    ) -> Option<Result<MeasuredCall, Unavailable>> {
+        let key = (list, name.to_owned());
+        if let Some(call) = self.anchored.borrow().get(&key) {
+            return call.clone();
+        }
+        let parsed = if list {
+            axioval_ir::measured::parse_members(name)
+        } else {
+            axioval_ir::measured::parse(name)
+        };
+        let call = parsed.ok().filter(|call| !call.is_bound()).map(|mut call| {
+            bind_references(context, parameters, Some(self), None, &mut call).map(|()| call)
+        });
+        self.anchored.borrow_mut().insert(key, call.clone());
+        call
     }
 
     /// The objects the selector parameter `parameter` picks, read once.
@@ -340,15 +393,29 @@ pub(crate) fn bind(
     anchor: &ObjectId,
     call: &mut MeasuredCall,
 ) -> Result<(), Unavailable> {
+    bind_references(context, parameters, arguments, Some(anchor), call)
+}
+
+/// [`bind`], the anchor left unbound where none is given.
+fn bind_references(
+    context: &RuleContext<'_>,
+    parameters: Option<&BTreeMap<String, ParameterValue>>,
+    arguments: Option<&Arguments>,
+    anchor: Option<&ObjectId>,
+    call: &mut MeasuredCall,
+) -> Result<(), Unavailable> {
     let references: Vec<(&'static str, MeasuredArgument)> = call
         .references()
         .map(|(key, argument)| (key, argument.clone()))
         .collect();
     for (key, reference) in references {
         let argument = match &reference {
-            MeasuredArgument::Anchor => {
-                MeasuredArgument::Objects(Arc::new(MeasuredSelection::anchor(anchor.clone())))
-            }
+            MeasuredArgument::Anchor => match anchor {
+                Some(anchor) => {
+                    MeasuredArgument::Objects(Arc::new(MeasuredSelection::anchor(anchor.clone())))
+                }
+                None => continue,
+            },
             MeasuredArgument::Parameter(parameter) => {
                 let Some(parameters) = parameters else {
                     return Err(invalid(format!(

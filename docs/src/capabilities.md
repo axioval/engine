@@ -1440,6 +1440,8 @@ The circulation map erodes the space's free area (its floor less what the obstac
 
 With `subtract_door_swings`, the floor the selected doors' hinged leaves sweep (their `SwingSector`s, as the object-frame service states them) is an obstacle for the map, the end areas and the passing spaces (see [Door swings as obstacles](./free-space.md#door-swings-as-obstacles)): a leaf standing open across the path cuts off what lies behind it. A door the selection cannot decide, or whose leaves cannot be read, leaves every space not evaluated. Without the option only what the obstacles occupy counts. Door widths along a route are judged by `accessible-route`; `check_entrance_width` judges the entrances of the space itself.
 
+The capability runs as a [template](./templates.md#local-circulation) judging the answers its circulation search states as the measured list `circulation_verdicts`.
+
 **Entrances.** Two space-level checks judge the space's entrances (the doors and openings `access_path` reaches it from, those of its `merge_path` spaces included), independent of any component and of the circulation map, so they apply to an empty room too. Both are off by default.
 
 - With `require_entrances`, a space no door or opening reaches is a finding on it: `… has no entrance: no door or opening reaches it along IfcRelSpaceBoundary:backward`. One reached only by an element whose type the selectors cannot decide, or by one whose spaces cannot be read, is not evaluated.

@@ -752,6 +752,7 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             ),
         ],
     },
+    searches::CIRCULATION_VERDICTS,
     clash::CLASH_MATRIX_PAIRS,
     clash::CLASH_PAIRS,
     walking::CLEAR_WIDTHS,

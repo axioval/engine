@@ -158,13 +158,29 @@ impl Scene {
                 leaves: self.leaves,
             })))
             .unwrap();
-        LocalCirculation.evaluate(
-            &RuleContext {
-                project: &project,
-                services: &services,
-            },
-            &rule,
-        )
+        // The template reads its measured verdicts as a run does.
+        axioval::rules::register_builtins(axioval::engine::CapabilityRegistry::new())
+            .unwrap()
+            .install_measured(&mut services, &project);
+        let context = RuleContext {
+            project: &project,
+            services: &services,
+        };
+        let template = LocalCirculation.evaluate(&context, &rule);
+        // Held to the implementation it replaced, on the same scene.
+        let reference = axioval_rules::reference::LocalCirculation.evaluate(&context, &rule);
+        let parity = axioval::rules::parity::Parity::contract().compare(
+            (
+                "local-circulation",
+                &axioval::rules::parity::Observations::of_evaluation(&reference),
+            ),
+            (
+                "template",
+                &axioval::rules::parity::Observations::of_evaluation(&template),
+            ),
+        );
+        assert!(parity.holds(), "{}", parity.diff());
+        template
     }
 }
 

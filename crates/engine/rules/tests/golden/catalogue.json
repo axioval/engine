@@ -26427,7 +26427,215 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "local-circulation",
+        "declaration": [
+          {
+            "kind": "arguments",
+            "when": [],
+            "value": "circulation_verdicts;component_selector=@component_selector;space_path=@space_path;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector;obstacles=@obstacles;subtract_door_swings=@subtract_door_swings;width_metres=@width_metres;clear_height_metres=@clear_height_metres;tolerance_metres=@tolerance_metres;component_mode=@component_mode;end_width_metres=@end_width_metres;end_length_metres=@end_length_metres;end_reach_metres=@end_reach_metres;short_end_metres=@short_end_metres;narrow_end_metres=@narrow_end_metres;merge_path=@merge_path;band_from_metres=@band_from_metres;end_exempt_selector=@end_exempt_selector;end_exempt_reach_metres=@end_exempt_reach_metres;partner_selector=@partner_selector;require_entrances=@require_entrances;check_entrance_width=@check_entrance_width;clear_width_property=@clear_width_property;clear_width_from_leaves=@clear_width_from_leaves;overall_width=@overall_width;width_deduction=@width_deduction;passing_width_metres=@passing_width_metres;passing_length_metres=@passing_length_metres;passing_spacing_metres=@passing_spacing_metres;passing_reach_metres=@passing_reach_metres;selection=@selection"
+          }
+        ],
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "judged",
+                "expression": {
+                  "kind": "literal",
+                  "value": {
+                    "type": "integer",
+                    "value": 1
+                  },
+                  "label": "the circulation is searched"
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "judged",
+              "rounding": []
+            },
+            "fail": "",
+            "undecided": "",
+            "checks": [
+              {
+                "values": [],
+                "decision": {
+                  "kind": "items",
+                  "applies": {},
+                  "list": "circulation_verdicts;component_selector=@component_selector;space_path=@space_path;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector;obstacles=@obstacles;subtract_door_swings=@subtract_door_swings;width_metres=@width_metres;clear_height_metres=@clear_height_metres;tolerance_metres=@tolerance_metres;component_mode=@component_mode;end_width_metres=@end_width_metres;end_length_metres=@end_length_metres;end_reach_metres=@end_reach_metres;short_end_metres=@short_end_metres;narrow_end_metres=@narrow_end_metres;merge_path=@merge_path;band_from_metres=@band_from_metres;end_exempt_selector=@end_exempt_selector;end_exempt_reach_metres=@end_exempt_reach_metres;partner_selector=@partner_selector;require_entrances=@require_entrances;check_entrance_width=@check_entrance_width;clear_width_property=@clear_width_property;clear_width_from_leaves=@clear_width_from_leaves;overall_width=@overall_width;width_deduction=@width_deduction;passing_width_metres=@passing_width_metres;passing_length_metres=@passing_length_metres;passing_spacing_metres=@passing_spacing_metres;passing_reach_metres=@passing_reach_metres;selection=@selection",
+                  "refused": "{why}",
+                  "checks": [
+                    {
+                      "kind": "test",
+                      "judge": {
+                        "kind": "truth",
+                        "value": "met",
+                        "finding": false
+                      },
+                      "fail": "{words}",
+                      "undecided": "{why}",
+                      "related": "related"
+                    }
+                  ],
+                  "at": "at",
+                  "reason": "reason"
+                },
+                "fail": "",
+                "undecided": ""
+              }
+            ]
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "aggregate",
+                  "function": "none",
+                  "over": {
+                    "kind": "measured",
+                    "name": "circulation_verdicts;component_selector=@component_selector;space_path=@space_path;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector;obstacles=@obstacles;subtract_door_swings=@subtract_door_swings;width_metres=@width_metres;clear_height_metres=@clear_height_metres;tolerance_metres=@tolerance_metres;component_mode=@component_mode;end_width_metres=@end_width_metres;end_length_metres=@end_length_metres;end_reach_metres=@end_reach_metres;short_end_metres=@short_end_metres;narrow_end_metres=@narrow_end_metres;merge_path=@merge_path;band_from_metres=@band_from_metres;end_exempt_selector=@end_exempt_selector;end_exempt_reach_metres=@end_exempt_reach_metres;partner_selector=@partner_selector;require_entrances=@require_entrances;check_entrance_width=@check_entrance_width;clear_width_property=@clear_width_property;clear_width_from_leaves=@clear_width_from_leaves;overall_width=@overall_width;width_deduction=@width_deduction;passing_width_metres=@passing_width_metres;passing_length_metres=@passing_length_metres;passing_spacing_metres=@passing_spacing_metres;passing_reach_metres=@passing_reach_metres;selection=@selection"
+                  },
+                  "value": {
+                    "kind": "not",
+                    "operand": {
+                      "kind": "and",
+                      "operands": [
+                        {
+                          "kind": "property",
+                          "propertySet": "axioval:member",
+                          "property": "met"
+                        }
+                      ]
+                    }
+                  },
+                  "label": "no item fails"
+                },
+                {
+                  "kind": "isDefined",
+                  "operand": {
+                    "kind": "literal",
+                    "value": {
+                      "type": "integer",
+                      "value": 1
+                    },
+                    "label": "the circulation is searched"
+                  },
+                  "label": "read"
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.aggregate",
+                      "label": "no item fails",
+                      "fields": {
+                        "function": "none"
+                      },
+                      "inputs": {
+                        "over": {
+                          "block": {
+                            "type": "members.circulation_verdicts",
+                            "fields": {
+                              "access_path": "@access_path",
+                              "band_from_metres": "@band_from_metres",
+                              "check_entrance_width": "@check_entrance_width",
+                              "clear_height_metres": "@clear_height_metres",
+                              "clear_width_from_leaves": "@clear_width_from_leaves",
+                              "clear_width_property": "@clear_width_property",
+                              "component_mode": "@component_mode",
+                              "component_selector": "@component_selector",
+                              "door_selector": "@door_selector",
+                              "end_exempt_reach_metres": "@end_exempt_reach_metres",
+                              "end_exempt_selector": "@end_exempt_selector",
+                              "end_length_metres": "@end_length_metres",
+                              "end_reach_metres": "@end_reach_metres",
+                              "end_width_metres": "@end_width_metres",
+                              "merge_path": "@merge_path",
+                              "narrow_end_metres": "@narrow_end_metres",
+                              "obstacles": "@obstacles",
+                              "opening_selector": "@opening_selector",
+                              "overall_width": "@overall_width",
+                              "partner_selector": "@partner_selector",
+                              "passing_length_metres": "@passing_length_metres",
+                              "passing_reach_metres": "@passing_reach_metres",
+                              "passing_spacing_metres": "@passing_spacing_metres",
+                              "passing_width_metres": "@passing_width_metres",
+                              "require_entrances": "@require_entrances",
+                              "selection": "@selection",
+                              "short_end_metres": "@short_end_metres",
+                              "space_path": "@space_path",
+                              "space_selector": "@space_selector",
+                              "subtract_door_swings": "@subtract_door_swings",
+                              "tolerance_metres": "@tolerance_metres",
+                              "width_deduction": "@width_deduction",
+                              "width_metres": "@width_metres"
+                            }
+                          }
+                        },
+                        "value": {
+                          "block": {
+                            "type": "expression.not",
+                            "inputs": {
+                              "operand": {
+                                "block": {
+                                  "type": "expression.and",
+                                  "inputs": {
+                                    "operands": {
+                                      "blocks": [
+                                        {
+                                          "type": "expression.property",
+                                          "fields": {
+                                            "property": "met",
+                                            "propertySet": "axioval:member"
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.isDefined",
+                      "label": "read",
+                      "inputs": {
+                        "operand": {
+                          "block": {
+                            "type": "expression.literal",
+                            "label": "the circulation is searched",
+                            "fields": {
+                              "value": {
+                                "type": "integer",
+                                "value": 1
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.manual-issue",
@@ -84241,6 +84449,786 @@
             {
               "language": "de",
               "text": "Die nächste Wand, die sicher neben der Seite liegt, falls eine."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
+      "name": "circulation_verdicts",
+      "parameters": [
+        {
+          "key": "component_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `component_selector`, as `local-circulation` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `component_selector` der Regel, wie `local-circulation` ihn liest."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "space_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `space_path`, as `local-circulation` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `space_path` der Regel, wie `local-circulation` ihn liest."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "access_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `access_path`, as `local-circulation` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `access_path` der Regel, wie `local-circulation` ihn liest."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "door_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `door_selector`, as `local-circulation` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `door_selector` der Regel, wie `local-circulation` ihn liest."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "opening_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `opening_selector`, as `local-circulation` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `opening_selector` der Regel, wie `local-circulation` ihn liest."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "space_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `space_selector`, as `local-circulation` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `space_selector` der Regel, wie `local-circulation` ihn liest."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "obstacles",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `obstacles`, as `local-circulation` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `obstacles` der Regel, wie `local-circulation` ihn liest."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "subtract_door_swings",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `subtract_door_swings`, as `local-circulation` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `subtract_door_swings` der Regel, wie `local-circulation` ihn liest."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "width_metres",
+          "kind": {
+            "type": "number",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `width_metres`, as `local-circulation` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `width_metres` der Regel, wie `local-circulation` ihn liest."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "clear_height_metres",
+          "kind": {
+            "type": "number",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `clear_height_metres`, as `local-circulation` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `clear_height_metres` der Regel, wie `local-circulation` ihn liest."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "tolerance_metres",
+          "kind": {
+            "type": "number",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `tolerance_metres`, as `local-circulation` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `tolerance_metres` der Regel, wie `local-circulation` ihn liest."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "component_mode",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `component_mode`, as `local-circulation` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `component_mode` der Regel, wie `local-circulation` ihn liest."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "end_width_metres",
+          "kind": {
+            "type": "number",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `end_width_metres`, as `local-circulation` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `end_width_metres` der Regel, wie `local-circulation` ihn liest."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "end_length_metres",
+          "kind": {
+            "type": "number",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `end_length_metres`, as `local-circulation` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `end_length_metres` der Regel, wie `local-circulation` ihn liest."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "end_reach_metres",
+          "kind": {
+            "type": "number",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `end_reach_metres`, as `local-circulation` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `end_reach_metres` der Regel, wie `local-circulation` ihn liest."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "short_end_metres",
+          "kind": {
+            "type": "number",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `short_end_metres`, as `local-circulation` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `short_end_metres` der Regel, wie `local-circulation` ihn liest."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "narrow_end_metres",
+          "kind": {
+            "type": "number",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `narrow_end_metres`, as `local-circulation` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `narrow_end_metres` der Regel, wie `local-circulation` ihn liest."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "merge_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `merge_path`, as `local-circulation` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `merge_path` der Regel, wie `local-circulation` ihn liest."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "band_from_metres",
+          "kind": {
+            "type": "number",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `band_from_metres`, as `local-circulation` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `band_from_metres` der Regel, wie `local-circulation` ihn liest."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "end_exempt_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `end_exempt_selector`, as `local-circulation` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `end_exempt_selector` der Regel, wie `local-circulation` ihn liest."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "end_exempt_reach_metres",
+          "kind": {
+            "type": "number",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `end_exempt_reach_metres`, as `local-circulation` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `end_exempt_reach_metres` der Regel, wie `local-circulation` ihn liest."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "partner_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `partner_selector`, as `local-circulation` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `partner_selector` der Regel, wie `local-circulation` ihn liest."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "require_entrances",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `require_entrances`, as `local-circulation` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `require_entrances` der Regel, wie `local-circulation` ihn liest."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "check_entrance_width",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `check_entrance_width`, as `local-circulation` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `check_entrance_width` der Regel, wie `local-circulation` ihn liest."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "clear_width_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `clear_width_property`, as `local-circulation` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `clear_width_property` der Regel, wie `local-circulation` ihn liest."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "clear_width_from_leaves",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `clear_width_from_leaves`, as `local-circulation` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `clear_width_from_leaves` der Regel, wie `local-circulation` ihn liest."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "overall_width",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `overall_width`, as `local-circulation` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `overall_width` der Regel, wie `local-circulation` ihn liest."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "width_deduction",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `width_deduction`, as `local-circulation` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `width_deduction` der Regel, wie `local-circulation` ihn liest."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "passing_width_metres",
+          "kind": {
+            "type": "number",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `passing_width_metres`, as `local-circulation` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `passing_width_metres` der Regel, wie `local-circulation` ihn liest."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "passing_length_metres",
+          "kind": {
+            "type": "number",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `passing_length_metres`, as `local-circulation` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `passing_length_metres` der Regel, wie `local-circulation` ihn liest."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "passing_spacing_metres",
+          "kind": {
+            "type": "number",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `passing_spacing_metres`, as `local-circulation` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `passing_spacing_metres` der Regel, wie `local-circulation` ihn liest."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "passing_reach_metres",
+          "kind": {
+            "type": "number",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `passing_reach_metres`, as `local-circulation` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `passing_reach_metres` der Regel, wie `local-circulation` ihn liest."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "selection",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects the rule selects, those it cannot decide possible members."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, die die Regel wählt, die unentschiedenen mögliche Mitglieder."
+            }
+          ],
+          "references": "selector"
+        }
+      ],
+      "services": [
+        "free-space",
+        "relationship-selection",
+        "object-frame",
+        "metric-routing",
+        "plan-span",
+        "vertical-extent",
+        "proximity"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the free-space service is not registered or cannot map a space, or a selection cannot be listed"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Circulation verdicts"
+        },
+        {
+          "language": "de",
+          "text": "Bewegungsflächenurteile"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "Every answer local-circulation's search gives about the spaces a rule selects and their components: entrances, reach, links, path ends and passing spaces, each on the object it is about."
+        },
+        {
+          "language": "de",
+          "text": "Jede Antwort, die die Suche von local-circulation zu den gewählten Räumen und ihren Bauteilen gibt: Zugänge, Erreichbarkeit, Verbindungen, Wegenden und Ausweichstellen, jede beim Objekt, um das es geht."
+        }
+      ],
+      "fields": [
+        {
+          "name": "at",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Where"
+            },
+            {
+              "language": "de",
+              "text": "Wo"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The space or component the answer is about."
+            },
+            {
+              "language": "de",
+              "text": "Der Raum oder das Bauteil, um das es geht."
+            }
+          ]
+        },
+        {
+          "name": "met",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Met"
+            },
+            {
+              "language": "de",
+              "text": "Erfüllt"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the answer meets the requirement (false for each the search finds unmet); undecided, with why, where the search cannot tell."
+            },
+            {
+              "language": "de",
+              "text": "Ob die Antwort die Anforderung erfüllt (falsch für jede, die die Suche als nicht erfüllt findet); unentschieden, mit Grund, wo die Suche es nicht entscheidet."
+            }
+          ]
+        },
+        {
+          "name": "words",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Words"
+            },
+            {
+              "language": "de",
+              "text": "Worte"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "What an unmet answer comes to, as findings word it."
+            },
+            {
+              "language": "de",
+              "text": "Was eine nicht erfüllte Antwort ergibt, wie Befunde es formulieren."
+            }
+          ]
+        },
+        {
+          "name": "related",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Related"
+            },
+            {
+              "language": "de",
+              "text": "Bezogen"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects an unmet answer relates."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, auf die sich eine nicht erfüllte Antwort bezieht."
+            }
+          ]
+        },
+        {
+          "name": "reason",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Reason"
+            },
+            {
+              "language": "de",
+              "text": "Grund"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Why an undecided answer is open, as a report writes it."
+            },
+            {
+              "language": "de",
+              "text": "Warum eine unentschiedene Antwort offen ist, wie ein Bericht es schreibt."
             }
           ]
         }

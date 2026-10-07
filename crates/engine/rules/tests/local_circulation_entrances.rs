@@ -14,6 +14,13 @@ use axioval_engine::{
 use axioval_ir::contract::ParameterValue;
 use axioval_ir::{Evidence, NotEvaluatedReason, PropertyValue, QuantityDimension};
 use axioval_rules::LocalCirculation;
+
+/// `local-circulation` as it runs, held to the implementation it replaced
+/// on every evaluation.
+static HELD: common::Held = common::Held(
+    &LocalCirculation,
+    &axioval_rules::reference::LocalCirculation,
+);
 use common::{
     Model, boolean, findings, id, kind, number, property, rule, selector, source, strings,
     unevaluated,
@@ -101,15 +108,11 @@ fn run(model: Model, extra: Vec<(&'static str, ParameterValue)>) -> CapabilityEv
         ("clear_height_metres", number(2.0)),
     ];
     parameters.extend(extra);
-    model.evaluate_with(
-        &LocalCirculation,
-        &rule(ID, kind("space"), parameters),
-        |services| {
-            services
-                .register(FreeSpaceServiceHandle::new(Arc::new(Stub)))
-                .unwrap();
-        },
-    )
+    model.evaluate_with(&HELD, &rule(ID, kind("space"), parameters), |services| {
+        services
+            .register(FreeSpaceServiceHandle::new(Arc::new(Stub)))
+            .unwrap();
+    })
 }
 
 fn widths() -> Vec<(&'static str, ParameterValue)> {

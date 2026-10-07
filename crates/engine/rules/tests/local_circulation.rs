@@ -18,6 +18,13 @@ use axioval_engine::{
 use axioval_ir::contract::{ParameterValue, Selector};
 use axioval_ir::{Evidence, NotEvaluatedReason};
 use axioval_rules::LocalCirculation;
+
+/// `local-circulation` as it runs, held to the implementation it replaced
+/// on every evaluation.
+static HELD: common::Held = common::Held(
+    &LocalCirculation,
+    &axioval_rules::reference::LocalCirculation,
+);
 use common::{
     Model, findings, id, kind, number, rule, selector, source, string, strings, unevaluated,
 };
@@ -42,6 +49,8 @@ struct Stub {
     pieces: usize,
     contacts: Vec<(&'static str, Vec<usize>, Vec<usize>)>,
     refuse: bool,
+    /// Whether the map rests on exact evidence, or on a tessellation.
+    exact: bool,
     seen: Mutex<Vec<CirculationRequest>>,
 }
 
@@ -51,6 +60,7 @@ impl Stub {
             pieces,
             contacts,
             refuse: false,
+            exact: true,
             seen: Mutex::new(Vec::new()),
         }
     }
@@ -103,7 +113,11 @@ impl FreeSpaceService for Stub {
             0.05,
             contacts,
             Vec::new(),
-            Evidence::exact(source(), "circulation:s"),
+            {
+                let mut evidence = Evidence::exact(source(), "circulation:s");
+                evidence.exact = self.exact;
+                evidence
+            },
         )
     }
 }
@@ -125,15 +139,11 @@ fn run(stub: Arc<Stub>, extra: Vec<(&'static str, ParameterValue)>) -> Capabilit
         ("clear_height_metres", number(2.0)),
     ];
     parameters.extend(extra);
-    model().evaluate_with(
-        &LocalCirculation,
-        &rule(ID, kind("space"), parameters),
-        |services| {
-            services
-                .register(FreeSpaceServiceHandle::new(stub))
-                .unwrap();
-        },
-    )
+    model().evaluate_with(&HELD, &rule(ID, kind("space"), parameters), |services| {
+        services
+            .register(FreeSpaceServiceHandle::new(stub))
+            .unwrap();
+    })
 }
 
 #[test]
@@ -150,7 +160,8 @@ fn the_request_names_the_space_its_entrances_components_and_obstacles() {
     assert!(evaluation.findings().is_empty(), "{evaluation:#?}");
     assert!(unevaluated(&evaluation).is_empty(), "{evaluation:#?}");
     let seen = stub.seen.lock().unwrap();
-    assert_eq!(seen.len(), 1);
+    // The template and the implementation it is held to each map once.
+    assert_eq!(seen.len(), 2);
     let request = &seen[0];
     assert_eq!(request.scope(), &id("s"));
     assert_eq!(request.entrances(), [id("d")]);
@@ -250,7 +261,7 @@ fn refusals_and_missing_services_are_not_evaluated() {
         ]
     );
     let evaluation = model().evaluate(
-        &LocalCirculation,
+        &HELD,
         &rule(
             ID,
             kind("space"),
@@ -303,7 +314,7 @@ fn merged_spaces_band_start_and_partners_are_requested() {
         .edge("in", "c", "t")
         .edge("merges", "s", "t");
     let evaluation = model.evaluate_with(
-        &LocalCirculation,
+        &HELD,
         &rule(
             ID,
             kind("space"),
@@ -339,4 +350,33 @@ fn merged_spaces_band_start_and_partners_are_requested() {
     // The WC of `s` and the bed of the merged `t`.
     assert_eq!(request.components(), [id("a"), id("c")]);
     assert!(!request.obstacles().contains(&id("t")));
+}
+
+/// The measured list `circulation_verdicts` never cites a map measured
+/// approximately: a component cut off on an exact map is found on exact
+/// evidence, while a map of a tessellation leaves it open, never found.
+#[test]
+fn a_component_cut_off_is_found_only_on_an_exact_map() {
+    let run_on = |exact: bool| {
+        let mut stub = Stub::new(
+            2,
+            vec![
+                ("d", vec![0], vec![0]),
+                ("a", vec![1], vec![1]),
+                ("b", vec![0], vec![0]),
+            ],
+        );
+        stub.exact = exact;
+        run(Arc::new(stub), Vec::new())
+    };
+    let exact = run_on(true);
+    let found = exact
+        .findings()
+        .iter()
+        .find(|finding| finding.scope == axioval_ir::Scope::Object(id("a")))
+        .unwrap_or_else(|| panic!("{exact:#?}"));
+    assert!(found.evidence.iter().all(|evidence| evidence.exact));
+    let approximate = run_on(false);
+    assert!(approximate.findings().is_empty(), "{approximate:#?}");
+    assert!(!unevaluated(&approximate).is_empty());
 }

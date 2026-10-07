@@ -2044,3 +2044,431 @@ pub(super) const ROUTE_VERDICTS: MemberDescriptor = MemberDescriptor {
         ),
     ],
 };
+
+const CIRCULATION_VERDICTS_PARAMETERS: [MeasuredParameter; 33] = [
+    MeasuredParameter {
+        key: "component_selector",
+        kind: MeasuredParameterKind::Objects,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `component_selector`, as `local-circulation` reads it.",
+            "Der Parameter `component_selector` der Regel, wie `local-circulation` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "space_path",
+        kind: MeasuredParameterKind::Path,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `space_path`, as `local-circulation` reads it.",
+            "Der Parameter `space_path` der Regel, wie `local-circulation` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "access_path",
+        kind: MeasuredParameterKind::Path,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `access_path`, as `local-circulation` reads it.",
+            "Der Parameter `access_path` der Regel, wie `local-circulation` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "door_selector",
+        kind: MeasuredParameterKind::Objects,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `door_selector`, as `local-circulation` reads it.",
+            "Der Parameter `door_selector` der Regel, wie `local-circulation` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "opening_selector",
+        kind: MeasuredParameterKind::Objects,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `opening_selector`, as `local-circulation` reads it.",
+            "Der Parameter `opening_selector` der Regel, wie `local-circulation` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "space_selector",
+        kind: MeasuredParameterKind::Objects,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `space_selector`, as `local-circulation` reads it.",
+            "Der Parameter `space_selector` der Regel, wie `local-circulation` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "obstacles",
+        kind: MeasuredParameterKind::Objects,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `obstacles`, as `local-circulation` reads it.",
+            "Der Parameter `obstacles` der Regel, wie `local-circulation` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "subtract_door_swings",
+        kind: MeasuredParameterKind::Objects,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `subtract_door_swings`, as `local-circulation` reads it.",
+            "Der Parameter `subtract_door_swings` der Regel, wie `local-circulation` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "width_metres",
+        kind: MeasuredParameterKind::Number {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `width_metres`, as `local-circulation` reads it.",
+            "Der Parameter `width_metres` der Regel, wie `local-circulation` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "clear_height_metres",
+        kind: MeasuredParameterKind::Number {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `clear_height_metres`, as `local-circulation` reads it.",
+            "Der Parameter `clear_height_metres` der Regel, wie `local-circulation` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "tolerance_metres",
+        kind: MeasuredParameterKind::Number {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `tolerance_metres`, as `local-circulation` reads it.",
+            "Der Parameter `tolerance_metres` der Regel, wie `local-circulation` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "component_mode",
+        kind: MeasuredParameterKind::Text,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `component_mode`, as `local-circulation` reads it.",
+            "Der Parameter `component_mode` der Regel, wie `local-circulation` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "end_width_metres",
+        kind: MeasuredParameterKind::Number {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `end_width_metres`, as `local-circulation` reads it.",
+            "Der Parameter `end_width_metres` der Regel, wie `local-circulation` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "end_length_metres",
+        kind: MeasuredParameterKind::Number {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `end_length_metres`, as `local-circulation` reads it.",
+            "Der Parameter `end_length_metres` der Regel, wie `local-circulation` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "end_reach_metres",
+        kind: MeasuredParameterKind::Number {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `end_reach_metres`, as `local-circulation` reads it.",
+            "Der Parameter `end_reach_metres` der Regel, wie `local-circulation` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "short_end_metres",
+        kind: MeasuredParameterKind::Number {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `short_end_metres`, as `local-circulation` reads it.",
+            "Der Parameter `short_end_metres` der Regel, wie `local-circulation` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "narrow_end_metres",
+        kind: MeasuredParameterKind::Number {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `narrow_end_metres`, as `local-circulation` reads it.",
+            "Der Parameter `narrow_end_metres` der Regel, wie `local-circulation` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "merge_path",
+        kind: MeasuredParameterKind::Path,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `merge_path`, as `local-circulation` reads it.",
+            "Der Parameter `merge_path` der Regel, wie `local-circulation` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "band_from_metres",
+        kind: MeasuredParameterKind::Number {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `band_from_metres`, as `local-circulation` reads it.",
+            "Der Parameter `band_from_metres` der Regel, wie `local-circulation` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "end_exempt_selector",
+        kind: MeasuredParameterKind::Objects,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `end_exempt_selector`, as `local-circulation` reads it.",
+            "Der Parameter `end_exempt_selector` der Regel, wie `local-circulation` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "end_exempt_reach_metres",
+        kind: MeasuredParameterKind::Number {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `end_exempt_reach_metres`, as `local-circulation` reads it.",
+            "Der Parameter `end_exempt_reach_metres` der Regel, wie `local-circulation` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "partner_selector",
+        kind: MeasuredParameterKind::Objects,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `partner_selector`, as `local-circulation` reads it.",
+            "Der Parameter `partner_selector` der Regel, wie `local-circulation` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "require_entrances",
+        kind: MeasuredParameterKind::Truth,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `require_entrances`, as `local-circulation` reads it.",
+            "Der Parameter `require_entrances` der Regel, wie `local-circulation` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "check_entrance_width",
+        kind: MeasuredParameterKind::Truth,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `check_entrance_width`, as `local-circulation` reads it.",
+            "Der Parameter `check_entrance_width` der Regel, wie `local-circulation` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "clear_width_property",
+        kind: MeasuredParameterKind::Property,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `clear_width_property`, as `local-circulation` reads it.",
+            "Der Parameter `clear_width_property` der Regel, wie `local-circulation` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "clear_width_from_leaves",
+        kind: MeasuredParameterKind::Text,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `clear_width_from_leaves`, as `local-circulation` reads it.",
+            "Der Parameter `clear_width_from_leaves` der Regel, wie `local-circulation` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "overall_width",
+        kind: MeasuredParameterKind::Property,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `overall_width`, as `local-circulation` reads it.",
+            "Der Parameter `overall_width` der Regel, wie `local-circulation` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "width_deduction",
+        kind: MeasuredParameterKind::Length {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `width_deduction`, as `local-circulation` reads it.",
+            "Der Parameter `width_deduction` der Regel, wie `local-circulation` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "passing_width_metres",
+        kind: MeasuredParameterKind::Number {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `passing_width_metres`, as `local-circulation` reads it.",
+            "Der Parameter `passing_width_metres` der Regel, wie `local-circulation` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "passing_length_metres",
+        kind: MeasuredParameterKind::Number {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `passing_length_metres`, as `local-circulation` reads it.",
+            "Der Parameter `passing_length_metres` der Regel, wie `local-circulation` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "passing_spacing_metres",
+        kind: MeasuredParameterKind::Number {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `passing_spacing_metres`, as `local-circulation` reads it.",
+            "Der Parameter `passing_spacing_metres` der Regel, wie `local-circulation` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "passing_reach_metres",
+        kind: MeasuredParameterKind::Number {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `passing_reach_metres`, as `local-circulation` reads it.",
+            "Der Parameter `passing_reach_metres` der Regel, wie `local-circulation` ihn liest.",
+        ),
+    },
+    SELECTION,
+];
+
+pub(super) const CIRCULATION_VERDICTS: MemberDescriptor = MemberDescriptor {
+    list: MeasuredDescriptor {
+        name: "circulation_verdicts",
+        parameters: &CIRCULATION_VERDICTS_PARAMETERS,
+        dimension: None,
+        services: &[
+            "free-space",
+            "relationship-selection",
+            "object-frame",
+            "metric-routing",
+            "plan-span",
+            "vertical-extent",
+            "proximity",
+        ],
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[
+            "the free-space service is not registered or cannot map a space, or a selection cannot be listed",
+        ],
+        label: &en_de("Circulation verdicts", "Bewegungsflächenurteile"),
+        help: &en_de(
+            "Every answer local-circulation's search gives about the spaces a rule selects and their components: entrances, reach, links, path ends and passing spaces, each on the object it is about.",
+            "Jede Antwort, die die Suche von local-circulation zu den gewählten Räumen und ihren Bauteilen gibt: Zugänge, Erreichbarkeit, Verbindungen, Wegenden und Ausweichstellen, jede beim Objekt, um das es geht.",
+        ),
+    },
+    fields: &[
+        field(
+            "at",
+            OBJECTS,
+            &en_de("Where", "Wo"),
+            &en_de(
+                "The space or component the answer is about.",
+                "Der Raum oder das Bauteil, um das es geht.",
+            ),
+        ),
+        field(
+            "met",
+            TRUTH,
+            &en_de("Met", "Erfüllt"),
+            &en_de(
+                "Whether the answer meets the requirement (false for each the search finds unmet); undecided, with why, where the search cannot tell.",
+                "Ob die Antwort die Anforderung erfüllt (falsch für jede, die die Suche als nicht erfüllt findet); unentschieden, mit Grund, wo die Suche es nicht entscheidet.",
+            ),
+        ),
+        field(
+            "words",
+            TEXT,
+            &en_de("Words", "Worte"),
+            &en_de(
+                "What an unmet answer comes to, as findings word it.",
+                "Was eine nicht erfüllte Antwort ergibt, wie Befunde es formulieren.",
+            ),
+        ),
+        field(
+            "related",
+            OBJECTS,
+            &en_de("Related", "Bezogen"),
+            &en_de(
+                "The objects an unmet answer relates.",
+                "Die Objekte, auf die sich eine nicht erfüllte Antwort bezieht.",
+            ),
+        ),
+        field(
+            "reason",
+            TEXT,
+            &en_de("Reason", "Grund"),
+            &en_de(
+                "Why an undecided answer is open, as a report writes it.",
+                "Warum eine unentschiedene Antwort offen ist, wie ein Bericht es schreibt.",
+            ),
+        ),
+    ],
+};

@@ -2033,6 +2033,22 @@ naming what blocks it, the objects that do and the evidence), undecided
 with why otherwise; a walk that cannot be taken refuses the list for every
 destination, for its reason. The template judges `reached`.
 
+### `local-circulation`
+
+One form, judged by one check of each selected space over the measured
+list `circulation_verdicts;component_selector=@component_selector;…;selection=@selection`,
+every parameter under its own name: the declaration is the list's argument
+check, refused for the rule. The circulation search stays the
+capability's (`local_circulation::circulate`): over the spaces the rule
+selects, each space's entrances, its circulation map, the reach or links of
+its components, its path ends and passing spaces. It runs once per rule
+(the list is memoized), and each space's list holds the answers about it
+and its components, so a rule selecting no space searches nothing. Each
+answer is one item placed on the space or component it is about
+(`Items::at`): `met` false with the words, related objects and evidence of
+what is missing, or undecided with why and its reason. The template judges
+`met`.
+
 ## Binding and running a rule
 
 The rules crate's `templates` module runs a template
@@ -2747,6 +2763,13 @@ every fixture of `tests/accessible_route.rs` and of the facade's
 `tests/axiolid_accessible_route.rs` and `tests/axiolid_passing_spaces.rs`
 under `Parity::contract()`, and by the rules of the case `routes`, recorded
 before the switch. It is never forked.
+
+`local-circulation` is held to `local_circulation/reference.rs`
+(`axioval_rules::reference::LocalCirculation`), which shares the search, on
+every fixture of `tests/local_circulation.rs`,
+`tests/local_circulation_entrances.rs` and the facade's
+`tests/axiolid_local_circulation.rs` under `Parity::contract()`, and by the
+rules of the case `floors`, recorded before the switch. It is never forked.
 
 The reference is kept, rather than deleted, because generated inputs need
 a live implementation to compare with; recorded outcomes outlive it on the

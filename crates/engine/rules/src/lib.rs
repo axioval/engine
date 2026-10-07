@@ -210,6 +210,7 @@ pub mod reference {
     pub use crate::keyed_limit::reference::KeyedLimit;
     pub use crate::level_spacing::reference::LevelSpacing;
     pub use crate::light_well::reference::LightWell;
+    pub use crate::local_circulation::reference::LocalCirculation;
     pub use crate::name_sequence::reference::NameSequence;
     pub use crate::numbering_consistency::reference::NumberingConsistency;
     pub use crate::object_count::reference::ObjectCount;
@@ -355,6 +356,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(group_composition::CompositionMeasures))
         .and_then(|registry| registry.register_measured(component_clearance::ClearanceMeasures))
         .and_then(|registry| registry.register_measured(accessible_route::RouteMeasures))
+        .and_then(|registry| registry.register_measured(local_circulation::CirculationMeasures))
         .and_then(|registry| registry.register_measured(parking_bay::BayMeasures))
         .and_then(|registry| registry.register_measured(parking_bay::BayItems))
         .and_then(|registry| registry.register_measured(wall_spacing::SpacingMeasures))

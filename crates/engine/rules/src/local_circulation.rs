@@ -52,7 +52,18 @@
 //! decide, and a door whose swing may count but is unknown, leave every
 //! space not evaluated.
 
+mod measured;
+#[cfg(feature = "parity-reference")]
+pub(crate) mod reference;
+mod template;
+
+pub(crate) use measured::CirculationMeasures;
+
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::sync::LazyLock;
+
+use axioval_engine::template::Template;
+use axioval_ir::measured::MeasuredSelection;
 
 use axioval_engine::{
     BoxClearance, CapabilityEvaluation, CirculationMap, CirculationNodeKind, CirculationRequest,
@@ -106,16 +117,73 @@ struct EndArea {
     reach: f64,
 }
 
+/// What picks the objects of one role: a rule's selector, or the objects a
+/// measured value's argument bound from it.
+#[derive(Clone, Copy)]
+enum Source<'a> {
+    Selector(&'a Selector),
+    Selected(&'a MeasuredSelection),
+}
+
+/// An object `source` picks, surely or not, in the project's order (the
+/// surely picked first); the reason and message of an undecided one.
+type Picked = (ObjectId, Option<(NotEvaluatedReason, String)>);
+
+/// What `source` picks, or why it cannot be listed as a whole.
+fn pick(context: &RuleContext<'_>, source: Source<'_>) -> Result<Vec<Picked>, Unavailable> {
+    match source {
+        Source::Selector(selector) => {
+            let (picked, outcomes) = select_objects(context, selector);
+            let mut objects: Vec<Picked> = picked
+                .iter()
+                .map(|object| (object.id.clone(), None))
+                .collect();
+            for outcome in outcomes.not_evaluated_outcomes() {
+                match outcome.object_id() {
+                    Some(object) => objects.push((
+                        object.clone(),
+                        Some((outcome.reason().clone(), outcome.message().to_owned())),
+                    )),
+                    None => return Err((outcome.reason().clone(), outcome.message().to_owned())),
+                }
+            }
+            Ok(objects)
+        }
+        Source::Selected(selected) => {
+            let mut objects: Vec<Picked> = context
+                .project
+                .objects()
+                .filter(|object| selected.matched.contains(&object.id))
+                .map(|object| (object.id.clone(), None))
+                .collect();
+            objects.extend(
+                context
+                    .project
+                    .objects()
+                    .filter(|object| selected.undecided.contains(&object.id))
+                    .map(|object| {
+                        let why = selected.reasons.get(&object.id).cloned().unwrap_or((
+                            NotEvaluatedReason::IncompleteEvidence,
+                            "its selection is undecided".to_owned(),
+                        ));
+                        (object.id.clone(), Some(why))
+                    }),
+            );
+            Ok(objects)
+        }
+    }
+}
+
 struct Declaration<'a> {
-    components: &'a Selector,
+    components: Source<'a>,
     spaces: Traversal,
     access: AccessDeclaration<'a>,
-    obstacles: Option<&'a Selector>,
-    swings: Option<&'a Selector>,
+    obstacles: Option<Source<'a>>,
+    swings: Option<Source<'a>>,
     merge: Option<Traversal>,
     band_from: Option<f64>,
-    exempt: Option<(&'a Selector, f64)>,
-    partners: Option<&'a Selector>,
+    exempt: Option<(Source<'a>, f64)>,
+    partners: Option<Source<'a>>,
     width: f64,
     height: f64,
     tolerance: f64,
@@ -191,7 +259,7 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
         parameters.selector("end_exempt_selector")?,
         positive(&parameters, "end_exempt_reach_metres")?,
     ) {
-        (Some(selector), Some(reach)) => Some((selector, reach)),
+        (Some(selector), Some(reach)) => Some((Source::Selector(selector), reach)),
         (None, None) => None,
         _ => {
             return Err(invalid(
@@ -246,15 +314,17 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
         (false, None) => None,
     };
     Ok(Declaration {
-        components: parameters.required_selector("component_selector")?,
+        components: Source::Selector(parameters.required_selector("component_selector")?),
         spaces,
         access,
-        obstacles: parameters.selector("obstacles")?,
-        swings: parameters.selector("subtract_door_swings")?,
+        obstacles: parameters.selector("obstacles")?.map(Source::Selector),
+        swings: parameters
+            .selector("subtract_door_swings")?
+            .map(Source::Selector),
         merge,
         band_from,
         exempt,
-        partners,
+        partners: partners.map(Source::Selector),
         width: positive(&parameters, "width_metres")?
             .ok_or_else(|| invalid("parameter `width_metres` is required"))?,
         height,
@@ -269,177 +339,213 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
     })
 }
 
+/// The capability's parameter descriptor.
+pub(crate) fn parameters() -> Vec<ParameterDescriptor> {
+    let mut parameters = vec![
+        ParameterDescriptor::required("component_selector", ParameterType::Selector),
+        ParameterDescriptor::required("space_path", ParameterType::StringList),
+        ParameterDescriptor::required("access_path", ParameterType::StringList),
+        ParameterDescriptor::optional("door_selector", ParameterType::Selector),
+        ParameterDescriptor::optional("opening_selector", ParameterType::Selector),
+        ParameterDescriptor::optional("space_selector", ParameterType::Selector),
+        ParameterDescriptor::optional("obstacles", ParameterType::Selector),
+        ParameterDescriptor::optional("subtract_door_swings", ParameterType::Selector),
+        ParameterDescriptor::required("width_metres", ParameterType::Number),
+        ParameterDescriptor::required("clear_height_metres", ParameterType::Number),
+        ParameterDescriptor::optional("tolerance_metres", ParameterType::Number),
+        ParameterDescriptor::optional("component_mode", ParameterType::String),
+        ParameterDescriptor::optional("end_width_metres", ParameterType::Number),
+        ParameterDescriptor::optional("end_length_metres", ParameterType::Number),
+        ParameterDescriptor::optional("end_reach_metres", ParameterType::Number),
+        ParameterDescriptor::optional("short_end_metres", ParameterType::Number),
+        ParameterDescriptor::optional("narrow_end_metres", ParameterType::Number),
+        ParameterDescriptor::optional("merge_path", ParameterType::StringList),
+        ParameterDescriptor::optional("band_from_metres", ParameterType::Number),
+        ParameterDescriptor::optional("end_exempt_selector", ParameterType::Selector),
+        ParameterDescriptor::optional("end_exempt_reach_metres", ParameterType::Number),
+        ParameterDescriptor::optional("partner_selector", ParameterType::Selector),
+        ParameterDescriptor::optional("require_entrances", ParameterType::Boolean),
+        ParameterDescriptor::optional("check_entrance_width", ParameterType::Boolean),
+        ParameterDescriptor::optional("clear_width_property", ParameterType::PropertyReference),
+    ];
+    parameters.extend(CLEAR_WIDTH_SOURCES.into_iter().map(|name| {
+        ParameterDescriptor::optional(
+            name,
+            match name {
+                "clear_width_from_leaves" => ParameterType::String,
+                "overall_width" => ParameterType::PropertyReference,
+                _ => ParameterType::Quantity,
+            },
+        )
+    }));
+    parameters.extend(passing_spaces::parameters());
+    parameters
+}
+
+static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
+
+/// The plans of the rules bound to it, kept across runs.
+static PLANS: crate::templates::Plans = crate::templates::Plans::new();
+
+/// Checks the rule parameters `circulation_verdicts` names, as the rule
+/// states them: the declaration the capability refused, in its order and
+/// words.
+///
+/// # Errors
+///
+/// An invalid declaration.
+pub(crate) fn check_arguments(
+    stated: &BTreeMap<String, axioval_ir::contract::ParameterValue>,
+) -> Result<(), Unavailable> {
+    let rule = crate::light_area::synthesised(stated.clone());
+    declaration(&rule).map(|_| ())
+}
+
 impl RuleCapability for LocalCirculation {
     fn id(&self) -> &'static str {
         "axioval:capability.local-circulation"
     }
 
     fn parameters(&self) -> Vec<ParameterDescriptor> {
-        let mut parameters = vec![
-            ParameterDescriptor::required("component_selector", ParameterType::Selector),
-            ParameterDescriptor::required("space_path", ParameterType::StringList),
-            ParameterDescriptor::required("access_path", ParameterType::StringList),
-            ParameterDescriptor::optional("door_selector", ParameterType::Selector),
-            ParameterDescriptor::optional("opening_selector", ParameterType::Selector),
-            ParameterDescriptor::optional("space_selector", ParameterType::Selector),
-            ParameterDescriptor::optional("obstacles", ParameterType::Selector),
-            ParameterDescriptor::optional("subtract_door_swings", ParameterType::Selector),
-            ParameterDescriptor::required("width_metres", ParameterType::Number),
-            ParameterDescriptor::required("clear_height_metres", ParameterType::Number),
-            ParameterDescriptor::optional("tolerance_metres", ParameterType::Number),
-            ParameterDescriptor::optional("component_mode", ParameterType::String),
-            ParameterDescriptor::optional("end_width_metres", ParameterType::Number),
-            ParameterDescriptor::optional("end_length_metres", ParameterType::Number),
-            ParameterDescriptor::optional("end_reach_metres", ParameterType::Number),
-            ParameterDescriptor::optional("short_end_metres", ParameterType::Number),
-            ParameterDescriptor::optional("narrow_end_metres", ParameterType::Number),
-            ParameterDescriptor::optional("merge_path", ParameterType::StringList),
-            ParameterDescriptor::optional("band_from_metres", ParameterType::Number),
-            ParameterDescriptor::optional("end_exempt_selector", ParameterType::Selector),
-            ParameterDescriptor::optional("end_exempt_reach_metres", ParameterType::Number),
-            ParameterDescriptor::optional("partner_selector", ParameterType::Selector),
-            ParameterDescriptor::optional("require_entrances", ParameterType::Boolean),
-            ParameterDescriptor::optional("check_entrance_width", ParameterType::Boolean),
-            ParameterDescriptor::optional("clear_width_property", ParameterType::PropertyReference),
-        ];
-        parameters.extend(CLEAR_WIDTH_SOURCES.into_iter().map(|name| {
-            ParameterDescriptor::optional(
-                name,
-                match name {
-                    "clear_width_from_leaves" => ParameterType::String,
-                    "overall_width" => ParameterType::PropertyReference,
-                    _ => ParameterType::Quantity,
-                },
-            )
-        }));
-        parameters.extend(passing_spaces::parameters());
-        parameters
+        TEMPLATE.parameters.clone()
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
-        let declared = match declaration(rule) {
-            Ok(declared) => declared,
-            Err((reason, message)) => {
-                return CapabilityEvaluation::not_evaluated(
-                    reason,
-                    format!("local-circulation: {message}"),
-                );
-            }
-        };
-        let (spaces, mut evaluation) = select_objects(context, &rule.selector);
-        if spaces.is_empty() {
-            return evaluation;
-        }
-        let refuse = |evaluation: &mut CapabilityEvaluation, (reason, message): Unavailable| {
-            for space in &spaces {
-                evaluation.push_object_not_evaluated(
-                    space.id.clone(),
-                    reason.clone(),
-                    message.clone(),
-                );
-            }
-        };
-        let Some(free_space) = context.services.get::<FreeSpaceServiceHandle>() else {
-            refuse(
-                &mut evaluation,
-                (
-                    NotEvaluatedReason::MissingService,
-                    "free-space service is not registered".into(),
-                ),
-            );
-            return evaluation;
-        };
-        let obstacles = match select_obstacles(context, declared.obstacles) {
-            Ok(obstacles) => obstacles,
-            Err(unavailable) => {
-                refuse(&mut evaluation, unavailable);
-                return evaluation;
-            }
-        };
-        let swept = match Swings::select(context, declared.swings) {
-            Ok(swings) => match swings.undecided() {
-                None => swings.sure,
-                Some(why) => {
-                    refuse(
-                        &mut evaluation,
-                        incomplete(format!("the door swings are not all known: {why}")),
-                    );
-                    return evaluation;
-                }
-            },
-            Err(unavailable) => {
-                refuse(&mut evaluation, unavailable);
-                return evaluation;
-            }
-        };
-        let everything: Vec<&Object> = context.project.objects().collect();
-        let members = match components(context, &declared, &everything, &mut evaluation) {
-            Ok(members) => members,
-            Err(unavailable) => {
-                refuse(&mut evaluation, unavailable);
-                return evaluation;
-            }
-        };
-        let others = |selector: Option<&Selector>, what: &str| {
-            selector.map_or_else(
-                || Ok(Others::default()),
-                |selector| Others::select(context, &declared, selector, &everything, what),
-            )
-        };
-        let (partners, exempt) = match (
-            others(declared.partners, "partner"),
-            others(
-                declared.exempt.map(|(selector, _)| selector),
-                "exempting object",
-            ),
-        ) {
-            (Ok(partners), Ok(exempt)) => (partners, exempt),
-            (Err(unavailable), _) | (_, Err(unavailable)) => {
-                refuse(&mut evaluation, unavailable);
-                return evaluation;
-            }
-        };
-        let index = declared.access.index(context);
-        let judge = Judge {
-            context,
-            rule,
-            declared: &declared,
-            free_space,
-            index: &index,
-            obstacles: &obstacles,
-            swept: &swept,
-            everything: &everything,
-            members: &members,
-            partners: &partners,
-            exempt: &exempt,
-        };
-        for space in &spaces {
-            judge.space(&space.id, &mut evaluation);
-        }
-        evaluation
+        crate::templates::run((&TEMPLATE, &PLANS), context, rule)
     }
+
+    fn template(&self) -> Option<&Template> {
+        Some(&TEMPLATE)
+    }
+}
+
+/// The circulation of `spaces` (the rule's selection, in the project's
+/// order) as `declared` asks for it: each space's entrances, map, reach,
+/// links, ends and passing spaces, and its components', each object's
+/// answers as findings or reasons it is open. The template judges them.
+fn circulate(
+    context: &RuleContext<'_>,
+    rule: &CompiledRule,
+    declared: &Declaration<'_>,
+    spaces: &[&Object],
+) -> CapabilityEvaluation {
+    let mut evaluation = CapabilityEvaluation::default();
+    if spaces.is_empty() {
+        return evaluation;
+    }
+    let refuse = |evaluation: &mut CapabilityEvaluation, (reason, message): Unavailable| {
+        for space in spaces {
+            evaluation.push_object_not_evaluated(space.id.clone(), reason.clone(), message.clone());
+        }
+    };
+    let Some(free_space) = context.services.get::<FreeSpaceServiceHandle>() else {
+        refuse(
+            &mut evaluation,
+            (
+                NotEvaluatedReason::MissingService,
+                "free-space service is not registered".into(),
+            ),
+        );
+        return evaluation;
+    };
+    let obstacles = match select_obstacles(context, declared.obstacles) {
+        Ok(obstacles) => obstacles,
+        Err(unavailable) => {
+            refuse(&mut evaluation, unavailable);
+            return evaluation;
+        }
+    };
+    let swings = match declared.swings {
+        Some(Source::Selected(doors)) => Ok(Swings::of_selection(context, doors)),
+        Some(Source::Selector(selector)) => Swings::select(context, Some(selector)),
+        None => Ok(Swings::default()),
+    };
+    let swept = match swings {
+        Ok(swings) => match swings.undecided() {
+            None => swings.sure,
+            Some(why) => {
+                refuse(
+                    &mut evaluation,
+                    incomplete(format!("the door swings are not all known: {why}")),
+                );
+                return evaluation;
+            }
+        },
+        Err(unavailable) => {
+            refuse(&mut evaluation, unavailable);
+            return evaluation;
+        }
+    };
+    let everything: Vec<&Object> = context.project.objects().collect();
+    let members = match components(context, declared, &everything, &mut evaluation) {
+        Ok(members) => members,
+        Err(unavailable) => {
+            refuse(&mut evaluation, unavailable);
+            return evaluation;
+        }
+    };
+    let others = |selector: Option<Source<'_>>, what: &str| {
+        selector.map_or_else(
+            || Ok(Others::default()),
+            |selector| Others::select(context, declared, selector, &everything, what),
+        )
+    };
+    let (partners, exempt) = match (
+        others(declared.partners, "partner"),
+        others(
+            declared.exempt.map(|(selector, _)| selector),
+            "exempting object",
+        ),
+    ) {
+        (Ok(partners), Ok(exempt)) => (partners, exempt),
+        (Err(unavailable), _) | (_, Err(unavailable)) => {
+            refuse(&mut evaluation, unavailable);
+            return evaluation;
+        }
+    };
+    let index = declared.access.index(context);
+    let judge = Judge {
+        context,
+        rule,
+        declared,
+        free_space,
+        index: &index,
+        obstacles: &obstacles,
+        swept: &swept,
+        everything: &everything,
+        members: &members,
+        partners: &partners,
+        exempt: &exempt,
+    };
+    for space in spaces {
+        judge.space(&space.id, &mut evaluation);
+    }
+    evaluation
 }
 
 /// Every obstacle the selection picks, or every object without one.
 fn select_obstacles(
     context: &RuleContext<'_>,
-    selector: Option<&Selector>,
+    source: Option<Source<'_>>,
 ) -> Result<Vec<ObjectId>, Unavailable> {
-    let Some(selector) = selector else {
+    let Some(source) = source else {
         return Ok(context
             .project
             .objects()
             .map(|object| object.id.clone())
             .collect());
     };
-    let (objects, outcomes) = select_objects(context, selector);
-    if let Some(outcome) = outcomes.not_evaluated_outcomes().first() {
-        return Err((
+    let undecided = |message: &str| {
+        (
             NotEvaluatedReason::IncompleteEvidence,
-            format!("the obstacle selection is undecided: {}", outcome.message()),
-        ));
+            format!("the obstacle selection is undecided: {message}"),
+        )
+    };
+    let picked = pick(context, source).map_err(|(_, message)| undecided(&message))?;
+    if let Some((_, Some((_, message)))) = picked.iter().find(|(_, open)| open.is_some()) {
+        return Err(undecided(message));
     }
-    Ok(objects.iter().map(|object| object.id.clone()).collect())
+    Ok(picked.into_iter().map(|(object, _)| object).collect())
 }
 
 /// The selected components of each space. A component whose selection or
@@ -450,38 +556,33 @@ fn components(
     spaces: &[&Object],
     evaluation: &mut CapabilityEvaluation,
 ) -> Result<BTreeMap<ObjectId, Vec<ObjectId>>, Unavailable> {
-    let (picked, outcomes) = select_objects(context, declared.components);
-    for outcome in outcomes.not_evaluated_outcomes() {
-        match outcome.object_id() {
-            Some(object) => evaluation.push_object_not_evaluated(
-                object.clone(),
-                outcome.reason().clone(),
-                format!(
-                    "whether it is a component is undecided: {}",
-                    outcome.message()
-                ),
+    let picked = pick(context, declared.components).map_err(|(reason, message)| {
+        (
+            reason,
+            format!("the component selection is undecided: {message}"),
+        )
+    })?;
+    let mut sure = Vec::new();
+    for (object, open) in picked {
+        match open {
+            None => sure.push(object),
+            Some((reason, message)) => evaluation.push_object_not_evaluated(
+                object,
+                reason,
+                format!("whether it is a component is undecided: {message}"),
             ),
-            None => {
-                return Err((
-                    outcome.reason().clone(),
-                    format!(
-                        "the component selection is undecided: {}",
-                        outcome.message()
-                    ),
-                ));
-            }
         }
     }
     let mut members: BTreeMap<ObjectId, Vec<ObjectId>> = BTreeMap::new();
-    for component in picked {
-        match declared.spaces.related(context, &component.id, spaces) {
+    for component in sure {
+        match declared.spaces.related(context, &component, spaces) {
             Ok((reached, _)) => {
                 for space in reached {
-                    members.entry(space).or_default().push(component.id.clone());
+                    members.entry(space).or_default().push(component.clone());
                 }
             }
             Err((reason, message)) => evaluation.push_object_not_evaluated(
-                component.id.clone(),
+                component,
                 reason,
                 format!("its spaces cannot be read: {message}"),
             ),
@@ -504,26 +605,20 @@ impl Others {
     fn select(
         context: &RuleContext<'_>,
         declared: &Declaration<'_>,
-        selector: &Selector,
+        source: Source<'_>,
         everything: &[&Object],
         what: &str,
     ) -> Result<Self, Unavailable> {
-        let (picked, outcomes) = select_objects(context, selector);
-        let mut objects: Vec<(ObjectId, bool)> = picked
-            .iter()
-            .map(|object| (object.id.clone(), true))
+        let objects: Vec<(ObjectId, bool)> = pick(context, source)
+            .map_err(|(reason, message)| {
+                (
+                    reason,
+                    format!("the {what} selection is undecided: {message}"),
+                )
+            })?
+            .into_iter()
+            .map(|(object, open)| (object, open.is_none()))
             .collect();
-        for outcome in outcomes.not_evaluated_outcomes() {
-            match outcome.object_id() {
-                Some(object) => objects.push((object.clone(), false)),
-                None => {
-                    return Err((
-                        outcome.reason().clone(),
-                        format!("the {what} selection is undecided: {}", outcome.message()),
-                    ));
-                }
-            }
-        }
         let mut others = Self::default();
         for (object, sure) in objects {
             match declared.spaces.related(context, &object, everything) {

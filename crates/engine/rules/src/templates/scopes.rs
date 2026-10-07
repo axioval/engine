@@ -76,7 +76,10 @@ pub(super) fn run<'a>(
     rule: &CompiledRule,
     ran: &mut Ran<'a>,
 ) -> CapabilityEvaluation {
-    if scopes.sources == ScopeSources::Occupied {
+    if matches!(
+        scopes.sources,
+        ScopeSources::Occupied | ScopeSources::Reached { .. }
+    ) {
         return occupied(plan, decision, scopes, context, rule, ran);
     }
     let across = matches!(
@@ -241,6 +244,25 @@ fn occupied<'a>(
                 .or_default()
                 .sure
                 .push(object.id.clone());
+        }
+        if let ScopeSources::Reached { selector } = scopes.sources {
+            // Where the selection is undecided, and where the parameter's
+            // objects lie.
+            for outcome in evaluation.not_evaluated_outcomes() {
+                if let Some(object) = outcome.object_id() {
+                    tallies
+                        .entry(Scope::Source(object.source.clone()))
+                        .or_default();
+                }
+            }
+            if let Some(ParameterValue::Selector { value }) = plan.bound.parameters.get(selector) {
+                let (picked, _) = crate::selection::select_shared(context, value);
+                for object in picked {
+                    tallies
+                        .entry(Scope::Source(object.id.source.clone()))
+                        .or_default();
+                }
+            }
         }
         for (scope, tally) in tallies {
             judge(

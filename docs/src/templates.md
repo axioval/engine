@@ -221,7 +221,12 @@ the rule's selection is made once and its outcomes reported, each such
 source is judged (its values may name `@selection`, the rule's own
 selection), and then every selected object is judged by the form's
 `checks`, each its own outcome: one measurement leading to outcomes at
-source and at object level. A finding on a source relates the value
+source and at object level. `reached` (`ScopeSources::Reached`, with a
+selector parameter) is `occupied` and also every source where the rule's
+selection leaves an object undecided or where that parameter's selector
+surely picks an object: a check over those objects (whether any of a
+source's walls declares itself external) concerns the source even where
+the rule selects nothing there. A finding on a source relates the value
 `related` names, if any. `Scopes::needs` judges the scopes only where a
 condition holds over the values read once per rule (`Condition::Measured`):
 where it does not, the rule's open outcomes stand for every scope.

@@ -914,6 +914,12 @@ pub enum ScopeSources {
     /// checks then judge each selected object ([`Form::checks`]): one
     /// measurement leading to outcomes at source and at object level.
     Occupied,
+    /// As [`Self::Occupied`], and also every source where the rule's
+    /// selection leaves an object undecided or where the rule's selector
+    /// parameter `selector` surely picks an object: a check of those
+    /// objects (whether a source's walls declare any external) concerns
+    /// the source even where the rule selects nothing there.
+    Reached { selector: &'static str },
 }
 
 impl ScopeSources {

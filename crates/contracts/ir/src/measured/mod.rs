@@ -202,6 +202,11 @@ pub enum MeasuredParameterKind {
     /// Relationship steps, `,`-separated, each written as a `related`
     /// selector's step. The engine parses the steps.
     Path,
+    /// Relationship paths, `,`-separated, each its steps separated by
+    /// spaces, as a rule's string list states them: none where the list is
+    /// empty. Bound as a [`MeasuredArgument::Path`] of the paths as
+    /// written.
+    Paths,
     /// A source kind, such as an entity name; subtypes match.
     SourceKind,
     /// A length in metres, at least `minimum`.
@@ -252,7 +257,7 @@ impl MeasuredParameterKind {
     pub const fn reference(self) -> Option<ParameterReference> {
         match self {
             Self::Length { .. } => Some(ParameterReference::Length),
-            Self::Path | Self::Choices { .. } => Some(ParameterReference::StringList),
+            Self::Path | Self::Paths | Self::Choices { .. } => Some(ParameterReference::StringList),
             Self::Choice { .. } | Self::Text | Self::Pattern | Self::SourceKind => {
                 Some(ParameterReference::String)
             }
@@ -397,24 +402,22 @@ impl MeasuredCall {
             (
                 MeasuredParameterKind::Length { .. },
                 MeasuredArgument::Length(_)
-            ) | (MeasuredParameterKind::Path, MeasuredArgument::Path(_))
-                | (
-                    MeasuredParameterKind::Choice { .. },
-                    MeasuredArgument::Choice(_)
-                )
-                | (
-                    MeasuredParameterKind::Choices { .. },
-                    MeasuredArgument::Choices(_)
-                )
-                | (
-                    MeasuredParameterKind::Text | MeasuredParameterKind::Pattern,
-                    MeasuredArgument::Text(_)
-                )
-                | (
-                    MeasuredParameterKind::SourceKind | MeasuredParameterKind::Objects,
-                    MeasuredArgument::SourceKind(_)
-                )
-                | (MeasuredParameterKind::Objects, MeasuredArgument::Objects(_))
+            ) | (
+                MeasuredParameterKind::Path | MeasuredParameterKind::Paths,
+                MeasuredArgument::Path(_)
+            ) | (
+                MeasuredParameterKind::Choice { .. },
+                MeasuredArgument::Choice(_)
+            ) | (
+                MeasuredParameterKind::Choices { .. },
+                MeasuredArgument::Choices(_)
+            ) | (
+                MeasuredParameterKind::Text | MeasuredParameterKind::Pattern,
+                MeasuredArgument::Text(_)
+            ) | (
+                MeasuredParameterKind::SourceKind | MeasuredParameterKind::Objects,
+                MeasuredArgument::SourceKind(_)
+            ) | (MeasuredParameterKind::Objects, MeasuredArgument::Objects(_))
                 | (
                     MeasuredParameterKind::Property,
                     MeasuredArgument::Property { .. }
@@ -821,7 +824,8 @@ fn argument(kind: MeasuredParameterKind, value: &str) -> Result<MeasuredArgument
         return reference(kind, value, name.trim());
     }
     Ok(match kind {
-        MeasuredParameterKind::Path => {
+        // Steps of one path, or whole paths, `,`-separated alike.
+        MeasuredParameterKind::Path | MeasuredParameterKind::Paths => {
             let steps: Vec<String> = value
                 .split(',')
                 .map(|step| step.trim().to_owned())

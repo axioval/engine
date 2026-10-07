@@ -465,6 +465,7 @@ parameter's `references`):
 | --- | --- |
 | `length` | a `number` or `integer` of metres, or a `quantity` of length, at least the parameter's minimum |
 | `path` | a `stringList` of steps |
+| `paths` | a `stringList` of paths, each its steps separated by spaces; an empty list names none |
 | `choices` | a `stringList` of its options, each once |
 | `choice`, `text`, `sourceKind` | a `string` (a choice among its options) |
 | `objects` | a `selector`; or `@anchor` |
@@ -514,7 +515,8 @@ them.
 
 Every measured name is declared once, in `axioval_ir::measured`
 (`MEASURED_VALUES`, sorted by name). A descriptor states the name, its
-typed parameters (`path`, a `sourceKind`, a `length` with a minimum, a
+typed parameters (`path`, `paths` (several paths, `,`-separated, each
+its steps separated by spaces), a `sourceKind`, a `length` with a minimum, a
 `choice`, `choices` (several options, `,`-separated, each once), a
 `vector`, a `property`, a `text`, such as a discipline, or a
 `polygon` of `lateral:up` vertices, `,`-separated, at least three and never

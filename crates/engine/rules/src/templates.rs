@@ -19,6 +19,7 @@ mod groups;
 mod items;
 mod joined;
 mod members;
+mod pairs;
 mod parts;
 mod proportion;
 mod requirements;
@@ -3920,6 +3921,7 @@ fn run_apart<'a>(
         Decision::Requirements(names) => requirements::run(names, context, rule),
         Decision::Compared(names) => compared::run(names, context, rule),
         Decision::Conforms(conformance) => groups::conforms(plan, conformance, context, rule),
+        Decision::Pairs(decided) => pairs::run(plan, decided, context, rule),
         Decision::Proportion(decided) if decided.groups.is_some() => {
             let groups = decided.groups.as_ref()?;
             proportion::groups(plan, groups, context, rule)
@@ -4387,6 +4389,7 @@ pub fn fork(capability: &dyn RuleCapability, rule: &CompiledRule) -> Result<Fork
             | Decision::Facets(_)
             | Decision::Requirements(_)
             | Decision::Compared(_)
+            | Decision::Pairs(_)
     ) {
         return Err(ForkError::Inexpressible(
             "an expression rule judges each object on its own, not against the values of its group"

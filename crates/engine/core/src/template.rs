@@ -36,6 +36,7 @@ use serde::Serialize;
 use crate::ParameterDescriptor;
 
 mod items;
+mod pairs;
 mod parts;
 
 pub use items::{
@@ -43,6 +44,10 @@ pub use items::{
     Guard, ItemCheck, ItemTest, ItemText, ItemUnit, Items, Judge, Least, On, OnNull, OpenCase,
     OpenItems, Passing, Range, Requirement, RowColumn, Rows, Spread, Together, TogetherJudge,
     Truths, When,
+};
+pub use pairs::{
+    ClassSeverities, GradeMeasure, PairClass, PairGrades, PairGroups, PairOpen, PairOrder,
+    PairSeverity, PairTest, Pairs,
 };
 pub use parts::Parts;
 
@@ -538,6 +543,7 @@ pub enum Service {
     Guard,
     Space,
     FreeSpace,
+    Proximity,
 }
 
 impl Service {
@@ -570,6 +576,7 @@ impl Service {
             Self::Guard => services.get::<crate::GuardServiceHandle>().is_some(),
             Self::Space => services.get::<crate::SpaceServiceHandle>().is_some(),
             Self::FreeSpace => services.get::<crate::FreeSpaceServiceHandle>().is_some(),
+            Self::Proximity => services.get::<crate::ProximityServiceHandle>().is_some(),
         }
     }
 }
@@ -1265,6 +1272,11 @@ pub enum Decision {
     /// still of the wrong kind); the values after it are read only where
     /// it fails, to word the finding.
     Holds { value: &'static str },
+    /// The pairs of a measured member list of the project, each put in the
+    /// first class that holds and reported as that class says, graded and
+    /// grouped ([`Pairs`]): a rule's selected objects against their
+    /// counterparts.
+    Pairs(Box<Pairs>),
 }
 
 /// One outcome over the items of a measured member list, read for the
@@ -2319,6 +2331,7 @@ impl Decision {
                 }
             }
             Self::Items(items) => items.expression(),
+            Self::Pairs(pairs) => pairs.expression(),
             Self::Joined(joined) => Expression::Aggregate {
                 function: axioval_ir::contract::AggregateFunction::None,
                 over: axioval_ir::contract::AggregateSource::Measured {

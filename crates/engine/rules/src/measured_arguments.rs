@@ -57,7 +57,7 @@ const PARSED_KEPT: usize = 1024;
 /// references unbound; `None` where it does not parse. Parsing is a pure
 /// function of the name, so each is parsed once and kept for every run
 /// (at most [`PARSED_KEPT`], all dropped when full).
-fn parsed(name: &str, list: bool) -> Option<MeasuredCall> {
+pub(crate) fn parsed(name: &str, list: bool) -> Option<MeasuredCall> {
     type Kept = std::collections::HashMap<(bool, String), Option<MeasuredCall>>;
     static KEPT: std::sync::LazyLock<std::sync::Mutex<Kept>> =
         std::sync::LazyLock::new(|| std::sync::Mutex::new(Kept::new()));
@@ -350,7 +350,16 @@ fn bound(
                     .map_err(|why| invalid(format!("{reference}: {why}")))?,
             )
         }
-        (MeasuredParameterKind::Path | MeasuredParameterKind::Choices { .. }, _) => {
+        // Each path as the rule states it; an empty list states none.
+        (MeasuredParameterKind::Paths, ParameterValue::StringList { value: paths }) => {
+            MeasuredArgument::Path(paths.iter().map(|path| path.trim().to_owned()).collect())
+        }
+        (
+            MeasuredParameterKind::Path
+            | MeasuredParameterKind::Paths
+            | MeasuredParameterKind::Choices { .. },
+            _,
+        ) => {
             return Err(not("a string list"));
         }
         // A pattern binds exactly as stated: its spaces match spaces.

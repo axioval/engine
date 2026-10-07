@@ -81,7 +81,7 @@ rules crate (`body_extent/template.rs`):
 | `refusals` | Where a refused declaration and missing services are reported: `rule` (the default, once, before anything is selected, after the name), `objects` (for each selected object, worded as the check states it, as capabilities that judged their declaration per object reported it) or `prefixed` (for each selected object, a refused declaration after a prefix: `slab-contact declaration is invalid: …`; missing services as stated) or `servicesPerObject` (a refused declaration once for the rule, after the name, missing services for each selected object) or `selected` (once for the rule after selecting, and only where the rule selects an object, beside the selection's own outcomes: a refused declaration after the name, missing services as stated, as capabilities that selected before reading their declaration reported it). |
 | `defaults` | Values optional parameters take when unstated (`tolerance` 0 m). A default taking its value `from` other parameters takes the first of them the rule states, its literal where none is: one value a rule may state under either of two names (`horizontal` from `tolerance` or `horizontal_tolerance`), or the least severe of the thresholds stated. Such a name may be no parameter of the descriptor; messages, conditions and measured values (`@horizontal`) read it as any parameter. |
 | `declaration` | `Check`s over the rule's parameters, in order: `excludes` (where a mode is stated, no string parameter of a list states an option it does not combine with), `arguments` (where a mode is stated, the rule parameters a measured value or member list names, checked as stated by the value's own argument check: a declaration, such as a table of rows, only the measurement knows how to read), `choice` (a string among options), `length` (a non-negative length), `count` (an integer of at least zero, stated where the descriptor requires it), `kind` (a parameter of its descriptor's kind, placed where the capability read it so refusals keep their order), `nonNegative` (numbers of at least zero), `traversal` (a valid `relationship` or `path`, declared only with one of the named parameters, or anywhere where it names none), `exclusive`, `anyOf`, `requires`, `ordered` (numbers, integers or quantities, as the descriptor types them), `disciplines` (a non-empty list of valid disciplines), `path` (a valid relationship path), `tolerance` (the rule's tolerance parameters valid together), `required` (a parameter stated, of its kind), `finite` (each parameter stated as a finite `number`, above or at least a bound where given), `increasing` (both numbers, the first below the second), `atMost` (each number stated at most a value: a share no greater than the whole), `when` (a check that applies only where one of some boolean parameters is stated true: a declaration a mode needs only while it is on), `amongEach` (every string a list states, trimmed, among options, `{value}` the one that is not), `declaresListed` (`declares`, a string list only where it lists one), `holds` (a `Condition` holds over the parameters, their defaults applied: a declaration stated as conditions, such as two switches not both off, or a share in `[0, 1)`), `exceeds` (where stated, a number above each earlier one stated: thresholds strictly increasing), `quantity` (where stated, a quantity of one dimension, of any sign), `angleBelow` (where stated, a plane angle of at least zero and below a number of degrees, compared in degrees as the capability converted it), `finiteLength` (a finite length of at least zero, `` `x` must be a finite length, not negative `` or `` `x` is not a length ``), `listed` (every string a list states is, as stated and untrimmed, one of some options and listed once, judged string by string in the list's order: `unknown` or `repeated`, `{value}` the string) and `listedNeeds` (for each string a list states, in its order, the parameters that option `Needed` are stated: a mode list whose options each need their own inputs). The first failing check leaves the rule not evaluated as an invalid declaration, worded as the capability worded it. `ifStated` judges a check only where the rule states a parameter (of any kind). A refusal worded after the template's name is not named again where its message names the capability itself (`horizontal-guard declaration is missing or not realisable`). |
-| `services` | The host services the values need (`Service`: `object-frame`, `vertical-extent`, `triangle-count`, `walking-surface`, `contact`, `plan-area`, `plan-span`, `coordinate-system`, `envelope-membership`, `boundary-coverage`, `guard`, `space`, `free-space`), and the message leaving the whole rule open without them, before anything is selected (after selecting, with `selected` refusals). With `only` (a string parameter and a value), they are needed only where the rule states that value (`elevation_overlap` `overlapping`); with `whole`, a missing one leaves the rule as a whole open, after the name, whatever the `refusals`. |
+| `services` | The host services the values need (`Service`: `object-frame`, `vertical-extent`, `triangle-count`, `walking-surface`, `contact`, `plan-area`, `plan-span`, `coordinate-system`, `envelope-membership`, `boundary-coverage`, `guard`, `space`, `free-space`, `proximity`), and the message leaving the whole rule open without them, before anything is selected (after selecting, with `selected` refusals). With `only` (a string parameter and a value), they are needed only where the rule states that value (`elevation_overlap` `overlapping`); with `whole`, a missing one leaves the rule as a whole open, after the name, whatever the `refusals`. |
 | `texts` | Named message parts, optionally conditional: `Condition::Positive` (a parameter above zero), `Condition::Inexact` (a value read from evidence that is not exact, such as a count of a tessellation), `Condition::Equals` (a string parameter or its default is a value), `Condition::Zero` (a value's lower end is zero: nothing surely counted), `Condition::All` (every one of several), `Condition::Not`, `Condition::Cites` (a value's measured reads cite an object: a search found a candidate), `Condition::Absent` (a value is `null`: a measurement found nothing near), `Condition::Below` and `Condition::Above` (a value surely below or above a number: its upper or lower end is), `Condition::Lists` (a string-list parameter lists a word), `Condition::AtLeast` and `Condition::Under` (a parameter, or its default, a number at least or below a number: a tolerance not negative), `Condition::Exceeds` (a value's lower or upper end above the number a parameter states, never where it states none: a share surely or possibly above a threshold), `Condition::Stated` (the rule states a parameter, or a default gives it), `Condition::Measured` (a value was read: one read once per rule was not refused) and `Condition::Scope` (the source a scope judges is one a value's measured reads cite: the reference source), `Condition::Noted` (a value's measured reads noted something: boundaries that surely overlap). Several texts may share a name, each under its own condition: the first that holds is rendered (`plan area` or `facade area` by `measure`). |
 | `forms` | The compositions. The first form whose `when` parameters are all stated applies. |
 
@@ -707,6 +707,51 @@ once), then its `checks`, every outcome on the part; its measured values
 name that object as `@anchor`. The form's own values and checks then judge
 the object. A path the object cannot be read along leaves it open. Such a
 form is never forked.
+
+**Pairs.** A form deciding `Decision::Pairs` (`Pairs`) judges the items
+of a measured member list of the project, read once per rule, its `@`
+references bound (`@selection` the objects the rule selects): the
+candidate pairs the rule's objects form with their counterparts, each
+measured once beside the tolerances it is judged against. An item whose
+text field `open` states words is no pair to judge: it is open on its
+`subject` with them, for the reason its field `reason` names as reports
+spell it (`invalid_evidence`). Every other item is a pair, tried against
+the `classes` in order. A class (`PairClass`) is a conjunction of
+three-valued tests (`PairTest`): a number field `Compare`d with a bound (an
+item's number, a rule parameter or a literal) by `below`, `atMost`,
+`above` or `atLeast`, holding where every value of the interval does,
+failing where none does, open otherwise; a `null` value or bound fails
+(no penetration, no clearance declared), an undecided one may hold, and
+with `zero` a bound of exactly zero holds whatever the value (a tolerance
+of zero does not limit); a `Truth` field; a field `Stated` or not. The
+first class surely holding decides the pair: a finding worded by its
+`fail` where its truth field `reported` is true (or it names none), a
+pass where it is switched off (its pairs are never reclassified), or, with
+`opens`, an open outcome. One surely not holding hands the pair to the
+next; one that may hold decides only where both readings agree: two
+findings keep the later class's, a pass and a finding leave the pair open
+with the class's `undecided`, an open reading stands. A class's `excused`
+test is read last and only where the class may hold and is reported, so
+what it reads is consulted only where it can change the outcome. Where
+the item's `unless` field states words (an exclusion that cannot be
+decided), any outcome but a pass is open with them instead. A finding is
+graded (`PairSeverity`): the severity a text field of the item names (a
+matrix cell's), else its class's from a table parameter, else the rule's;
+a class `PairGrades` grades takes the most severe grade its measure (the
+number field the string parameter `by` chooses) may reach among the
+table's rows, the class's own below every grade, worded after the
+finding (`graded`, `reaches`, `unmeasured`). `suffix` words follow every
+finding (the cell). Open outcomes are reported once per object, reason
+and message, the rule's own and its `selections`' undecided objects among
+them. Where `groups` applies, findings sharing the text field `key` (and,
+where `classed` holds, their class) are one finding on the object most of
+them involve (the first in identity order), relating every other, at the
+most severe of their severities, citing what each cited, worded by
+`message` (`{count}`, `{class}`, `{parts}`, each pair's `part`); a pair
+whose key is undecided is reported alone, with `alone`. A finding cites
+what its item was measured from. Its expression form, for the catalogue,
+is a `none` aggregate over the list of a pair in a reported class; a rule
+is never forked from it.
 
 ### `object-count`
 

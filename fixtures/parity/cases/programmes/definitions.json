@@ -1,0 +1,728 @@
+{
+  "schemaVersion": "0.1.0",
+  "package": {
+    "id": "axioval:parity.public.programmes.definitions",
+    "name": {
+      "default": "Public parity definitions, programmes",
+      "translations": {}
+    },
+    "version": "0.1.0",
+    "description": {
+      "default": "Terms for holding the allocation capabilities to the outcomes recorded before their decisions became templates.",
+      "translations": {}
+    },
+    "authors": []
+  },
+  "objectTypes": {
+    "axioval:parity.public.programmes.space": {
+      "id": "axioval:parity.public.programmes.space",
+      "name": {
+        "default": "space",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcSpace"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcSpace"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcSpace"
+        }
+      ]
+    },
+    "axioval:parity.public.programmes.storey": {
+      "id": "axioval:parity.public.programmes.storey",
+      "name": {
+        "default": "storey",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcBuildingStorey"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcBuildingStorey"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcBuildingStorey"
+        }
+      ]
+    },
+    "axioval:parity.public.programmes.zone": {
+      "id": "axioval:parity.public.programmes.zone",
+      "name": {
+        "default": "zone",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcZone"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcZone"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcZone"
+        }
+      ]
+    },
+    "axioval:parity.public.programmes.wall": {
+      "id": "axioval:parity.public.programmes.wall",
+      "name": {
+        "default": "wall",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcWall"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcWall"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcWall"
+        }
+      ]
+    },
+    "axioval:parity.public.programmes.slab": {
+      "id": "axioval:parity.public.programmes.slab",
+      "name": {
+        "default": "slab",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcSlab"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcSlab"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcSlab"
+        }
+      ]
+    },
+    "axioval:parity.public.programmes.beam": {
+      "id": "axioval:parity.public.programmes.beam",
+      "name": {
+        "default": "beam",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcBeam"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcBeam"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcBeam"
+        }
+      ]
+    },
+    "axioval:parity.public.programmes.furniture": {
+      "id": "axioval:parity.public.programmes.furniture",
+      "name": {
+        "default": "furniture",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcFurnishingElement"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcFurnishingElement"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcFurnishingElement"
+        }
+      ]
+    }
+  },
+  "properties": {
+    "axioval:parity.public.programmes.name": {
+      "id": "axioval:parity.public.programmes.name",
+      "name": {
+        "default": "name",
+        "translations": {}
+      },
+      "valueKind": "string",
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "Name"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "Name"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "Name"
+        }
+      ]
+    },
+    "axioval:parity.public.programmes.long-name": {
+      "id": "axioval:parity.public.programmes.long-name",
+      "name": {
+        "default": "long-name",
+        "translations": {}
+      },
+      "valueKind": "string",
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "LongName"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "LongName"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "LongName"
+        }
+      ]
+    },
+    "axioval:parity.public.programmes.object-type": {
+      "id": "axioval:parity.public.programmes.object-type",
+      "name": {
+        "default": "object-type",
+        "translations": {}
+      },
+      "valueKind": "string",
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "ObjectType"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "ObjectType"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "ObjectType"
+        }
+      ]
+    }
+  },
+  "propertySets": {},
+  "definitions": {
+    "axioval:parity.public.programmes.group-composition": {
+      "id": "axioval:parity.public.programmes.group-composition",
+      "name": {
+        "default": "group-composition",
+        "translations": {}
+      },
+      "capability": "axioval:capability.group-composition",
+      "parameters": {
+        "requirements": {
+          "id": "requirements",
+          "name": {
+            "default": "requirements",
+            "translations": {}
+          },
+          "kind": "table",
+          "required": true,
+          "columns": [
+            {
+              "id": "key_1",
+              "name": {
+                "default": "key_1",
+                "translations": {}
+              },
+              "kind": "textPattern",
+              "required": false
+            },
+            {
+              "id": "key_2",
+              "name": {
+                "default": "key_2",
+                "translations": {}
+              },
+              "kind": "textPattern",
+              "required": false
+            },
+            {
+              "id": "key_3",
+              "name": {
+                "default": "key_3",
+                "translations": {}
+              },
+              "kind": "textPattern",
+              "required": false
+            },
+            {
+              "id": "group",
+              "name": {
+                "default": "group",
+                "translations": {}
+              },
+              "kind": "textPattern",
+              "required": false
+            },
+            {
+              "id": "group_2",
+              "name": {
+                "default": "group_2",
+                "translations": {}
+              },
+              "kind": "textPattern",
+              "required": false
+            },
+            {
+              "id": "group_3",
+              "name": {
+                "default": "group_3",
+                "translations": {}
+              },
+              "kind": "textPattern",
+              "required": false
+            },
+            {
+              "id": "label",
+              "name": {
+                "default": "label",
+                "translations": {}
+              },
+              "kind": "string",
+              "required": false
+            },
+            {
+              "id": "count",
+              "name": {
+                "default": "count",
+                "translations": {}
+              },
+              "kind": "integer",
+              "required": true
+            }
+          ]
+        },
+        "key_1": {
+          "id": "key_1",
+          "name": {
+            "default": "key_1",
+            "translations": {}
+          },
+          "kind": "propertyReference",
+          "required": false
+        },
+        "key_2": {
+          "id": "key_2",
+          "name": {
+            "default": "key_2",
+            "translations": {}
+          },
+          "kind": "propertyReference",
+          "required": false
+        },
+        "key_3": {
+          "id": "key_3",
+          "name": {
+            "default": "key_3",
+            "translations": {}
+          },
+          "kind": "propertyReference",
+          "required": false
+        },
+        "case_sensitive": {
+          "id": "case_sensitive",
+          "name": {
+            "default": "case_sensitive",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        },
+        "group_key": {
+          "id": "group_key",
+          "name": {
+            "default": "group_key",
+            "translations": {}
+          },
+          "kind": "propertyReference",
+          "required": false
+        },
+        "group_key_1": {
+          "id": "group_key_1",
+          "name": {
+            "default": "group_key_1",
+            "translations": {}
+          },
+          "kind": "propertyReference",
+          "required": false
+        },
+        "group_key_2": {
+          "id": "group_key_2",
+          "name": {
+            "default": "group_key_2",
+            "translations": {}
+          },
+          "kind": "propertyReference",
+          "required": false
+        },
+        "group_key_3": {
+          "id": "group_key_3",
+          "name": {
+            "default": "group_key_3",
+            "translations": {}
+          },
+          "kind": "propertyReference",
+          "required": false
+        },
+        "report_absent_groups": {
+          "id": "report_absent_groups",
+          "name": {
+            "default": "report_absent_groups",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        },
+        "member_selector": {
+          "id": "member_selector",
+          "name": {
+            "default": "member_selector",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "ungrouped_selector": {
+          "id": "ungrouped_selector",
+          "name": {
+            "default": "ungrouped_selector",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "relationship": {
+          "id": "relationship",
+          "name": {
+            "default": "relationship",
+            "translations": {}
+          },
+          "kind": "string",
+          "required": false
+        },
+        "direction": {
+          "id": "direction",
+          "name": {
+            "default": "direction",
+            "translations": {}
+          },
+          "kind": "string",
+          "required": false
+        },
+        "follow_chain": {
+          "id": "follow_chain",
+          "name": {
+            "default": "follow_chain",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        },
+        "path": {
+          "id": "path",
+          "name": {
+            "default": "path",
+            "translations": {}
+          },
+          "kind": "stringList",
+          "required": false
+        },
+        "skip_absent_relationship_ends": {
+          "id": "skip_absent_relationship_ends",
+          "name": {
+            "default": "skip_absent_relationship_ends",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        }
+      }
+    },
+    "axioval:parity.public.programmes.table-allocation": {
+      "id": "axioval:parity.public.programmes.table-allocation",
+      "name": {
+        "default": "table-allocation",
+        "translations": {}
+      },
+      "capability": "axioval:capability.table-allocation",
+      "parameters": {
+        "rows": {
+          "id": "rows",
+          "name": {
+            "default": "rows",
+            "translations": {}
+          },
+          "kind": "table",
+          "required": true,
+          "columns": [
+            {
+              "id": "key_1",
+              "name": {
+                "default": "key_1",
+                "translations": {}
+              },
+              "kind": "textPattern",
+              "required": false
+            },
+            {
+              "id": "key_2",
+              "name": {
+                "default": "key_2",
+                "translations": {}
+              },
+              "kind": "textPattern",
+              "required": false
+            },
+            {
+              "id": "key_3",
+              "name": {
+                "default": "key_3",
+                "translations": {}
+              },
+              "kind": "textPattern",
+              "required": false
+            },
+            {
+              "id": "key_4",
+              "name": {
+                "default": "key_4",
+                "translations": {}
+              },
+              "kind": "textPattern",
+              "required": false
+            },
+            {
+              "id": "anchor",
+              "name": {
+                "default": "anchor",
+                "translations": {}
+              },
+              "kind": "textPattern",
+              "required": false
+            },
+            {
+              "id": "label",
+              "name": {
+                "default": "label",
+                "translations": {}
+              },
+              "kind": "string",
+              "required": false
+            },
+            {
+              "id": "count",
+              "name": {
+                "default": "count",
+                "translations": {}
+              },
+              "kind": "integer",
+              "required": false
+            },
+            {
+              "id": "area",
+              "name": {
+                "default": "area",
+                "translations": {}
+              },
+              "kind": "number",
+              "required": false
+            },
+            {
+              "id": "area_tolerance",
+              "name": {
+                "default": "area_tolerance",
+                "translations": {}
+              },
+              "kind": "number",
+              "required": false
+            },
+            {
+              "id": "area_tolerance_ratio",
+              "name": {
+                "default": "area_tolerance_ratio",
+                "translations": {}
+              },
+              "kind": "number",
+              "required": false
+            }
+          ]
+        },
+        "mode": {
+          "id": "mode",
+          "name": {
+            "default": "mode",
+            "translations": {}
+          },
+          "kind": "string",
+          "required": false
+        },
+        "key_1": {
+          "id": "key_1",
+          "name": {
+            "default": "key_1",
+            "translations": {}
+          },
+          "kind": "propertyReference",
+          "required": false
+        },
+        "key_2": {
+          "id": "key_2",
+          "name": {
+            "default": "key_2",
+            "translations": {}
+          },
+          "kind": "propertyReference",
+          "required": false
+        },
+        "key_3": {
+          "id": "key_3",
+          "name": {
+            "default": "key_3",
+            "translations": {}
+          },
+          "kind": "propertyReference",
+          "required": false
+        },
+        "key_4": {
+          "id": "key_4",
+          "name": {
+            "default": "key_4",
+            "translations": {}
+          },
+          "kind": "propertyReference",
+          "required": false
+        },
+        "case_sensitive": {
+          "id": "case_sensitive",
+          "name": {
+            "default": "case_sensitive",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        },
+        "area_property": {
+          "id": "area_property",
+          "name": {
+            "default": "area_property",
+            "translations": {}
+          },
+          "kind": "propertyReference",
+          "required": false
+        },
+        "area_mode": {
+          "id": "area_mode",
+          "name": {
+            "default": "area_mode",
+            "translations": {}
+          },
+          "kind": "string",
+          "required": false
+        },
+        "anchor_selector": {
+          "id": "anchor_selector",
+          "name": {
+            "default": "anchor_selector",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "anchor_key": {
+          "id": "anchor_key",
+          "name": {
+            "default": "anchor_key",
+            "translations": {}
+          },
+          "kind": "propertyReference",
+          "required": false
+        },
+        "across_sources": {
+          "id": "across_sources",
+          "name": {
+            "default": "across_sources",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        },
+        "relationship": {
+          "id": "relationship",
+          "name": {
+            "default": "relationship",
+            "translations": {}
+          },
+          "kind": "string",
+          "required": false
+        },
+        "direction": {
+          "id": "direction",
+          "name": {
+            "default": "direction",
+            "translations": {}
+          },
+          "kind": "string",
+          "required": false
+        },
+        "follow_chain": {
+          "id": "follow_chain",
+          "name": {
+            "default": "follow_chain",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        },
+        "path": {
+          "id": "path",
+          "name": {
+            "default": "path",
+            "translations": {}
+          },
+          "kind": "stringList",
+          "required": false
+        },
+        "skip_absent_relationship_ends": {
+          "id": "skip_absent_relationship_ends",
+          "name": {
+            "default": "skip_absent_relationship_ends",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        }
+      }
+    }
+  }
+}

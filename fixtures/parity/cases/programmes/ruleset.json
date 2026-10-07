@@ -1,0 +1,742 @@
+{
+  "schemaVersion": "0.1.0",
+  "package": {
+    "id": "axioval:parity.public.programmes",
+    "name": {
+      "default": "Public parity ruleset, programmes",
+      "translations": {}
+    },
+    "version": "0.1.0",
+    "description": {
+      "default": "group-composition and table-allocation, recorded before their decisions became templates.",
+      "translations": {}
+    },
+    "authors": []
+  },
+  "definitionPackages": [
+    "axioval:parity.public.programmes.definitions"
+  ],
+  "root": {
+    "id": "root",
+    "name": {
+      "default": "Programmes",
+      "translations": {}
+    },
+    "rules": [
+      {
+        "id": "gc-zone",
+        "definitionId": "axioval:parity.public.programmes.group-composition",
+        "name": {
+          "default": "gc-zone",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.programmes.zone",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "requirements": {
+            "type": "table",
+            "value": [
+              {
+                "key_1": {
+                  "type": "string",
+                  "value": "*room"
+                },
+                "count": {
+                  "type": "integer",
+                  "value": 1
+                },
+                "label": {
+                  "type": "string",
+                  "value": "rooms"
+                }
+              },
+              {
+                "key_1": {
+                  "type": "string",
+                  "value": "*hall"
+                },
+                "count": {
+                  "type": "integer",
+                  "value": 1
+                }
+              },
+              {
+                "key_1": {
+                  "type": "string",
+                  "value": "bed*"
+                },
+                "count": {
+                  "type": "integer",
+                  "value": 1
+                },
+                "label": {
+                  "type": "string",
+                  "value": "bedroom"
+                }
+              }
+            ]
+          },
+          "key_1": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.programmes.name"
+          },
+          "relationship": {
+            "type": "string",
+            "value": "IfcRelAssignsToGroup"
+          },
+          "direction": {
+            "type": "string",
+            "value": "forward"
+          }
+        }
+      },
+      {
+        "id": "gc-short",
+        "definitionId": "axioval:parity.public.programmes.group-composition",
+        "name": {
+          "default": "gc-short",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.programmes.zone",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "requirements": {
+            "type": "table",
+            "value": [
+              {
+                "key_1": {
+                  "type": "string",
+                  "value": "*"
+                },
+                "count": {
+                  "type": "integer",
+                  "value": 3
+                },
+                "label": {
+                  "type": "string",
+                  "value": "spaces"
+                }
+              }
+            ]
+          },
+          "key_1": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.programmes.name"
+          },
+          "relationship": {
+            "type": "string",
+            "value": "IfcRelAssignsToGroup"
+          },
+          "direction": {
+            "type": "string",
+            "value": "forward"
+          }
+        }
+      },
+      {
+        "id": "gc-competing",
+        "definitionId": "axioval:parity.public.programmes.group-composition",
+        "name": {
+          "default": "gc-competing",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.programmes.zone",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "requirements": {
+            "type": "table",
+            "value": [
+              {
+                "key_1": {
+                  "type": "string",
+                  "value": "*room"
+                },
+                "count": {
+                  "type": "integer",
+                  "value": 2
+                }
+              },
+              {
+                "key_1": {
+                  "type": "string",
+                  "value": "living*"
+                },
+                "count": {
+                  "type": "integer",
+                  "value": 1
+                }
+              },
+              {
+                "key_2": {
+                  "type": "string",
+                  "value": "hall*"
+                },
+                "count": {
+                  "type": "integer",
+                  "value": 1
+                }
+              }
+            ]
+          },
+          "key_1": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.programmes.name"
+          },
+          "key_2": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.programmes.object-type"
+          },
+          "relationship": {
+            "type": "string",
+            "value": "IfcRelAssignsToGroup"
+          },
+          "direction": {
+            "type": "string",
+            "value": "forward"
+          }
+        }
+      },
+      {
+        "id": "gc-surplus",
+        "definitionId": "axioval:parity.public.programmes.group-composition",
+        "name": {
+          "default": "gc-surplus",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.programmes.zone",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "requirements": {
+            "type": "table",
+            "value": [
+              {
+                "key_1": {
+                  "type": "string",
+                  "value": "living*"
+                },
+                "count": {
+                  "type": "integer",
+                  "value": 1
+                }
+              }
+            ]
+          },
+          "key_1": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.programmes.name"
+          },
+          "member_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.programmes.space",
+              "includeSubtypes": true
+            }
+          },
+          "relationship": {
+            "type": "string",
+            "value": "IfcRelAssignsToGroup"
+          },
+          "direction": {
+            "type": "string",
+            "value": "forward"
+          }
+        }
+      },
+      {
+        "id": "gc-groups",
+        "definitionId": "axioval:parity.public.programmes.group-composition",
+        "name": {
+          "default": "gc-groups",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.programmes.zone",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "requirements": {
+            "type": "table",
+            "value": [
+              {
+                "group": {
+                  "type": "string",
+                  "value": "house*"
+                },
+                "key_1": {
+                  "type": "string",
+                  "value": "*"
+                },
+                "count": {
+                  "type": "integer",
+                  "value": 2
+                }
+              },
+              {
+                "group": {
+                  "type": "string",
+                  "value": "flat*"
+                },
+                "key_1": {
+                  "type": "string",
+                  "value": "*"
+                },
+                "count": {
+                  "type": "integer",
+                  "value": 1
+                }
+              }
+            ]
+          },
+          "key_1": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.programmes.name"
+          },
+          "group_key": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.programmes.name"
+          },
+          "report_absent_groups": {
+            "type": "boolean",
+            "value": true
+          },
+          "ungrouped_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.programmes.space",
+              "includeSubtypes": true
+            }
+          },
+          "relationship": {
+            "type": "string",
+            "value": "IfcRelAssignsToGroup"
+          },
+          "direction": {
+            "type": "string",
+            "value": "forward"
+          }
+        }
+      },
+      {
+        "id": "gc-invalid",
+        "definitionId": "axioval:parity.public.programmes.group-composition",
+        "name": {
+          "default": "gc-invalid",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.programmes.zone",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "requirements": {
+            "type": "table",
+            "value": [
+              {
+                "group": {
+                  "type": "string",
+                  "value": "house*"
+                },
+                "count": {
+                  "type": "integer",
+                  "value": 1
+                }
+              }
+            ]
+          },
+          "key_1": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.programmes.name"
+          },
+          "relationship": {
+            "type": "string",
+            "value": "IfcRelAssignsToGroup"
+          },
+          "direction": {
+            "type": "string",
+            "value": "forward"
+          }
+        }
+      },
+      {
+        "id": "ta-names",
+        "definitionId": "axioval:parity.public.programmes.table-allocation",
+        "name": {
+          "default": "ta-names",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.programmes.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "rows": {
+            "type": "table",
+            "value": [
+              {
+                "key_1": {
+                  "type": "string",
+                  "value": "living*"
+                },
+                "count": {
+                  "type": "integer",
+                  "value": 1
+                },
+                "label": {
+                  "type": "string",
+                  "value": "living"
+                }
+              },
+              {
+                "key_1": {
+                  "type": "string",
+                  "value": "entry*"
+                },
+                "count": {
+                  "type": "integer",
+                  "value": 1
+                }
+              }
+            ]
+          },
+          "key_1": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.programmes.name"
+          }
+        }
+      },
+      {
+        "id": "ta-extra",
+        "definitionId": "axioval:parity.public.programmes.table-allocation",
+        "name": {
+          "default": "ta-extra",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.programmes.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "rows": {
+            "type": "table",
+            "value": [
+              {
+                "key_1": {
+                  "type": "string",
+                  "value": "living*"
+                },
+                "count": {
+                  "type": "integer",
+                  "value": 2
+                }
+              }
+            ]
+          },
+          "key_1": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.programmes.name"
+          }
+        }
+      },
+      {
+        "id": "ta-area",
+        "definitionId": "axioval:parity.public.programmes.table-allocation",
+        "name": {
+          "default": "ta-area",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.programmes.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "rows": {
+            "type": "table",
+            "value": [
+              {
+                "key_1": {
+                  "type": "string",
+                  "value": "*"
+                },
+                "area": {
+                  "type": "number",
+                  "value": 30.0
+                },
+                "area_tolerance": {
+                  "type": "number",
+                  "value": 5.0
+                }
+              }
+            ]
+          },
+          "key_1": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.programmes.name"
+          }
+        }
+      },
+      {
+        "id": "ta-each",
+        "definitionId": "axioval:parity.public.programmes.table-allocation",
+        "name": {
+          "default": "ta-each",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.programmes.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "rows": {
+            "type": "table",
+            "value": [
+              {
+                "area": {
+                  "type": "number",
+                  "value": 20.0
+                },
+                "area_tolerance_ratio": {
+                  "type": "number",
+                  "value": 0.5
+                }
+              },
+              {
+                "key_2": {
+                  "type": "string",
+                  "value": "*"
+                },
+                "count": {
+                  "type": "integer",
+                  "value": 0
+                }
+              }
+            ]
+          },
+          "key_2": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.programmes.object-type"
+          },
+          "area_mode": {
+            "type": "string",
+            "value": "each"
+          }
+        }
+      },
+      {
+        "id": "ta-anchored",
+        "definitionId": "axioval:parity.public.programmes.table-allocation",
+        "name": {
+          "default": "ta-anchored",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.programmes.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "rows": {
+            "type": "table",
+            "value": [
+              {
+                "anchor": {
+                  "type": "string",
+                  "value": "00*"
+                },
+                "key_1": {
+                  "type": "string",
+                  "value": "*"
+                },
+                "count": {
+                  "type": "integer",
+                  "value": 2
+                }
+              },
+              {
+                "anchor": {
+                  "type": "string",
+                  "value": "01*"
+                },
+                "key_1": {
+                  "type": "string",
+                  "value": "*"
+                },
+                "count": {
+                  "type": "integer",
+                  "value": 1
+                }
+              }
+            ]
+          },
+          "key_1": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.programmes.name"
+          },
+          "anchor_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.programmes.storey",
+              "includeSubtypes": true
+            }
+          },
+          "anchor_key": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.programmes.name"
+          },
+          "relationship": {
+            "type": "string",
+            "value": "IfcRelAggregates"
+          },
+          "direction": {
+            "type": "string",
+            "value": "forward"
+          }
+        }
+      },
+      {
+        "id": "ta-specific",
+        "definitionId": "axioval:parity.public.programmes.table-allocation",
+        "name": {
+          "default": "ta-specific",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.programmes.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "rows": {
+            "type": "table",
+            "value": [
+              {
+                "key_1": {
+                  "type": "string",
+                  "value": "*"
+                },
+                "count": {
+                  "type": "integer",
+                  "value": 1
+                }
+              },
+              {
+                "key_1": {
+                  "type": "string",
+                  "value": "living room"
+                },
+                "key_2": {
+                  "type": "string",
+                  "value": "living*"
+                },
+                "count": {
+                  "type": "integer",
+                  "value": 1
+                }
+              }
+            ]
+          },
+          "key_1": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.programmes.name"
+          },
+          "key_2": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.programmes.object-type"
+          },
+          "mode": {
+            "type": "string",
+            "value": "most_specific"
+          },
+          "across_sources": {
+            "type": "boolean",
+            "value": true
+          }
+        }
+      },
+      {
+        "id": "ta-invalid",
+        "definitionId": "axioval:parity.public.programmes.table-allocation",
+        "name": {
+          "default": "ta-invalid",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.programmes.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "rows": {
+            "type": "table",
+            "value": [
+              {
+                "anchor": {
+                  "type": "string",
+                  "value": "00*"
+                },
+                "count": {
+                  "type": "integer",
+                  "value": 1
+                }
+              }
+            ]
+          },
+          "key_1": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.programmes.name"
+          }
+        }
+      }
+    ]
+  }
+}

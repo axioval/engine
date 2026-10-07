@@ -1,0 +1,73 @@
+{
+  "description": "The allocation capabilities over every public model, meshed, recorded before their decisions become templates over their allocations (#286).",
+  "models": "*",
+  "pairs": [],
+  "recorded": [
+    {
+      "rule": "gc-zone",
+      "comparison": "contract",
+      "reason": "group-composition splits its allocation from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "gc-short",
+      "comparison": "contract",
+      "reason": "group-composition splits its allocation from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "gc-competing",
+      "comparison": "contract",
+      "reason": "group-composition splits its allocation from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "gc-surplus",
+      "comparison": "contract",
+      "reason": "group-composition splits its allocation from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "gc-groups",
+      "comparison": "contract",
+      "reason": "group-composition splits its allocation from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "gc-invalid",
+      "comparison": "contract",
+      "reason": "group-composition splits its allocation from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "ta-names",
+      "comparison": "contract",
+      "reason": "table-allocation splits its allocation from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "ta-extra",
+      "comparison": "contract",
+      "reason": "table-allocation splits its allocation from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "ta-area",
+      "comparison": "contract",
+      "reason": "table-allocation splits its allocation from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "ta-each",
+      "comparison": "contract",
+      "reason": "table-allocation splits its allocation from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "ta-anchored",
+      "comparison": "contract",
+      "reason": "table-allocation splits its allocation from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "ta-specific",
+      "comparison": "contract",
+      "reason": "table-allocation splits its allocation from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "ta-invalid",
+      "comparison": "contract",
+      "reason": "table-allocation splits its allocation from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    }
+  ],
+  "divergences": []
+}

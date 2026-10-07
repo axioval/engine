@@ -1,0 +1,217 @@
+{
+  "findings": [
+    {
+      "evidence": [],
+      "id": "374f7017-a504-5b17-b4e5-5362ba9b6d53",
+      "message": "not in model: no group matches row 1 (axioval:attributes.axioval:parity.public.programmes.name like `house*`)",
+      "rule_id": "gc-groups",
+      "severity": "warning"
+    },
+    {
+      "evidence": [],
+      "id": "d881b40f-e394-5276-ac68-3e4117a7d10a",
+      "message": "not in model: no group matches row 2 (axioval:attributes.axioval:parity.public.programmes.name like `flat*`)",
+      "rule_id": "gc-groups",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:903b5a005901397aa2b235daf6a60f46c099eae286cb01c815abf0a341707432:relationship-scan:IfcRelAggregates:5",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "54ff5b02-bf3b-59c3-92de-fb907d5fc864",
+      "message": "row 1 (axioval:attributes.axioval:parity.public.programmes.name like `*`) in anchors like `00*` matched no object; required exactly 2",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "ta-anchored",
+      "severity": "warning"
+    },
+    {
+      "evidence": [],
+      "id": "3f69fa5e-90c0-5a25-b8b9-5cbf776c897f",
+      "message": "row 1 (axioval:attributes.axioval:parity.public.programmes.name like `*`) matched no object in source `ifc-step:bs-ifc4-building-structural.ifc`",
+      "rule_id": "ta-area",
+      "severity": "warning",
+      "source": {
+        "document": "bs-ifc4-building-structural.ifc",
+        "system": "ifc-step"
+      }
+    },
+    {
+      "evidence": [],
+      "id": "90dfffe2-9021-5fe3-81ab-11ffcc203b5f",
+      "message": "row 1 (any object) matched no object in source `ifc-step:bs-ifc4-building-structural.ifc`",
+      "rule_id": "ta-each",
+      "severity": "warning",
+      "source": {
+        "document": "bs-ifc4-building-structural.ifc",
+        "system": "ifc-step"
+      }
+    },
+    {
+      "evidence": [],
+      "id": "8f6db9ee-6e3a-5ccc-9560-bea521fbeb11",
+      "message": "row 1 (axioval:attributes.axioval:parity.public.programmes.name like `living*`) matched no object in source `ifc-step:bs-ifc4-building-structural.ifc`; required exactly 2",
+      "rule_id": "ta-extra",
+      "severity": "warning",
+      "source": {
+        "document": "bs-ifc4-building-structural.ifc",
+        "system": "ifc-step"
+      }
+    },
+    {
+      "evidence": [],
+      "id": "e0bee81e-75f5-54b9-ae77-df39caf6a43b",
+      "message": "row 1 `living` matched no object in source `ifc-step:bs-ifc4-building-structural.ifc`; required exactly 1",
+      "rule_id": "ta-names",
+      "severity": "warning",
+      "source": {
+        "document": "bs-ifc4-building-structural.ifc",
+        "system": "ifc-step"
+      }
+    },
+    {
+      "evidence": [],
+      "id": "525009cf-5552-50bf-bda5-b6551c4e6cf2",
+      "message": "row 2 (axioval:attributes.axioval:parity.public.programmes.name like `entry*`) matched no object in source `ifc-step:bs-ifc4-building-structural.ifc`; required exactly 1",
+      "rule_id": "ta-names",
+      "severity": "warning",
+      "source": {
+        "document": "bs-ifc4-building-structural.ifc",
+        "system": "ifc-step"
+      }
+    },
+    {
+      "evidence": [],
+      "id": "8921ade6-c7c6-531f-a8e4-e8e1399f0ad3",
+      "message": "row 1 (axioval:attributes.axioval:parity.public.programmes.name like `*`) matched no object in the project; required exactly 1",
+      "rule_id": "ta-specific",
+      "severity": "warning"
+    },
+    {
+      "evidence": [],
+      "id": "f714f8a8-d952-5f83-9627-a055559450ef",
+      "message": "row 2 (axioval:attributes.axioval:parity.public.programmes.name like `living room`, axioval:attributes.axioval:parity.public.programmes.object-type like `living*`) matched no object in the project; required exactly 1",
+      "rule_id": "ta-specific",
+      "severity": "warning"
+    }
+  ],
+  "not_evaluated": [
+    {
+      "message": "group-composition: row 1 fills `group`, but no group key property is declared for it",
+      "object_id": null,
+      "reason": "invalid_declaration",
+      "rule_id": "gc-invalid"
+    },
+    {
+      "message": "table-allocation: row 1 fills `anchor`, but no `anchor_key` property is declared",
+      "object_id": null,
+      "reason": "invalid_declaration",
+      "rule_id": "ta-invalid"
+    }
+  ],
+  "rules": [
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "gc-competing",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "gc-groups",
+      "status": "failed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "gc-invalid",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "gc-short",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "gc-surplus",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "gc-zone",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "ta-anchored",
+      "status": "failed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "ta-area",
+      "status": "failed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "ta-each",
+      "status": "failed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "ta-extra",
+      "status": "failed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "ta-invalid",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "ta-names",
+      "status": "failed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "ta-specific",
+      "status": "failed"
+    }
+  ]
+}

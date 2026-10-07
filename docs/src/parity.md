@@ -288,6 +288,14 @@ are found too close, no destination has direct access, the exits are too
 few, and the walks, the walkability snapshot and the footprints the
 services cannot read leave the rest open.
 
+The case `programmes` records the allocation capabilities before their
+decisions become templates over their allocations (#286):
+`group-composition` on the zones grouping the spaces (entries by name, a
+shortfall, competing entries, a surplus, group keys with absent groups and
+ungrouped spaces, and an invalid group cell) and `table-allocation` on the
+spaces (rows by name, an extra, summed and individual areas, rows per
+storey, the most specific row across sources, and an invalid anchor cell).
+
 Each pair's evidence prints as one JSON line. That line is what the
 migration ledger records as a proof item, tagged `"kind": "parity"`; the
 ledger check (`scripts/migration.py`) rejects a parity proof that does not

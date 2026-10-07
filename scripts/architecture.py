@@ -263,6 +263,44 @@ def arena_identity_violations(source: str) -> list[str]:
     ]
 
 
+# Code only the parity references read is compiled with the feature
+# (`#[cfg(feature = "parity-reference")]`) or lives in the capability's
+# `reference.rs`. An allowance switched by the feature would build it into
+# every binary with its warnings silenced, so none is accepted.
+CFG_ATTR = re.compile(r"#!?\[\s*cfg_attr\s*\(")
+SILENCED_LINTS = re.compile(r"\b(?:allow|expect)\s*\(([^)]*)\)")
+HIDDEN_LINT = re.compile(r"\b(?:dead_code|unused(?:_[a-z_]+)?)\b")
+REFERENCE_FEATURE = "parity-reference"
+
+
+def reference_allowance_violations(source: str) -> list[str]:
+    """Allowances of dead or unused code switched by the parity references' feature."""
+    code = strip_noise(source)
+    failures: list[str] = []
+    for match in CFG_ATTR.finditer(code):
+        depth, index = 1, match.end()
+        while index < len(code) and depth:
+            depth += {"(": 1, ")": -1}.get(code[index], 0)
+            index += 1
+        # Strings are blanked in `code`; the feature's name is read from the
+        # source at the same offsets, the lints from the blanked code.
+        if REFERENCE_FEATURE not in source[match.end() : index]:
+            continue
+        lints = [
+            lint
+            for silenced in SILENCED_LINTS.finditer(code[match.end() : index])
+            for lint in HIDDEN_LINT.findall(silenced.group(1))
+        ]
+        if lints:
+            line = code.count("\n", 0, match.start()) + 1
+            failures.append(
+                f"line {line}: `{REFERENCE_FEATURE}` switches an allowance of "
+                f"{', '.join(lints)}; compile the code with the feature or move it into "
+                "the capability's reference.rs"
+            )
+    return failures
+
+
 IMMUTABLE_ACTION = re.compile(r"^[^@]+@[0-9a-f]{40}$")
 DEPENDENCY_AUDIT_MARKER = "AXIOVAL_DEPENDENCY_AUDIT_COMPLETE"
 CARGO_DENY_ACTION = re.compile(
@@ -491,6 +529,39 @@ def self_test() -> None:
     assert not arena_identity_violations("ObjectId::new(source.clone(), id.to_string())")
     assert not arena_identity_violations("ObjectId::new(src, global_id.to_string())")
     assert not arena_identity_violations("// ObjectId::new(src, entity.to_string())")
+
+    # Reference-only code is compiled with `parity-reference`, never kept in
+    # every build with its warnings silenced: each such allowance is a
+    # rejected mutation, however it is written.
+    assert reference_allowance_violations(
+        '#[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]\nfn f() {}'
+    ) == [
+        "line 1: `parity-reference` switches an allowance of dead_code; compile the code "
+        "with the feature or move it into the capability's reference.rs"
+    ]
+    assert reference_allowance_violations(
+        "//! Stairs.\n\n"
+        '#![cfg_attr(not(feature = "parity-reference"), allow(dead_code, unused_imports))]\n'
+    ) == [
+        "line 3: `parity-reference` switches an allowance of dead_code, unused_imports; "
+        "compile the code with the feature or move it into the capability's reference.rs"
+    ]
+    assert reference_allowance_violations(
+        "struct S {\n    #[cfg_attr(\n        not(feature = \"parity-reference\"),\n"
+        "        expect(unused_variables)\n    )]\n    x: u8,\n}"
+    )
+    assert reference_allowance_violations(
+        '#[cfg_attr(feature = "parity-reference", allow(clippy::x, unused))]\nfn f() {}'
+    )
+    # Gating the code itself, another lint, another condition, or the
+    # attribute quoted in a comment is not an allowance of reference code.
+    assert not reference_allowance_violations(
+        '#[cfg(feature = "parity-reference")]\nfn f() {}\n'
+        '#[cfg_attr(not(feature = "parity-reference"), allow(clippy::too_many_lines))]\n'
+        "fn g() {}\n"
+        "#[cfg_attr(test, allow(dead_code))]\nfn h() {}\n"
+        '// #[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]\n'
+    )
 
     # A capability may name a rule -- policy belongs in `axioval-rules`.
     assert not service_seam_violations(
@@ -798,6 +869,9 @@ def check(root: Path) -> list[str]:
             failures.append(
                 f"{source.relative_to(root)}: ObjectId minted from arena index `{detail}`"
             )
+    for source in sorted((root / "crates").rglob("*.rs")):
+        for detail in reference_allowance_violations(source.read_text(encoding="utf-8")):
+            failures.append(f"{source.relative_to(root)}: {detail}")
     for workflow in sorted((root / ".github" / "workflows").glob("*.yml")):
         for detail in workflow_violations(workflow.read_text(encoding="utf-8")):
             failures.append(f"{workflow.relative_to(root)}: {detail}")

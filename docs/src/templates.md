@@ -2858,7 +2858,12 @@ values, and every rule reading them, share one measurement.
    `parity-reference`, export it from `axioval_rules::reference`, and let
    the capability's type run the template (`templates::run`, returning the
    template from `RuleCapability::template`). Rename its ledger entries to
-   the reference module.
+   the reference module. A shared part only the reference still reads (a
+   parser, a judge, a declaration field) moves into `reference.rs` or is
+   compiled with `#[cfg(feature = "parity-reference")]` too; never keep it
+   in every build behind an allowance of dead or unused code. The
+   architecture gate refuses such an allowance, and the lint section runs
+   clippy on the libraries without the feature, as a release builds them.
 5. Run every fixture under `Parity::contract()` against the reference,
    measured values included, and the generated inputs likewise; fork each
    fixture's rule and compare outcomes.

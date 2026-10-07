@@ -43,6 +43,10 @@ check_lint() {
   python3 scripts/test_bench.py
   cargo fmt --all -- --check
   cargo clippy --workspace --all-targets --all-features -- -D warnings
+  # Tests turn `parity-reference` on through dev-dependencies, so the build
+  # above never sees the libraries as a release does. Lint them without it:
+  # code only the parity references read must be compiled only with them.
+  cargo clippy --workspace --lib --bins -- -D warnings
 }
 
 check_test() {

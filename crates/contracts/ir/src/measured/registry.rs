@@ -1414,6 +1414,8 @@ const NO_ENVELOPE: &str = "the derivation's objects cannot all be decided, it is
      none, or the envelope-membership service cannot derive it";
 const UNDECLARED: &str =
     "the model states neither external nor internal, or the body could not be measured";
+const WALL_UNDECLARED: &str = "a wall states no external flag, or an object may be a wall";
+const UNLISTED: &str = "the objects of the source, or of the selection, cannot all be listed";
 
 /// The derivation of a building envelope.
 const DERIVATION: MeasuredParameter = MeasuredParameter {
@@ -1821,18 +1823,6 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
             "Der Winkel zwischen dem Objekt und den Objekten, die ein Pfad erreicht.",
         ),
     },
-    plain!(
-        MEASURED_AREA,
-        Some(QuantityDimension::Area),
-        &["plan-area"],
-        MeasuredExactness::Measured,
-        &[NO_GEOMETRY],
-        en_de("Footprint area", "Grundfläche"),
-        en_de(
-            "The area of the object's footprint in plan, overlaps counted once.",
-            "Die Fläche des Grundrisses des Objekts, Überlappungen einmal gezählt."
-        )
-    ),
     MeasuredDescriptor {
         name: "any_external",
         parameters: &[
@@ -1864,7 +1854,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         services: &["property-resolution"],
         exactness: MeasuredExactness::Stated,
         subject: MeasuredSubject::Source,
-        not_evaluated: &[],
+        not_evaluated: &[WALL_UNDECLARED, UNDECIDED_KIND],
         label: &en_de("Any external wall", "Eine Außenwand"),
         help: &en_de(
             "Whether any of the source's walls declares itself external: 1 where one surely \
@@ -1877,6 +1867,18 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              gelesen, wie `opening-spaces` die Quelle liest.",
         ),
     },
+    plain!(
+        MEASURED_AREA,
+        Some(QuantityDimension::Area),
+        &["plan-area"],
+        MeasuredExactness::Measured,
+        &[NO_GEOMETRY],
+        en_de("Footprint area", "Grundfläche"),
+        en_de(
+            "The area of the object's footprint in plan, overlaps counted once.",
+            "Die Fläche des Grundrisses des Objekts, Überlappungen einmal gezählt."
+        )
+    ),
     MeasuredDescriptor {
         name: "band_uncovered_area",
         parameters: &[
@@ -3660,33 +3662,6 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         ),
     },
     MeasuredDescriptor {
-        name: INCLINATION,
-        parameters: &[MeasuredParameter {
-            key: "axis",
-            kind: MeasuredParameterKind::Choice {
-                options: &["own_x", "own_y", "own_z"],
-            },
-            required: true,
-            default: None,
-            help: &en_de(
-                "The object's own axis: `own_z` is measured from the vertical, \
-                 `own_x` and `own_y` from the horizontal.",
-                "Die eigene Achse des Objekts: `own_z` wird von der Senkrechten \
-                 gemessen, `own_x` und `own_y` von der Waagerechten.",
-            ),
-        }],
-        dimension: Some(QuantityDimension::PlaneAngle),
-        services: &["object-frame"],
-        exactness: MeasuredExactness::Stated,
-        subject: MeasuredSubject::Object,
-        not_evaluated: &["the placement is not stated exactly"],
-        label: &en_de("Inclination", "Neigung"),
-        help: &en_de(
-            "The tilt of one of the object's placement axes.",
-            "Die Neigung einer Achse der Platzierung des Objekts.",
-        ),
-    },
-    MeasuredDescriptor {
         name: "hinged_leaves",
         parameters: &[],
         dimension: None,
@@ -3738,11 +3713,38 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         services: &["property-resolution"],
         exactness: MeasuredExactness::Stated,
         subject: MeasuredSubject::Source,
-        not_evaluated: &[],
+        not_evaluated: &[UNLISTED],
         label: &en_de("Walls", "Wände"),
         help: &en_de(
             "How many walls the source surely holds.",
             "Wie viele Wände die Quelle sicher enthält.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: INCLINATION,
+        parameters: &[MeasuredParameter {
+            key: "axis",
+            kind: MeasuredParameterKind::Choice {
+                options: &["own_x", "own_y", "own_z"],
+            },
+            required: true,
+            default: None,
+            help: &en_de(
+                "The object's own axis: `own_z` is measured from the vertical, \
+                 `own_x` and `own_y` from the horizontal.",
+                "Die eigene Achse des Objekts: `own_z` wird von der Senkrechten \
+                 gemessen, `own_x` und `own_y` von der Waagerechten.",
+            ),
+        }],
+        dimension: Some(QuantityDimension::PlaneAngle),
+        services: &["object-frame"],
+        exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &["the placement is not stated exactly"],
+        label: &en_de("Inclination", "Neigung"),
+        help: &en_de(
+            "The tilt of one of the object's placement axes.",
+            "Die Neigung einer Achse der Platzierung des Objekts.",
         ),
     },
     MeasuredDescriptor {
@@ -4699,7 +4701,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         services: &["property-resolution"],
         exactness: MeasuredExactness::Stated,
         subject: MeasuredSubject::Source,
-        not_evaluated: &[],
+        not_evaluated: &[UNLISTED],
         label: &en_de("Possible walls", "Mögliche Wände"),
         help: &en_de(
             "How many more of the source's objects may be walls: their selection is undecided.",
@@ -5832,7 +5834,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         services: &["property-resolution"],
         exactness: MeasuredExactness::Stated,
         subject: MeasuredSubject::Source,
-        not_evaluated: &[],
+        not_evaluated: &[UNLISTED],
         label: &en_de("Undeclared walls", "Wände ohne Angabe"),
         help: &en_de(
             "How many of the source's walls declare no usable exposure (absent, `null` or not a \

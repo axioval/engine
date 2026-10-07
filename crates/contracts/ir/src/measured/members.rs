@@ -524,135 +524,6 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
     walking::CLEARANCES,
     MemberDescriptor {
         list: MeasuredDescriptor {
-            name: "corridor_end_openings",
-            parameters: &[
-                MeasuredParameter {
-                    key: "path",
-                    kind: MeasuredParameterKind::Path,
-                    required: true,
-                    default: None,
-                    help: &en_de(
-                        "The relationship steps from the corridor to its openings.",
-                        "Die Beziehungsschritte vom Flur zu seinen Öffnungen.",
-                    ),
-                },
-                MeasuredParameter {
-                    key: "openings",
-                    kind: MeasuredParameterKind::Objects,
-                    required: true,
-                    default: None,
-                    help: &en_de(
-                        "The openings searched: source kinds, `,`-separated, or `@` a selector \
-                         parameter of the rule, whose undecided objects are searched too.",
-                        "Die gesuchten Öffnungen: Quellarten, durch `,` getrennt, oder mit `@` \
-                         ein Selektorparameter der Regel, dessen unentschiedene Objekte \
-                         ebenfalls gesucht werden.",
-                    ),
-                },
-                MeasuredParameter {
-                    key: "depth",
-                    kind: MeasuredParameterKind::Number { minimum: 0.0 },
-                    required: false,
-                    default: None,
-                    help: &en_de(
-                        "How far behind an end wall's face an opening may lie, in metres; half \
-                         a metre without it.",
-                        "Wie weit hinter der Ansicht einer Endwand eine Öffnung liegen darf, in \
-                         Metern; ohne Angabe ein halber Meter.",
-                    ),
-                },
-                MeasuredParameter {
-                    key: "facing",
-                    kind: MeasuredParameterKind::Number { minimum: 0.0 },
-                    required: false,
-                    default: None,
-                    help: &en_de(
-                        "How much of an end wall an opening must face, more than this many \
-                         metres; a tenth of a metre without it.",
-                        "Wie viel einer Endwand eine Öffnung zugewandt sein muss, mehr als so \
-                         viele Meter; ohne Angabe ein Zehntelmeter.",
-                    ),
-                },
-            ],
-            dimension: None,
-            services: &["plan-span", "relationship-selection"],
-            exactness: MeasuredExactness::Measured,
-            not_evaluated: &[
-                "the corridor ends cannot be measured",
-                "the path from the corridor cannot be followed",
-            ],
-            label: &en_de("Openings at a corridor's ends", "Öffnungen an Flurenden"),
-            help: &en_de(
-                "The openings a corridor reaches, each searched against the walls its ends \
-                 run into, as `corridor-end-openings` searches them: whether it sits in one, \
-                 which, and whether the selection picks it.",
-                "Die Öffnungen, die ein Flur erreicht, je gegen die Wände gesucht, auf die \
-                 seine Enden treffen, wie `corridor-end-openings` sucht: ob sie in einer \
-                 liegt, in welcher, und ob die Auswahl sie trifft.",
-            ),
-            subject: MeasuredSubject::Object,
-        },
-        fields: &[
-            field(
-                "opening",
-                MemberFieldKind::Objects,
-                &en_de("Opening", "Öffnung"),
-                &en_de("The opening searched.", "Die gesuchte Öffnung."),
-            ),
-            field(
-                "corridor",
-                MemberFieldKind::Objects,
-                &en_de("Corridor", "Flur"),
-                &en_de(
-                    "The corridor searched from.",
-                    "Der Flur, von dem aus gesucht wird.",
-                ),
-            ),
-            field(
-                "picked",
-                TRUTH,
-                &en_de("Selected", "Ausgewählt"),
-                &en_de(
-                    "Whether the selection surely picks the opening; undecided where it \
-                     cannot tell.",
-                    "Ob die Auswahl die Öffnung sicher trifft; unentschieden, wo sie es nicht \
-                     entscheidet.",
-                ),
-            ),
-            field(
-                "unpicked",
-                MemberFieldKind::Text,
-                &en_de("Why undecided", "Warum unentschieden"),
-                &en_de(
-                    "Why the selection cannot decide the opening; empty where it can.",
-                    "Warum die Auswahl die Öffnung nicht entscheidet; leer, wo sie es kann.",
-                ),
-            ),
-            field(
-                "sits",
-                TRUTH,
-                &en_de("Sits in an end wall", "Liegt in einer Endwand"),
-                &en_de(
-                    "Whether the opening sits in a wall the corridor ends at; undecided \
-                     where an end wall, or the opening's contact with one, cannot decide it.",
-                    "Ob die Öffnung in einer Wand liegt, an der der Flur endet; \
-                     unentschieden, wo eine Endwand oder ihr Kontakt damit es nicht \
-                     entscheidet.",
-                ),
-            ),
-            field(
-                "walls",
-                MemberFieldKind::Text,
-                &en_de("End walls", "Endwände"),
-                &en_de(
-                    "The end walls it sits in, with its gap to each and how much it faces.",
-                    "Die Endwände, in denen sie liegt, mit Abstand und zugewandter Länge.",
-                ),
-            ),
-        ],
-    },
-    MemberDescriptor {
-        list: MeasuredDescriptor {
             name: "connected_spaces",
             parameters: &[
                 MeasuredParameter {
@@ -903,6 +774,135 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
                      none (a map conversion), true otherwise.",
                     "Falsch, wo die Angabe nicht verglichen werden kann, weil eine Quelle \
                      keine erfasst (eine Kartenumrechnung), sonst wahr.",
+                ),
+            ),
+        ],
+    },
+    MemberDescriptor {
+        list: MeasuredDescriptor {
+            name: "corridor_end_openings",
+            parameters: &[
+                MeasuredParameter {
+                    key: "path",
+                    kind: MeasuredParameterKind::Path,
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The relationship steps from the corridor to its openings.",
+                        "Die Beziehungsschritte vom Flur zu seinen Öffnungen.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "openings",
+                    kind: MeasuredParameterKind::Objects,
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The openings searched: source kinds, `,`-separated, or `@` a selector \
+                         parameter of the rule, whose undecided objects are searched too.",
+                        "Die gesuchten Öffnungen: Quellarten, durch `,` getrennt, oder mit `@` \
+                         ein Selektorparameter der Regel, dessen unentschiedene Objekte \
+                         ebenfalls gesucht werden.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "depth",
+                    kind: MeasuredParameterKind::Number { minimum: 0.0 },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "How far behind an end wall's face an opening may lie, in metres; half \
+                         a metre without it.",
+                        "Wie weit hinter der Ansicht einer Endwand eine Öffnung liegen darf, in \
+                         Metern; ohne Angabe ein halber Meter.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "facing",
+                    kind: MeasuredParameterKind::Number { minimum: 0.0 },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "How much of an end wall an opening must face, more than this many \
+                         metres; a tenth of a metre without it.",
+                        "Wie viel einer Endwand eine Öffnung zugewandt sein muss, mehr als so \
+                         viele Meter; ohne Angabe ein Zehntelmeter.",
+                    ),
+                },
+            ],
+            dimension: None,
+            services: &["plan-span", "relationship-selection"],
+            exactness: MeasuredExactness::Measured,
+            not_evaluated: &[
+                "the corridor ends cannot be measured",
+                "the path from the corridor cannot be followed",
+            ],
+            label: &en_de("Openings at a corridor's ends", "Öffnungen an Flurenden"),
+            help: &en_de(
+                "The openings a corridor reaches, each searched against the walls its ends \
+                 run into, as `corridor-end-openings` searches them: whether it sits in one, \
+                 which, and whether the selection picks it.",
+                "Die Öffnungen, die ein Flur erreicht, je gegen die Wände gesucht, auf die \
+                 seine Enden treffen, wie `corridor-end-openings` sucht: ob sie in einer \
+                 liegt, in welcher, und ob die Auswahl sie trifft.",
+            ),
+            subject: MeasuredSubject::Object,
+        },
+        fields: &[
+            field(
+                "opening",
+                MemberFieldKind::Objects,
+                &en_de("Opening", "Öffnung"),
+                &en_de("The opening searched.", "Die gesuchte Öffnung."),
+            ),
+            field(
+                "corridor",
+                MemberFieldKind::Objects,
+                &en_de("Corridor", "Flur"),
+                &en_de(
+                    "The corridor searched from.",
+                    "Der Flur, von dem aus gesucht wird.",
+                ),
+            ),
+            field(
+                "picked",
+                TRUTH,
+                &en_de("Selected", "Ausgewählt"),
+                &en_de(
+                    "Whether the selection surely picks the opening; undecided where it \
+                     cannot tell.",
+                    "Ob die Auswahl die Öffnung sicher trifft; unentschieden, wo sie es nicht \
+                     entscheidet.",
+                ),
+            ),
+            field(
+                "unpicked",
+                MemberFieldKind::Text,
+                &en_de("Why undecided", "Warum unentschieden"),
+                &en_de(
+                    "Why the selection cannot decide the opening; empty where it can.",
+                    "Warum die Auswahl die Öffnung nicht entscheidet; leer, wo sie es kann.",
+                ),
+            ),
+            field(
+                "sits",
+                TRUTH,
+                &en_de("Sits in an end wall", "Liegt in einer Endwand"),
+                &en_de(
+                    "Whether the opening sits in a wall the corridor ends at; undecided \
+                     where an end wall, or the opening's contact with one, cannot decide it.",
+                    "Ob die Öffnung in einer Wand liegt, an der der Flur endet; \
+                     unentschieden, wo eine Endwand oder ihr Kontakt damit es nicht \
+                     entscheidet.",
+                ),
+            ),
+            field(
+                "walls",
+                MemberFieldKind::Text,
+                &en_de("End walls", "Endwände"),
+                &en_de(
+                    "The end walls it sits in, with its gap to each and how much it faces.",
+                    "Die Endwände, in denen sie liegt, mit Abstand und zugewandter Länge.",
                 ),
             ),
         ],
@@ -2217,9 +2217,6 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             ),
         ],
     },
-    walking::STAIR_CLEAR_WIDTHS,
-    walking::STAIR_CONTINUITY,
-    walking::STAIRS,
     MemberDescriptor {
         list: MeasuredDescriptor {
             name: "space_connections",
@@ -2387,6 +2384,9 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             ),
         ],
     },
+    walking::STAIR_CLEAR_WIDTHS,
+    walking::STAIR_CONTINUITY,
+    walking::STAIRS,
     MemberDescriptor {
         list: MeasuredDescriptor {
             name: "steps",

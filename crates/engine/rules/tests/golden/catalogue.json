@@ -58151,40 +58151,6 @@
       "available": true
     },
     {
-      "name": "area",
-      "parameters": [],
-      "dimension": "area",
-      "services": [
-        "plan-area"
-      ],
-      "exactness": "measured",
-      "notEvaluated": [
-        "the object has no body the service can measure"
-      ],
-      "label": [
-        {
-          "language": "en",
-          "text": "Footprint area"
-        },
-        {
-          "language": "de",
-          "text": "Grundfläche"
-        }
-      ],
-      "help": [
-        {
-          "language": "en",
-          "text": "The area of the object's footprint in plan, overlaps counted once."
-        },
-        {
-          "language": "de",
-          "text": "Die Fläche des Grundrisses des Objekts, Überlappungen einmal gezählt."
-        }
-      ],
-      "unit": "m2",
-      "available": true
-    },
-    {
       "name": "any_external",
       "parameters": [
         {
@@ -58229,7 +58195,10 @@
       ],
       "exactness": "stated",
       "subject": "source",
-      "notEvaluated": [],
+      "notEvaluated": [
+        "a wall states no external flag, or an object may be a wall",
+        "an object's kind cannot be decided"
+      ],
       "label": [
         {
           "language": "en",
@@ -58251,6 +58220,40 @@
         }
       ],
       "unit": "1",
+      "available": true
+    },
+    {
+      "name": "area",
+      "parameters": [],
+      "dimension": "area",
+      "services": [
+        "plan-area"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object has no body the service can measure"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Footprint area"
+        },
+        {
+          "language": "de",
+          "text": "Grundfläche"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The area of the object's footprint in plan, overlaps counted once."
+        },
+        {
+          "language": "de",
+          "text": "Die Fläche des Grundrisses des Objekts, Überlappungen einmal gezählt."
+        }
+      ],
+      "unit": "m2",
       "available": true
     },
     {
@@ -65798,64 +65801,6 @@
       "available": true
     },
     {
-      "name": "inclination",
-      "parameters": [
-        {
-          "key": "axis",
-          "kind": {
-            "type": "choice",
-            "options": [
-              "own_x",
-              "own_y",
-              "own_z"
-            ]
-          },
-          "required": true,
-          "help": [
-            {
-              "language": "en",
-              "text": "The object's own axis: `own_z` is measured from the vertical, `own_x` and `own_y` from the horizontal."
-            },
-            {
-              "language": "de",
-              "text": "Die eigene Achse des Objekts: `own_z` wird von der Senkrechten gemessen, `own_x` und `own_y` von der Waagerechten."
-            }
-          ],
-          "references": "string"
-        }
-      ],
-      "dimension": "plane_angle",
-      "services": [
-        "object-frame"
-      ],
-      "exactness": "stated",
-      "notEvaluated": [
-        "the placement is not stated exactly"
-      ],
-      "label": [
-        {
-          "language": "en",
-          "text": "Inclination"
-        },
-        {
-          "language": "de",
-          "text": "Neigung"
-        }
-      ],
-      "help": [
-        {
-          "language": "en",
-          "text": "The tilt of one of the object's placement axes."
-        },
-        {
-          "language": "de",
-          "text": "Die Neigung einer Achse der Platzierung des Objekts."
-        }
-      ],
-      "unit": "rad",
-      "available": true
-    },
-    {
       "name": "hinged_leaves",
       "parameters": [],
       "services": [
@@ -65934,7 +65879,9 @@
       ],
       "exactness": "stated",
       "subject": "source",
-      "notEvaluated": [],
+      "notEvaluated": [
+        "the objects of the source, or of the selection, cannot all be listed"
+      ],
       "label": [
         {
           "language": "en",
@@ -65956,6 +65903,64 @@
         }
       ],
       "unit": "1",
+      "available": true
+    },
+    {
+      "name": "inclination",
+      "parameters": [
+        {
+          "key": "axis",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "own_x",
+              "own_y",
+              "own_z"
+            ]
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The object's own axis: `own_z` is measured from the vertical, `own_x` and `own_y` from the horizontal."
+            },
+            {
+              "language": "de",
+              "text": "Die eigene Achse des Objekts: `own_z` wird von der Senkrechten gemessen, `own_x` und `own_y` von der Waagerechten."
+            }
+          ],
+          "references": "string"
+        }
+      ],
+      "dimension": "plane_angle",
+      "services": [
+        "object-frame"
+      ],
+      "exactness": "stated",
+      "notEvaluated": [
+        "the placement is not stated exactly"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Inclination"
+        },
+        {
+          "language": "de",
+          "text": "Neigung"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The tilt of one of the object's placement axes."
+        },
+        {
+          "language": "de",
+          "text": "Die Neigung einer Achse der Platzierung des Objekts."
+        }
+      ],
+      "unit": "rad",
       "available": true
     },
     {
@@ -69644,7 +69649,9 @@
       ],
       "exactness": "stated",
       "subject": "source",
-      "notEvaluated": [],
+      "notEvaluated": [
+        "the objects of the source, or of the selection, cannot all be listed"
+      ],
       "label": [
         {
           "language": "en",
@@ -72869,7 +72876,9 @@
       ],
       "exactness": "stated",
       "subject": "source",
-      "notEvaluated": [],
+      "notEvaluated": [
+        "the objects of the source, or of the selection, cannot all be listed"
+      ],
       "label": [
         {
           "language": "en",
@@ -74252,273 +74261,6 @@
       "available": true
     },
     {
-      "name": "corridor_end_openings",
-      "parameters": [
-        {
-          "key": "path",
-          "kind": {
-            "type": "path"
-          },
-          "required": true,
-          "help": [
-            {
-              "language": "en",
-              "text": "The relationship steps from the corridor to its openings."
-            },
-            {
-              "language": "de",
-              "text": "Die Beziehungsschritte vom Flur zu seinen Öffnungen."
-            }
-          ],
-          "references": "stringList"
-        },
-        {
-          "key": "openings",
-          "kind": {
-            "type": "objects"
-          },
-          "required": true,
-          "help": [
-            {
-              "language": "en",
-              "text": "The openings searched: source kinds, `,`-separated, or `@` a selector parameter of the rule, whose undecided objects are searched too."
-            },
-            {
-              "language": "de",
-              "text": "Die gesuchten Öffnungen: Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel, dessen unentschiedene Objekte ebenfalls gesucht werden."
-            }
-          ],
-          "references": "selector"
-        },
-        {
-          "key": "depth",
-          "kind": {
-            "type": "number",
-            "minimum": 0.0
-          },
-          "required": false,
-          "help": [
-            {
-              "language": "en",
-              "text": "How far behind an end wall's face an opening may lie, in metres; half a metre without it."
-            },
-            {
-              "language": "de",
-              "text": "Wie weit hinter der Ansicht einer Endwand eine Öffnung liegen darf, in Metern; ohne Angabe ein halber Meter."
-            }
-          ],
-          "references": "number"
-        },
-        {
-          "key": "facing",
-          "kind": {
-            "type": "number",
-            "minimum": 0.0
-          },
-          "required": false,
-          "help": [
-            {
-              "language": "en",
-              "text": "How much of an end wall an opening must face, more than this many metres; a tenth of a metre without it."
-            },
-            {
-              "language": "de",
-              "text": "Wie viel einer Endwand eine Öffnung zugewandt sein muss, mehr als so viele Meter; ohne Angabe ein Zehntelmeter."
-            }
-          ],
-          "references": "number"
-        }
-      ],
-      "services": [
-        "plan-span",
-        "relationship-selection"
-      ],
-      "exactness": "measured",
-      "notEvaluated": [
-        "the corridor ends cannot be measured",
-        "the path from the corridor cannot be followed"
-      ],
-      "label": [
-        {
-          "language": "en",
-          "text": "Openings at a corridor's ends"
-        },
-        {
-          "language": "de",
-          "text": "Öffnungen an Flurenden"
-        }
-      ],
-      "help": [
-        {
-          "language": "en",
-          "text": "The openings a corridor reaches, each searched against the walls its ends run into, as `corridor-end-openings` searches them: whether it sits in one, which, and whether the selection picks it."
-        },
-        {
-          "language": "de",
-          "text": "Die Öffnungen, die ein Flur erreicht, je gegen die Wände gesucht, auf die seine Enden treffen, wie `corridor-end-openings` sucht: ob sie in einer liegt, in welcher, und ob die Auswahl sie trifft."
-        }
-      ],
-      "fields": [
-        {
-          "name": "opening",
-          "kind": {
-            "type": "objects"
-          },
-          "label": [
-            {
-              "language": "en",
-              "text": "Opening"
-            },
-            {
-              "language": "de",
-              "text": "Öffnung"
-            }
-          ],
-          "help": [
-            {
-              "language": "en",
-              "text": "The opening searched."
-            },
-            {
-              "language": "de",
-              "text": "Die gesuchte Öffnung."
-            }
-          ]
-        },
-        {
-          "name": "corridor",
-          "kind": {
-            "type": "objects"
-          },
-          "label": [
-            {
-              "language": "en",
-              "text": "Corridor"
-            },
-            {
-              "language": "de",
-              "text": "Flur"
-            }
-          ],
-          "help": [
-            {
-              "language": "en",
-              "text": "The corridor searched from."
-            },
-            {
-              "language": "de",
-              "text": "Der Flur, von dem aus gesucht wird."
-            }
-          ]
-        },
-        {
-          "name": "picked",
-          "kind": {
-            "type": "truth"
-          },
-          "label": [
-            {
-              "language": "en",
-              "text": "Selected"
-            },
-            {
-              "language": "de",
-              "text": "Ausgewählt"
-            }
-          ],
-          "help": [
-            {
-              "language": "en",
-              "text": "Whether the selection surely picks the opening; undecided where it cannot tell."
-            },
-            {
-              "language": "de",
-              "text": "Ob die Auswahl die Öffnung sicher trifft; unentschieden, wo sie es nicht entscheidet."
-            }
-          ]
-        },
-        {
-          "name": "unpicked",
-          "kind": {
-            "type": "text"
-          },
-          "label": [
-            {
-              "language": "en",
-              "text": "Why undecided"
-            },
-            {
-              "language": "de",
-              "text": "Warum unentschieden"
-            }
-          ],
-          "help": [
-            {
-              "language": "en",
-              "text": "Why the selection cannot decide the opening; empty where it can."
-            },
-            {
-              "language": "de",
-              "text": "Warum die Auswahl die Öffnung nicht entscheidet; leer, wo sie es kann."
-            }
-          ]
-        },
-        {
-          "name": "sits",
-          "kind": {
-            "type": "truth"
-          },
-          "label": [
-            {
-              "language": "en",
-              "text": "Sits in an end wall"
-            },
-            {
-              "language": "de",
-              "text": "Liegt in einer Endwand"
-            }
-          ],
-          "help": [
-            {
-              "language": "en",
-              "text": "Whether the opening sits in a wall the corridor ends at; undecided where an end wall, or the opening's contact with one, cannot decide it."
-            },
-            {
-              "language": "de",
-              "text": "Ob die Öffnung in einer Wand liegt, an der der Flur endet; unentschieden, wo eine Endwand oder ihr Kontakt damit es nicht entscheidet."
-            }
-          ]
-        },
-        {
-          "name": "walls",
-          "kind": {
-            "type": "text"
-          },
-          "label": [
-            {
-              "language": "en",
-              "text": "End walls"
-            },
-            {
-              "language": "de",
-              "text": "Endwände"
-            }
-          ],
-          "help": [
-            {
-              "language": "en",
-              "text": "The end walls it sits in, with its gap to each and how much it faces."
-            },
-            {
-              "language": "de",
-              "text": "Die Endwände, in denen sie liegt, mit Abstand und zugewandter Länge."
-            }
-          ]
-        }
-      ],
-      "available": true
-    },
-    {
       "name": "connected_spaces",
       "parameters": [
         {
@@ -75137,6 +74879,273 @@
             {
               "language": "de",
               "text": "Falsch, wo die Angabe nicht verglichen werden kann, weil eine Quelle keine erfasst (eine Kartenumrechnung), sonst wahr."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
+      "name": "corridor_end_openings",
+      "parameters": [
+        {
+          "key": "path",
+          "kind": {
+            "type": "path"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps from the corridor to its openings."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte vom Flur zu seinen Öffnungen."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "openings",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The openings searched: source kinds, `,`-separated, or `@` a selector parameter of the rule, whose undecided objects are searched too."
+            },
+            {
+              "language": "de",
+              "text": "Die gesuchten Öffnungen: Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel, dessen unentschiedene Objekte ebenfalls gesucht werden."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "depth",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "How far behind an end wall's face an opening may lie, in metres; half a metre without it."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit hinter der Ansicht einer Endwand eine Öffnung liegen darf, in Metern; ohne Angabe ein halber Meter."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "facing",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "How much of an end wall an opening must face, more than this many metres; a tenth of a metre without it."
+            },
+            {
+              "language": "de",
+              "text": "Wie viel einer Endwand eine Öffnung zugewandt sein muss, mehr als so viele Meter; ohne Angabe ein Zehntelmeter."
+            }
+          ],
+          "references": "number"
+        }
+      ],
+      "services": [
+        "plan-span",
+        "relationship-selection"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the corridor ends cannot be measured",
+        "the path from the corridor cannot be followed"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Openings at a corridor's ends"
+        },
+        {
+          "language": "de",
+          "text": "Öffnungen an Flurenden"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The openings a corridor reaches, each searched against the walls its ends run into, as `corridor-end-openings` searches them: whether it sits in one, which, and whether the selection picks it."
+        },
+        {
+          "language": "de",
+          "text": "Die Öffnungen, die ein Flur erreicht, je gegen die Wände gesucht, auf die seine Enden treffen, wie `corridor-end-openings` sucht: ob sie in einer liegt, in welcher, und ob die Auswahl sie trifft."
+        }
+      ],
+      "fields": [
+        {
+          "name": "opening",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Opening"
+            },
+            {
+              "language": "de",
+              "text": "Öffnung"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The opening searched."
+            },
+            {
+              "language": "de",
+              "text": "Die gesuchte Öffnung."
+            }
+          ]
+        },
+        {
+          "name": "corridor",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Corridor"
+            },
+            {
+              "language": "de",
+              "text": "Flur"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The corridor searched from."
+            },
+            {
+              "language": "de",
+              "text": "Der Flur, von dem aus gesucht wird."
+            }
+          ]
+        },
+        {
+          "name": "picked",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Selected"
+            },
+            {
+              "language": "de",
+              "text": "Ausgewählt"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the selection surely picks the opening; undecided where it cannot tell."
+            },
+            {
+              "language": "de",
+              "text": "Ob die Auswahl die Öffnung sicher trifft; unentschieden, wo sie es nicht entscheidet."
+            }
+          ]
+        },
+        {
+          "name": "unpicked",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Why undecided"
+            },
+            {
+              "language": "de",
+              "text": "Warum unentschieden"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Why the selection cannot decide the opening; empty where it can."
+            },
+            {
+              "language": "de",
+              "text": "Warum die Auswahl die Öffnung nicht entscheidet; leer, wo sie es kann."
+            }
+          ]
+        },
+        {
+          "name": "sits",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Sits in an end wall"
+            },
+            {
+              "language": "de",
+              "text": "Liegt in einer Endwand"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the opening sits in a wall the corridor ends at; undecided where an end wall, or the opening's contact with one, cannot decide it."
+            },
+            {
+              "language": "de",
+              "text": "Ob die Öffnung in einer Wand liegt, an der der Flur endet; unentschieden, wo eine Endwand oder ihr Kontakt damit es nicht entscheidet."
+            }
+          ]
+        },
+        {
+          "name": "walls",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "End walls"
+            },
+            {
+              "language": "de",
+              "text": "Endwände"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The end walls it sits in, with its gap to each and how much it faces."
+            },
+            {
+              "language": "de",
+              "text": "Die Endwände, in denen sie liegt, mit Abstand und zugewandter Länge."
             }
           ]
         }
@@ -82033,6 +82042,339 @@
       "available": true
     },
     {
+      "name": "space_connections",
+      "parameters": [
+        {
+          "key": "connections",
+          "kind": {
+            "type": "table"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "Rows of a `from` selector (the spaces a row applies to), an optional `to` selector, `access` and `exit` (`allowed`, `required` or `forbidden`), an `access_type` (`any`, `doors` or `openings`) and an optional `label`, as `space-connection` reads them."
+            },
+            {
+              "language": "de",
+              "text": "Zeilen aus einem Selektor `from` (die Räume, für die eine Zeile gilt), einem optionalen Selektor `to`, `access` und `exit` (`allowed`, `required` oder `forbidden`), einem `access_type` (`any`, `doors` oder `openings`) und einem optionalen `label`, wie `space-connection` sie liest."
+            }
+          ],
+          "references": "table"
+        },
+        {
+          "key": "access_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps from each door or opening to the spaces it connects."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte von jeder Tür oder Öffnung zu den Räumen, die sie verbindet."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "door_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The doors: source kinds, `,`-separated, or `@` a selector parameter of the rule, whose undecided objects may be doors."
+            },
+            {
+              "language": "de",
+              "text": "Die Türen: Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel, dessen unentschiedene Objekte Türen sein können."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "opening_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The openings, as `door_selector` names the doors."
+            },
+            {
+              "language": "de",
+              "text": "Die Öffnungen, wie `door_selector` die Türen nennt."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "space_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The spaces a door or opening may connect; every object without it."
+            },
+            {
+              "language": "de",
+              "text": "Die Räume, die eine Tür oder Öffnung verbinden kann; ohne Angabe jedes Objekt."
+            }
+          ],
+          "references": "selector"
+        }
+      ],
+      "services": [
+        "relationship-selection"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "whether a row's `from` picks the space is undecided"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Space connections"
+        },
+        {
+          "language": "de",
+          "text": "Raumverbindungen"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "Each requirement of each row of `connections` whose `from` picks the space, its `access` and then its `exit`: whether the space is surely linked as the row asks, surely not, or undecided."
+        },
+        {
+          "language": "de",
+          "text": "Jede Anforderung jeder Zeile von `connections`, deren `from` den Raum trifft, erst ihr `access`, dann ihr `exit`: ob der Raum sicher wie verlangt verbunden ist, sicher nicht, oder unentschieden."
+        }
+      ],
+      "fields": [
+        {
+          "name": "row",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Row"
+            },
+            {
+              "language": "de",
+              "text": "Zeile"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The row, as messages name it: `row 0 (label)`."
+            },
+            {
+              "language": "de",
+              "text": "Die Zeile, wie Meldungen sie nennen: `row 0 (label)`."
+            }
+          ]
+        },
+        {
+          "name": "access",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Access"
+            },
+            {
+              "language": "de",
+              "text": "Zugang"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the item is the row's `access` requirement; its `exit` otherwise."
+            },
+            {
+              "language": "de",
+              "text": "Ob das Element die Anforderung `access` der Zeile ist; sonst ihr `exit`."
+            }
+          ]
+        },
+        {
+          "name": "required",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Required"
+            },
+            {
+              "language": "de",
+              "text": "Verlangt"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the row requires the link; it forbids it otherwise."
+            },
+            {
+              "language": "de",
+              "text": "Ob die Zeile die Verbindung verlangt; sonst verbietet sie sie."
+            }
+          ]
+        },
+        {
+          "name": "kind",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Element type"
+            },
+            {
+              "language": "de",
+              "text": "Elementart"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The elements the row counts: `door`, `opening` or `door or opening`."
+            },
+            {
+              "language": "de",
+              "text": "Die Elemente, die die Zeile zählt: `door`, `opening` oder `door or opening`."
+            }
+          ]
+        },
+        {
+          "name": "via",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Relationship"
+            },
+            {
+              "language": "de",
+              "text": "Beziehung"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship the access path follows."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehung, der der Zugangspfad folgt."
+            }
+          ]
+        },
+        {
+          "name": "links",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Links"
+            },
+            {
+              "language": "de",
+              "text": "Verbindungen"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The sure links found: each space and the element it is reached through, or the element opening to the outside; empty where none."
+            },
+            {
+              "language": "de",
+              "text": "Die sicheren Verbindungen: je Raum und das Element, durch das er erreicht wird, oder das Element ins Freie; leer, wo keine."
+            }
+          ]
+        },
+        {
+          "name": "linked",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Linked"
+            },
+            {
+              "language": "de",
+              "text": "Verbunden"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the space is surely linked as the row asks; undecided where an element or a space the row may pick could change it."
+            },
+            {
+              "language": "de",
+              "text": "Ob der Raum sicher wie verlangt verbunden ist; unentschieden, wo ein Element oder ein Raum, den die Zeile treffen kann, es ändern könnte."
+            }
+          ]
+        },
+        {
+          "name": "related",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Related"
+            },
+            {
+              "language": "de",
+              "text": "Bezogen"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The linked spaces and elements where linked; otherwise the elements reaching the space."
+            },
+            {
+              "language": "de",
+              "text": "Die verbundenen Räume und Elemente, wo verbunden; sonst die Elemente, die den Raum erreichen."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
       "name": "stair_clear_widths",
       "parameters": [
         {
@@ -82838,339 +83180,6 @@
             {
               "language": "de",
               "text": "Ob jeder Lauf gemessen ist und keiner fehlen kann."
-            }
-          ]
-        }
-      ],
-      "available": true
-    },
-    {
-      "name": "space_connections",
-      "parameters": [
-        {
-          "key": "connections",
-          "kind": {
-            "type": "table"
-          },
-          "required": true,
-          "help": [
-            {
-              "language": "en",
-              "text": "Rows of a `from` selector (the spaces a row applies to), an optional `to` selector, `access` and `exit` (`allowed`, `required` or `forbidden`), an `access_type` (`any`, `doors` or `openings`) and an optional `label`, as `space-connection` reads them."
-            },
-            {
-              "language": "de",
-              "text": "Zeilen aus einem Selektor `from` (die Räume, für die eine Zeile gilt), einem optionalen Selektor `to`, `access` und `exit` (`allowed`, `required` oder `forbidden`), einem `access_type` (`any`, `doors` oder `openings`) und einem optionalen `label`, wie `space-connection` sie liest."
-            }
-          ],
-          "references": "table"
-        },
-        {
-          "key": "access_path",
-          "kind": {
-            "type": "path"
-          },
-          "required": true,
-          "help": [
-            {
-              "language": "en",
-              "text": "The relationship steps from each door or opening to the spaces it connects."
-            },
-            {
-              "language": "de",
-              "text": "Die Beziehungsschritte von jeder Tür oder Öffnung zu den Räumen, die sie verbindet."
-            }
-          ],
-          "references": "stringList"
-        },
-        {
-          "key": "door_selector",
-          "kind": {
-            "type": "objects"
-          },
-          "required": false,
-          "help": [
-            {
-              "language": "en",
-              "text": "The doors: source kinds, `,`-separated, or `@` a selector parameter of the rule, whose undecided objects may be doors."
-            },
-            {
-              "language": "de",
-              "text": "Die Türen: Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel, dessen unentschiedene Objekte Türen sein können."
-            }
-          ],
-          "references": "selector"
-        },
-        {
-          "key": "opening_selector",
-          "kind": {
-            "type": "objects"
-          },
-          "required": false,
-          "help": [
-            {
-              "language": "en",
-              "text": "The openings, as `door_selector` names the doors."
-            },
-            {
-              "language": "de",
-              "text": "Die Öffnungen, wie `door_selector` die Türen nennt."
-            }
-          ],
-          "references": "selector"
-        },
-        {
-          "key": "space_selector",
-          "kind": {
-            "type": "objects"
-          },
-          "required": false,
-          "help": [
-            {
-              "language": "en",
-              "text": "The spaces a door or opening may connect; every object without it."
-            },
-            {
-              "language": "de",
-              "text": "Die Räume, die eine Tür oder Öffnung verbinden kann; ohne Angabe jedes Objekt."
-            }
-          ],
-          "references": "selector"
-        }
-      ],
-      "services": [
-        "relationship-selection"
-      ],
-      "exactness": "measured",
-      "notEvaluated": [
-        "whether a row's `from` picks the space is undecided"
-      ],
-      "label": [
-        {
-          "language": "en",
-          "text": "Space connections"
-        },
-        {
-          "language": "de",
-          "text": "Raumverbindungen"
-        }
-      ],
-      "help": [
-        {
-          "language": "en",
-          "text": "Each requirement of each row of `connections` whose `from` picks the space, its `access` and then its `exit`: whether the space is surely linked as the row asks, surely not, or undecided."
-        },
-        {
-          "language": "de",
-          "text": "Jede Anforderung jeder Zeile von `connections`, deren `from` den Raum trifft, erst ihr `access`, dann ihr `exit`: ob der Raum sicher wie verlangt verbunden ist, sicher nicht, oder unentschieden."
-        }
-      ],
-      "fields": [
-        {
-          "name": "row",
-          "kind": {
-            "type": "text"
-          },
-          "label": [
-            {
-              "language": "en",
-              "text": "Row"
-            },
-            {
-              "language": "de",
-              "text": "Zeile"
-            }
-          ],
-          "help": [
-            {
-              "language": "en",
-              "text": "The row, as messages name it: `row 0 (label)`."
-            },
-            {
-              "language": "de",
-              "text": "Die Zeile, wie Meldungen sie nennen: `row 0 (label)`."
-            }
-          ]
-        },
-        {
-          "name": "access",
-          "kind": {
-            "type": "truth"
-          },
-          "label": [
-            {
-              "language": "en",
-              "text": "Access"
-            },
-            {
-              "language": "de",
-              "text": "Zugang"
-            }
-          ],
-          "help": [
-            {
-              "language": "en",
-              "text": "Whether the item is the row's `access` requirement; its `exit` otherwise."
-            },
-            {
-              "language": "de",
-              "text": "Ob das Element die Anforderung `access` der Zeile ist; sonst ihr `exit`."
-            }
-          ]
-        },
-        {
-          "name": "required",
-          "kind": {
-            "type": "truth"
-          },
-          "label": [
-            {
-              "language": "en",
-              "text": "Required"
-            },
-            {
-              "language": "de",
-              "text": "Verlangt"
-            }
-          ],
-          "help": [
-            {
-              "language": "en",
-              "text": "Whether the row requires the link; it forbids it otherwise."
-            },
-            {
-              "language": "de",
-              "text": "Ob die Zeile die Verbindung verlangt; sonst verbietet sie sie."
-            }
-          ]
-        },
-        {
-          "name": "kind",
-          "kind": {
-            "type": "text"
-          },
-          "label": [
-            {
-              "language": "en",
-              "text": "Element type"
-            },
-            {
-              "language": "de",
-              "text": "Elementart"
-            }
-          ],
-          "help": [
-            {
-              "language": "en",
-              "text": "The elements the row counts: `door`, `opening` or `door or opening`."
-            },
-            {
-              "language": "de",
-              "text": "Die Elemente, die die Zeile zählt: `door`, `opening` oder `door or opening`."
-            }
-          ]
-        },
-        {
-          "name": "via",
-          "kind": {
-            "type": "text"
-          },
-          "label": [
-            {
-              "language": "en",
-              "text": "Relationship"
-            },
-            {
-              "language": "de",
-              "text": "Beziehung"
-            }
-          ],
-          "help": [
-            {
-              "language": "en",
-              "text": "The relationship the access path follows."
-            },
-            {
-              "language": "de",
-              "text": "Die Beziehung, der der Zugangspfad folgt."
-            }
-          ]
-        },
-        {
-          "name": "links",
-          "kind": {
-            "type": "text"
-          },
-          "label": [
-            {
-              "language": "en",
-              "text": "Links"
-            },
-            {
-              "language": "de",
-              "text": "Verbindungen"
-            }
-          ],
-          "help": [
-            {
-              "language": "en",
-              "text": "The sure links found: each space and the element it is reached through, or the element opening to the outside; empty where none."
-            },
-            {
-              "language": "de",
-              "text": "Die sicheren Verbindungen: je Raum und das Element, durch das er erreicht wird, oder das Element ins Freie; leer, wo keine."
-            }
-          ]
-        },
-        {
-          "name": "linked",
-          "kind": {
-            "type": "truth"
-          },
-          "label": [
-            {
-              "language": "en",
-              "text": "Linked"
-            },
-            {
-              "language": "de",
-              "text": "Verbunden"
-            }
-          ],
-          "help": [
-            {
-              "language": "en",
-              "text": "Whether the space is surely linked as the row asks; undecided where an element or a space the row may pick could change it."
-            },
-            {
-              "language": "de",
-              "text": "Ob der Raum sicher wie verlangt verbunden ist; unentschieden, wo ein Element oder ein Raum, den die Zeile treffen kann, es ändern könnte."
-            }
-          ]
-        },
-        {
-          "name": "related",
-          "kind": {
-            "type": "objects"
-          },
-          "label": [
-            {
-              "language": "en",
-              "text": "Related"
-            },
-            {
-              "language": "de",
-              "text": "Bezogen"
-            }
-          ],
-          "help": [
-            {
-              "language": "en",
-              "text": "The linked spaces and elements where linked; otherwise the elements reaching the space."
-            },
-            {
-              "language": "de",
-              "text": "Die verbundenen Räume und Elemente, wo verbunden; sonst die Elemente, die den Raum erreichen."
             }
           ]
         }

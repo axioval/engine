@@ -354,6 +354,11 @@ const PAIRS: &[Pair] = &[
         case: "floors",
         reference: |registry| registry.replace(axioval::rules::reference::LocalCirculation),
     },
+    Pair {
+        capability: "axioval:capability.escape-route",
+        case: "routes",
+        reference: |registry| registry.replace(axioval::rules::reference::EscapeRoute),
+    },
 ];
 
 /// Warm-up runs per side before measuring.

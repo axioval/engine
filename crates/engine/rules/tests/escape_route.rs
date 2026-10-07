@@ -33,6 +33,10 @@ use common::{
 
 const CAPABILITY: &str = "axioval:capability.escape-route";
 
+/// `escape-route` as it runs, held to the implementation it replaced on
+/// every evaluation.
+static HELD: common::Held = common::Held(&EscapeRoute, &axioval_rules::reference::EscapeRoute);
+
 /// How a stubbed walk ends.
 #[derive(Clone, Copy)]
 enum Walk {
@@ -563,7 +567,7 @@ fn evaluate(
     parameters: Vec<(&'static str, ParameterValue)>,
 ) -> CapabilityEvaluation {
     model.evaluate_with(
-        &EscapeRoute,
+        &HELD,
         &rule(CAPABILITY, kind("space"), parameters),
         |services| {
             geometry.register(services);
@@ -907,7 +911,7 @@ fn travel_from_the_rooms_door_is_measured_from_every_door() {
     };
     let run = |walk: Walk| {
         model().evaluate_with(
-            &EscapeRoute,
+            &HELD,
             &rule(
                 CAPABILITY,
                 kind("space"),
@@ -1117,7 +1121,7 @@ fn walked_passages_that_cannot_be_walked_are_refused() {
 #[test]
 fn without_the_routing_service_travel_is_not_evaluated() {
     let evaluation = model().evaluate(
-        &EscapeRoute,
+        &HELD,
         &rule(
             CAPABILITY,
             kind("space"),
@@ -1142,7 +1146,7 @@ fn a_space_no_use_picks_is_not_evaluated() {
         .object("d9", "door")
         .edge("bounds", "d9", "elsewhere")
         .evaluate_with(
-            &EscapeRoute,
+            &HELD,
             &rule(
                 CAPABILITY,
                 Selector::AnyOf {
@@ -1251,7 +1255,7 @@ fn a_shared_section_multiplies_only_where_enough_spaces_reach_it() {
             .edge("opens", "hall", "c")
             .edge("opens", "office", "c")
             .evaluate_with(
-                &EscapeRoute,
+                &HELD,
                 &rule(
                     CAPABILITY,
                     kind("space"),
@@ -1441,7 +1445,7 @@ fn a_passage_serving_a_space_of_unknown_load_is_not_evaluated() {
         .value("c", "Corridor", "ClearWidth", metres(3.0))
         .value("d1", "Access", "ClearWidth", metres(1.25))
         .evaluate_with(
-            &EscapeRoute,
+            &HELD,
             &rule(
                 CAPABILITY,
                 Selector::AnyOf {
@@ -1525,7 +1529,7 @@ fn an_exit_door_opening_into_the_space_is_found() {
             ],
         );
         model.evaluate_with(
-            &EscapeRoute,
+            &HELD,
             &rule(CAPABILITY, kind("space"), parameters),
             |services| {
                 services.register(doors.handle()).unwrap();
@@ -1621,7 +1625,7 @@ fn a_door_walk_counts_the_metres_it_walks_on_a_section_by_its_factor() {
             geometry = geometry.trace("d1", "st", metres);
         }
         office_and_hall().object("st", "stair").evaluate_with(
-            &EscapeRoute,
+            &HELD,
             &rule(
                 CAPABILITY,
                 kind("space"),
@@ -1685,7 +1689,7 @@ fn walked(geometry: Geometry) -> CapabilityEvaluation {
 
 fn walked_with(model: Model, geometry: Geometry) -> CapabilityEvaluation {
     model.evaluate_with(
-        &EscapeRoute,
+        &HELD,
         &rule(
             CAPABILITY,
             kind("space"),
@@ -1866,7 +1870,7 @@ fn a_door_not_usable_for_escape_forces_the_longer_walk() {
         );
         parameters.extend(extra);
         model.evaluate_with(
-            &EscapeRoute,
+            &HELD,
             &rule(CAPABILITY, kind("space"), parameters),
             |services| geometry.register(services),
         )
@@ -1945,7 +1949,7 @@ fn the_farthest_point_stands_only_where_no_walk_reaches_what_it_avoids() {
         hall_with_a_locked_door()
             .value("ld", "Escape", "Locked", PropertyValue::Boolean(true))
             .evaluate_with(
-                &EscapeRoute,
+                &HELD,
                 &rule(
                     CAPABILITY,
                     kind("space"),
@@ -2018,7 +2022,7 @@ fn in_compartments(
     );
     parameters.extend(extra);
     model.evaluate_with(
-        &EscapeRoute,
+        &HELD,
         &rule(CAPABILITY, kind("room"), parameters),
         |services| geometry.register(services),
     )
@@ -2223,7 +2227,7 @@ fn routes(geometry: Geometry) -> CapabilityEvaluation {
         .edge("serves", "x1", "r")
         .edge("serves", "x2", "r")
         .evaluate_with(
-            &EscapeRoute,
+            &HELD,
             &rule(
                 CAPABILITY,
                 kind("space"),
@@ -2355,7 +2359,7 @@ fn along_the_route(
     );
     parameters.extend(extra);
     model.evaluate_with(
-        &EscapeRoute,
+        &HELD,
         &rule(CAPABILITY, kind("space"), parameters),
         |services| {
             geometry
@@ -2503,7 +2507,7 @@ fn a_shared_stretch_counts_by_the_common_path_factor() {
         hall_with_a_locked_door()
             .object("c", "corridor")
             .evaluate_with(
-                &EscapeRoute,
+                &HELD,
                 &rule(CAPABILITY, kind("space"), parameters),
                 |services| {
                     Geometry::default()
@@ -2592,7 +2596,7 @@ fn a_corridor_door_carrying_three_rooms_is_as_wide_as_all_their_occupants_need()
         three_rooms_through_one_door()
             .value("cd", "Access", "ClearWidth", metres(width))
             .evaluate_with(
-                &EscapeRoute,
+                &HELD,
                 &rule(
                     CAPABILITY,
                     kind("space"),
@@ -2655,7 +2659,7 @@ fn a_rooms_own_doors_together_are_as_wide_as_its_occupants_need() {
         .value("d1", "Access", "ClearWidth", metres(0.8))
         .value("d2", "Access", "ClearWidth", metres(0.8))
         .evaluate_with(
-            &EscapeRoute,
+            &HELD,
             &rule(
                 CAPABILITY,
                 kind("space"),
@@ -2982,7 +2986,7 @@ fn a_space_without_a_door_walks_its_passages_from_its_farthest_point() {
         .object("annex", "space")
         .edge("serves", "x1", "annex");
     let evaluation = model.evaluate_with(
-        &EscapeRoute,
+        &HELD,
         &rule(
             CAPABILITY,
             kind("space"),
@@ -3217,7 +3221,7 @@ fn travel_distance_reaches_the_verdicts_per_use_row() {
         // by the row's expression alone.
         for (of, requirement) in per_row {
             let expected = model().evaluate_with(
-                &EscapeRoute,
+                &HELD,
                 &rule(CAPABILITY, kind(of), parameters.clone()),
                 |services| {
                     geometry().register(services);
@@ -3243,6 +3247,129 @@ fn travel_distance_reaches_the_verdicts_per_use_row() {
                 ("expression", &outcome),
             );
             assert!(parity.holds(), "case {index}, {of}:\n{}", parity.diff());
+        }
+    }
+}
+
+/// Generated halls, each with its own doors, judged by the template and by
+/// the implementation it replaced (`HELD`): travel walked to a bracket, cut
+/// off or refused, exits counted, and doors stated, measured or unknown
+/// in width against the occupant load.
+#[test]
+fn generated_halls_are_judged_as_before() {
+    use proptest::prelude::*;
+
+    #[derive(Clone, Debug)]
+    struct Hall {
+        doors: Vec<Option<f64>>,
+        walk: (u8, f64, f64),
+        area: f64,
+    }
+
+    let hall = (
+        proptest::collection::vec(proptest::option::of(0.6f64..1.6), 1..4),
+        (0u8..4, 5.0f64..40.0, 0.0f64..3.0),
+        10.0f64..500.0,
+    )
+        .prop_map(|(doors, walk, area)| Hall { doors, walk, area });
+    let declared = (
+        proptest::option::of(10.0f64..40.0),
+        proptest::option::of(1i64..4),
+        proptest::option::of(1.0f64..5.0),
+    );
+    proptest!(ProptestConfig::with_cases(96), |(
+        halls in proptest::collection::vec(hall, 1..4),
+        (maximum, needed, per_occupant) in declared,
+    )| {
+        let mut model = Model::default();
+        let mut geometry = Geometry::default();
+        for (index, hall) in halls.iter().enumerate() {
+            let name = format!("hall{index}");
+            model = model.object(&name, "space");
+            let mut doors = Vec::new();
+            for (door, width) in hall.doors.iter().enumerate() {
+                let door = format!("d{index}x{door}");
+                model = model.object(&door, "door").edge("bounds", &door, &name);
+                match width {
+                    Some(width) => {
+                        model = model.value(&door, "Access", "ClearWidth", metres(*width));
+                    }
+                    None => geometry = geometry.diameter(&door, 1.0),
+                }
+                doors.push(door);
+            }
+            doors.sort();
+            let (kind_of, lower, spread) = hall.walk;
+            let walk = match kind_of {
+                0 => Walk::Unreachable,
+                1 => Walk::Refused,
+                _ => Walk::Between(lower, lower + spread),
+            };
+            geometry = geometry
+                .walk(&name, &doors.join(","), walk)
+                .area(&name, hall.area, hall.area);
+        }
+        let mut row = Vec::new();
+        if let Some(maximum) = maximum {
+            row.push(("maximum_travel", number(maximum)));
+        }
+        if let Some(needed) = needed {
+            row.push(("exits", integer(needed)));
+        }
+        if let Some(per_occupant) = per_occupant {
+            row.push(("area_per_occupant", number(per_occupant)));
+        }
+        // `evaluate` holds the template to the reference on every case.
+        evaluate(
+            model,
+            geometry,
+            with(
+                exits(kind("door")),
+                vec![
+                    uses(&row),
+                    widths(),
+                    (
+                        "clear_width_property",
+                        property(Some("Access"), "ClearWidth"),
+                    ),
+                ],
+            ),
+        );
+    });
+}
+
+/// The measured list `escape_verdicts` never cites a walk measured
+/// approximately: travel too long on an exact walk is found on exact
+/// evidence, while a walk over a tessellation leaves it open, never found.
+#[test]
+fn a_travel_finding_on_a_tessellation_is_left_open() {
+    for approximate in [true, false] {
+        let mut geometry = Geometry::default().walk("hall", "d1,d2", Walk::Between(21.0, 21.01));
+        if approximate {
+            geometry = geometry.approximate();
+        }
+        let evaluation = evaluate(
+            model(),
+            geometry,
+            with(
+                exits(kind("door")),
+                vec![uses(&[("maximum_travel", number(20.0))])],
+            ),
+        );
+        if approximate {
+            assert!(evaluation.findings().is_empty(), "{evaluation:?}");
+            assert_eq!(
+                unevaluated(&evaluation),
+                [("hall".into(), NotEvaluatedReason::IncompleteEvidence)]
+            );
+        } else {
+            assert_eq!(evaluation.findings().len(), 1, "{evaluation:?}");
+            assert!(
+                evaluation.findings()[0]
+                    .evidence
+                    .iter()
+                    .all(|evidence| evidence.exact)
+            );
         }
     }
 }

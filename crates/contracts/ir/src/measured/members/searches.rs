@@ -2472,3 +2472,444 @@ pub(super) const CIRCULATION_VERDICTS: MemberDescriptor = MemberDescriptor {
         ),
     ],
 };
+
+const ESCAPE_VERDICTS_PARAMETERS: [MeasuredParameter; 36] = [
+    MeasuredParameter {
+        key: "uses",
+        kind: MeasuredParameterKind::Table,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `uses`, as `escape-route` reads it.",
+            "Der Parameter `uses` der Regel, wie `escape-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "widths",
+        kind: MeasuredParameterKind::Table,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `widths`, as `escape-route` reads it.",
+            "Der Parameter `widths` der Regel, wie `escape-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "exit_path",
+        kind: MeasuredParameterKind::Path,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `exit_path`, as `escape-route` reads it.",
+            "Der Parameter `exit_path` der Regel, wie `escape-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "exit_selector",
+        kind: MeasuredParameterKind::Objects,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `exit_selector`, as `escape-route` reads it.",
+            "Der Parameter `exit_selector` der Regel, wie `escape-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "door_path",
+        kind: MeasuredParameterKind::Path,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `door_path`, as `escape-route` reads it.",
+            "Der Parameter `door_path` der Regel, wie `escape-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "door_selector",
+        kind: MeasuredParameterKind::Objects,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `door_selector`, as `escape-route` reads it.",
+            "Der Parameter `door_selector` der Regel, wie `escape-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "clear_width_property",
+        kind: MeasuredParameterKind::Property,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `clear_width_property`, as `escape-route` reads it.",
+            "Der Parameter `clear_width_property` der Regel, wie `escape-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "walking_height",
+        kind: MeasuredParameterKind::Number {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `walking_height`, as `escape-route` reads it.",
+            "Der Parameter `walking_height` der Regel, wie `escape-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "walking_step",
+        kind: MeasuredParameterKind::Number {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `walking_step`, as `escape-route` reads it.",
+            "Der Parameter `walking_step` der Regel, wie `escape-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "sections",
+        kind: MeasuredParameterKind::Table,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `sections`, as `escape-route` reads it.",
+            "Der Parameter `sections` der Regel, wie `escape-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "section_path",
+        kind: MeasuredParameterKind::Path,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `section_path`, as `escape-route` reads it.",
+            "Der Parameter `section_path` der Regel, wie `escape-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "passage_path",
+        kind: MeasuredParameterKind::Path,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `passage_path`, as `escape-route` reads it.",
+            "Der Parameter `passage_path` der Regel, wie `escape-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "passage_selector",
+        kind: MeasuredParameterKind::Objects,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `passage_selector`, as `escape-route` reads it.",
+            "Der Parameter `passage_selector` der Regel, wie `escape-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "passage_width_property",
+        kind: MeasuredParameterKind::Property,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `passage_width_property`, as `escape-route` reads it.",
+            "Der Parameter `passage_width_property` der Regel, wie `escape-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "exit_door_direction",
+        kind: MeasuredParameterKind::Truth,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `exit_door_direction`, as `escape-route` reads it.",
+            "Der Parameter `exit_door_direction` der Regel, wie `escape-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "walked_passages",
+        kind: MeasuredParameterKind::Truth,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `walked_passages`, as `escape-route` reads it.",
+            "Der Parameter `walked_passages` der Regel, wie `escape-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "no_escape_selector",
+        kind: MeasuredParameterKind::Objects,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `no_escape_selector`, as `escape-route` reads it.",
+            "Der Parameter `no_escape_selector` der Regel, wie `escape-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "compartment_selector",
+        kind: MeasuredParameterKind::Objects,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `compartment_selector`, as `escape-route` reads it.",
+            "Der Parameter `compartment_selector` der Regel, wie `escape-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "compartment_path",
+        kind: MeasuredParameterKind::Path,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `compartment_path`, as `escape-route` reads it.",
+            "Der Parameter `compartment_path` der Regel, wie `escape-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "compartment_overlap",
+        kind: MeasuredParameterKind::Number {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `compartment_overlap`, as `escape-route` reads it.",
+            "Der Parameter `compartment_overlap` der Regel, wie `escape-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "zones",
+        kind: MeasuredParameterKind::Table,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `zones`, as `escape-route` reads it.",
+            "Der Parameter `zones` der Regel, wie `escape-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "exit_count",
+        kind: MeasuredParameterKind::Text,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `exit_count`, as `escape-route` reads it.",
+            "Der Parameter `exit_count` der Regel, wie `escape-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "route_door_selector",
+        kind: MeasuredParameterKind::Objects,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `route_door_selector`, as `escape-route` reads it.",
+            "Der Parameter `route_door_selector` der Regel, wie `escape-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "common_path_factor",
+        kind: MeasuredParameterKind::Number {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `common_path_factor`, as `escape-route` reads it.",
+            "Der Parameter `common_path_factor` der Regel, wie `escape-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "route_door_direction",
+        kind: MeasuredParameterKind::Truth,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `route_door_direction`, as `escape-route` reads it.",
+            "Der Parameter `route_door_direction` der Regel, wie `escape-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "minimum_clear_height",
+        kind: MeasuredParameterKind::Number {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `minimum_clear_height`, as `escape-route` reads it.",
+            "Der Parameter `minimum_clear_height` der Regel, wie `escape-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "clear_height_property",
+        kind: MeasuredParameterKind::Property,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `clear_height_property`, as `escape-route` reads it.",
+            "Der Parameter `clear_height_property` der Regel, wie `escape-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "overall_height",
+        kind: MeasuredParameterKind::Property,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `overall_height`, as `escape-route` reads it.",
+            "Der Parameter `overall_height` der Regel, wie `escape-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "lining_thickness",
+        kind: MeasuredParameterKind::Property,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `lining_thickness`, as `escape-route` reads it.",
+            "Der Parameter `lining_thickness` der Regel, wie `escape-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "threshold_thickness",
+        kind: MeasuredParameterKind::Property,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `threshold_thickness`, as `escape-route` reads it.",
+            "Der Parameter `threshold_thickness` der Regel, wie `escape-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "stair_selector",
+        kind: MeasuredParameterKind::Objects,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `stair_selector`, as `escape-route` reads it.",
+            "Der Parameter `stair_selector` der Regel, wie `escape-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "ramp_selector",
+        kind: MeasuredParameterKind::Objects,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `ramp_selector`, as `escape-route` reads it.",
+            "Der Parameter `ramp_selector` der Regel, wie `escape-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "lift_selector",
+        kind: MeasuredParameterKind::Objects,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `lift_selector`, as `escape-route` reads it.",
+            "Der Parameter `lift_selector` der Regel, wie `escape-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "stair_length",
+        kind: MeasuredParameterKind::Text,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `stair_length`, as `escape-route` reads it.",
+            "Der Parameter `stair_length` der Regel, wie `escape-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "vertical_factor",
+        kind: MeasuredParameterKind::Number {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `vertical_factor`, as `escape-route` reads it.",
+            "Der Parameter `vertical_factor` der Regel, wie `escape-route` ihn liest.",
+        ),
+    },
+    SELECTION,
+];
+
+pub(super) const ESCAPE_VERDICTS: MemberDescriptor = MemberDescriptor {
+    list: MeasuredDescriptor {
+        name: "escape_verdicts",
+        parameters: &ESCAPE_VERDICTS_PARAMETERS,
+        dimension: None,
+        services: &[
+            "metric-routing",
+            "relationship-selection",
+            "plan-area",
+            "plan-span",
+            "free-space",
+            "object-frame",
+            "vertical-extent",
+            "proximity",
+        ],
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[
+            "a service a walk or measure needs is not registered or cannot answer, or a selection cannot be listed",
+        ],
+        label: &en_de("Escape verdicts", "Fluchtwegurteile"),
+        help: &en_de(
+            "Every answer escape-route's search gives about the spaces a rule selects: travel, exits, widths, door directions, clear heights, and the loads of the passages and doors their occupants rely on, each on what it is about.",
+            "Jede Antwort, die die Suche von escape-route zu den gewählten Räumen gibt: Fluchtweglänge, Ausgänge, Breiten, Türaufschlag, lichte Höhen und die Lasten der Flure und Türen, auf die ihre Nutzer angewiesen sind, jede bei dem, worum es geht.",
+        ),
+    },
+    fields: &[
+        field(
+            "at",
+            OBJECTS,
+            &en_de("Where", "Wo"),
+            &en_de(
+                "The space or component the answer is about.",
+                "Der Raum oder das Bauteil, um das es geht.",
+            ),
+        ),
+        field(
+            "met",
+            TRUTH,
+            &en_de("Met", "Erfüllt"),
+            &en_de(
+                "Whether the answer meets the requirement (false for each the search finds unmet); undecided, with why, where the search cannot tell.",
+                "Ob die Antwort die Anforderung erfüllt (falsch für jede, die die Suche als nicht erfüllt findet); unentschieden, mit Grund, wo die Suche es nicht entscheidet.",
+            ),
+        ),
+        field(
+            "words",
+            TEXT,
+            &en_de("Words", "Worte"),
+            &en_de(
+                "What an unmet answer comes to, as findings word it.",
+                "Was eine nicht erfüllte Antwort ergibt, wie Befunde es formulieren.",
+            ),
+        ),
+        field(
+            "related",
+            OBJECTS,
+            &en_de("Related", "Bezogen"),
+            &en_de(
+                "The objects an unmet answer relates.",
+                "Die Objekte, auf die sich eine nicht erfüllte Antwort bezieht.",
+            ),
+        ),
+        field(
+            "reason",
+            TEXT,
+            &en_de("Reason", "Grund"),
+            &en_de(
+                "Why an undecided answer is open, as a report writes it.",
+                "Warum eine unentschiedene Antwort offen ist, wie ein Bericht es schreibt.",
+            ),
+        ),
+    ],
+};

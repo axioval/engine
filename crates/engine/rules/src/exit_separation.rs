@@ -361,6 +361,33 @@ impl<'a> Candidates<'a> {
             undecided,
         }
     }
+
+    /// The objects a bound selection picks or cannot decide, in the
+    /// project's order, each undecided one with why.
+    pub(crate) fn of_selection(
+        context: &RuleContext<'a>,
+        selection: &axioval_ir::measured::MeasuredSelection,
+    ) -> Self {
+        let mut universe = Vec::new();
+        let mut undecided = BTreeMap::new();
+        for object in context.project.objects() {
+            if selection.matched.contains(&object.id) {
+                universe.push(object);
+            } else if selection.undecided.contains(&object.id) {
+                let why = selection
+                    .reasons
+                    .get(&object.id)
+                    .map(|(_, why)| why.clone())
+                    .unwrap_or_default();
+                undecided.insert(object.id.clone(), why);
+                universe.push(object);
+            }
+        }
+        Self {
+            universe,
+            undecided,
+        }
+    }
 }
 
 /// The exits a space reaches: those surely exits, those whose selection is

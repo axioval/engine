@@ -139,12 +139,19 @@
 //! measured on one level only.
 
 mod measured;
+#[cfg(feature = "parity-reference")]
+pub(crate) mod reference;
+mod template;
+mod verdicts;
 
 pub(crate) use measured::TravelMeasures;
+pub(crate) use verdicts::EscapeMeasures;
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::LazyLock;
 
+use axioval_engine::template::Template;
 use axioval_engine::{
     CapabilityEvaluation, ColumnKind, CompiledRule, ConnectorRouting, DoorLeaves, DoorLeavesError,
     FarthestPointOutcome, FarthestPointRequest, ForcedWalkOutcome, ForcedWalkRequest,
@@ -156,6 +163,7 @@ use axioval_engine::{
     TravelCost, VerticalExtentServiceHandle,
 };
 use axioval_ir::contract::Selector;
+use axioval_ir::measured::MeasuredSelection;
 use axioval_ir::{Evidence, Finding, Object, ObjectId, PropertyValue, QuantityDimension, Scope};
 
 use crate::climbing::{self, Climbing};
@@ -163,7 +171,7 @@ use crate::door_swing::{self, Relation};
 use crate::exit_separation::Candidates;
 use crate::keyed_limit::door_clear_height;
 use crate::plan_area::{footprint, shown};
-use crate::selection::{Selection, select_objects, selector_matches};
+use crate::selection::{Selection, selector_matches};
 use crate::space_distance::representative_point;
 use crate::support::table::{Matched, RowSelection, RowTest, match_rows};
 use crate::support::{
@@ -750,175 +758,234 @@ fn passages<'a>(
     }))
 }
 
+/// The capability's parameter descriptor.
+pub(crate) fn parameters() -> Vec<ParameterDescriptor> {
+    let mut parameters = vec![
+        ParameterDescriptor::required("uses", ParameterType::Table(USES)),
+        ParameterDescriptor::optional("widths", ParameterType::Table(WIDTHS)),
+        ParameterDescriptor::required("exit_path", ParameterType::StringList),
+        ParameterDescriptor::required("exit_selector", ParameterType::Selector),
+        ParameterDescriptor::optional("door_path", ParameterType::StringList),
+        ParameterDescriptor::optional("door_selector", ParameterType::Selector),
+        ParameterDescriptor::optional("clear_width_property", ParameterType::PropertyReference),
+        ParameterDescriptor::optional("walking_height", ParameterType::Number),
+        ParameterDescriptor::optional("walking_step", ParameterType::Number),
+        ParameterDescriptor::optional("sections", ParameterType::Table(SECTIONS)),
+        ParameterDescriptor::optional("section_path", ParameterType::StringList),
+        ParameterDescriptor::optional("passage_path", ParameterType::StringList),
+        ParameterDescriptor::optional("passage_selector", ParameterType::Selector),
+        ParameterDescriptor::optional("passage_width_property", ParameterType::PropertyReference),
+        ParameterDescriptor::optional("exit_door_direction", ParameterType::Boolean),
+        ParameterDescriptor::optional("walked_passages", ParameterType::Boolean),
+        ParameterDescriptor::optional("no_escape_selector", ParameterType::Selector),
+        ParameterDescriptor::optional("compartment_selector", ParameterType::Selector),
+        ParameterDescriptor::optional("compartment_path", ParameterType::StringList),
+        ParameterDescriptor::optional("compartment_overlap", ParameterType::Number),
+        ParameterDescriptor::optional("zones", ParameterType::Table(ZONES)),
+        ParameterDescriptor::optional("exit_count", ParameterType::String),
+        ParameterDescriptor::optional("route_door_selector", ParameterType::Selector),
+        ParameterDescriptor::optional("common_path_factor", ParameterType::Number),
+        ParameterDescriptor::optional("route_door_direction", ParameterType::Boolean),
+        ParameterDescriptor::optional("minimum_clear_height", ParameterType::Number),
+        ParameterDescriptor::optional("clear_height_property", ParameterType::PropertyReference),
+        ParameterDescriptor::optional("overall_height", ParameterType::PropertyReference),
+        ParameterDescriptor::optional("lining_thickness", ParameterType::PropertyReference),
+        ParameterDescriptor::optional("threshold_thickness", ParameterType::PropertyReference),
+    ];
+    parameters.extend(climbing::descriptors());
+    parameters
+}
+
+static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
+
+/// The plans of the rules bound to it, kept across runs.
+static PLANS: crate::templates::Plans = crate::templates::Plans::new();
+
+/// Checks the rule parameters `escape_verdicts` names, as the rule states
+/// them: the declaration the capability refused, in its order and words.
+///
+/// # Errors
+///
+/// An invalid declaration.
+pub(crate) fn check_arguments(
+    stated: &BTreeMap<String, axioval_ir::contract::ParameterValue>,
+) -> Result<(), Unavailable> {
+    let rule = crate::light_area::synthesised(stated.clone());
+    declaration(&rule).map(|_| ())
+}
+
 impl RuleCapability for EscapeRoute {
     fn id(&self) -> &'static str {
         "axioval:capability.escape-route"
     }
 
     fn parameters(&self) -> Vec<ParameterDescriptor> {
-        let mut parameters = vec![
-            ParameterDescriptor::required("uses", ParameterType::Table(USES)),
-            ParameterDescriptor::optional("widths", ParameterType::Table(WIDTHS)),
-            ParameterDescriptor::required("exit_path", ParameterType::StringList),
-            ParameterDescriptor::required("exit_selector", ParameterType::Selector),
-            ParameterDescriptor::optional("door_path", ParameterType::StringList),
-            ParameterDescriptor::optional("door_selector", ParameterType::Selector),
-            ParameterDescriptor::optional("clear_width_property", ParameterType::PropertyReference),
-            ParameterDescriptor::optional("walking_height", ParameterType::Number),
-            ParameterDescriptor::optional("walking_step", ParameterType::Number),
-            ParameterDescriptor::optional("sections", ParameterType::Table(SECTIONS)),
-            ParameterDescriptor::optional("section_path", ParameterType::StringList),
-            ParameterDescriptor::optional("passage_path", ParameterType::StringList),
-            ParameterDescriptor::optional("passage_selector", ParameterType::Selector),
-            ParameterDescriptor::optional(
-                "passage_width_property",
-                ParameterType::PropertyReference,
-            ),
-            ParameterDescriptor::optional("exit_door_direction", ParameterType::Boolean),
-            ParameterDescriptor::optional("walked_passages", ParameterType::Boolean),
-            ParameterDescriptor::optional("no_escape_selector", ParameterType::Selector),
-            ParameterDescriptor::optional("compartment_selector", ParameterType::Selector),
-            ParameterDescriptor::optional("compartment_path", ParameterType::StringList),
-            ParameterDescriptor::optional("compartment_overlap", ParameterType::Number),
-            ParameterDescriptor::optional("zones", ParameterType::Table(ZONES)),
-            ParameterDescriptor::optional("exit_count", ParameterType::String),
-            ParameterDescriptor::optional("route_door_selector", ParameterType::Selector),
-            ParameterDescriptor::optional("common_path_factor", ParameterType::Number),
-            ParameterDescriptor::optional("route_door_direction", ParameterType::Boolean),
-            ParameterDescriptor::optional("minimum_clear_height", ParameterType::Number),
-            ParameterDescriptor::optional(
-                "clear_height_property",
-                ParameterType::PropertyReference,
-            ),
-            ParameterDescriptor::optional("overall_height", ParameterType::PropertyReference),
-            ParameterDescriptor::optional("lining_thickness", ParameterType::PropertyReference),
-            ParameterDescriptor::optional("threshold_thickness", ParameterType::PropertyReference),
-        ];
-        parameters.extend(climbing::descriptors());
-        parameters
+        TEMPLATE.parameters.clone()
     }
 
-    #[allow(clippy::too_many_lines)]
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
-        let declared = match declaration(rule) {
-            Ok(declared) => declared,
-            Err((reason, message)) => {
-                return CapabilityEvaluation::not_evaluated(
-                    reason,
-                    format!("escape-route: {message}"),
+        crate::templates::run((&TEMPLATE, &PLANS), context, rule)
+    }
+
+    fn template(&self) -> Option<&Template> {
+        Some(&TEMPLATE)
+    }
+}
+
+/// The rule's selection as the search reads it.
+pub(crate) struct Selected<'s, 'o> {
+    /// The spaces surely selected, in the project's order.
+    pub(crate) spaces: &'s [&'o Object],
+    /// The spaces the rule may select.
+    pub(crate) undecided: &'s [ObjectId],
+    /// Every space it selects or may select, in the project's order.
+    pub(crate) checked: &'s [&'o Object],
+}
+
+/// The objects the declaration's selectors pick, where a template's list
+/// bound them already.
+#[derive(Default, Clone, Copy)]
+pub(crate) struct Bindings<'s> {
+    pub(crate) exits: Option<&'s MeasuredSelection>,
+    pub(crate) doors: Option<&'s MeasuredSelection>,
+    pub(crate) passages: Option<&'s MeasuredSelection>,
+    pub(crate) no_escape: Option<&'s MeasuredSelection>,
+    pub(crate) route_doors: Option<&'s MeasuredSelection>,
+    pub(crate) compartments: Option<&'s MeasuredSelection>,
+}
+
+/// What `selector` picks, or the selection bound for it.
+fn candidates<'c>(
+    context: &RuleContext<'c>,
+    selector: &Selector,
+    bound: Option<&MeasuredSelection>,
+) -> Candidates<'c> {
+    match bound {
+        Some(selection) => Candidates::of_selection(context, selection),
+        None => Candidates::select(context, selector),
+    }
+}
+
+/// The escape routes of the selected spaces as `declared` asks for them:
+/// each space's travel, exits, widths, doors and heights, and the passages
+/// and doors its occupants rely on, each object's answers as findings or
+/// reasons it is open. The template judges them.
+#[allow(clippy::too_many_lines)]
+fn search(
+    context: &RuleContext<'_>,
+    rule: &CompiledRule,
+    declared: &Declaration<'_>,
+    bound: &Bindings<'_>,
+    selected: &Selected<'_, '_>,
+) -> CapabilityEvaluation {
+    let judge = Judge::new(context, rule, declared, bound, selected.checked);
+    let mut evaluation = CapabilityEvaluation::default();
+    judge.no_compartment(selected.spaces, &mut evaluation);
+    let mut served = Served::default();
+    let mut served_doors = Served::default();
+    let mut results: Vec<(ObjectId, String, Checked)> = Vec::new();
+    for &space in selected.spaces {
+        let matched = match_rows(
+            &declared.uses,
+            RowSelection::First,
+            |use_| match selector_matches(context, use_.spaces, space, &mut Vec::new()) {
+                Selection::Match => RowTest::Match(0),
+                Selection::NoMatch => RowTest::NoMatch,
+                Selection::NotEvaluated(..) => RowTest::Undecided,
+            },
+        );
+        let use_ = match matched {
+            Matched::Rows(rows) if !rows.is_empty() => rows[0].1,
+            Matched::Rows(_) => {
+                evaluation.push_object_not_evaluated(
+                    space.id.clone(),
+                    NotEvaluatedReason::IncompleteEvidence,
+                    "escape-route: no row of `uses` picks this space",
                 );
-            }
-        };
-        let judge = Judge::new(context, rule, &declared);
-        let (spaces, mut evaluation) = select_objects(context, &rule.selector);
-        judge.no_compartment(&spaces, &mut evaluation);
-        let mut served = Served::default();
-        let mut served_doors = Served::default();
-        let mut results: Vec<(ObjectId, String, Checked)> = Vec::new();
-        for space in spaces {
-            let matched =
-                match_rows(
-                    &declared.uses,
-                    RowSelection::First,
-                    |use_| match selector_matches(context, use_.spaces, space, &mut Vec::new()) {
-                        Selection::Match => RowTest::Match(0),
-                        Selection::NoMatch => RowTest::NoMatch,
-                        Selection::NotEvaluated(..) => RowTest::Undecided,
-                    },
-                );
-            let use_ = match matched {
-                Matched::Rows(rows) if !rows.is_empty() => rows[0].1,
-                Matched::Rows(_) => {
-                    evaluation.push_object_not_evaluated(
-                        space.id.clone(),
-                        NotEvaluatedReason::IncompleteEvidence,
-                        "escape-route: no row of `uses` picks this space",
-                    );
-                    judge.serve(
-                        &space.id,
-                        Err("no row of `uses` picks it"),
-                        false,
-                        &mut served,
-                    );
-                    judge.serve_doors(
-                        &space.id,
-                        Err("no row of `uses` picks it"),
-                        false,
-                        &mut served_doors,
-                    );
-                    continue;
-                }
-                Matched::Undecided | Matched::Ambiguous(_) => {
-                    evaluation.push_object_not_evaluated(
-                        space.id.clone(),
-                        NotEvaluatedReason::IncompleteEvidence,
-                        "escape-route: whether a row of `uses` picks this space is undecided",
-                    );
-                    judge.serve(
-                        &space.id,
-                        Err("whether a row of `uses` picks it is undecided"),
-                        false,
-                        &mut served,
-                    );
-                    judge.serve_doors(
-                        &space.id,
-                        Err("whether a row of `uses` picks it is undecided"),
-                        false,
-                        &mut served_doors,
-                    );
-                    continue;
-                }
-            };
-            let mut checked = Checked::default();
-            let load = judge.space(space, use_, &mut checked);
-            let load = match &load {
-                Some(Ok(load)) => Ok(load),
-                Some(Err(_)) => Err("its footprint is not measured"),
-                None => Err("its use states no `area_per_occupant`"),
-            };
-            let from_farthest = use_.start == Start::FarthestPoint;
-            if let Some(doubt) = judge.serve(&space.id, load, from_farthest, &mut served) {
-                checked.doubts.push(doubt);
-            }
-            judge.serve_doors(&space.id, load, from_farthest, &mut served_doors);
-            results.push((
-                space.id.clone(),
-                format!("escape-route {}", use_.name),
-                checked,
-            ));
-        }
-        if declared
-            .passages
-            .as_ref()
-            .is_some_and(|passages| passages.judged)
-        {
-            // A space the rule may select brings occupants nobody counted.
-            for space in Candidates::select(context, &rule.selector).undecided.keys() {
                 judge.serve(
-                    space,
-                    Err("whether the rule selects it is undecided"),
+                    &space.id,
+                    Err("no row of `uses` picks it"),
                     false,
                     &mut served,
                 );
-            }
-            judge.judge_passages(served, Class::Passage, &mut results);
-        }
-        if judge.route_doors.is_some() {
-            for space in Candidates::select(context, &rule.selector).undecided.keys() {
                 judge.serve_doors(
-                    space,
-                    Err("whether the rule selects it is undecided"),
+                    &space.id,
+                    Err("no row of `uses` picks it"),
                     false,
                     &mut served_doors,
                 );
+                continue;
             }
-            judge.judge_passages(served_doors, Class::Door, &mut results);
+            Matched::Undecided | Matched::Ambiguous(_) => {
+                evaluation.push_object_not_evaluated(
+                    space.id.clone(),
+                    NotEvaluatedReason::IncompleteEvidence,
+                    "escape-route: whether a row of `uses` picks this space is undecided",
+                );
+                judge.serve(
+                    &space.id,
+                    Err("whether a row of `uses` picks it is undecided"),
+                    false,
+                    &mut served,
+                );
+                judge.serve_doors(
+                    &space.id,
+                    Err("whether a row of `uses` picks it is undecided"),
+                    false,
+                    &mut served_doors,
+                );
+                continue;
+            }
+        };
+        let mut checked = Checked::default();
+        let load = judge.space(space, use_, &mut checked);
+        let load = match &load {
+            Some(Ok(load)) => Ok(load),
+            Some(Err(_)) => Err("its footprint is not measured"),
+            None => Err("its use states no `area_per_occupant`"),
+        };
+        let from_farthest = use_.start == Start::FarthestPoint;
+        if let Some(doubt) = judge.serve(&space.id, load, from_farthest, &mut served) {
+            checked.doubts.push(doubt);
         }
-        for (subject, prefix, checked) in results {
-            emit(&mut evaluation, subject, &prefix, checked);
-        }
-        evaluation
+        judge.serve_doors(&space.id, load, from_farthest, &mut served_doors);
+        results.push((
+            space.id.clone(),
+            format!("escape-route {}", use_.name),
+            checked,
+        ));
     }
+    if declared
+        .passages
+        .as_ref()
+        .is_some_and(|passages| passages.judged)
+    {
+        // A space the rule may select brings occupants nobody counted.
+        for space in selected.undecided {
+            judge.serve(
+                space,
+                Err("whether the rule selects it is undecided"),
+                false,
+                &mut served,
+            );
+        }
+        judge.judge_passages(served, Class::Passage, &mut results);
+    }
+    if judge.route_doors.is_some() {
+        for space in selected.undecided {
+            judge.serve_doors(
+                space,
+                Err("whether the rule selects it is undecided"),
+                false,
+                &mut served_doors,
+            );
+        }
+        judge.judge_passages(served_doors, Class::Door, &mut results);
+    }
+    for (subject, prefix, checked) in results {
+        emit(&mut evaluation, subject, &prefix, checked);
+    }
+    evaluation
 }
 
 /// Records what checking one object found.
@@ -967,7 +1034,7 @@ struct Section {
 /// nothing and is left out.
 fn possible_sections(
     context: &RuleContext<'_>,
-    rule: &CompiledRule,
+    checked: &[&Object],
     declared: &Declaration<'_>,
 ) -> Vec<Section> {
     if declared.sections.is_empty() {
@@ -993,7 +1060,7 @@ fn possible_sections(
                 }
             }
         }
-        for space in Candidates::select(context, &rule.selector).universe {
+        for space in checked {
             match path.related(context, &space.id, &universe) {
                 Ok((reached, _)) => {
                     for object in reached {
@@ -1461,31 +1528,33 @@ impl<'r, 'c> Judge<'r, 'c> {
         context: &'r RuleContext<'c>,
         rule: &'r CompiledRule,
         declared: &'r Declaration<'r>,
+        bound: &Bindings<'_>,
+        checked: &[&Object],
     ) -> Self {
         Self {
             context,
             rule,
             declared,
-            exits: Candidates::select(context, declared.exit_selector),
+            exits: candidates(context, declared.exit_selector, bound.exits),
             doors: declared
                 .doors
                 .as_ref()
-                .map(|(_, selector)| Candidates::select(context, selector)),
-            sections: possible_sections(context, rule, declared),
+                .map(|(_, selector)| candidates(context, selector, bound.doors)),
+            sections: possible_sections(context, checked, declared),
             passages: declared
                 .passages
                 .as_ref()
-                .map(|passages| Candidates::select(context, passages.selector)),
+                .map(|passages| candidates(context, passages.selector, bound.passages)),
             no_escape: declared
                 .no_escape
-                .map(|selector| Candidates::select(context, selector)),
+                .map(|selector| candidates(context, selector, bound.no_escape)),
             route_doors: declared
                 .route_doors
-                .map(|selector| Candidates::select(context, selector)),
+                .map(|selector| candidates(context, selector, bound.route_doors)),
             compartments: declared
                 .compartments
                 .as_ref()
-                .map(|compartments| Candidates::select(context, compartments.selector)),
+                .map(|compartments| candidates(context, compartments.selector, bound.compartments)),
             zones: declared
                 .zones
                 .iter()

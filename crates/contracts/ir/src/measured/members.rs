@@ -2283,6 +2283,7 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             ),
         ],
     },
+    searches::ESCAPE_VERDICTS,
     MemberDescriptor {
         list: MeasuredDescriptor {
             name: "exit_pairs",

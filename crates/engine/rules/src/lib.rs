@@ -202,6 +202,7 @@ pub mod reference {
     pub use crate::door_swing_direction::reference::DoorSwing;
     pub use crate::effective_coverage::reference::EffectiveCoverage;
     pub use crate::empty_host::reference::EmptyHost;
+    pub use crate::escape_route::reference::EscapeRoute;
     pub use crate::exit_separation::reference::ExitSeparation;
     pub use crate::external_wall_validation::reference::ExternalWallValidation;
     pub use crate::free_floor::reference::{FreeFloorCircle, FreeFloorRectangle};
@@ -349,6 +350,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(numbering_consistency::NumberingMeasures))
         .and_then(|registry| registry.register_measured(axioval_engine::FacePieceMeasures))
         .and_then(|registry| registry.register_measured(escape_route::TravelMeasures))
+        .and_then(|registry| registry.register_measured(escape_route::EscapeMeasures))
         .and_then(|registry| registry.register_measured(free_floor::PlacementMeasures))
         .and_then(|registry| registry.register_measured(free_floor::FitMeasures))
         .and_then(|registry| registry.register_measured(space_distance::RowMeasures))

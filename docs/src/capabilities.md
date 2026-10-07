@@ -842,6 +842,8 @@ A finding names the pair (with `any`, the pair farthest apart), its separation, 
 how many exits it has, and how wide its exits and passages are for its
 occupants.
 
+The capability runs as a [template](./templates.md#escape-route) judging the answers its escape search states as the measured list `escape_verdicts`.
+
 | Column of `uses` | Kind | Meaning |
 |---|---|---|
 | `spaces` | selector, required | the spaces of this use |

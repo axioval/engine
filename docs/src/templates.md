@@ -2033,6 +2033,23 @@ naming what blocks it, the objects that do and the evidence), undecided
 with why otherwise; a walk that cannot be taken refuses the list for every
 destination, for its reason. The template judges `reached`.
 
+### `escape-route`
+
+One form, judged by one check of each selected space over the measured
+list `escape_verdicts;uses=@uses;…;selection=@selection`, every parameter
+under its own name: the declaration is the list's argument check, refused
+for the rule. The escape search stays the capability's
+(`escape_route::search`): over the spaces the rule selects (and those it
+may select, whose occupants passages and doors may carry), each space's
+use row, travel, exits, widths, door directions and clear heights, and the
+loads of the passages and doors on routes. It runs once per rule (the list
+is memoized), and each space's list holds the answers about it; an answer
+about a passage, a door or a source comes with the first space's, so a
+rule selecting no space searches nothing. Each answer is one item placed
+on what it is about (`Items::at`): `met` false with the words, related
+objects and evidence of what is missing, or undecided with why and its
+reason. The template judges `met`.
+
 ### `local-circulation`
 
 One form, judged by one check of each selected space over the measured
@@ -2770,6 +2787,13 @@ every fixture of `tests/local_circulation.rs`,
 `tests/local_circulation_entrances.rs` and the facade's
 `tests/axiolid_local_circulation.rs` under `Parity::contract()`, and by the
 rules of the case `floors`, recorded before the switch. It is never forked.
+
+`escape-route` is held to `escape_route/reference.rs`
+(`axioval_rules::reference::EscapeRoute`), which shares the search, on
+every fixture of `tests/escape_route.rs`, generated halls of random doors,
+widths, walks and use rows, and the facade's `tests/axiolid_escape_levels.rs`
+under `Parity::contract()`, and by the rules of the case `routes`, recorded
+before the switch. It is never forked.
 
 The reference is kept, rather than deleted, because generated inputs need
 a live implementation to compare with; recorded outcomes outlive it on the

@@ -17987,7 +17987,218 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "escape-route",
+        "declaration": [
+          {
+            "kind": "arguments",
+            "when": [],
+            "value": "escape_verdicts;uses=@uses;widths=@widths;exit_path=@exit_path;exit_selector=@exit_selector;door_path=@door_path;door_selector=@door_selector;clear_width_property=@clear_width_property;walking_height=@walking_height;walking_step=@walking_step;sections=@sections;section_path=@section_path;passage_path=@passage_path;passage_selector=@passage_selector;passage_width_property=@passage_width_property;exit_door_direction=@exit_door_direction;walked_passages=@walked_passages;no_escape_selector=@no_escape_selector;compartment_selector=@compartment_selector;compartment_path=@compartment_path;compartment_overlap=@compartment_overlap;zones=@zones;exit_count=@exit_count;route_door_selector=@route_door_selector;common_path_factor=@common_path_factor;route_door_direction=@route_door_direction;minimum_clear_height=@minimum_clear_height;clear_height_property=@clear_height_property;overall_height=@overall_height;lining_thickness=@lining_thickness;threshold_thickness=@threshold_thickness;stair_selector=@stair_selector;ramp_selector=@ramp_selector;lift_selector=@lift_selector;stair_length=@stair_length;vertical_factor=@vertical_factor;selection=@selection"
+          }
+        ],
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "judged",
+                "expression": {
+                  "kind": "literal",
+                  "value": {
+                    "type": "integer",
+                    "value": 1
+                  },
+                  "label": "the escape routes are searched"
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "judged",
+              "rounding": []
+            },
+            "fail": "",
+            "undecided": "",
+            "checks": [
+              {
+                "values": [],
+                "decision": {
+                  "kind": "items",
+                  "applies": {},
+                  "list": "escape_verdicts;uses=@uses;widths=@widths;exit_path=@exit_path;exit_selector=@exit_selector;door_path=@door_path;door_selector=@door_selector;clear_width_property=@clear_width_property;walking_height=@walking_height;walking_step=@walking_step;sections=@sections;section_path=@section_path;passage_path=@passage_path;passage_selector=@passage_selector;passage_width_property=@passage_width_property;exit_door_direction=@exit_door_direction;walked_passages=@walked_passages;no_escape_selector=@no_escape_selector;compartment_selector=@compartment_selector;compartment_path=@compartment_path;compartment_overlap=@compartment_overlap;zones=@zones;exit_count=@exit_count;route_door_selector=@route_door_selector;common_path_factor=@common_path_factor;route_door_direction=@route_door_direction;minimum_clear_height=@minimum_clear_height;clear_height_property=@clear_height_property;overall_height=@overall_height;lining_thickness=@lining_thickness;threshold_thickness=@threshold_thickness;stair_selector=@stair_selector;ramp_selector=@ramp_selector;lift_selector=@lift_selector;stair_length=@stair_length;vertical_factor=@vertical_factor;selection=@selection",
+                  "refused": "{why}",
+                  "checks": [
+                    {
+                      "kind": "test",
+                      "judge": {
+                        "kind": "truth",
+                        "value": "met",
+                        "finding": false
+                      },
+                      "fail": "{words}",
+                      "undecided": "{why}",
+                      "related": "related"
+                    }
+                  ],
+                  "at": "at",
+                  "reason": "reason"
+                },
+                "fail": "",
+                "undecided": ""
+              }
+            ]
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "aggregate",
+                  "function": "none",
+                  "over": {
+                    "kind": "measured",
+                    "name": "escape_verdicts;uses=@uses;widths=@widths;exit_path=@exit_path;exit_selector=@exit_selector;door_path=@door_path;door_selector=@door_selector;clear_width_property=@clear_width_property;walking_height=@walking_height;walking_step=@walking_step;sections=@sections;section_path=@section_path;passage_path=@passage_path;passage_selector=@passage_selector;passage_width_property=@passage_width_property;exit_door_direction=@exit_door_direction;walked_passages=@walked_passages;no_escape_selector=@no_escape_selector;compartment_selector=@compartment_selector;compartment_path=@compartment_path;compartment_overlap=@compartment_overlap;zones=@zones;exit_count=@exit_count;route_door_selector=@route_door_selector;common_path_factor=@common_path_factor;route_door_direction=@route_door_direction;minimum_clear_height=@minimum_clear_height;clear_height_property=@clear_height_property;overall_height=@overall_height;lining_thickness=@lining_thickness;threshold_thickness=@threshold_thickness;stair_selector=@stair_selector;ramp_selector=@ramp_selector;lift_selector=@lift_selector;stair_length=@stair_length;vertical_factor=@vertical_factor;selection=@selection"
+                  },
+                  "value": {
+                    "kind": "not",
+                    "operand": {
+                      "kind": "and",
+                      "operands": [
+                        {
+                          "kind": "property",
+                          "propertySet": "axioval:member",
+                          "property": "met"
+                        }
+                      ]
+                    }
+                  },
+                  "label": "no item fails"
+                },
+                {
+                  "kind": "isDefined",
+                  "operand": {
+                    "kind": "literal",
+                    "value": {
+                      "type": "integer",
+                      "value": 1
+                    },
+                    "label": "the escape routes are searched"
+                  },
+                  "label": "read"
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.aggregate",
+                      "label": "no item fails",
+                      "fields": {
+                        "function": "none"
+                      },
+                      "inputs": {
+                        "over": {
+                          "block": {
+                            "type": "members.escape_verdicts",
+                            "fields": {
+                              "clear_height_property": "@clear_height_property",
+                              "clear_width_property": "@clear_width_property",
+                              "common_path_factor": "@common_path_factor",
+                              "compartment_overlap": "@compartment_overlap",
+                              "compartment_path": "@compartment_path",
+                              "compartment_selector": "@compartment_selector",
+                              "door_path": "@door_path",
+                              "door_selector": "@door_selector",
+                              "exit_count": "@exit_count",
+                              "exit_door_direction": "@exit_door_direction",
+                              "exit_path": "@exit_path",
+                              "exit_selector": "@exit_selector",
+                              "lift_selector": "@lift_selector",
+                              "lining_thickness": "@lining_thickness",
+                              "minimum_clear_height": "@minimum_clear_height",
+                              "no_escape_selector": "@no_escape_selector",
+                              "overall_height": "@overall_height",
+                              "passage_path": "@passage_path",
+                              "passage_selector": "@passage_selector",
+                              "passage_width_property": "@passage_width_property",
+                              "ramp_selector": "@ramp_selector",
+                              "route_door_direction": "@route_door_direction",
+                              "route_door_selector": "@route_door_selector",
+                              "section_path": "@section_path",
+                              "sections": "@sections",
+                              "selection": "@selection",
+                              "stair_length": "@stair_length",
+                              "stair_selector": "@stair_selector",
+                              "threshold_thickness": "@threshold_thickness",
+                              "uses": "@uses",
+                              "vertical_factor": "@vertical_factor",
+                              "walked_passages": "@walked_passages",
+                              "walking_height": "@walking_height",
+                              "walking_step": "@walking_step",
+                              "widths": "@widths",
+                              "zones": "@zones"
+                            }
+                          }
+                        },
+                        "value": {
+                          "block": {
+                            "type": "expression.not",
+                            "inputs": {
+                              "operand": {
+                                "block": {
+                                  "type": "expression.and",
+                                  "inputs": {
+                                    "operands": {
+                                      "blocks": [
+                                        {
+                                          "type": "expression.property",
+                                          "fields": {
+                                            "property": "met",
+                                            "propertySet": "axioval:member"
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.isDefined",
+                      "label": "read",
+                      "inputs": {
+                        "operand": {
+                          "block": {
+                            "type": "expression.literal",
+                            "label": "the escape routes are searched",
+                            "fields": {
+                              "value": {
+                                "type": "integer",
+                                "value": 1
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.exit-separation",
@@ -95053,6 +95264,832 @@
             {
               "language": "de",
               "text": "Die Länge des Wandabschnitts, dem die Öffnung gegenübersteht."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
+      "name": "escape_verdicts",
+      "parameters": [
+        {
+          "key": "uses",
+          "kind": {
+            "type": "table"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `uses`, as `escape-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `uses` der Regel, wie `escape-route` ihn liest."
+            }
+          ],
+          "references": "table"
+        },
+        {
+          "key": "widths",
+          "kind": {
+            "type": "table"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `widths`, as `escape-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `widths` der Regel, wie `escape-route` ihn liest."
+            }
+          ],
+          "references": "table"
+        },
+        {
+          "key": "exit_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `exit_path`, as `escape-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `exit_path` der Regel, wie `escape-route` ihn liest."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "exit_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `exit_selector`, as `escape-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `exit_selector` der Regel, wie `escape-route` ihn liest."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "door_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `door_path`, as `escape-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `door_path` der Regel, wie `escape-route` ihn liest."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "door_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `door_selector`, as `escape-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `door_selector` der Regel, wie `escape-route` ihn liest."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "clear_width_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `clear_width_property`, as `escape-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `clear_width_property` der Regel, wie `escape-route` ihn liest."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "walking_height",
+          "kind": {
+            "type": "number",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `walking_height`, as `escape-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `walking_height` der Regel, wie `escape-route` ihn liest."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "walking_step",
+          "kind": {
+            "type": "number",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `walking_step`, as `escape-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `walking_step` der Regel, wie `escape-route` ihn liest."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "sections",
+          "kind": {
+            "type": "table"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `sections`, as `escape-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `sections` der Regel, wie `escape-route` ihn liest."
+            }
+          ],
+          "references": "table"
+        },
+        {
+          "key": "section_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `section_path`, as `escape-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `section_path` der Regel, wie `escape-route` ihn liest."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "passage_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `passage_path`, as `escape-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `passage_path` der Regel, wie `escape-route` ihn liest."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "passage_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `passage_selector`, as `escape-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `passage_selector` der Regel, wie `escape-route` ihn liest."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "passage_width_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `passage_width_property`, as `escape-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `passage_width_property` der Regel, wie `escape-route` ihn liest."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "exit_door_direction",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `exit_door_direction`, as `escape-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `exit_door_direction` der Regel, wie `escape-route` ihn liest."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "walked_passages",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `walked_passages`, as `escape-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `walked_passages` der Regel, wie `escape-route` ihn liest."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "no_escape_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `no_escape_selector`, as `escape-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `no_escape_selector` der Regel, wie `escape-route` ihn liest."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "compartment_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `compartment_selector`, as `escape-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `compartment_selector` der Regel, wie `escape-route` ihn liest."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "compartment_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `compartment_path`, as `escape-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `compartment_path` der Regel, wie `escape-route` ihn liest."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "compartment_overlap",
+          "kind": {
+            "type": "number",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `compartment_overlap`, as `escape-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `compartment_overlap` der Regel, wie `escape-route` ihn liest."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "zones",
+          "kind": {
+            "type": "table"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `zones`, as `escape-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `zones` der Regel, wie `escape-route` ihn liest."
+            }
+          ],
+          "references": "table"
+        },
+        {
+          "key": "exit_count",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `exit_count`, as `escape-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `exit_count` der Regel, wie `escape-route` ihn liest."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "route_door_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `route_door_selector`, as `escape-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `route_door_selector` der Regel, wie `escape-route` ihn liest."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "common_path_factor",
+          "kind": {
+            "type": "number",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `common_path_factor`, as `escape-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `common_path_factor` der Regel, wie `escape-route` ihn liest."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "route_door_direction",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `route_door_direction`, as `escape-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `route_door_direction` der Regel, wie `escape-route` ihn liest."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "minimum_clear_height",
+          "kind": {
+            "type": "number",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `minimum_clear_height`, as `escape-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `minimum_clear_height` der Regel, wie `escape-route` ihn liest."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "clear_height_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `clear_height_property`, as `escape-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `clear_height_property` der Regel, wie `escape-route` ihn liest."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "overall_height",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `overall_height`, as `escape-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `overall_height` der Regel, wie `escape-route` ihn liest."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "lining_thickness",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `lining_thickness`, as `escape-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `lining_thickness` der Regel, wie `escape-route` ihn liest."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "threshold_thickness",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `threshold_thickness`, as `escape-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `threshold_thickness` der Regel, wie `escape-route` ihn liest."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "stair_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `stair_selector`, as `escape-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `stair_selector` der Regel, wie `escape-route` ihn liest."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "ramp_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `ramp_selector`, as `escape-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `ramp_selector` der Regel, wie `escape-route` ihn liest."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "lift_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `lift_selector`, as `escape-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `lift_selector` der Regel, wie `escape-route` ihn liest."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "stair_length",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `stair_length`, as `escape-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `stair_length` der Regel, wie `escape-route` ihn liest."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "vertical_factor",
+          "kind": {
+            "type": "number",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `vertical_factor`, as `escape-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `vertical_factor` der Regel, wie `escape-route` ihn liest."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "selection",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects the rule selects, those it cannot decide possible members."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, die die Regel wählt, die unentschiedenen mögliche Mitglieder."
+            }
+          ],
+          "references": "selector"
+        }
+      ],
+      "services": [
+        "metric-routing",
+        "relationship-selection",
+        "plan-area",
+        "plan-span",
+        "free-space",
+        "object-frame",
+        "vertical-extent",
+        "proximity"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "a service a walk or measure needs is not registered or cannot answer, or a selection cannot be listed"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Escape verdicts"
+        },
+        {
+          "language": "de",
+          "text": "Fluchtwegurteile"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "Every answer escape-route's search gives about the spaces a rule selects: travel, exits, widths, door directions, clear heights, and the loads of the passages and doors their occupants rely on, each on what it is about."
+        },
+        {
+          "language": "de",
+          "text": "Jede Antwort, die die Suche von escape-route zu den gewählten Räumen gibt: Fluchtweglänge, Ausgänge, Breiten, Türaufschlag, lichte Höhen und die Lasten der Flure und Türen, auf die ihre Nutzer angewiesen sind, jede bei dem, worum es geht."
+        }
+      ],
+      "fields": [
+        {
+          "name": "at",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Where"
+            },
+            {
+              "language": "de",
+              "text": "Wo"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The space or component the answer is about."
+            },
+            {
+              "language": "de",
+              "text": "Der Raum oder das Bauteil, um das es geht."
+            }
+          ]
+        },
+        {
+          "name": "met",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Met"
+            },
+            {
+              "language": "de",
+              "text": "Erfüllt"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the answer meets the requirement (false for each the search finds unmet); undecided, with why, where the search cannot tell."
+            },
+            {
+              "language": "de",
+              "text": "Ob die Antwort die Anforderung erfüllt (falsch für jede, die die Suche als nicht erfüllt findet); unentschieden, mit Grund, wo die Suche es nicht entscheidet."
+            }
+          ]
+        },
+        {
+          "name": "words",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Words"
+            },
+            {
+              "language": "de",
+              "text": "Worte"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "What an unmet answer comes to, as findings word it."
+            },
+            {
+              "language": "de",
+              "text": "Was eine nicht erfüllte Antwort ergibt, wie Befunde es formulieren."
+            }
+          ]
+        },
+        {
+          "name": "related",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Related"
+            },
+            {
+              "language": "de",
+              "text": "Bezogen"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects an unmet answer relates."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, auf die sich eine nicht erfüllte Antwort bezieht."
+            }
+          ]
+        },
+        {
+          "name": "reason",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Reason"
+            },
+            {
+              "language": "de",
+              "text": "Grund"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Why an undecided answer is open, as a report writes it."
+            },
+            {
+              "language": "de",
+              "text": "Warum eine unentschiedene Antwort offen ist, wie ein Bericht es schreibt."
             }
           ]
         }

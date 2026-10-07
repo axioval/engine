@@ -127,7 +127,14 @@ impl MeasuredProvider for TravelMeasures {
         };
         let rule = rule(call, object, context)?;
         let declared = declaration(&rule).map_err(refused)?;
-        let judge = Judge::new(context, &rule, &declared);
+        let candidates = super::Candidates::select(context, &rule.selector);
+        let judge = Judge::new(
+            context,
+            &rule,
+            &declared,
+            &super::Bindings::default(),
+            &candidates.universe,
+        );
         let start = if call.choice("start") == Some("door") {
             Start::Door
         } else {

@@ -242,13 +242,29 @@ fn check(maximum: f64, climbing: bool) -> CapabilityEvaluation {
     services
         .register(RelationshipSelectionServiceHandle::new(Arc::new(Exits)))
         .unwrap();
-    EscapeRoute.evaluate(
-        &RuleContext {
-            project: &project,
-            services: &services,
-        },
-        &rule,
-    )
+    // The template reads its measured verdicts as a run does.
+    axioval::rules::register_builtins(axioval::engine::CapabilityRegistry::new())
+        .unwrap()
+        .install_measured(&mut services, &project);
+    let context = RuleContext {
+        project: &project,
+        services: &services,
+    };
+    let template = EscapeRoute.evaluate(&context, &rule);
+    // Held to the implementation it replaced, on the same scene.
+    let reference = axioval_rules::reference::EscapeRoute.evaluate(&context, &rule);
+    let parity = axioval::rules::parity::Parity::contract().compare(
+        (
+            "escape-route",
+            &axioval::rules::parity::Observations::of_evaluation(&reference),
+        ),
+        (
+            "template",
+            &axioval::rules::parity::Observations::of_evaluation(&template),
+        ),
+    );
+    assert!(parity.holds(), "{}", parity.diff());
+    template
 }
 
 fn on(outcome: &CapabilityEvaluation, local: &str) -> (Vec<String>, Vec<String>) {

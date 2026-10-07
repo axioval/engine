@@ -21,6 +21,11 @@
 //! python3 scripts/bench.py report    # prints the same, never fails on a ratio
 //! ```
 //!
+//! Each side's record also lists every measured run in order (`times_ns`,
+//! `peaks_bytes`), so runs pair across the two sides. With `--only FILE`
+//! (a JSON list of `[capability, input]` pairs) it measures only those
+//! inputs: `scripts/bench.py` measures an undecided input again that way.
+//!
 //! Environment: `AXIOVAL_PARITY_MODELS` (the fetched public models,
 //! default `~/.cache/axioval/parity-models`), `AXIOVAL_BENCH_RUNS`
 //! (measured runs per side, default 21), `AXIOVAL_BENCH_WALLS` (walls in the
@@ -625,6 +630,11 @@ impl Side {
             "min_ns": times[0],
             "max_ns": times[times.len() - 1],
             "peak_bytes": peaks[peaks.len() / 2],
+            // Every measured run in the order it ran: run `i` of the
+            // template and of the reference ran next to each other, so
+            // `scripts/bench.py` judges their paired ratios.
+            "times_ns": self.times.iter().map(Duration::as_nanos).collect::<Vec<_>>(),
+            "peaks_bytes": self.peaks,
         })
     }
 }
@@ -700,11 +710,31 @@ fn main() -> Result<(), Box<dyn Error>> {
         .position(|arg| arg == "--out")
         .and_then(|index| args.get(index + 1))
         .map(PathBuf::from);
+    let only: Option<Vec<(String, String)>> = match args
+        .iter()
+        .position(|arg| arg == "--only")
+        .and_then(|index| args.get(index + 1))
+    {
+        Some(path) => Some(serde_json::from_value(read_json(Path::new(path))?)?),
+        None => None,
+    };
+    let wanted = |capability: &str, name: &str| {
+        only.as_ref().is_none_or(|only| {
+            only.iter()
+                .any(|(c, n)| c.as_str() == capability && n.as_str() == name)
+        })
+    };
     let runs = setting("AXIOVAL_BENCH_RUNS", 21);
     let walls = setting("AXIOVAL_BENCH_WALLS", 400);
     let models = models_dir();
     let mut records = Vec::new();
     for pair in PAIRS {
+        if only
+            .as_ref()
+            .is_some_and(|only| !only.iter().any(|(c, _)| c.as_str() == pair.capability))
+        {
+            continue;
+        }
         let Some(case) = Case::of(pair)? else {
             continue;
         };
@@ -713,12 +743,17 @@ fn main() -> Result<(), Box<dyn Error>> {
             axioval::engine::compile_rulesets(&templates, &[case.definitions], &[case.ruleset])?;
         let reference = Runtime::new((pair.reference)(axioval::default_registry()?)?);
         let template = Runtime::new(templates);
-        let mut inputs = vec![input(
-            &format!("fixture-{walls}-walls.ifc"),
-            fixture(walls).into_bytes(),
-        )?];
+        let mut inputs = Vec::new();
+        let fixture_name = format!("fixture-{walls}-walls.ifc");
+        if wanted(pair.capability, &fixture_name) {
+            inputs.push(input(&fixture_name, fixture(walls).into_bytes())?);
+        }
         let mut missing = Vec::new();
-        for name in &case.models {
+        for name in case
+            .models
+            .iter()
+            .filter(|name| wanted(pair.capability, name))
+        {
             match models
                 .as_ref()
                 .map(|dir| dir.join(name))

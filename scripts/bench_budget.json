@@ -1,10 +1,12 @@
 {
-  "comment": "Budget of a capability rebuilt as a template against the implementation it replaced (#279): its median run time and its median peak heap over the reference's, per input. Inputs whose reference runs faster than floor_ns are judged together, by the sum of their medians, since a run of a few microseconds is mostly timer noise. Small inputs may also exceed their references' summed medians by at most small_slack_ns each, and any input its reference's peak heap by at most slack_bytes: a template's fixed cost of a few microseconds or kibibytes per rule is no regression on a model of a handful of objects.",
+  "comment": "Budget of a capability rebuilt as a template against the implementation it replaced (#279): its run time and its median peak heap over the reference's, per input. Run time is judged by Student's t interval at `confidence` over rounds (separate processes of the bench), each giving its median paired ratio; it decides only after the round counts in `looks`, each at `confidence`, so an input's verdict is wrong with at most their summed error; an input whose interval straddles its ceiling is measured in further rounds up to the last look, and fails if still undecided (#293). Inputs whose reference runs faster than floor_ns are judged together, by the sum of their medians, since a run of a few microseconds is mostly timer noise. Small inputs may also exceed their references' summed medians by at most small_slack_ns each, and any input its reference's peak heap by at most slack_bytes: a template's fixed cost of a few microseconds or kibibytes per rule is no regression on a model of a handful of objects.",
   "time": 1.25,
   "memory": 1.5,
   "floor_ns": 100000,
   "small_slack_ns": 50000,
   "slack_bytes": 65536,
+  "confidence": 0.99,
+  "looks": [2, 3, 20],
   "exceptions": [
     {
       "capability": "axioval:capability.triangle-count",

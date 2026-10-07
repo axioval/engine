@@ -106,16 +106,22 @@ every pinned public model the case names, it:
    (`AXIOVAL_BENCH_RUNS`), interleaved and alternating which goes first;
 5. records each side's median, least and greatest run time and median peak
    heap: what the run allocated beyond what was live before it, counted by
-   a global allocator (`peak_alloc`, a bench-only dependency).
+   a global allocator (`peak_alloc`, a bench-only dependency); and every
+   measured run of each side in the order it ran (`times_ns`,
+   `peaks_bytes`), so run `i` of the template pairs with run `i` of the
+   reference.
 
-Run time is wall time; the medians of interleaved runs absorb a machine's
-drift, not its load, so a gate runs where nothing else builds.
+Run time is wall time; the paired runs of interleaved measurement absorb a
+machine's drift, not its load, so a gate runs where nothing else builds.
+With `--only FILE` (a JSON list of `[capability, input]`) the bench
+measures only those inputs.
 
 `scripts/bench.py` runs the bench and judges its records against
 `scripts/bench_budget.json`:
 
-- the median run time over the reference's, per input whose reference
-  takes at least `floor_ns` (100 µs); inputs below it are judged together,
+- the run time over the reference's, per input whose reference takes at
+  least `floor_ns` (100 µs), with a stated confidence (below); inputs
+  below the floor are judged together,
   by the sum of their medians, since a run of a few microseconds is mostly
   timer noise, and may also exceed the references' summed medians by at
   most `small_slack_ns` (50 µs, a few rules' fixed cost) each;
@@ -127,9 +133,72 @@ drift, not its load, so a gate runs where nothing else builds.
 - in a gate, a fixture and a public model measured, and every public model
   the case names fetched.
 
-A gate whose only failures are run times over budget measures once more and
-judges that measurement; a real regression fails both. `scripts/test_bench.py`
-(in the `lint` gate) is its self-test.
+`scripts/test_bench.py` (in the `lint` gate) is its self-test: pass, fail
+and undecided inputs, the interval, pooling and the re-measurement loop.
+
+### Judging run time with a stated confidence
+
+One median against the budget passed or failed an input near the line by
+chance: the same build measured `space-validation` on one architecture
+model at 1.22× and at 1.28× ([#293](https://github.com/axioval/engine/issues/293)).
+A gate therefore judges an interval, not a point.
+
+- **A round's measurement.** Each interleaved pair of runs gives one ratio,
+  the template's time over the reference's; the two ran next to each
+  other, so a change in the machine's speed falls on both. A *round* is one
+  process of the bench, and its measurement is the median of its 21 paired
+  ratios, which one slow run does not move.
+- **Rounds, not runs, are independent.** A process's code and heap layout
+  shifts every run in it alike. Measured on the inputs near the line,
+  `door-swing` on the fixture read 1.215× to 1.291× in six processes, each
+  with a 99% interval over its own runs about ±0.02 wide and several of
+  them disjoint: an interval over the runs of one process is overconfident.
+  The rounds' medians are the independent measurements.
+- **The interval.** Over `J` rounds with logarithmic medians `m_j`, mean
+  `m` and standard deviation `s`, Student's t interval
+  `exp(m ± t((1 + c) / 2, J - 1) · s / √J)` covers the ratio a round
+  measures with confidence `c` (`confidence` in
+  `scripts/bench_budget.json`, 99%). It assumes the rounds' log medians
+  are roughly normal (each is a median of 21 runs) and needs no
+  resampling: the same rounds give the same interval. The table records the
+  spread `s` per input, so a noisy input is visible.
+- **The verdict, at planned looks.** An input passes when the interval's
+  upper end is within its ceiling (the budget's, or a recorded
+  exception's), and fails when its lower end exceeds it. Otherwise it is
+  undecided. The interval is judged only after the round counts in `looks`
+  (2, 3 and 20); between them an input stays undecided, whatever its
+  interval. Judging after every round would let a template near its
+  ceiling pass whenever one round's interval happened to clear it: in a
+  trial gate judging every round, two inputs within 1% of the line passed
+  after 12 and 16 rounds.
+- **Further rounds.** The gate measures every input in a first round, then
+  each input above the floor that is undecided in another round of its own
+  (`--only`), until it is decided at a look or reaches the last. The second
+  round covers every input above the floor; most are decided at the second
+  or third look, and only the few near their ceiling are measured to 20
+  rounds, each such round a fraction of a second per input.
+- **The stated rule at the bound.** An input still undecided after the
+  last look fails, reported as undecided with its interval: a gate passes
+  only a template it shows to be within budget, as a straddling value
+  never passes a check. Its run time is within the measurement's
+  resolution of the ceiling; optimize it, or record an exception with its
+  reason.
+
+Each look is at 99% and there are three, so a template's verdict is wrong
+(passed though over its ceiling, or failed though within it) with
+probability at most 3%. The verdict repeats across gates for every input
+whose ratio is not within the last look's half-width of its ceiling: with
+a spread of 1 to 2% between rounds, as on the inputs near the line, about
+±1% after 20 rounds. A template that close to its ceiling may be decided
+either way, or not at all, from one gate to the next; one comfortably
+within passes at the second or third look.
+
+Inputs under the floor are measured in the first round only and judged by
+the sum of their medians, as above. The records written back to `--out`
+hold every pooled run and how many runs each round took (`rounds`), so
+`bench.py judge FILE --gate` reproduces the gate's verdict. `report`
+measures one round, so its inputs above the floor are listed undecided
+with their ratio.
 
 ### Running it
 
@@ -499,9 +568,9 @@ written once per selector. With them, measured by the same gate:
 | opening-zone | wall with opening and window | 1.35× / 1.20× |
 | opening-zone | building structural (IFC2x3) | 0.76× / 1.69× |
 
-Still over the budget: `door-swing` on the fixture and `space-validation`
-on one architecture model by a hundredth or two of run time (each
-measurement varies by about as much); `opening-zone` on the wall model,
+Still over the budget: `door-swing` on the fixture, `keyed-limit` on the
+wall model and `space-validation` on the architecture models, by up to 3%
+of run time (judged with a stated confidence, below); `opening-zone` on the wall model,
 and its heap on the structural model, whose provider measures a whole
 rule's checks (about 2 KiB an item) before its openings read them, its
 judge holding state that cannot be kept between reads; and the small
@@ -510,3 +579,39 @@ models under the floor (`distance`, `containment`, `clash`,
 nothing and leave a few microseconds of the runner's cost per rule:
 binding the rule's selections into `MeasuredSelection`s and its lists,
 and a provider's reading of the rule.
+
+### Judged with a stated confidence
+
+Three consecutive gates on one build under the build lock
+([#293](https://github.com/axioval/engine/issues/293)), each 14 to 16
+minutes (two full rounds of about six minutes, then 20 rounds of the few
+inputs near their ceiling), gave every input the same outcome: the same
+eight failed in each, every other input passed. Ratio and 99% interval
+after 20 rounds, per gate:
+
+| capability | input | gate 1 | gate 2 | gate 3 | verdict |
+| --- | --- | --- | --- | --- | --- |
+| door-swing | generated fixture, 400 walls | 1.266 (1.253 to 1.279) | 1.270 (1.262 to 1.279) | 1.265 (1.252 to 1.277) | over |
+| keyed-limit | wall with opening and window | 1.250 (1.242 to 1.258) | 1.251 (1.244 to 1.257) | 1.253 (1.245 to 1.260) | undecided |
+| space-validation | building architecture (IFC4) | 1.263 (1.250 to 1.277) | 1.262 (1.252 to 1.271) | 1.268 (1.258 to 1.277) | over |
+| space-validation | building architecture (IFC2x3) | 1.246 (1.234 to 1.258) | 1.250 (1.241 to 1.259) | 1.247 (1.241 to 1.252) | undecided |
+| space-validation | building architecture (IFC4x3) | 1.277 (1.266 to 1.288) | 1.276 (1.264 to 1.288) | 1.278 (1.270 to 1.286) | over |
+| table-allocation | wall with opening and window | 1.254 (1.249 to 1.259) | 1.256 (1.250 to 1.262) | 1.248 (1.241 to 1.255) | undecided, once over |
+| table-allocation | column, tessellated | 1.300 (1.252 to 1.350), 3 rounds | 1.285 (1.280 to 1.290) | 1.280 (1.272 to 1.288), 2 rounds | over |
+| opening-zone | wall with opening and window | 1.381 (1.371 to 1.390) | 1.379 (1.324 to 1.436), 3 rounds | 1.369 (1.327 to 1.413), 3 rounds | over |
+
+The inputs a single median had passed or failed by chance are real
+failures, or sit on the line: `door-swing` on the fixture and
+`space-validation` on the IFC4 and IFC4x3 architecture models are over
+the budget by 1 to 3%, beyond the measurement's resolution, and
+`keyed-limit` on the wall model and `space-validation` on the IFC2x3
+model are at it. The runner owes them its fixed cost, as above. Inputs
+that pass near the line (`body-extent` on the infra road, 1.23×;
+`table-allocation` on most models, 1.20 to 1.23×; `opening-area` on the
+fixture, 1.21 to 1.23×) passed in every gate.
+
+A gate's rounds share its machine's state, so two gates differ by a little
+more than one gate's interval: `door-swing` read 1.23× pooled over twelve
+rounds of one earlier gate and 1.27× in these. Six inputs whose reference
+takes about the floor's 100 µs fell above it in one gate and below it in
+another; above, they passed alone, below, with their small inputs.

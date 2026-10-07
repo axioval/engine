@@ -10,14 +10,18 @@
 
 use std::collections::BTreeSet;
 
+#[cfg(feature = "parity-reference")]
+use axioval_engine::RuleContext;
 use axioval_engine::{
-    PlanSpanError, PlanSpanServiceHandle, RectangleSide, RuleContext, SideDistanceRequest,
-    SideDistances, SidePresence,
+    PlanSpanError, PlanSpanServiceHandle, RectangleSide, SideDistanceRequest, SideDistances,
+    SidePresence,
 };
+#[cfg(feature = "parity-reference")]
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, NotEvaluatedReason, ObjectId};
 
 use crate::level_spacing::metres;
+#[cfg(feature = "parity-reference")]
 use crate::selection::select_objects;
 use crate::support::Unavailable;
 
@@ -29,6 +33,7 @@ pub(crate) struct Walls {
 }
 
 impl Walls {
+    #[cfg(feature = "parity-reference")]
     pub(crate) fn select(context: &RuleContext<'_>, selector: &Selector) -> Self {
         let (objects, outcomes) = select_objects(context, selector);
         let mut maybe = BTreeSet::new();

@@ -168,6 +168,7 @@ pub(crate) fn relation_text(traversal: Option<&Traversal>) -> String {
 
 /// A count as a real number for its relative deviation; counts beyond 2^53
 /// round, which moves a deviation by far less than any band.
+#[cfg(feature = "parity-reference")]
 #[allow(clippy::cast_precision_loss)]
 pub(crate) fn real(count: i64) -> f64 {
     count as f64

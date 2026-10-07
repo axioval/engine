@@ -531,9 +531,9 @@ struct Config<'a> {
     vertical_offset: f64,
     /// The top datum and the offset above it, instead of a height.
     top: Option<(Reference, f64)>,
-    #[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
+    #[cfg(feature = "parity-reference")]
     obstacles: &'a Selector,
-    #[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
+    #[cfg(feature = "parity-reference")]
     allowed: Option<&'a Selector>,
     protrusion: f64,
     within_space: bool,
@@ -549,6 +549,22 @@ struct Config<'a> {
     /// With `depth_mode` `less_clear_width`: where the door's clear width
     /// comes from, and the total, minimum and maximum it sizes the depth by.
     clear_width: Option<DoorClearWidth<'a>>,
+}
+
+/// The offsets and then the obstacle selections, read in the declaration's
+/// order so the first refusal stays the capability's. Only the parity
+/// reference keeps the selections.
+fn tail<'a>(
+    parameters: &Parameters<'a>,
+) -> Result<([f64; 3], &'a Selector, Option<&'a Selector>), Unavailable> {
+    let offsets = [
+        length(parameters, "offset")?.unwrap_or(0.0),
+        length(parameters, "lateral_offset")?.unwrap_or(0.0),
+        length(parameters, "vertical_offset")?.unwrap_or(0.0),
+    ];
+    let obstacles = parameters.required_selector("obstacles")?;
+    let allowed = parameters.selector("allowed_intruders")?;
+    Ok((offsets, obstacles, allowed))
 }
 
 impl Config<'_> {
@@ -898,6 +914,9 @@ impl<'a> Config<'a> {
             _ => {}
         }
         let clear_width = clear_width(&parameters, declared)?;
+        let ([offset, lateral_offset, vertical_offset], obstacles, allowed) = tail(&parameters)?;
+        #[cfg(not(feature = "parity-reference"))]
+        let _ = (obstacles, allowed);
         Ok(Self {
             sides,
             quantifier,
@@ -905,15 +924,17 @@ impl<'a> Config<'a> {
             declared,
             mode,
             tolerance,
-            offset: length(&parameters, "offset")?.unwrap_or(0.0),
+            offset,
             depth_from,
-            lateral_offset: length(&parameters, "lateral_offset")?.unwrap_or(0.0),
+            lateral_offset,
             align,
             reference,
-            vertical_offset: length(&parameters, "vertical_offset")?.unwrap_or(0.0),
+            vertical_offset,
             top,
-            obstacles: parameters.required_selector("obstacles")?,
-            allowed: parameters.selector("allowed_intruders")?,
+            #[cfg(feature = "parity-reference")]
+            obstacles,
+            #[cfg(feature = "parity-reference")]
+            allowed,
             protrusion,
             within_space,
             slide,

@@ -570,10 +570,7 @@ written once per selector. With them, measured by the same gate:
 
 Still over the budget: `door-swing` on the fixture, `keyed-limit` on the
 wall model and `space-validation` on the architecture models, by up to 3%
-of run time (judged with a stated confidence, below); `opening-zone` on the wall model,
-and its heap on the structural model, whose provider measures a whole
-rule's checks (about 2 KiB an item) before its openings read them, its
-judge holding state that cannot be kept between reads; and the small
+of run time (judged with a stated confidence, below); and the small
 models under the floor (`distance`, `containment`, `clash`,
 `clash-matrix` on the three-object column), whose rules select almost
 nothing and leave a few microseconds of the runner's cost per rule:
@@ -615,3 +612,25 @@ more than one gate's interval: `door-swing` read 1.23× pooled over twelve
 rounds of one earlier gate and 1.27× in these. Six inputs whose reference
 takes about the floor's 100 µs fell above it in one gate and below it in
 another; above, they passed alone, below, with their small inputs.
+
+`opening-zone`'s provider measured a whole rule's checks (about 2 KiB an
+item) before its openings read them
+([#294](https://github.com/axioval/engine/issues/294)). It now keeps only
+what a rule's openings share (the placements, the hosts' bodies, the
+table's selections, the supports read) and measures each opening's checks
+when its list is read; each host's body and each opening's solid are read
+once per run, shared by the rules, where the capability read them once per
+rule. Measured by the same gate, the case's ten rules together (time /
+peak heap):
+
+| input | before | after |
+| --- | --- | --- |
+| wall with opening and window | 1.38× / 1.20× | 0.94× / 1.31× |
+| building structural (IFC2x3) | 0.75× / 1.69× | 0.78× / 1.31× |
+| building structural (IFC4, IFC4x3) | 0.51× / 1.17× | 0.52× / 1.17× |
+| generated fixture, 400 walls | 0.21× / 0.90× | 0.22× / 0.90× |
+| every other public model | 0.22 to 0.46× / 0.98 to 1.03× | 0.21 to 0.46× / 0.98 to 1.03× |
+
+The heap on the wall model rises by the bodies kept for the run. One rule
+run alone reads them all itself and stays 1.24 to 1.53× its reference's
+time there: the runner's fixed cost per rule on a model of nine objects.

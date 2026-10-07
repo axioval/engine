@@ -2,6 +2,9 @@
 //! aisle and the obstructions allowed at their ends and sides.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::LazyLock;
+
+use axioval_engine::template::Template;
 
 use axioval_engine::{
     CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ObjectBounds, ParameterDescriptor,
@@ -16,16 +19,21 @@ use crate::orientation::{
     Alignment, Tri, aligned, along, angle_tolerance, extent_unavailable, rectangle,
     rectangle_service,
 };
-use crate::pairs::{reason as proximity_reason, refuse_all};
+use crate::pairs::reason as proximity_reason;
 use crate::plan_area::{Verdict, judge, shown};
 use crate::selection::select_objects;
-use crate::support::{Parameters, Unavailable, finding, invalid};
+use crate::support::{Parameters, Unavailable, invalid};
 
+mod items;
 mod measured;
+#[cfg(feature = "parity-reference")]
+pub(crate) mod reference;
+mod template;
 
+pub(crate) use items::BayItems;
 pub(crate) use measured::BayMeasures;
 
-const NAME: &str = "parking-bay";
+pub(crate) const NAME: &str = "parking-bay";
 
 /// Requires each selected parking bay to have its size along its own axes,
 /// its orientation to the aisle, and no more obstructions at its ends and
@@ -70,11 +78,80 @@ const NAME: &str = "parking-bay";
 /// obstructions: they turn a finding they could remove, or a pass they
 /// could break, into not evaluated, and a bay whose states they leave open
 /// has a size finding not evaluated.
+///
+/// It runs as a template ([`axioval_engine::template`]): the items of the
+/// measured `parking_bay` list of each bay, its sizes against their bounds,
+/// its counts of obstacles against what is allowed and its searches'
+/// answers, judged by the template.
 pub struct ParkingBay;
+
+static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
+
+/// The plans of the rules bound to it, kept across runs.
+static PLANS: crate::templates::Plans = crate::templates::Plans::new();
+
+impl RuleCapability for ParkingBay {
+    fn id(&self) -> &'static str {
+        template::ID
+    }
+
+    fn parameters(&self) -> Vec<ParameterDescriptor> {
+        TEMPLATE.parameters.clone()
+    }
+
+    fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
+        crate::templates::run((&TEMPLATE, &PLANS), context, rule)
+    }
+
+    fn template(&self) -> Option<&Template> {
+        Some(&TEMPLATE)
+    }
+}
+
+/// The capability's parameter descriptor.
+pub(crate) fn parameters() -> Vec<ParameterDescriptor> {
+    let mut parameters: Vec<ParameterDescriptor> = [
+        "min_width",
+        "max_width",
+        "min_length",
+        "max_length",
+        "min_height",
+        "max_height",
+    ]
+    .into_iter()
+    .map(|name| ParameterDescriptor::optional(name, ParameterType::Quantity))
+    .collect();
+    parameters.extend([
+        ParameterDescriptor::optional("aisles", ParameterType::Selector),
+        ParameterDescriptor::optional("aisle_reach", ParameterType::Quantity),
+        ParameterDescriptor::optional("orientation", ParameterType::String),
+        ParameterDescriptor::optional("angle_tolerance", ParameterType::Quantity),
+        ParameterDescriptor::optional("obstacles", ParameterType::Selector),
+        ParameterDescriptor::optional("obstruction_reach", ParameterType::Quantity),
+        ParameterDescriptor::optional("end_obstructions", ParameterType::String),
+        ParameterDescriptor::optional("side_obstructions", ParameterType::String),
+        ParameterDescriptor::optional("applies_when", ParameterType::String),
+        ParameterDescriptor::optional("orientations", ParameterType::StringList),
+        ParameterDescriptor::optional("end_states", ParameterType::StringList),
+        ParameterDescriptor::optional("side_states", ParameterType::StringList),
+        ParameterDescriptor::optional("side_zone_length", ParameterType::Quantity),
+        ParameterDescriptor::optional("neighbour_reach", ParameterType::Quantity),
+    ]);
+    parameters
+}
+
+/// Checks the rule parameters the measured `parking_bay` is handed, as the
+/// rule states them: the capability's declaration, in its order and words.
+pub(crate) fn check_arguments(
+    arguments: &BTreeMap<String, axioval_ir::contract::ParameterValue>,
+) -> Result<(), Unavailable> {
+    let rule = crate::light_area::synthesised(arguments.clone());
+    parse(&Parameters(&rule)).map(|_| ())
+}
 
 /// How many of a bay's two ends, or two sides, may be obstructed.
 #[derive(Clone, Copy)]
-struct Allowed(usize);
+pub(crate) struct Allowed(usize);
 
 impl Allowed {
     fn count(name: &str, value: &str) -> Result<usize, Unavailable> {
@@ -161,52 +238,52 @@ const ALIGNMENTS: [Alignment; 3] = [
 ];
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Applies {
+pub(crate) enum Applies {
     Findings,
     Filter,
 }
 
 /// The objects a bay's orientation is read against.
-enum Reference<'a> {
+pub(crate) enum Reference<'a> {
     /// Aisles within `reach`.
     Aisles { aisles: &'a Selector, reach: f64 },
     /// Neighbouring bays within `reach`.
     Neighbours { reach: f64 },
 }
 
-struct Orientation<'a> {
-    reference: Reference<'a>,
-    tolerance: f64,
+pub(crate) struct Orientation<'a> {
+    pub(crate) reference: Reference<'a>,
+    pub(crate) tolerance: f64,
     /// The alignment a finding is judged against, in findings mode.
-    wanted: Option<Alignment>,
+    pub(crate) wanted: Option<Alignment>,
 }
 
-struct Obstructions<'a> {
-    obstacles: &'a Selector,
-    reach: f64,
+pub(crate) struct Obstructions<'a> {
+    pub(crate) obstacles: &'a Selector,
+    pub(crate) reach: f64,
     /// How many may be obstructed, in findings mode.
-    ends: Option<Allowed>,
-    sides: Option<Allowed>,
+    pub(crate) ends: Option<Allowed>,
+    pub(crate) sides: Option<Allowed>,
     /// The central stretch of a side an obstruction must overlap.
-    side_zone: Option<f64>,
+    pub(crate) side_zone: Option<f64>,
 }
 
 /// The states a bay must be in for its size bounds to apply.
 #[derive(Default)]
-struct Filters {
+pub(crate) struct Filters {
     orientations: Option<BTreeSet<State>>,
     ends: Option<BTreeSet<usize>>,
     sides: Option<BTreeSet<usize>>,
 }
 
-struct Config<'a> {
-    width: (Option<f64>, Option<f64>),
-    length: (Option<f64>, Option<f64>),
-    height: (Option<f64>, Option<f64>),
-    applies: Applies,
-    orientation: Option<Orientation<'a>>,
-    obstructions: Option<Obstructions<'a>>,
-    filters: Filters,
+pub(crate) struct Config<'a> {
+    pub(crate) width: (Option<f64>, Option<f64>),
+    pub(crate) length: (Option<f64>, Option<f64>),
+    pub(crate) height: (Option<f64>, Option<f64>),
+    pub(crate) applies: Applies,
+    pub(crate) orientation: Option<Orientation<'a>>,
+    pub(crate) obstructions: Option<Obstructions<'a>>,
+    pub(crate) filters: Filters,
 }
 
 impl Config<'_> {
@@ -232,99 +309,6 @@ impl Config<'_> {
 
     fn high(&self) -> bool {
         self.height.0.is_some() || self.height.1.is_some()
-    }
-}
-
-impl RuleCapability for ParkingBay {
-    fn id(&self) -> &'static str {
-        "axioval:capability.parking-bay"
-    }
-
-    fn parameters(&self) -> Vec<ParameterDescriptor> {
-        let mut parameters: Vec<ParameterDescriptor> = [
-            "min_width",
-            "max_width",
-            "min_length",
-            "max_length",
-            "min_height",
-            "max_height",
-        ]
-        .into_iter()
-        .map(|name| ParameterDescriptor::optional(name, ParameterType::Quantity))
-        .collect();
-        parameters.extend([
-            ParameterDescriptor::optional("aisles", ParameterType::Selector),
-            ParameterDescriptor::optional("aisle_reach", ParameterType::Quantity),
-            ParameterDescriptor::optional("orientation", ParameterType::String),
-            ParameterDescriptor::optional("angle_tolerance", ParameterType::Quantity),
-            ParameterDescriptor::optional("obstacles", ParameterType::Selector),
-            ParameterDescriptor::optional("obstruction_reach", ParameterType::Quantity),
-            ParameterDescriptor::optional("end_obstructions", ParameterType::String),
-            ParameterDescriptor::optional("side_obstructions", ParameterType::String),
-            ParameterDescriptor::optional("applies_when", ParameterType::String),
-            ParameterDescriptor::optional("orientations", ParameterType::StringList),
-            ParameterDescriptor::optional("end_states", ParameterType::StringList),
-            ParameterDescriptor::optional("side_states", ParameterType::StringList),
-            ParameterDescriptor::optional("side_zone_length", ParameterType::Quantity),
-            ParameterDescriptor::optional("neighbour_reach", ParameterType::Quantity),
-        ]);
-        parameters
-    }
-
-    fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
-        let config = match parse(&Parameters(rule)) {
-            Ok(config) => config,
-            Err((reason, message)) => {
-                return CapabilityEvaluation::not_evaluated(reason, format!("{NAME}: {message}"));
-            }
-        };
-        let (bays, evaluation) = select_objects(context, &rule.selector);
-        let services = match Services::of(context, &config) {
-            Ok(services) => services,
-            Err((reason, message)) => return refuse_all(&bays, evaluation, &reason, &message),
-        };
-        let near = |selector: &Selector, reach: f64| {
-            Nearby::find(context, &services, selector, &bays, reach)
-        };
-        let references = match config.orientation.as_ref().map(|o| match &o.reference {
-            Reference::Aisles { aisles, reach } => near(aisles, *reach),
-            Reference::Neighbours { reach } => near(&rule.selector, *reach),
-        }) {
-            Some(Err((reason, message))) => {
-                return refuse_all(&bays, evaluation, &reason, &message);
-            }
-            other => other.map(Result::unwrap),
-        };
-        let obstacles = match config
-            .obstructions
-            .as_ref()
-            .map(|o| near(o.obstacles, o.reach))
-        {
-            Some(Err((reason, message))) => {
-                return refuse_all(&bays, evaluation, &reason, &message);
-            }
-            other => other.map(Result::unwrap),
-        };
-        let mut evaluation = evaluation;
-        for bay in bays {
-            let judged = Bay {
-                config: &config,
-                services: &services,
-                object: bay,
-            };
-            for check in judged.checks(references.as_ref(), obstacles.as_ref()) {
-                match check {
-                    Ok(None) => {}
-                    Ok(Some((message, evidence, related))) => {
-                        evaluation.push_finding(finding(rule, &bay.id, message, evidence, related));
-                    }
-                    Err((reason, message)) => {
-                        evaluation.push_object_not_evaluated(bay.id.clone(), reason, message);
-                    }
-                }
-            }
-        }
-        evaluation
     }
 }
 
@@ -356,7 +340,7 @@ fn states<T: Ord>(
         .map(Some)
 }
 
-fn parse<'a>(parameters: &Parameters<'a>) -> Result<Config<'a>, Unavailable> {
+pub(crate) fn parse<'a>(parameters: &Parameters<'a>) -> Result<Config<'a>, Unavailable> {
     let length = |name: &str| length_of(parameters, name);
     let range = |name: &str| -> Result<(Option<f64>, Option<f64>), Unavailable> {
         let (low, high) = (
@@ -543,14 +527,14 @@ fn obstructions<'a>(
     Ok(obstructions)
 }
 
-struct Services<'a> {
-    rectangles: Option<&'a PlanSpanServiceHandle>,
-    extents: Option<&'a VerticalExtentServiceHandle>,
-    proximity: Option<&'a ProximityServiceHandle>,
+pub(crate) struct Services<'a> {
+    pub(crate) rectangles: Option<&'a PlanSpanServiceHandle>,
+    pub(crate) extents: Option<&'a VerticalExtentServiceHandle>,
+    pub(crate) proximity: Option<&'a ProximityServiceHandle>,
 }
 
 impl<'a> Services<'a> {
-    fn of(context: &RuleContext<'a>, config: &Config<'_>) -> Result<Self, Unavailable> {
+    pub(crate) fn of(context: &RuleContext<'a>, config: &Config<'_>) -> Result<Self, Unavailable> {
         let missing = |what: &str| {
             (
                 NotEvaluatedReason::MissingService,
@@ -590,18 +574,18 @@ impl<'a> Services<'a> {
 }
 
 /// The objects of one selector near each bay, from the plan broad phase.
-struct Nearby {
+pub(crate) struct Nearby {
     /// Objects the selector picks.
-    matched: BTreeSet<ObjectId>,
+    pub(crate) matched: BTreeSet<ObjectId>,
     /// Objects near each bay, matched or undecided.
-    near: BTreeMap<ObjectId, Vec<ObjectId>>,
+    pub(crate) near: BTreeMap<ObjectId, Vec<ObjectId>>,
     /// Matched or undecided objects whose extent cannot be read: they may
     /// stand near any bay.
-    blind: BTreeSet<ObjectId>,
+    pub(crate) blind: BTreeSet<ObjectId>,
     /// Bays whose extent cannot be read.
-    unbounded: BTreeMap<ObjectId, Unavailable>,
+    pub(crate) unbounded: BTreeMap<ObjectId, Unavailable>,
     /// Enclosing boxes, for every object with a readable extent.
-    bounds: BTreeMap<ObjectId, ObjectBounds>,
+    pub(crate) bounds: BTreeMap<ObjectId, ObjectBounds>,
 }
 
 impl Nearby {
@@ -629,7 +613,7 @@ impl Nearby {
     }
 
     /// The `matched` and `undecided` objects near each bay.
-    fn of(
+    pub(crate) fn of(
         proximity: &ProximityServiceHandle,
         matched: BTreeSet<ObjectId>,
         undecided: &BTreeSet<ObjectId>,
@@ -700,13 +684,87 @@ impl Nearby {
         Ok(found)
     }
 
+    /// The same, keeping the extents only of the bays and the objects near
+    /// one: all a bay's steps read of them.
+    pub(crate) fn kept(mut self) -> Self {
+        let near: BTreeSet<&ObjectId> = self.near.values().flatten().collect();
+        let unbounded = &self.unbounded;
+        let bays: BTreeSet<&ObjectId> = self.near.keys().collect();
+        let kept: BTreeMap<ObjectId, ObjectBounds> = std::mem::take(&mut self.bounds)
+            .into_iter()
+            .filter(|(object, _)| {
+                near.contains(object) || bays.contains(object) || unbounded.contains_key(object)
+            })
+            .collect();
+        self.bounds = kept;
+        self
+    }
+
     fn near(&self, bay: &ObjectId) -> &[ObjectId] {
         self.near.get(bay).map_or(&[], Vec::as_slice)
     }
 }
 
 /// A finding (message, evidence, related objects), or `None` for a pass.
-type Check = Result<Option<(String, Vec<Evidence>, Vec<ObjectId>)>, Unavailable>;
+pub(crate) type Check = Result<Option<(String, Vec<Evidence>, Vec<ObjectId>)>, Unavailable>;
+
+/// What was measured, its interval in metres and its evidence.
+pub(crate) type Size = (String, (f64, f64), Vec<Evidence>);
+
+/// A bay's size against inclusive bounds: what was measured (`width along
+/// the bay's own axes`), its interval and evidence, or why it could not be.
+pub(crate) struct Sized {
+    pub(crate) measured: Result<Size, Unavailable>,
+    pub(crate) bounds: (Option<f64>, Option<f64>),
+}
+
+/// Obstacles counted at a bay, from surely to at most, against how many
+/// are allowed, with the words of a finding and of a doubt.
+pub(crate) struct Counting {
+    pub(crate) counted: (usize, usize),
+    pub(crate) allowed: usize,
+    pub(crate) found: String,
+    pub(crate) open: String,
+    pub(crate) related: Vec<ObjectId>,
+    pub(crate) evidence: Vec<Evidence>,
+}
+
+/// One thing judged of a bay, in the capability's order: a search's own
+/// answer, a size against its bounds, or a count against what is allowed.
+pub(crate) enum Matter {
+    Judged(Check),
+    Size(Sized),
+    Count(Counting),
+}
+
+/// How the filters stand for a bay in filter mode: whether the size bounds
+/// apply to it, the states it may be in, why that is open, and the
+/// evidence of the states.
+pub(crate) struct Filtering {
+    pub(crate) applies: Tri,
+    pub(crate) states: String,
+    pub(crate) why: String,
+    pub(crate) evidence: Vec<Evidence>,
+}
+
+/// A count judged: a finding above what is allowed, open where it may be.
+pub(crate) fn judge_count(counting: &Counting) -> Check {
+    let (surely, most) = counting.counted;
+    if surely > counting.allowed {
+        Ok(Some((
+            counting.found.clone(),
+            counting.evidence.clone(),
+            counting.related.clone(),
+        )))
+    } else if most > counting.allowed {
+        Err((
+            NotEvaluatedReason::IncompleteEvidence,
+            counting.open.clone(),
+        ))
+    } else {
+        Ok(None)
+    }
+}
 
 /// The obstructions counted at one pair of edges: surely and at most, with
 /// the obstacles surely and possibly obstructing them.
@@ -728,7 +786,7 @@ impl Count {
 /// obstructed ends and sides.
 #[derive(Default)]
 struct Counted {
-    inside: Option<Check>,
+    inside: Option<Counting>,
     /// How many obstacles stand within the bay: surely, and at most (every
     /// obstacle that cannot be placed counted).
     within: (usize, usize),
@@ -745,10 +803,10 @@ struct Oriented {
     evidence: Vec<Evidence>,
 }
 
-struct Bay<'s, 'a> {
-    config: &'s Config<'s>,
-    services: &'s Services<'a>,
-    object: &'s Object,
+pub(crate) struct Bay<'s, 'a> {
+    pub(crate) config: &'s Config<'s>,
+    pub(crate) services: &'s Services<'a>,
+    pub(crate) object: &'s Object,
 }
 
 /// The four edges of a bay: along its long axis (ends) or across it
@@ -760,7 +818,14 @@ impl Bay<'_, '_> {
         &self.object.id
     }
 
-    fn checks(&self, references: Option<&Nearby>, obstacles: Option<&Nearby>) -> Vec<Check> {
+    /// What is judged of the bay, in the capability's order, and how the
+    /// filters stand for it in filter mode (they decide whether its sizes
+    /// are judged).
+    pub(crate) fn steps(
+        &self,
+        references: Option<&Nearby>,
+        obstacles: Option<&Nearby>,
+    ) -> (Vec<Matter>, Option<Filtering>) {
         let rectangle = self
             .services
             .rectangles
@@ -769,8 +834,10 @@ impl Bay<'_, '_> {
         if self.config.sized() {
             sizes.extend(self.size(rectangle.as_ref()));
         }
-        if self.config.high() {
-            sizes.push(self.height());
+        if self.config.high()
+            && let Some(height) = self.height()
+        {
+            sizes.push(height);
         }
         let counted = match (&self.config.obstructions, obstacles) {
             (Some(obstructions), Some(obstacles)) => {
@@ -778,28 +845,45 @@ impl Bay<'_, '_> {
             }
             _ => None,
         };
-        let mut checks = Vec::new();
+        let mut steps = Vec::new();
         if let Some(Ok(counted)) = &counted
             && let Some(inside) = &counted.inside
         {
-            checks.push(inside.clone());
+            steps.push(Matter::Count(Counting {
+                counted: inside.counted,
+                allowed: inside.allowed,
+                found: inside.found.clone(),
+                open: inside.open.clone(),
+                related: inside.related.clone(),
+                evidence: inside.evidence.clone(),
+            }));
         }
         match self.config.applies {
             Applies::Findings => {
-                checks.extend(sizes);
+                steps.extend(sizes.into_iter().map(Matter::Size));
                 if let (Some(orientation), Some(aisles), Some(wanted)) = (
                     &self.config.orientation,
                     references,
                     self.config.orientation.as_ref().and_then(|o| o.wanted),
                 ) {
-                    checks.push(self.orientation(orientation, wanted, aisles, rectangle.as_ref()));
+                    steps.push(Matter::Judged(self.orientation(
+                        orientation,
+                        wanted,
+                        aisles,
+                        rectangle.as_ref(),
+                    )));
                 }
                 if let (Some(obstructions), Some(counted)) = (&self.config.obstructions, counted) {
                     match counted {
-                        Ok(counted) => checks.extend(judge_counts(obstructions, &counted)),
-                        Err(error) => checks.push(Err(error)),
+                        Ok(counted) => steps.extend(
+                            counts(obstructions, &counted)
+                                .into_iter()
+                                .map(Matter::Count),
+                        ),
+                        Err(error) => steps.push(Matter::Judged(Err(error))),
                     }
                 }
+                (steps, None)
             }
             Applies::Filter => {
                 let oriented = match (&self.config.orientation, references) {
@@ -808,20 +892,20 @@ impl Bay<'_, '_> {
                     }
                     _ => None,
                 };
-                checks.extend(self.filtered(sizes, oriented.as_ref(), counted.as_ref()));
+                let filtering = self.filtered(oriented.as_ref(), counted.as_ref());
+                steps.extend(sizes.into_iter().map(Matter::Size));
+                (steps, Some(filtering))
             }
         }
-        checks
     }
 
     /// The size checks, applied to this bay only as far as its states are
     /// the filters'.
     fn filtered(
         &self,
-        sizes: Vec<Check>,
         oriented: Option<&Oriented>,
         counted: Option<&Result<Counted, Unavailable>>,
-    ) -> Vec<Check> {
+    ) -> Filtering {
         let filters = &self.config.filters;
         let mut applies = Tri::Yes;
         let mut why = Vec::new();
@@ -889,50 +973,35 @@ impl Bay<'_, '_> {
             ));
             applies = applies.and(answer);
         }
-        let states = said.join(", ");
-        match applies {
-            Tri::No => Vec::new(),
-            Tri::Yes => sizes
-                .into_iter()
-                .map(|check| {
-                    check.map(|found| {
-                        found.map(|(message, mut cited, related)| {
-                            cited.extend(evidence.iter().cloned());
-                            (format!("{message} (a bay with {states})"), cited, related)
-                        })
-                    })
-                })
-                .collect(),
-            Tri::Maybe => {
-                let why = why.join("; ");
-                sizes
-                    .into_iter()
-                    .map(|check| match check {
-                        Ok(None) => Ok(None),
-                        Ok(Some((message, _, _))) => Err((
-                            NotEvaluatedReason::IncompleteEvidence,
-                            format!("{message}, if the bound applies to it: {why}"),
-                        )),
-                        Err((reason, message)) => Err((reason, format!("{message}; {why}"))),
-                    })
-                    .collect()
-            }
+        Filtering {
+            applies,
+            states: said.join(", "),
+            why: why.join("; "),
+            evidence,
         }
     }
 
-    fn size(&self, rectangle: Option<&Result<PlanRectangle, Unavailable>>) -> Vec<Check> {
+    fn size(&self, rectangle: Option<&Result<PlanRectangle, Unavailable>>) -> Vec<Sized> {
         let rectangle = match rectangle {
             Some(Ok(rectangle)) => rectangle,
-            Some(Err(error)) => return vec![Err(error.clone())],
+            Some(Err(error)) => {
+                return vec![Sized {
+                    measured: Err(error.clone()),
+                    bounds: (None, None),
+                }];
+            }
             None => return Vec::new(),
         };
         let sides = match rectangle.width_and_length() {
             Ok(sides) => sides,
             Err(reason) => {
-                return vec![Err((
-                    NotEvaluatedReason::IncompleteEvidence,
-                    format!("its own axes are unknown: {reason}"),
-                ))];
+                return vec![Sized {
+                    measured: Err((
+                        NotEvaluatedReason::IncompleteEvidence,
+                        format!("its own axes are unknown: {reason}"),
+                    )),
+                    bounds: (None, None),
+                }];
             }
         };
         [
@@ -941,33 +1010,33 @@ impl Bay<'_, '_> {
         ]
         .into_iter()
         .filter(|(_, _, (low, high))| low.is_some() || high.is_some())
-        .map(|(name, measured, (low, high))| {
-            bounded(
-                &format!("{name} along the bay's own axes"),
+        .map(|(name, measured, bounds)| Sized {
+            measured: Ok((
+                format!("{name} along the bay's own axes"),
                 measured,
-                low,
-                high,
                 vec![rectangle.evidence().clone()],
-            )
+            )),
+            bounds,
         })
         .collect()
     }
 
-    fn height(&self) -> Check {
-        let Some(extents) = self.services.extents else {
-            return Ok(None);
-        };
-        let extent = extents
-            .measure_vertical_extent(self.id())
-            .map_err(|error| extent_unavailable(&error))?;
-        let (low, high) = self.config.height;
-        bounded(
-            "height",
-            extent.height_metres(),
-            low,
-            high,
-            vec![extent.evidence().clone()],
-        )
+    fn height(&self) -> Option<Sized> {
+        let extents = self.services.extents?;
+        let bounds = self.config.height;
+        Some(Sized {
+            measured: extents
+                .measure_vertical_extent(self.id())
+                .map_err(|error| extent_unavailable(&error))
+                .map(|extent| {
+                    (
+                        "height".to_owned(),
+                        extent.height_metres(),
+                        vec![extent.evidence().clone()],
+                    )
+                }),
+            bounds,
+        })
     }
 
     fn orientation(
@@ -1324,29 +1393,27 @@ impl Bay<'_, '_> {
             }
         }
         let within = (inside.len(), inside.len() + maybe_inside.len() + unplaced);
-        let inside = if !inside.is_empty() {
-            Some(Ok(Some((
-                format!(
-                    "{} within the bay, past none of its edges",
-                    names(&inside, "stands", "stand")
-                ),
-                evidence.clone(),
-                inside,
-            ))))
-        } else if !maybe_inside.is_empty() || !unknown.is_empty() {
+        let inside = if inside.is_empty() && maybe_inside.is_empty() && unknown.is_empty() {
+            None
+        } else {
             let mut reasons = unknown.clone();
             if !maybe_inside.is_empty() {
                 reasons.push(format!("{} may stand within the bay", list(&maybe_inside)));
             }
-            Some(Err((
-                NotEvaluatedReason::IncompleteEvidence,
-                format!(
+            Some(Counting {
+                counted: within,
+                allowed: 0,
+                found: format!(
+                    "{} within the bay, past none of its edges",
+                    names(&inside, "stands", "stand")
+                ),
+                open: format!(
                     "whether an obstacle stands within the bay is unknown: {}",
                     reasons.join("; ")
                 ),
-            )))
-        } else {
-            None
+                related: inside,
+                evidence: evidence.clone(),
+            })
         };
         let count = |first: usize| {
             let edges = first..first + 2;
@@ -1384,41 +1451,37 @@ impl Bay<'_, '_> {
     }
 }
 
-/// The obstruction findings of findings mode.
-fn judge_counts(obstructions: &Obstructions<'_>, counted: &Counted) -> Vec<Check> {
-    let mut checks = Vec::new();
+/// The obstruction counts of findings mode, against what is allowed.
+fn counts(obstructions: &Obstructions<'_>, counted: &Counted) -> Vec<Counting> {
+    let mut counts = Vec::new();
     for (label, count, allowed) in [
         ("ends", &counted.ends, obstructions.ends),
         ("sides", &counted.sides, obstructions.sides),
     ] {
         let Some(allowed) = allowed else { continue };
-        if count.surely > allowed.0 {
-            checks.push(Ok(Some((
-                format!(
-                    "{} of its {label} obstructed by {}, {} allowed",
-                    count.surely,
-                    list(&count.related),
-                    allowed.name()
-                ),
-                counted.evidence.clone(),
-                count.related.clone(),
-            ))));
-        } else if count.most > allowed.0 {
-            let mut reasons = counted.unknown.clone();
-            if !count.open.is_empty() {
-                reasons.push(format!("{} may obstruct them", list(&count.open)));
-            }
-            checks.push(Err((
-                NotEvaluatedReason::IncompleteEvidence,
-                format!(
-                    "how many of its {label} are obstructed is unknown, {} allowed: {}",
-                    allowed.name(),
-                    reasons.join("; ")
-                ),
-            )));
+        let mut reasons = counted.unknown.clone();
+        if !count.open.is_empty() {
+            reasons.push(format!("{} may obstruct them", list(&count.open)));
         }
+        counts.push(Counting {
+            counted: (count.surely, count.most),
+            allowed: allowed.0,
+            found: format!(
+                "{} of its {label} obstructed by {}, {} allowed",
+                count.surely,
+                list(&count.related),
+                allowed.name()
+            ),
+            open: format!(
+                "how many of its {label} are obstructed is unknown, {} allowed: {}",
+                allowed.name(),
+                reasons.join("; ")
+            ),
+            related: count.related.clone(),
+            evidence: counted.evidence.clone(),
+        });
     }
-    checks
+    counts
 }
 
 /// Whether every possible state is allowed (`Yes`), none is (`No`), or
@@ -1553,7 +1616,7 @@ fn rectangle_of(
 }
 
 /// A measured length against inclusive bounds.
-fn bounded(
+pub(crate) fn bounded(
     what: &str,
     (low, high): (f64, f64),
     minimum: Option<f64>,

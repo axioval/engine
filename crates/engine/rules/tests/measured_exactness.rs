@@ -25,6 +25,11 @@ use axioval_ir::{Evidence, Property, PropertyValue, QuantityDimension};
 /// root) and the test.
 const COVERED: &[(&str, &str, &str)] = &[
     (
+        "parking_bay",
+        "../../facade/axioval/tests/axiolid_bays_and_spacing.rs",
+        "a_bay_measured_on_a_tessellation_is_inexact",
+    ),
+    (
         "wall_spacing",
         "../../facade/axioval/tests/axiolid_bays_and_spacing.rs",
         "a_spacing_measured_on_a_tessellation_is_inexact",

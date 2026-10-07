@@ -412,3 +412,9 @@ footprint selections once per rule, lists each selection's objects and
 the project's once per run (`support::everything`, which a traversal walks
 through), and measures each storey's pairs and footprints once, as the
 capability did.
+
+`parking-bay` runs the `spans` case's three rules: 0.32 to 1.06× its
+reference's run time and 0.62 to 1.44× its peak heap. Its list runs the
+plan broad phase once per rule and kind of neighbour, keeping only the
+extents a bay reads (`Nearby::kept`), as the capability searched once per
+rule, and measures each bay's rectangle, extent and obstacles once.

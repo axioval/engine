@@ -1289,7 +1289,7 @@ Findings report how far the share exceeds the lowest declared threshold, so a ru
 
 ### Parking bays
 
-`axioval:capability.parking-bay` checks each selected parking bay along its own axes: those of the least-area rectangle around its footprint (`PlanSpanService::measure_rectangle`), never its bounding box, so a bay turned 45° whose box is long enough but which is itself too short is found. Its length is the longer side, its width the shorter; the ends are the two sides across the long axis, the sides the two along it. It needs the plan-span service and, depending on the checks declared, the vertical-extent and proximity services.
+`axioval:capability.parking-bay` checks each selected parking bay along its own axes: those of the least-area rectangle around its footprint (`PlanSpanService::measure_rectangle`), never its bounding box, so a bay turned 45° whose box is long enough but which is itself too short is found. Its length is the longer side, its width the shorter; the ends are the two sides across the long axis, the sides the two along it. It needs the plan-span service and, depending on the checks declared, the vertical-extent and proximity services. It runs as a template over the measured `parking_bay`: each bay's sizes judged against their bounds and its obstacles counted against what is allowed ([Capability templates](./templates.md#parking-bay)).
 
 | Parameter | Type | Meaning |
 |---|---|---|

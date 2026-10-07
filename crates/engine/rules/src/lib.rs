@@ -209,6 +209,7 @@ pub mod reference {
     pub use crate::opening_area::reference::OpeningArea;
     pub use crate::opening_spaces::reference::OpeningSpaces;
     pub use crate::opening_zone::reference::OpeningZone;
+    pub use crate::parking_bay::reference::ParkingBay;
     pub use crate::plan_area::reference::PlanAreaRange;
     pub use crate::plan_coverage::reference::PlanCoverage;
     pub use crate::property_comparison::reference::PropertyComparison;
@@ -336,6 +337,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(escape_route::TravelMeasures))
         .and_then(|registry| registry.register_measured(free_floor::PlacementMeasures))
         .and_then(|registry| registry.register_measured(parking_bay::BayMeasures))
+        .and_then(|registry| registry.register_measured(parking_bay::BayItems))
         .and_then(|registry| registry.register_measured(wall_spacing::SpacingMeasures))
         .and_then(|registry| registry.register_measured(wall_spacing::SpacingItems))
         .and_then(|registry| registry.register_measured(counterpart_coverage::CoverageMeasures))

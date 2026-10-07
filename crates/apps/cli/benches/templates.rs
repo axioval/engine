@@ -263,6 +263,11 @@ const PAIRS: &[Pair] = &[
         reference: |registry| registry.replace(axioval::rules::reference::WallSpacing),
     },
     Pair {
+        capability: "axioval:capability.parking-bay",
+        case: "spans",
+        reference: |registry| registry.replace(axioval::rules::reference::ParkingBay),
+    },
+    Pair {
         capability: "axioval:capability.coordinate-consistency",
         case: "storeys",
         reference: |registry| {

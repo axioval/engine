@@ -2912,6 +2912,389 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             ),
         )],
     },
+    MemberDescriptor {
+        list: MeasuredDescriptor {
+            name: "parking_bay",
+            parameters: &[
+                MeasuredParameter {
+                    key: "min_width",
+                    kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The least width of a bay, if any.",
+                        "Die kleinste Breite eines Stellplatzes, falls angegeben.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "max_width",
+                    kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The greatest width of a bay, if any.",
+                        "Die größte Breite eines Stellplatzes, falls angegeben.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "min_length",
+                    kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The least length of a bay, if any.",
+                        "Die kleinste Länge eines Stellplatzes, falls angegeben.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "max_length",
+                    kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The greatest length of a bay, if any.",
+                        "Die größte Länge eines Stellplatzes, falls angegeben.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "min_height",
+                    kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The least height of a bay, if any.",
+                        "Die kleinste Höhe eines Stellplatzes, falls angegeben.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "max_height",
+                    kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The greatest height of a bay, if any.",
+                        "Die größte Höhe eines Stellplatzes, falls angegeben.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "aisles",
+                    kind: MeasuredParameterKind::Objects,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The aisles a bay's orientation is read against.",
+                        "Die Fahrgassen, gegen die die Ausrichtung eines Stellplatzes gelesen wird.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "aisle_reach",
+                    kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "How far from the bay an aisle may lie.",
+                        "Wie weit vom Stellplatz eine Fahrgasse liegen darf.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "orientation",
+                    kind: MeasuredParameterKind::Pattern,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The orientation a bay must have to an aisle, as the rule states it.",
+                        "Die Ausrichtung, die ein Stellplatz zu einer Fahrgasse haben muss, wie die Regel sie angibt.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "angle_tolerance",
+                    kind: MeasuredParameterKind::Angle { below: 45.0 },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "How far from parallel or perpendicular axes may lie, in degrees.",
+                        "Wie weit Achsen von parallel oder rechtwinklig abweichen dürfen, in Grad.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "obstacles",
+                    kind: MeasuredParameterKind::Objects,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The objects that may obstruct a bay.",
+                        "Die Objekte, die einen Stellplatz behindern können.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "obstruction_reach",
+                    kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "How far from the bay an obstacle may lie.",
+                        "Wie weit vom Stellplatz ein Hindernis liegen darf.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "end_obstructions",
+                    kind: MeasuredParameterKind::Pattern,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "How many ends may be obstructed, as the rule states it.",
+                        "Wie viele Enden behindert sein dürfen, wie die Regel es angibt.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "side_obstructions",
+                    kind: MeasuredParameterKind::Pattern,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "How many sides may be obstructed, as the rule states it.",
+                        "Wie viele Seiten behindert sein dürfen, wie die Regel es angibt.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "applies_when",
+                    kind: MeasuredParameterKind::Pattern,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "Whether orientation and obstructions are findings or select the bays the sizes apply to.",
+                        "Ob Ausrichtung und Behinderungen Befunde sind oder die Stellplätze wählen, für die die Größen gelten.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "orientations",
+                    kind: MeasuredParameterKind::Path,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The orientation states the sizes apply to, as the rule lists them.",
+                        "Die Ausrichtungszustände, für die die Größen gelten, wie die Regel sie aufzählt.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "end_states",
+                    kind: MeasuredParameterKind::Path,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The obstructed ends the sizes apply to, as the rule lists them.",
+                        "Die behinderten Enden, für die die Größen gelten, wie die Regel sie aufzählt.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "side_states",
+                    kind: MeasuredParameterKind::Path,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The obstructed sides the sizes apply to, as the rule lists them.",
+                        "Die behinderten Seiten, für die die Größen gelten, wie die Regel sie aufzählt.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "side_zone_length",
+                    kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The central stretch of a side an obstruction must overlap.",
+                        "Der mittlere Abschnitt einer Seite, den eine Behinderung überlappen muss.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "neighbour_reach",
+                    kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "How far from the bay a neighbouring bay may lie.",
+                        "Wie weit vom Stellplatz ein benachbarter Stellplatz liegen darf.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "selection",
+                    kind: MeasuredParameterKind::Objects,
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The rule's bays (`@selection`), among which neighbours are read.",
+                        "Die Stellplätze der Regel (`@selection`), unter denen Nachbarn gelesen werden.",
+                    ),
+                },
+            ],
+            dimension: None,
+            services: &["plan-span", "proximity", "vertical-extent"],
+            exactness: MeasuredExactness::Measured,
+            subject: MeasuredSubject::Object,
+            not_evaluated: &[
+                "a service is not registered",
+                "the bay's extent cannot be read",
+            ],
+            label: &en_de("Parking bay", "Stellplatz"),
+            help: &en_de(
+                "What `parking-bay` judges of a bay: its sizes against their bounds, the \
+                 obstacles counted within it and at its ends and sides against what is \
+                 allowed, and its orientation to an aisle.",
+                "Was `parking-bay` an einem Stellplatz beurteilt: seine Größen gegen ihre \
+                 Grenzen, die in ihm und an seinen Enden und Seiten gezählten Hindernisse gegen \
+                 das Erlaubte, und seine Ausrichtung zu einer Fahrgasse.",
+            ),
+        },
+        fields: &[
+            field(
+                "judged",
+                TRUTH,
+                &en_de("Search", "Suche"),
+                &en_de(
+                    "True on an item of a search's own answer.",
+                    "Wahr am Element der eigenen Antwort einer Suche.",
+                ),
+            ),
+            field(
+                "found",
+                TRUTH,
+                &en_de("Found", "Gefunden"),
+                &en_de(
+                    "Whether the search found the bay wanting; refused for why it is undecided.",
+                    "Ob die Suche den Stellplatz mangelhaft fand; verweigert mit dem Grund, warum es offen ist.",
+                ),
+            ),
+            field(
+                "message",
+                MemberFieldKind::Text,
+                &en_de("Words", "Worte"),
+                &en_de(
+                    "The search's finding, worded.",
+                    "Der Befund der Suche, in Worten.",
+                ),
+            ),
+            field(
+                "counting",
+                TRUTH,
+                &en_de("Count", "Zählung"),
+                &en_de(
+                    "True on an item of obstacles counted.",
+                    "Wahr am Element gezählter Hindernisse.",
+                ),
+            ),
+            field(
+                "count",
+                RATIO,
+                &en_de("Counted", "Gezählt"),
+                &en_de(
+                    "From the obstacles or edges surely counted to every one that may be.",
+                    "Von den sicher gezählten Hindernissen oder Kanten bis zu jedem, das es sein kann.",
+                ),
+            ),
+            field(
+                "allowed",
+                RATIO,
+                &en_de("Allowed", "Erlaubt"),
+                &en_de("How many are allowed.", "Wie viele erlaubt sind."),
+            ),
+            field(
+                "found_words",
+                MemberFieldKind::Text,
+                &en_de("Finding", "Befund"),
+                &en_de("Words of a finding.", "Worte eines Befunds."),
+            ),
+            field(
+                "open_words",
+                MemberFieldKind::Text,
+                &en_de("Doubt", "Zweifel"),
+                &en_de("Words of a doubt.", "Worte eines Zweifels."),
+            ),
+            field(
+                "related",
+                MemberFieldKind::Objects,
+                &en_de("Related", "Bezogen"),
+                &en_de(
+                    "The objects a finding relates.",
+                    "Die Objekte, auf die ein Befund verweist.",
+                ),
+            ),
+            field(
+                "sized",
+                TRUTH,
+                &en_de("Size", "Größe"),
+                &en_de("True on an item of a size.", "Wahr am Element einer Größe."),
+            ),
+            field(
+                "size",
+                LENGTH,
+                &en_de("Measured", "Gemessen"),
+                &en_de(
+                    "The size; refused for why it cannot be measured.",
+                    "Die Größe; verweigert mit dem Grund, warum sie nicht gemessen werden kann.",
+                ),
+            ),
+            field(
+                "measured",
+                MemberFieldKind::Text,
+                &en_de("Words", "Worte"),
+                &en_de("The size, worded.", "Die Größe, in Worten."),
+            ),
+            field(
+                "low",
+                LENGTH,
+                &en_de("Least", "Mindestens"),
+                &en_de(
+                    "The least size allowed, if any.",
+                    "Die kleinste erlaubte Größe, falls angegeben.",
+                ),
+            ),
+            field(
+                "high",
+                LENGTH,
+                &en_de("Most", "Höchstens"),
+                &en_de(
+                    "The greatest size allowed, if any.",
+                    "Die größte erlaubte Größe, falls angegeben.",
+                ),
+            ),
+            field(
+                "suffix",
+                MemberFieldKind::Text,
+                &en_de("States", "Zustände"),
+                &en_de(
+                    "The states a filtered bay is in, after a finding.",
+                    "Die Zustände eines gefilterten Stellplatzes, nach einem Befund.",
+                ),
+            ),
+            field(
+                "doubtful",
+                TRUTH,
+                &en_de("Doubtful", "Zweifelhaft"),
+                &en_de(
+                    "Whether the filters may leave the bay out.",
+                    "Ob die Filter den Stellplatz auslassen können.",
+                ),
+            ),
+            field(
+                "applies_why",
+                MemberFieldKind::Text,
+                &en_de("Why", "Warum"),
+                &en_de(
+                    "Why the filters may leave the bay out.",
+                    "Warum die Filter den Stellplatz auslassen können.",
+                ),
+            ),
+            field(
+                "later",
+                MemberFieldKind::Text,
+                &en_de("Then", "Danach"),
+                &en_de(
+                    "Why the filters may leave the bay out, after `; `, where they may.",
+                    "Warum die Filter den Stellplatz auslassen können, nach `; `, wo sie es können.",
+                ),
+            ),
+        ],
+    },
     walking::RAIL_CONTINUITY,
     walking::RAIL_EXTENSIONS,
     walking::RAIL_GAPS,

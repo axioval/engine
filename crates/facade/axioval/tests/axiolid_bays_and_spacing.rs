@@ -172,6 +172,7 @@ impl Scene {
         // Held to the implementation it replaced, on the same scene.
         let reference: Option<&dyn RuleCapability> = match capability.id() {
             "axioval:capability.wall-spacing" => Some(&axioval_rules::reference::WallSpacing),
+            "axioval:capability.parking-bay" => Some(&axioval_rules::reference::ParkingBay),
             _ => None,
         };
         if let Some(reference) = reference {
@@ -1542,6 +1543,106 @@ fn a_spacing_measured_on_a_tessellation_is_inexact() {
             .evidence
             .iter()
             .any(|evidence| !evidence.exact),
+        "{outcome:?}"
+    );
+}
+
+/// Generated declarations over both car parks: size bounds, orientations
+/// to the aisle, obstructions in findings mode, and filters by orientation
+/// (to the aisle or the neighbours) and obstructed ends and sides, some
+/// columns tessellated; each held to the implementation the template
+/// replaced (`Scene::check`).
+#[test]
+fn generated_car_parks_hold_parking_bay_parity() {
+    let mut judged = 0;
+    for pattern in 0..72_usize {
+        let mut scene = if pattern % 2 == 0 {
+            car_park()
+        } else {
+            mixed_bays()
+        };
+        if pattern % 5 == 0 {
+            scene = scene.tessellated("aisle");
+        }
+        let mut parameters = vec![
+            ("min_width", metres([2.3, 2.5, 2.6][pattern % 3])),
+            ("min_length", metres([4.7, 5.0, 5.5][pattern / 3 % 3])),
+        ];
+        if pattern % 4 == 1 {
+            parameters.push(("max_height", metres(2.1)));
+        }
+        let filter = pattern / 2 % 3;
+        match filter {
+            0 => {
+                parameters.extend([
+                    ("aisles", selector(kind("aisle"))),
+                    (
+                        "orientation",
+                        text(["parallel", "perpendicular", "angled"][pattern % 3]),
+                    ),
+                    (
+                        "angle_tolerance",
+                        quantity([5.0, 30.0][pattern / 6 % 2], "deg"),
+                    ),
+                ]);
+                if pattern % 7 < 4 {
+                    parameters.extend([
+                        ("obstacles", selector(kind("column"))),
+                        ("obstruction_reach", metres([0.1, 0.5][pattern % 2])),
+                        ("end_obstructions", text(["none", "one"][pattern / 4 % 2])),
+                        ("side_obstructions", text(["none", "both"][pattern / 8 % 2])),
+                    ]);
+                }
+            }
+            1 => {
+                parameters.extend([
+                    ("applies_when", text("filter")),
+                    (
+                        "orientations",
+                        path(&[["perpendicular", "parallel", "unclear"][pattern % 3]]),
+                    ),
+                    ("angle_tolerance", quantity(5.0, "deg")),
+                ]);
+                if pattern % 4 < 2 {
+                    parameters.push(("aisles", selector(kind("aisle"))));
+                } else {
+                    parameters.push(("neighbour_reach", metres(0.5)));
+                }
+            }
+            _ => {
+                parameters.extend([
+                    ("applies_when", text("filter")),
+                    ("end_states", path(&[["none", "one"][pattern % 2]])),
+                    ("side_states", path(&["none", "one"])),
+                    ("obstacles", selector(kind("column"))),
+                    ("obstruction_reach", metres([0.1, 0.4][pattern / 4 % 2])),
+                ]);
+                if pattern % 3 == 0 {
+                    parameters.push(("side_zone_length", metres(3.0)));
+                }
+            }
+        }
+        let outcome = scene.check(&ParkingBay, "bay", parameters);
+        judged += outcome.findings().len() + outcome.not_evaluated_outcomes().len();
+    }
+    assert!(judged > 0);
+}
+
+/// A bay measured on a tessellation is cited as inexact, as the capability
+/// cited it.
+#[test]
+fn a_bay_measured_on_a_tessellation_is_inexact() {
+    let outcome =
+        car_park()
+            .tessellated("b1")
+            .check(&ParkingBay, "bay", vec![("max_height", metres(2.0))]);
+    assert!(!outcome.findings().is_empty(), "{outcome:?}");
+    assert!(
+        outcome
+            .findings()
+            .iter()
+            .filter(|finding| finding.object_id().is_some_and(|id| id.local_id == "b1"))
+            .all(|finding| finding.evidence.iter().any(|evidence| !evidence.exact)),
         "{outcome:?}"
     );
 }

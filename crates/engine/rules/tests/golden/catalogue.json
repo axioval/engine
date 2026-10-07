@@ -28031,7 +28031,451 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "parking-bay",
+        "declaration": [
+          {
+            "kind": "arguments",
+            "when": [],
+            "value": "parking_bay;min_width=@min_width;max_width=@max_width;min_length=@min_length;max_length=@max_length;min_height=@min_height;max_height=@max_height;aisles=@aisles;aisle_reach=@aisle_reach;orientation=@orientation;angle_tolerance=@angle_tolerance;obstacles=@obstacles;obstruction_reach=@obstruction_reach;end_obstructions=@end_obstructions;side_obstructions=@side_obstructions;applies_when=@applies_when;orientations=@orientations;end_states=@end_states;side_states=@side_states;side_zone_length=@side_zone_length;neighbour_reach=@neighbour_reach;selection=@selection"
+          }
+        ],
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "judged",
+                "expression": {
+                  "kind": "literal",
+                  "value": {
+                    "type": "integer",
+                    "value": 1
+                  },
+                  "label": "the bay is judged"
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "judged",
+              "rounding": []
+            },
+            "fail": "",
+            "undecided": "",
+            "checks": [
+              {
+                "values": [],
+                "decision": {
+                  "kind": "items",
+                  "applies": {},
+                  "list": "parking_bay;min_width=@min_width;max_width=@max_width;min_length=@min_length;max_length=@max_length;min_height=@min_height;max_height=@max_height;aisles=@aisles;aisle_reach=@aisle_reach;orientation=@orientation;angle_tolerance=@angle_tolerance;obstacles=@obstacles;obstruction_reach=@obstruction_reach;end_obstructions=@end_obstructions;side_obstructions=@side_obstructions;applies_when=@applies_when;orientations=@orientations;end_states=@end_states;side_states=@side_states;side_zone_length=@side_zone_length;neighbour_reach=@neighbour_reach;selection=@selection",
+                  "refused": "{why}",
+                  "checks": [
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "field",
+                          "field": "judged",
+                          "value": true
+                        }
+                      ],
+                      "judge": {
+                        "kind": "truth",
+                        "value": "found",
+                        "finding": true
+                      },
+                      "fail": "{message}",
+                      "undecided": "{why}",
+                      "related": "related"
+                    },
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "field",
+                          "field": "counting",
+                          "value": true
+                        }
+                      ],
+                      "judge": {
+                        "kind": "range",
+                        "value": "count",
+                        "unit": "count",
+                        "atMost": [
+                          {
+                            "name": "allowed",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "value",
+                                    "name": "allowed"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "allowance": {
+                          "kind": "none"
+                        },
+                        "grade": false,
+                        "null": {
+                          "kind": "skip"
+                        }
+                      },
+                      "fail": "{found_words}",
+                      "undecided": "{open_words}",
+                      "related": "related"
+                    },
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "field",
+                          "field": "sized",
+                          "value": true
+                        }
+                      ],
+                      "judge": {
+                        "kind": "range",
+                        "value": "size",
+                        "unit": "length",
+                        "atLeast": [
+                          {
+                            "name": "least",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "value",
+                                    "name": "low"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "atMost": [
+                          {
+                            "name": "most",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "value",
+                                    "name": "high"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "allowance": {
+                          "kind": "none"
+                        },
+                        "grade": false,
+                        "null": {
+                          "kind": "skip"
+                        }
+                      },
+                      "fail": "{measured}; {bound:plain} m{suffix}",
+                      "undecided": "{measured}, which straddles {bound:plain} m{later}",
+                      "effects": [
+                        {
+                          "when": [
+                            {
+                              "kind": "field",
+                              "field": "doubtful",
+                              "value": true
+                            }
+                          ],
+                          "on": "fail",
+                          "message": "{measured}; {bound:plain} m, if the bound applies to it: {applies_why}"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "fail": "",
+                "undecided": ""
+              }
+            ]
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "aggregate",
+                  "function": "none",
+                  "over": {
+                    "kind": "measured",
+                    "name": "parking_bay;min_width=@min_width;max_width=@max_width;min_length=@min_length;max_length=@max_length;min_height=@min_height;max_height=@max_height;aisles=@aisles;aisle_reach=@aisle_reach;orientation=@orientation;angle_tolerance=@angle_tolerance;obstacles=@obstacles;obstruction_reach=@obstruction_reach;end_obstructions=@end_obstructions;side_obstructions=@side_obstructions;applies_when=@applies_when;orientations=@orientations;end_states=@end_states;side_states=@side_states;side_zone_length=@side_zone_length;neighbour_reach=@neighbour_reach;selection=@selection"
+                  },
+                  "value": {
+                    "kind": "not",
+                    "operand": {
+                      "kind": "and",
+                      "operands": [
+                        {
+                          "kind": "not",
+                          "operand": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "found"
+                          }
+                        },
+                        {
+                          "kind": "compare",
+                          "operator": "lessThanOrEquals",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "count"
+                          },
+                          "right": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "allowed"
+                          }
+                        },
+                        {
+                          "kind": "compare",
+                          "operator": "greaterThanOrEquals",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "size"
+                          },
+                          "right": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "low"
+                          }
+                        },
+                        {
+                          "kind": "compare",
+                          "operator": "lessThanOrEquals",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "size"
+                          },
+                          "right": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "high"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "label": "no item fails"
+                },
+                {
+                  "kind": "isDefined",
+                  "operand": {
+                    "kind": "literal",
+                    "value": {
+                      "type": "integer",
+                      "value": 1
+                    },
+                    "label": "the bay is judged"
+                  },
+                  "label": "read"
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.aggregate",
+                      "label": "no item fails",
+                      "fields": {
+                        "function": "none"
+                      },
+                      "inputs": {
+                        "over": {
+                          "block": {
+                            "type": "members.parking_bay",
+                            "fields": {
+                              "aisle_reach": "@aisle_reach",
+                              "aisles": "@aisles",
+                              "angle_tolerance": "@angle_tolerance",
+                              "applies_when": "@applies_when",
+                              "end_obstructions": "@end_obstructions",
+                              "end_states": "@end_states",
+                              "max_height": "@max_height",
+                              "max_length": "@max_length",
+                              "max_width": "@max_width",
+                              "min_height": "@min_height",
+                              "min_length": "@min_length",
+                              "min_width": "@min_width",
+                              "neighbour_reach": "@neighbour_reach",
+                              "obstacles": "@obstacles",
+                              "obstruction_reach": "@obstruction_reach",
+                              "orientation": "@orientation",
+                              "orientations": "@orientations",
+                              "selection": "@selection",
+                              "side_obstructions": "@side_obstructions",
+                              "side_states": "@side_states",
+                              "side_zone_length": "@side_zone_length"
+                            }
+                          }
+                        },
+                        "value": {
+                          "block": {
+                            "type": "expression.not",
+                            "inputs": {
+                              "operand": {
+                                "block": {
+                                  "type": "expression.and",
+                                  "inputs": {
+                                    "operands": {
+                                      "blocks": [
+                                        {
+                                          "type": "expression.not",
+                                          "inputs": {
+                                            "operand": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "found",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "type": "expression.compare",
+                                          "fields": {
+                                            "operator": "lessThanOrEquals"
+                                          },
+                                          "inputs": {
+                                            "left": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "count",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "allowed",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "type": "expression.compare",
+                                          "fields": {
+                                            "operator": "greaterThanOrEquals"
+                                          },
+                                          "inputs": {
+                                            "left": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "size",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "low",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "type": "expression.compare",
+                                          "fields": {
+                                            "operator": "lessThanOrEquals"
+                                          },
+                                          "inputs": {
+                                            "left": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "size",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "high",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.isDefined",
+                      "label": "read",
+                      "inputs": {
+                        "operand": {
+                          "block": {
+                            "type": "expression.literal",
+                            "label": "the bay is judged",
+                            "fields": {
+                              "value": {
+                                "type": "integer",
+                                "value": 1
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.plan-area",
@@ -85599,6 +86043,904 @@
             {
               "language": "de",
               "text": "Der Abstand des Paars im Grundriss, nächste Punkte zueinander."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
+      "name": "parking_bay",
+      "parameters": [
+        {
+          "key": "min_width",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The least width of a bay, if any."
+            },
+            {
+              "language": "de",
+              "text": "Die kleinste Breite eines Stellplatzes, falls angegeben."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "max_width",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The greatest width of a bay, if any."
+            },
+            {
+              "language": "de",
+              "text": "Die größte Breite eines Stellplatzes, falls angegeben."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "min_length",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The least length of a bay, if any."
+            },
+            {
+              "language": "de",
+              "text": "Die kleinste Länge eines Stellplatzes, falls angegeben."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "max_length",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The greatest length of a bay, if any."
+            },
+            {
+              "language": "de",
+              "text": "Die größte Länge eines Stellplatzes, falls angegeben."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "min_height",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The least height of a bay, if any."
+            },
+            {
+              "language": "de",
+              "text": "Die kleinste Höhe eines Stellplatzes, falls angegeben."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "max_height",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The greatest height of a bay, if any."
+            },
+            {
+              "language": "de",
+              "text": "Die größte Höhe eines Stellplatzes, falls angegeben."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "aisles",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The aisles a bay's orientation is read against."
+            },
+            {
+              "language": "de",
+              "text": "Die Fahrgassen, gegen die die Ausrichtung eines Stellplatzes gelesen wird."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "aisle_reach",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "How far from the bay an aisle may lie."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit vom Stellplatz eine Fahrgasse liegen darf."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "orientation",
+          "kind": {
+            "type": "pattern"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The orientation a bay must have to an aisle, as the rule states it."
+            },
+            {
+              "language": "de",
+              "text": "Die Ausrichtung, die ein Stellplatz zu einer Fahrgasse haben muss, wie die Regel sie angibt."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "angle_tolerance",
+          "kind": {
+            "type": "angle",
+            "below": 45.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "How far from parallel or perpendicular axes may lie, in degrees."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit Achsen von parallel oder rechtwinklig abweichen dürfen, in Grad."
+            }
+          ],
+          "references": "angle"
+        },
+        {
+          "key": "obstacles",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects that may obstruct a bay."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, die einen Stellplatz behindern können."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "obstruction_reach",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "How far from the bay an obstacle may lie."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit vom Stellplatz ein Hindernis liegen darf."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "end_obstructions",
+          "kind": {
+            "type": "pattern"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "How many ends may be obstructed, as the rule states it."
+            },
+            {
+              "language": "de",
+              "text": "Wie viele Enden behindert sein dürfen, wie die Regel es angibt."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "side_obstructions",
+          "kind": {
+            "type": "pattern"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "How many sides may be obstructed, as the rule states it."
+            },
+            {
+              "language": "de",
+              "text": "Wie viele Seiten behindert sein dürfen, wie die Regel es angibt."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "applies_when",
+          "kind": {
+            "type": "pattern"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether orientation and obstructions are findings or select the bays the sizes apply to."
+            },
+            {
+              "language": "de",
+              "text": "Ob Ausrichtung und Behinderungen Befunde sind oder die Stellplätze wählen, für die die Größen gelten."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "orientations",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The orientation states the sizes apply to, as the rule lists them."
+            },
+            {
+              "language": "de",
+              "text": "Die Ausrichtungszustände, für die die Größen gelten, wie die Regel sie aufzählt."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "end_states",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The obstructed ends the sizes apply to, as the rule lists them."
+            },
+            {
+              "language": "de",
+              "text": "Die behinderten Enden, für die die Größen gelten, wie die Regel sie aufzählt."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "side_states",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The obstructed sides the sizes apply to, as the rule lists them."
+            },
+            {
+              "language": "de",
+              "text": "Die behinderten Seiten, für die die Größen gelten, wie die Regel sie aufzählt."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "side_zone_length",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The central stretch of a side an obstruction must overlap."
+            },
+            {
+              "language": "de",
+              "text": "Der mittlere Abschnitt einer Seite, den eine Behinderung überlappen muss."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "neighbour_reach",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "How far from the bay a neighbouring bay may lie."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit vom Stellplatz ein benachbarter Stellplatz liegen darf."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "selection",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's bays (`@selection`), among which neighbours are read."
+            },
+            {
+              "language": "de",
+              "text": "Die Stellplätze der Regel (`@selection`), unter denen Nachbarn gelesen werden."
+            }
+          ],
+          "references": "selector"
+        }
+      ],
+      "services": [
+        "plan-span",
+        "proximity",
+        "vertical-extent"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "a service is not registered",
+        "the bay's extent cannot be read"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Parking bay"
+        },
+        {
+          "language": "de",
+          "text": "Stellplatz"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "What `parking-bay` judges of a bay: its sizes against their bounds, the obstacles counted within it and at its ends and sides against what is allowed, and its orientation to an aisle."
+        },
+        {
+          "language": "de",
+          "text": "Was `parking-bay` an einem Stellplatz beurteilt: seine Größen gegen ihre Grenzen, die in ihm und an seinen Enden und Seiten gezählten Hindernisse gegen das Erlaubte, und seine Ausrichtung zu einer Fahrgasse."
+        }
+      ],
+      "fields": [
+        {
+          "name": "judged",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Search"
+            },
+            {
+              "language": "de",
+              "text": "Suche"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "True on an item of a search's own answer."
+            },
+            {
+              "language": "de",
+              "text": "Wahr am Element der eigenen Antwort einer Suche."
+            }
+          ]
+        },
+        {
+          "name": "found",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Found"
+            },
+            {
+              "language": "de",
+              "text": "Gefunden"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the search found the bay wanting; refused for why it is undecided."
+            },
+            {
+              "language": "de",
+              "text": "Ob die Suche den Stellplatz mangelhaft fand; verweigert mit dem Grund, warum es offen ist."
+            }
+          ]
+        },
+        {
+          "name": "message",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Words"
+            },
+            {
+              "language": "de",
+              "text": "Worte"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The search's finding, worded."
+            },
+            {
+              "language": "de",
+              "text": "Der Befund der Suche, in Worten."
+            }
+          ]
+        },
+        {
+          "name": "counting",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Count"
+            },
+            {
+              "language": "de",
+              "text": "Zählung"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "True on an item of obstacles counted."
+            },
+            {
+              "language": "de",
+              "text": "Wahr am Element gezählter Hindernisse."
+            }
+          ]
+        },
+        {
+          "name": "count",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Counted"
+            },
+            {
+              "language": "de",
+              "text": "Gezählt"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "From the obstacles or edges surely counted to every one that may be."
+            },
+            {
+              "language": "de",
+              "text": "Von den sicher gezählten Hindernissen oder Kanten bis zu jedem, das es sein kann."
+            }
+          ]
+        },
+        {
+          "name": "allowed",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Allowed"
+            },
+            {
+              "language": "de",
+              "text": "Erlaubt"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "How many are allowed."
+            },
+            {
+              "language": "de",
+              "text": "Wie viele erlaubt sind."
+            }
+          ]
+        },
+        {
+          "name": "found_words",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Finding"
+            },
+            {
+              "language": "de",
+              "text": "Befund"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Words of a finding."
+            },
+            {
+              "language": "de",
+              "text": "Worte eines Befunds."
+            }
+          ]
+        },
+        {
+          "name": "open_words",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Doubt"
+            },
+            {
+              "language": "de",
+              "text": "Zweifel"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Words of a doubt."
+            },
+            {
+              "language": "de",
+              "text": "Worte eines Zweifels."
+            }
+          ]
+        },
+        {
+          "name": "related",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Related"
+            },
+            {
+              "language": "de",
+              "text": "Bezogen"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects a finding relates."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, auf die ein Befund verweist."
+            }
+          ]
+        },
+        {
+          "name": "sized",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Size"
+            },
+            {
+              "language": "de",
+              "text": "Größe"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "True on an item of a size."
+            },
+            {
+              "language": "de",
+              "text": "Wahr am Element einer Größe."
+            }
+          ]
+        },
+        {
+          "name": "size",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Measured"
+            },
+            {
+              "language": "de",
+              "text": "Gemessen"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The size; refused for why it cannot be measured."
+            },
+            {
+              "language": "de",
+              "text": "Die Größe; verweigert mit dem Grund, warum sie nicht gemessen werden kann."
+            }
+          ]
+        },
+        {
+          "name": "measured",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Words"
+            },
+            {
+              "language": "de",
+              "text": "Worte"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The size, worded."
+            },
+            {
+              "language": "de",
+              "text": "Die Größe, in Worten."
+            }
+          ]
+        },
+        {
+          "name": "low",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Least"
+            },
+            {
+              "language": "de",
+              "text": "Mindestens"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The least size allowed, if any."
+            },
+            {
+              "language": "de",
+              "text": "Die kleinste erlaubte Größe, falls angegeben."
+            }
+          ]
+        },
+        {
+          "name": "high",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Most"
+            },
+            {
+              "language": "de",
+              "text": "Höchstens"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The greatest size allowed, if any."
+            },
+            {
+              "language": "de",
+              "text": "Die größte erlaubte Größe, falls angegeben."
+            }
+          ]
+        },
+        {
+          "name": "suffix",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "States"
+            },
+            {
+              "language": "de",
+              "text": "Zustände"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The states a filtered bay is in, after a finding."
+            },
+            {
+              "language": "de",
+              "text": "Die Zustände eines gefilterten Stellplatzes, nach einem Befund."
+            }
+          ]
+        },
+        {
+          "name": "doubtful",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Doubtful"
+            },
+            {
+              "language": "de",
+              "text": "Zweifelhaft"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the filters may leave the bay out."
+            },
+            {
+              "language": "de",
+              "text": "Ob die Filter den Stellplatz auslassen können."
+            }
+          ]
+        },
+        {
+          "name": "applies_why",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Why"
+            },
+            {
+              "language": "de",
+              "text": "Warum"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Why the filters may leave the bay out."
+            },
+            {
+              "language": "de",
+              "text": "Warum die Filter den Stellplatz auslassen können."
+            }
+          ]
+        },
+        {
+          "name": "later",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Then"
+            },
+            {
+              "language": "de",
+              "text": "Danach"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Why the filters may leave the bay out, after `; `, where they may."
+            },
+            {
+              "language": "de",
+              "text": "Warum die Filter den Stellplatz auslassen können, nach `; `, wo sie es können."
             }
           ]
         }

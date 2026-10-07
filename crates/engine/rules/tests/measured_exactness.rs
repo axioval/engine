@@ -25,6 +25,11 @@ use axioval_ir::{Evidence, Property, PropertyValue, QuantityDimension};
 /// root) and the test.
 const COVERED: &[(&str, &str, &str)] = &[
     (
+        "exit_separation",
+        "tests/exit_separation.rs",
+        "a_separation_measured_approximately_is_inexact",
+    ),
+    (
         "sight_view",
         "tests/component_visibility.rs",
         "a_view_measured_approximately_is_inexact",

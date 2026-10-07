@@ -25,6 +25,11 @@ use common::{
 
 const CAPABILITY: &str = "axioval:capability.exit-separation";
 
+/// The template, held to the implementation it replaced on every
+/// evaluation.
+static HELD: common::Held =
+    common::Held(&ExitSeparation, &axioval_rules::reference::ExitSeparation);
+
 /// The longest diagonal of a 20 x 10 m room.
 fn diagonal() -> f64 {
     500.0_f64.sqrt()
@@ -100,6 +105,8 @@ impl PlanSpanService for Spans {
 struct Plan {
     /// `(subject, counterpart)` -> horizontal distance interval.
     distances: BTreeMap<(String, String), (f64, f64)>,
+    /// Pairs whose distance cannot be measured.
+    unmeasured: Vec<(String, String)>,
 }
 
 impl Plan {
@@ -131,6 +138,9 @@ impl ProximityService for Plan {
             request.subject().local_id.clone(),
             request.counterpart().local_id.clone(),
         );
+        if self.unmeasured.contains(&(a.clone(), b.clone())) {
+            return Err(ProximityError::Unavailable);
+        }
         let (lower, upper) = *self
             .distances
             .get(&(a.clone(), b.clone()))
@@ -187,15 +197,16 @@ fn evaluate(
     plan: Plan,
     extra: Vec<(&'static str, ParameterValue)>,
 ) -> CapabilityEvaluation {
-    model.evaluate_with(
-        &ExitSeparation,
+    let (spans, plan) = (Arc::new(spans), Arc::new(plan));
+    model.evaluate_measured(
+        &HELD,
         &rule(CAPABILITY, kind("space"), parameters(extra)),
-        |services| {
+        move |services| {
             services
-                .register(PlanSpanServiceHandle::new(Arc::new(spans)))
+                .register(PlanSpanServiceHandle::new(spans.clone()))
                 .unwrap();
             services
-                .register(ProximityServiceHandle::new(Arc::new(plan)))
+                .register(ProximityServiceHandle::new(plan.clone()))
                 .unwrap();
         },
     )
@@ -225,16 +236,12 @@ fn two_exits_too_close_in_a_large_room_are_found() {
             id("d2")
         )
     );
+    // The finding cites the measured exits, as exact as the distance and
+    // the diagonal they rest on.
     let finding = &evaluation.findings()[0];
-    let locators: Vec<&str> = finding
-        .evidence
-        .iter()
-        .map(|evidence| evidence.locator.as_str())
-        .collect();
-    assert!(locators.contains(&"distance:d1:d2"), "{locators:?}");
     assert!(
-        locators.contains(&format!("plan-diameter:{}", id("hall")).as_str()),
-        "{locators:?}"
+        finding.evidence.iter().all(|evidence| evidence.exact),
+        "{finding:?}"
     );
     assert_eq!(finding.related, vec![id("d1"), id("d2")]);
     assert!(unevaluated(&evaluation).is_empty());
@@ -609,12 +616,13 @@ fn tagged_door() -> Selector {
 fn an_undecided_exit_can_only_add_pairs() {
     // d1 and d2 are tagged exits; whether d3 is one cannot be read.
     let run_tagged = |plan: Plan, pairs: &str| {
+        let plan = Arc::new(plan);
         three_doors()
             .value("d1", "Exit", "IsExit", PropertyValue::Boolean(true))
             .value("d2", "Exit", "IsExit", PropertyValue::Boolean(true))
             .unreadable("d3")
-            .evaluate_with(
-                &ExitSeparation,
+            .evaluate_measured(
+                &HELD,
                 &rule(
                     CAPABILITY,
                     kind("space"),
@@ -624,12 +632,12 @@ fn an_undecided_exit_can_only_add_pairs() {
                         ("pairs", string(pairs)),
                     ],
                 ),
-                |services| {
+                move |services| {
                     services
                         .register(PlanSpanServiceHandle::new(Arc::new(hall())))
                         .unwrap();
                     services
-                        .register(ProximityServiceHandle::new(Arc::new(plan)))
+                        .register(ProximityServiceHandle::new(plan.clone()))
                         .unwrap();
                 },
             )
@@ -683,9 +691,10 @@ fn a_tessellated_separation_straddling_the_requirement_is_not_evaluated() {
 
 #[test]
 fn missing_services_and_measurements_are_not_evaluated() {
-    let evaluation = model().evaluate(
-        &ExitSeparation,
+    let evaluation = model().evaluate_measured(
+        &HELD,
         &rule(CAPABILITY, kind("space"), parameters(vec![])),
+        |_| {},
     );
     assert_eq!(
         unevaluated(&evaluation),
@@ -708,7 +717,7 @@ fn invalid_declarations_refuse_the_rule() {
         ),
         (
             vec![("flagged_fraction", number(0.3))],
-            "`flagged_fraction` needs `flag`",
+            "`flagged_fraction` needs `flag` or `flag_sources`",
         ),
         (
             vec![("fraction", number(0.0))],
@@ -724,7 +733,7 @@ fn invalid_declarations_refuse_the_rule() {
                 both.push(("flag", property(Some("Fire"), "Sprinklered")));
                 both
             },
-            "not both",
+            "declare either `flag` (with `flag_path`) or `flag_sources`, not both",
         ),
         (
             vec![
@@ -733,8 +742,14 @@ fn invalid_declarations_refuse_the_rule() {
             ],
             "`flag_sources` has no rows",
         ),
-        (vec![("separation", string("edges"))], "separation `edges`"),
-        (vec![("pairs", string("some"))], "pairs `some`"),
+        (
+            vec![("separation", string("edges"))],
+            "separation `edges` is unsupported",
+        ),
+        (
+            vec![("pairs", string("some"))],
+            "pairs `some` is unsupported",
+        ),
         (
             vec![("minimum_exits", integer(0))],
             "`minimum_exits` must be at least one",
@@ -747,10 +762,7 @@ fn invalid_declarations_refuse_the_rule() {
             outcomes[0].reason(),
             &NotEvaluatedReason::InvalidDeclaration
         );
-        assert!(
-            outcomes[0].message().contains(needle),
-            "{needle}: {outcomes:?}"
-        );
+        assert_eq!(outcomes[0].message(), format!("exit-separation: {needle}"));
     }
 }
 
@@ -1109,4 +1121,120 @@ fn missing_services_leave_the_expression_open_too() {
     );
     assert!(parity.holds(), "{}", parity.diff());
     assert_eq!(parity.open, 1);
+}
+
+/// Generated rooms: up to four doors, each a tagged exit, an untagged door
+/// or one whose tag cannot be read, every pair at a distance (exact,
+/// tessellated or not measured), the room's diagonal exact, an interval or
+/// unmeasured, under every pair mode, minimum and flag (stated, unstated
+/// with or without a default, unreadable); each held to the implementation
+/// the template replaced.
+#[test]
+fn generated_rooms_hold_parity() {
+    let apart = [
+        Some((2.0, 2.0)),
+        Some((9.0, 9.0)),
+        Some((10.9, 11.5)),
+        Some((13.0, 13.0)),
+        None,
+    ];
+    let mut judged = 0;
+    for doors in 0..=4_usize {
+        for pattern in 0..24_usize {
+            let mut model = Model::default()
+                .object("level", "storey")
+                .object("hall", "space")
+                .edge("contains", "level", "hall");
+            let mut plan = Plan::default();
+            for door in 0..doors {
+                let name = format!("d{door}");
+                model = model.object(&name, "door").edge("bounds", &name, "hall");
+                model = match (pattern + door) % 5 {
+                    0 => model.unreadable(&name),
+                    1 => model,
+                    _ => model.value(&name, "Exit", "IsExit", PropertyValue::Boolean(true)),
+                };
+                for other in 0..door {
+                    let (a, b) = (format!("d{other}"), name.clone());
+                    match apart[(pattern * 7 + door * 3 + other) % apart.len()] {
+                        Some((lower, upper)) => plan = plan.apart(&a, &b, lower, upper),
+                        None => plan.unmeasured.push((a, b)),
+                    }
+                }
+            }
+            model = match pattern % 4 {
+                0 => model.value("level", "Fire", "Sprinklered", PropertyValue::Boolean(true)),
+                1 => model.value(
+                    "level",
+                    "Fire",
+                    "Sprinklered",
+                    PropertyValue::Boolean(false),
+                ),
+                2 => model.unreadable("level"),
+                _ => model,
+            };
+            let spans = match pattern % 3 {
+                0 => hall(),
+                1 => Spans::default().diameter("hall", diagonal() - 0.5, diagonal() + 0.5),
+                _ => Spans::default(),
+            };
+            let plan = Arc::new(plan);
+            let spans = Arc::new(spans);
+            for pairs in ["any", "all"] {
+                for minimum in [None, Some(2), Some(3)] {
+                    for flag in 0..3 {
+                        let mut extra = vec![
+                            ("exit_path", strings(&["bounds:backward"])),
+                            ("exit_selector", selector(tagged_door())),
+                            ("pairs", string(pairs)),
+                        ];
+                        if let Some(minimum) = minimum {
+                            extra.push(("minimum_exits", integer(minimum)));
+                        }
+                        match flag {
+                            0 => extra.extend(sprinklered()),
+                            1 => extra.extend(sprinklered_anywhere(Some(false))),
+                            _ => {}
+                        }
+                        let (plan, spans) = (plan.clone(), spans.clone());
+                        let evaluation = model.clone().evaluate_measured(
+                            &HELD,
+                            &rule(CAPABILITY, kind("space"), extra),
+                            move |services| {
+                                services
+                                    .register(PlanSpanServiceHandle::new(spans.clone()))
+                                    .unwrap();
+                                services
+                                    .register(ProximityServiceHandle::new(plan.clone()))
+                                    .unwrap();
+                            },
+                        );
+                        judged +=
+                            evaluation.findings().len() + evaluation.not_evaluated_outcomes().len();
+                    }
+                }
+            }
+        }
+    }
+    assert!(judged > 0);
+}
+
+/// Exits measured only approximately are cited as inexact, as the
+/// capability cited them.
+#[test]
+fn a_separation_measured_approximately_is_inexact() {
+    let evaluation = evaluate(
+        model(),
+        hall(),
+        Plan::default().apart("d1", "d2", 2.0, 2.2),
+        vec![],
+    );
+    assert_eq!(common::flagged(&evaluation), ["hall"]);
+    assert!(
+        evaluation.findings()[0]
+            .evidence
+            .iter()
+            .any(|evidence| !evidence.exact),
+        "{evaluation:#?}"
+    );
 }

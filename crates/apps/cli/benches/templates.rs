@@ -243,6 +243,11 @@ const PAIRS: &[Pair] = &[
         reference: |registry| registry.replace(axioval::rules::reference::ComponentVisibility),
     },
     Pair {
+        capability: "axioval:capability.exit-separation",
+        case: "spans",
+        reference: |registry| registry.replace(axioval::rules::reference::ExitSeparation),
+    },
+    Pair {
         capability: "axioval:capability.coordinate-consistency",
         case: "storeys",
         reference: |registry| {

@@ -41,8 +41,9 @@ a value without an upper bound
 the first of the plan-span capabilities
 ([#283](https://github.com/axioval/engine/issues/283)), judging the items
 of a measured list against a row its provider selects from the rule's
-table, and `light-well`, `centre-line-distance` and `component-visibility`
-follow; `coordinate-consistency` is the first judging the sources themselves,
+table, and `light-well`, `centre-line-distance`, `component-visibility`
+and `exit-separation` (whose required separation stays an interval over
+both shares where its flag is unknown) follow; `coordinate-consistency` is the first judging the sources themselves,
 against a reference read once per rule, and `external-wall-validation`
 the first leading one measurement to outcomes at source and at object
 level ([#291](https://github.com/axioval/engine/issues/291)): every
@@ -1271,6 +1272,42 @@ view, none allowed: {seen}`. Services missing and an eye that is not a
 point leave each component open, as the view reports them. The
 declaration keeps the capability's checks, words and order (`holds` for a
 positive minimum).
+
+### `exit-separation`
+
+| Form | When | Values | Checks |
+| --- | --- | --- | --- |
+| one | always | `judged` = 1 | `Items` over `exit_separation;exit_path=@exit_path;exit_selector=@exit_selector;…;minimum_exits=@minimum_exits` (every parameter under its own name, unstated ones dropped): the count item's `exits` at least `minimum_exits`; the separation item's `separation` at least its `required` |
+
+The list is the capability's own reading (`Reached`, `Measured`): the
+exits `exit_path` reaches among the objects `exit_selector` picks, those it
+leaves undecided possible exits, the longest plan diagonal, the share the
+flag selects and every pair of the sure exits. Where the rule declares
+`minimum_exits`, a first item counts the exits from the sure to the
+possible (`exits`): fewer possible than required is a finding (`has
+{possible:count} exit(s) via {relation}; at least {minimum_exits:count}
+required`), fewer sure is open, and then nothing else is judged. With two
+exits that may be, a second item states the separation of the pairs, the
+greatest for `pairs` `any` and the least for `all` (`null` where none is
+measured, undecided with fewer than two sure exits), against `required`,
+the share of the diagonal as an interval: where the flag is unknown it
+spans both shares, so a verdict stands only where both agree (D10); never a
+default. The range judge fails a separation surely below the interval's
+lower end and passes one at least its upper end. A pass under `all`, or a
+failure under `any`, that pairs not measured or undecided exits may change
+is open (`undecided_pass`, `undecided_fail`, through an effect and the
+`otherwise` test), and a space surely short of exits keeps its count
+finding alone: what the separation leaves open passes there (`short`, the
+`straddled` and `otherwise` tests and the `null` effect). Findings read
+`{failed}; {requirement}` (`exits d1 and d2 are 2 m apart between closest
+points; required at least 11.1803 m (0.5 × the longest plan diagonal of
+22.3607 m)`, or `no two of its 3 exits are far enough apart: …`) and relate
+the pairs too close and the objects the flag was read on; an open space
+reads `{open} ({requirement})`. A path that cannot be read, a missing
+service, a diagonal that cannot be measured and a flag holder outside the
+project refuse the list for their reason. The declaration is the
+capability's own (`arguments`, `exit_separation::check_arguments`), refused
+once for the rule.
 ### `coordinate-consistency`
 
 | Form | When | Once | Scopes | Decision |
@@ -2016,6 +2053,17 @@ by a wall or by a pillar of undecided selection, or undecided, some
 answered approximately, under either mode and many minimums; and by the
 `component-visibility` rules of the `proximity` case, recorded before the
 switch. It is never forked (D29).
+
+`exit-separation` is held to `exit_separation/reference.rs`
+(`axioval_rules::reference::ExitSeparation`, which reaches and measures
+through the same `Reached` and `Measured`) through `common::Held` on every
+fixture of `tests/exit_separation.rs`, its messages and refusals asserted
+literally; by generated rooms of up to four doors, tagged, untagged or of
+unreadable tag, at exact, tessellated or unmeasured distances, under exact,
+interval or missing diagonals, every pair mode, minimum and flag (stated
+true or false, unreadable, unstated with a default); and by the
+`exit-separation` rules of the `spans` case, recorded before the switch.
+It is never forked (D31).
 `coordinate-consistency` is held to `coordinate_consistency/reference.rs`
 (`axioval_rules::reference::CoordinateConsistencyCheck`, which shares the
 comparison and the choice of the reference) through `common::Held` on

@@ -382,18 +382,21 @@
     "exit_separation::measure_pairs::measure_distance": {
       "count": 1,
       "providedBy": [
-        "exit_pairs"
+        "exit_pairs",
+        "exit_separation"
       ]
     },
     "exit_separation::measure_pairs::measure_span": {
       "count": 1,
       "providedBy": [
-        "exit_pairs"
+        "exit_pairs",
+        "exit_separation"
       ]
     },
-    "exit_separation::separation::measure_diameter": {
+    "exit_separation::of::measure_diameter": {
       "count": 1,
       "providedBy": [
+        "exit_separation",
         "plan_diameter"
       ]
     },

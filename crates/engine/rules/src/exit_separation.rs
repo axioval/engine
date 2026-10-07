@@ -25,22 +25,32 @@
 //! pairs: a verdict stands only when they cannot change it.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::LazyLock;
 
+use axioval_engine::template::Template;
 use axioval_engine::{
     CapabilityEvaluation, ColumnKind, CompiledRule, NotEvaluatedReason, ParameterDescriptor,
-    ParameterType, PlanSpan, PlanSpanError, PlanSpanServiceHandle, ProximityProjection,
+    ParameterType, PlanLength, PlanSpan, PlanSpanError, PlanSpanServiceHandle, ProximityProjection,
     ProximityRequest, ProximityServiceHandle, RuleCapability, RuleContext, TableColumn,
 };
-use axioval_ir::contract::Selector;
-use axioval_ir::{Evidence, Finding, Object, ObjectId, PropertyValue};
+use axioval_ir::contract::{ParameterValue, Selector};
+use axioval_ir::{Evidence, Object, ObjectId, PropertyValue};
 
 use crate::plan_area::shown;
-use crate::selection::{Selection, select_objects, selector_matches};
+use crate::selection::{Selection, selector_matches};
 use crate::support::table::Row;
 use crate::support::{
-    Parameters, PropertyRef, Resolved, Traversal, Unavailable, display, finding, invalid, resolve,
-    undefined,
+    Parameters, PropertyRef, Resolved, Traversal, Unavailable, display, invalid, resolve, undefined,
 };
+
+mod measured;
+#[cfg(feature = "parity-reference")]
+pub(crate) mod reference;
+mod template;
+
+pub(crate) use measured::ExitMeasures;
+
+pub(crate) const NAME: &str = "exit-separation";
 
 const FLAG_SOURCE_COLUMNS: &[TableColumn] = &[
     TableColumn::optional("property_set", ColumnKind::String),
@@ -49,7 +59,17 @@ const FLAG_SOURCE_COLUMNS: &[TableColumn] = &[
 ];
 
 /// Requires each selected space's exits to lie far enough apart for its size.
+///
+/// It runs as a template ([`axioval_engine::template`]): the items of the
+/// measured `exit_separation` list, the count of a space's exits and the
+/// separation of their pairs against the share of its diagonal they must
+/// lie apart, judged by the rule's minimum and the required separation.
 pub struct ExitSeparation;
+
+static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
+
+/// The plans of the rules bound to it, kept across runs.
+static PLANS: crate::templates::Plans = crate::templates::Plans::new();
 
 /// Between which points of two exits a separation is measured.
 #[derive(Clone, Copy)]
@@ -59,7 +79,7 @@ pub(crate) enum Separation {
 }
 
 impl Separation {
-    fn describe(self) -> &'static str {
+    pub(crate) fn describe(self) -> &'static str {
         match self {
             Self::Closest => "between closest points",
             Self::Span(PlanSpan::Centres) => "between centres",
@@ -70,13 +90,13 @@ impl Separation {
 
 /// Which pairs of exits must lie far enough apart.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Pairs {
+pub(crate) enum Pairs {
     Any,
     All,
 }
 
 /// The flag that selects the second fraction, and where it is read.
-struct Flag<'a> {
+pub(crate) struct Flag<'a> {
     /// Where the flag is read, in order: the first that states a value
     /// decides.
     sources: Vec<FlagSource<'a>>,
@@ -87,7 +107,7 @@ struct Flag<'a> {
 
 /// One place the flag is read: a property of the space, or of the objects
 /// a path reaches from it.
-struct FlagSource<'a> {
+pub(crate) struct FlagSource<'a> {
     property: PropertyRef<'a>,
     /// The path's steps, validated when declared.
     path: Option<Vec<String>>,
@@ -195,14 +215,15 @@ fn flag<'a>(parameters: &Parameters<'a>) -> Result<Option<Flag<'a>>, Unavailable
     }
 }
 
-struct Declaration<'a> {
-    exits: Traversal,
-    exit_selector: &'a Selector,
-    fraction: f64,
-    flag: Option<Flag<'a>>,
-    separation: Separation,
-    pairs: Pairs,
-    minimum_exits: Option<usize>,
+pub(crate) struct Declaration<'a> {
+    pub(crate) exits: Traversal,
+    /// The exit selector, where the declaration was read from a rule.
+    pub(crate) exit_selector: Option<&'a Selector>,
+    pub(crate) fraction: f64,
+    pub(crate) flag: Option<Flag<'a>>,
+    pub(crate) separation: Separation,
+    pub(crate) pairs: Pairs,
+    pub(crate) minimum_exits: Option<usize>,
 }
 
 fn fraction(parameters: &Parameters<'_>, name: &str) -> Result<Option<f64>, Unavailable> {
@@ -214,15 +235,24 @@ fn fraction(parameters: &Parameters<'_>, name: &str) -> Result<Option<f64>, Unav
     }
 }
 
-fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
-    let parameters = Parameters(rule);
+/// The rule's declaration, read and refused as the capability always read
+/// it; the exit selector too where `selector` holds (a measured list is
+/// handed the objects it picks instead).
+pub(crate) fn declaration<'a>(
+    parameters: &Parameters<'a>,
+    selector: bool,
+) -> Result<Declaration<'a>, Unavailable> {
     let exits = Traversal::path(
         parameters
             .strings("exit_path")?
             .ok_or_else(|| invalid("parameter `exit_path` is required"))?,
     )?;
-    let exit_selector = parameters.required_selector("exit_selector")?;
-    let flag = flag(&parameters)?;
+    let exit_selector = if selector {
+        Some(parameters.required_selector("exit_selector")?)
+    } else {
+        None
+    };
+    let flag = flag(parameters)?;
     let separation = match parameters.string("separation")?.unwrap_or("closest") {
         "closest" => Separation::Closest,
         "centres" => Separation::Span(PlanSpan::Centres),
@@ -246,7 +276,7 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
     Ok(Declaration {
         exits,
         exit_selector,
-        fraction: fraction(&parameters, "fraction")?.unwrap_or(0.5),
+        fraction: fraction(parameters, "fraction")?.unwrap_or(0.5),
         flag,
         separation,
         pairs,
@@ -254,53 +284,49 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
     })
 }
 
+/// Checks the rule parameters the measured `exit_separation` is handed, as
+/// the rule states them: the capability's declaration, in its order and
+/// words.
+pub(crate) fn check_arguments(
+    arguments: &BTreeMap<String, ParameterValue>,
+) -> Result<(), Unavailable> {
+    let rule = crate::light_area::synthesised(arguments.clone());
+    declaration(&Parameters(&rule), true).map(|_| ())
+}
+
 impl RuleCapability for ExitSeparation {
     fn id(&self) -> &'static str {
-        "axioval:capability.exit-separation"
+        template::ID
     }
 
     fn parameters(&self) -> Vec<ParameterDescriptor> {
-        vec![
-            ParameterDescriptor::required("exit_path", ParameterType::StringList),
-            ParameterDescriptor::required("exit_selector", ParameterType::Selector),
-            ParameterDescriptor::optional("fraction", ParameterType::Number),
-            ParameterDescriptor::optional("flag", ParameterType::PropertyReference),
-            ParameterDescriptor::optional("flag_path", ParameterType::StringList),
-            ParameterDescriptor::optional("flagged_fraction", ParameterType::Number),
-            ParameterDescriptor::optional(
-                "flag_sources",
-                ParameterType::Table(FLAG_SOURCE_COLUMNS),
-            ),
-            ParameterDescriptor::optional("flag_default", ParameterType::Boolean),
-            ParameterDescriptor::optional("separation", ParameterType::String),
-            ParameterDescriptor::optional("pairs", ParameterType::String),
-            ParameterDescriptor::optional("minimum_exits", ParameterType::Integer),
-        ]
+        TEMPLATE.parameters.clone()
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
-        let declared = match declaration(rule) {
-            Ok(declared) => declared,
-            Err((reason, message)) => {
-                return CapabilityEvaluation::not_evaluated(
-                    reason,
-                    format!("exit-separation: {message}"),
-                );
-            }
-        };
-        let candidates = Candidates::select(context, declared.exit_selector);
-        let (spaces, mut evaluation) = select_objects(context, &rule.selector);
-        for space in spaces {
-            let found = check(context, rule, &declared, &candidates, space);
-            for finding in found.findings {
-                evaluation.push_finding(finding);
-            }
-            if let Some((reason, message)) = found.unevaluated {
-                evaluation.push_object_not_evaluated(space.id.clone(), reason, message);
-            }
-        }
-        evaluation
+        crate::templates::run((&TEMPLATE, &PLANS), context, rule)
     }
+
+    fn template(&self) -> Option<&Template> {
+        Some(&TEMPLATE)
+    }
+}
+
+/// The capability's parameter descriptor.
+pub(crate) fn parameters() -> Vec<ParameterDescriptor> {
+    vec![
+        ParameterDescriptor::required("exit_path", ParameterType::StringList),
+        ParameterDescriptor::required("exit_selector", ParameterType::Selector),
+        ParameterDescriptor::optional("fraction", ParameterType::Number),
+        ParameterDescriptor::optional("flag", ParameterType::PropertyReference),
+        ParameterDescriptor::optional("flag_path", ParameterType::StringList),
+        ParameterDescriptor::optional("flagged_fraction", ParameterType::Number),
+        ParameterDescriptor::optional("flag_sources", ParameterType::Table(FLAG_SOURCE_COLUMNS)),
+        ParameterDescriptor::optional("flag_default", ParameterType::Boolean),
+        ParameterDescriptor::optional("separation", ParameterType::String),
+        ParameterDescriptor::optional("pairs", ParameterType::String),
+        ParameterDescriptor::optional("minimum_exits", ParameterType::Integer),
+    ]
 }
 
 /// The objects `exit_selector` picks, and those it cannot decide. Shared
@@ -331,12 +357,109 @@ impl<'a> Candidates<'a> {
     }
 }
 
-/// What checking one space found: findings that stand, and why the rest
-/// could not be decided.
-#[derive(Default)]
-struct Checked {
-    findings: Vec<Finding>,
-    unevaluated: Option<Unavailable>,
+/// The exits a space reaches: those surely exits, those whose selection is
+/// undecided, and the evidence of the path reaching them.
+pub(crate) struct Reached {
+    pub(crate) exits: Vec<ObjectId>,
+    pub(crate) maybe: Vec<ObjectId>,
+    pub(crate) evidence: Vec<Evidence>,
+}
+
+impl Reached {
+    /// The exits `space` reaches along the declared path among
+    /// `universe`, those in `undecided` possible exits.
+    pub(crate) fn of(
+        context: &RuleContext<'_>,
+        exits: &Traversal,
+        (universe, undecided): (&[ObjectId], &BTreeMap<ObjectId, String>),
+        space: &Object,
+    ) -> Result<Self, Unavailable> {
+        let (reached, evidence) = exits.related_ids(context, &space.id, universe)?;
+        let (maybe, exits): (Vec<ObjectId>, Vec<ObjectId>) = reached
+            .into_iter()
+            .partition(|exit| undecided.contains_key(exit));
+        Ok(Self {
+            exits,
+            maybe,
+            evidence,
+        })
+    }
+
+    /// Why each possible exit is undecided, joined `; `.
+    pub(crate) fn undecided(&self, why: &BTreeMap<ObjectId, String>) -> String {
+        self.maybe
+            .iter()
+            .map(|exit| format!("whether {exit} is an exit is undecided: {}", why[exit]))
+            .collect::<Vec<_>>()
+            .join("; ")
+    }
+}
+
+/// What a space's separation is judged on: its longest plan diagonal, the
+/// share of it that applies (an interval over both shares where the flag
+/// is unknown) with the note naming the flag, the objects the flag was read
+/// on, and every pair of its sure exits with its separation.
+pub(crate) struct Measured {
+    pub(crate) diameter: PlanLength,
+    pub(crate) fractions: (f64, f64),
+    pub(crate) flag_note: String,
+    pub(crate) related: BTreeSet<ObjectId>,
+    pub(crate) pairs: Vec<Pair>,
+}
+
+impl Measured {
+    /// Measures the separation of `exits`, in identity order, as the
+    /// capability measured it; the flag's evidence joins `evidence`.
+    pub(crate) fn of(
+        context: &RuleContext<'_>,
+        declared: &Declaration<'_>,
+        space: &Object,
+        exits: &[ObjectId],
+        evidence: &mut Vec<Evidence>,
+    ) -> Result<Self, Unavailable> {
+        let spans = context
+            .services
+            .get::<PlanSpanServiceHandle>()
+            .ok_or_else(|| {
+                (
+                    NotEvaluatedReason::MissingService,
+                    "plan-span service is not registered".to_owned(),
+                )
+            })?;
+        let diameter = spans
+            .measure_diameter(&space.id)
+            .map_err(|error| span_unavailable(&error))?;
+        let mut related = BTreeSet::new();
+        let (fractions, flag_note) = fractions(context, declared, space, evidence, &mut related)?;
+        let pairs = measure_pairs(context, spans, declared.separation, exits)?;
+        Ok(Self {
+            diameter,
+            fractions,
+            flag_note,
+            related,
+            pairs,
+        })
+    }
+
+    /// The separation required: the share of the diagonal, an interval.
+    pub(crate) fn required(&self) -> (f64, f64) {
+        (
+            self.fractions.0 * self.diameter.lower_metres(),
+            self.fractions.1 * self.diameter.upper_metres(),
+        )
+    }
+
+    /// The requirement as findings word it.
+    pub(crate) fn requirement(&self) -> String {
+        let required = self.required();
+        format!(
+            "required at least {} m ({} × the longest plan diagonal of {} m{})",
+            shown(required.0, required.1),
+            shown(self.fractions.0, self.fractions.1),
+            shown(self.diameter.lower_metres(), self.diameter.upper_metres()),
+            self.flag_note,
+        )
+    }
 }
 
 /// A pair of exits and how its separation stands against the requirement.
@@ -346,14 +469,14 @@ pub(crate) struct Pair {
     pub(crate) measured: Result<(f64, f64, Evidence), String>,
 }
 
-enum Standing {
+pub(crate) enum Standing {
     FarEnough,
     TooClose,
     Unknown(String),
 }
 
 impl Pair {
-    fn standing(&self, required: (f64, f64)) -> Standing {
+    pub(crate) fn standing(&self, required: (f64, f64)) -> Standing {
         match &self.measured {
             Err(why) => Standing::Unknown(format!(
                 "the separation of {} and {} cannot be measured: {why}",
@@ -371,7 +494,7 @@ impl Pair {
         }
     }
 
-    fn describe(&self, separation: Separation) -> String {
+    pub(crate) fn describe(&self, separation: Separation) -> String {
         let apart = match &self.measured {
             Ok((lower, upper, _)) => shown(*lower, *upper),
             Err(_) => "unknown".into(),
@@ -385,207 +508,13 @@ impl Pair {
     }
 }
 
-fn check(
-    context: &RuleContext<'_>,
-    rule: &CompiledRule,
-    declared: &Declaration<'_>,
-    candidates: &Candidates<'_>,
-    space: &Object,
-) -> Checked {
-    let mut checked = Checked::default();
-    let (reached, mut evidence) =
-        match declared
-            .exits
-            .related(context, &space.id, &candidates.universe)
-        {
-            Ok(reached) => reached,
-            Err(unavailable) => {
-                checked.unevaluated = Some(unavailable);
-                return checked;
-            }
-        };
-    let (maybe, exits): (Vec<ObjectId>, Vec<ObjectId>) = reached
-        .into_iter()
-        .partition(|exit| candidates.undecided.contains_key(exit));
-    let undecided = || {
-        maybe
-            .iter()
-            .map(|exit| {
-                format!(
-                    "whether {exit} is an exit is undecided: {}",
-                    candidates.undecided[exit]
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("; ")
-    };
-    if let Some(minimum) = declared.minimum_exits {
-        if exits.len() + maybe.len() < minimum {
-            checked.findings.push(finding(
-                rule,
-                &space.id,
-                format!(
-                    "has {} exit(s) via {}; at least {minimum} required",
-                    exits.len() + maybe.len(),
-                    declared.exits.relationship
-                ),
-                evidence.clone(),
-                exits.iter().chain(&maybe).cloned().collect(),
-            ));
-        } else if exits.len() < minimum {
-            checked.unevaluated = Some((
-                NotEvaluatedReason::IncompleteEvidence,
-                format!(
-                    "{} certain exit(s), at least {minimum} required: {}",
-                    exits.len(),
-                    undecided()
-                ),
-            ));
-            return checked;
-        }
-    }
-    if exits.len() + maybe.len() < 2 {
-        return checked;
-    }
-    let separated = if exits.len() < 2 {
-        Err((
-            NotEvaluatedReason::IncompleteEvidence,
-            format!("fewer than two certain exits: {}", undecided()),
-        ))
-    } else {
-        separation(
-            context,
-            rule,
-            declared,
-            space,
-            &exits,
-            &maybe,
-            undecided,
-            &mut evidence,
-        )
-    };
-    match separated {
-        Ok(Some(found)) => checked.findings.push(found),
-        // A finding already standing is not withdrawn for want of the rest.
-        Err(unavailable) if checked.findings.is_empty() => checked.unevaluated = Some(unavailable),
-        Ok(None) | Err(_) => {}
-    }
-    checked
-}
-
-/// Judges the separation of `exits`, in identity order, against the space's
-/// required distance.
-#[allow(clippy::too_many_arguments)]
-fn separation(
-    context: &RuleContext<'_>,
-    rule: &CompiledRule,
-    declared: &Declaration<'_>,
-    space: &Object,
-    exits: &[ObjectId],
-    maybe: &[ObjectId],
-    undecided: impl Fn() -> String,
-    evidence: &mut Vec<Evidence>,
-) -> Result<Option<Finding>, Unavailable> {
-    let spans = context
-        .services
-        .get::<PlanSpanServiceHandle>()
-        .ok_or_else(|| {
-            (
-                NotEvaluatedReason::MissingService,
-                "plan-span service is not registered".to_owned(),
-            )
-        })?;
-    let diameter = spans
-        .measure_diameter(&space.id)
-        .map_err(|error| span_unavailable(&error))?;
-    let mut related = BTreeSet::new();
-    let (fractions, flag_note) = fractions(context, declared, space, evidence, &mut related)?;
-    let required = (
-        fractions.0 * diameter.lower_metres(),
-        fractions.1 * diameter.upper_metres(),
-    );
-    let pairs = measure_pairs(context, spans, declared.separation, exits)?;
-    let standings: Vec<Standing> = pairs.iter().map(|pair| pair.standing(required)).collect();
-    let unknown: Vec<&str> = standings
-        .iter()
-        .filter_map(|standing| match standing {
-            Standing::Unknown(why) => Some(why.as_str()),
-            _ => None,
-        })
-        .collect();
-    let far_enough = standings
-        .iter()
-        .any(|standing| matches!(standing, Standing::FarEnough));
-    let too_close: Vec<&Pair> = pairs
-        .iter()
-        .zip(&standings)
-        .filter(|(_, standing)| matches!(standing, Standing::TooClose))
-        .map(|(pair, _)| pair)
-        .collect();
-    let requirement = format!(
-        "required at least {} m ({} × the longest plan diagonal of {} m{flag_note})",
-        shown(required.0, required.1),
-        shown(fractions.0, fractions.1),
-        shown(diameter.lower_metres(), diameter.upper_metres()),
-    );
-    let failing: Vec<&Pair> = match declared.pairs {
-        Pairs::Any if far_enough => return Ok(None),
-        // Every pair is too close; name the one farthest apart.
-        Pairs::Any if unknown.is_empty() && maybe.is_empty() => pairs
-            .iter()
-            .max_by(|a, b| upper(a).total_cmp(&upper(b)))
-            .into_iter()
-            .collect(),
-        Pairs::All if !too_close.is_empty() => too_close,
-        Pairs::All if unknown.is_empty() && maybe.is_empty() => return Ok(None),
-        _ => {
-            let mut why: Vec<String> = unknown.iter().map(|why| (*why).to_owned()).collect();
-            if !maybe.is_empty() {
-                why.push(undecided());
-            }
-            return Err((
-                NotEvaluatedReason::IncompleteEvidence,
-                format!("{} ({requirement})", why.join("; ")),
-            ));
-        }
-    };
-    let described: Vec<String> = failing
-        .iter()
-        .map(|pair| pair.describe(declared.separation))
-        .collect();
-    let message = if declared.pairs == Pairs::Any && exits.len() > 2 {
-        format!(
-            "no two of its {} exits are far enough apart: {}; {requirement}",
-            exits.len(),
-            described.join("; ")
-        )
-    } else {
-        format!("exits {}; {requirement}", described.join("; "))
-    };
-    evidence.push(diameter.evidence().clone());
-    for pair in &failing {
-        related.insert(pair.first.clone());
-        related.insert(pair.second.clone());
-        if let Ok((_, _, measured)) = &pair.measured {
-            evidence.push(measured.clone());
-        }
-    }
-    Ok(Some(finding(
-        rule,
-        &space.id,
-        message,
-        evidence.clone(),
-        related.into_iter().collect(),
-    )))
-}
-
-fn upper(pair: &Pair) -> f64 {
+pub(crate) fn upper(pair: &Pair) -> f64 {
     pair.measured
         .as_ref()
         .map_or(f64::NEG_INFINITY, |(_, upper, _)| *upper)
 }
 
-fn span_unavailable(error: &PlanSpanError) -> Unavailable {
+pub(crate) fn span_unavailable(error: &PlanSpanError) -> Unavailable {
     let reason = match error {
         PlanSpanError::UnknownObject(_) | PlanSpanError::Unavailable(_) => {
             NotEvaluatedReason::IncompleteEvidence
@@ -660,7 +589,7 @@ pub(crate) fn measure_pairs(
 
 /// The fraction of the diagonal that applies, as an interval spanning both
 /// fractions when the flag is unknown, and a note naming the flag.
-fn fractions(
+pub(crate) fn fractions(
     context: &RuleContext<'_>,
     declared: &Declaration<'_>,
     space: &Object,

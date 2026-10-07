@@ -386,3 +386,9 @@ for every host and rule of the eleven `empty-host` rules, the values held
 openings again costs less than that; an object's leaves keep a value they
 measured, so a truth composing it and the value worded share one
 placement.
+`exit-separation` runs the `spans` case's four exit rules: 0.57 to 1.18×
+its reference's run time and 0.99 to 1.34× its peak heap. Its list binds
+the exit selection once per rule and reads its universe once per
+selection (`MeasuredMemo`), reaching each space's exits by identity
+(`Traversal::related_ids`), and measures each space's diagonal, flag and
+pairs once, as the capability did.

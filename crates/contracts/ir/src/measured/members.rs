@@ -1308,6 +1308,299 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
     },
     MemberDescriptor {
         list: MeasuredDescriptor {
+            name: "exit_separation",
+            parameters: &[
+                MeasuredParameter {
+                    key: "exit_path",
+                    kind: MeasuredParameterKind::Path,
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The relationship steps from the space to its exits.",
+                        "Die Beziehungsschritte vom Raum zu seinen Ausgängen.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "exit_selector",
+                    kind: MeasuredParameterKind::Objects,
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The objects that may be exits; those the selection leaves undecided possible exits.",
+                        "Die Objekte, die Ausgänge sein können; die unentschiedenen mögliche Ausgänge.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "fraction",
+                    kind: MeasuredParameterKind::Number { minimum: 0.0 },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The share of the longest plan diagonal the exits must lie apart; half without it.",
+                        "Der Anteil der längsten Grundrissdiagonale, den Ausgänge auseinanderliegen müssen; ohne Angabe die Hälfte.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "flag",
+                    kind: MeasuredParameterKind::Property,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The property choosing the second share where it is true.",
+                        "Die Eigenschaft, die den zweiten Anteil wählt, wenn sie wahr ist.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "flag_path",
+                    kind: MeasuredParameterKind::Path,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The relationship steps to the objects `flag` is read on.",
+                        "Die Beziehungsschritte zu den Objekten, an denen `flag` gelesen wird.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "flagged_fraction",
+                    kind: MeasuredParameterKind::Number { minimum: 0.0 },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The share where the flag is true.",
+                        "Der Anteil, wenn die Eigenschaft wahr ist.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "flag_sources",
+                    kind: MeasuredParameterKind::Table,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The places the flag is read from, in order.",
+                        "Die Orte, an denen die Eigenschaft der Reihe nach gelesen wird.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "flag_default",
+                    kind: MeasuredParameterKind::Truth,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The flag's value where no place states one.",
+                        "Der Wert der Eigenschaft, wo kein Ort einen angibt.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "separation",
+                    kind: MeasuredParameterKind::Choice {
+                        options: &["closest", "centres", "farthest"],
+                    },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "Between the exits' closest points, centres or farthest points in plan; the closest without it.",
+                        "Zwischen den nächsten Punkten, Mittelpunkten oder fernsten Punkten der Ausgänge im Grundriss; ohne Angabe den nächsten.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "pairs",
+                    kind: MeasuredParameterKind::Choice {
+                        options: &["any", "all"],
+                    },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "Whether some pair or every pair must lie far enough apart; some without it.",
+                        "Ob irgendein Paar oder jedes Paar weit genug auseinanderliegen muss; ohne Angabe irgendeines.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "minimum_exits",
+                    kind: MeasuredParameterKind::Number { minimum: 1.0 },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "How many exits the space needs at least.",
+                        "Wie viele Ausgänge der Raum mindestens haben muss.",
+                    ),
+                },
+            ],
+            dimension: None,
+            services: &["plan-span", "proximity", "relationship-selection"],
+            exactness: MeasuredExactness::Measured,
+            subject: MeasuredSubject::Object,
+            not_evaluated: &[
+                "the path to the exits cannot be read",
+                "a service is not registered",
+                "the longest plan diagonal cannot be measured",
+            ],
+            label: &en_de("Exit separation", "Ausgangsabstand"),
+            help: &en_de(
+                "How far apart a space's exits lie against the share of its longest plan \
+                 diagonal they must, as `exit-separation` measures it: an item counting the \
+                 exits where a minimum is declared, and one with the separation of the \
+                 pairs.",
+                "Wie weit die Ausgänge eines Raums auseinanderliegen, gegen den Anteil seiner \
+                 längsten Grundrissdiagonale, den sie müssen, wie `exit-separation` es misst: \
+                 ein Element, das die Ausgänge zählt, wo ein Minimum erklärt ist, und eines \
+                 mit dem Abstand der Paare.",
+            ),
+        },
+        fields: &[
+            field(
+                "counted",
+                TRUTH,
+                &en_de("Counted", "Gezählt"),
+                &en_de(
+                    "True on the item counting the exits (only with `minimum_exits`).",
+                    "Wahr am Element, das die Ausgänge zählt (nur mit `minimum_exits`).",
+                ),
+            ),
+            field(
+                "exits",
+                RATIO,
+                &en_de("Exits", "Ausgänge"),
+                &en_de(
+                    "From the exits surely reached to every one that may be.",
+                    "Von den sicheren Ausgängen bis zu jedem möglichen.",
+                ),
+            ),
+            field(
+                "sure",
+                RATIO,
+                &en_de("Sure exits", "Sichere Ausgänge"),
+                &en_de(
+                    "The exits surely reached.",
+                    "Die sicher erreichten Ausgänge.",
+                ),
+            ),
+            field(
+                "possible",
+                RATIO,
+                &en_de("Possible exits", "Mögliche Ausgänge"),
+                &en_de(
+                    "Every exit that may be one.",
+                    "Jeder Ausgang, der es sein kann.",
+                ),
+            ),
+            field(
+                "relation",
+                MemberFieldKind::Text,
+                &en_de("Relation", "Beziehung"),
+                &en_de(
+                    "Words naming the path to the exits.",
+                    "Worte, die den Weg zu den Ausgängen nennen.",
+                ),
+            ),
+            field(
+                "undecided",
+                MemberFieldKind::Text,
+                &en_de("Undecided exits", "Unentschiedene Ausgänge"),
+                &en_de(
+                    "Why each possible exit is undecided.",
+                    "Warum jeder mögliche Ausgang unentschieden ist.",
+                ),
+            ),
+            field(
+                "named",
+                MemberFieldKind::Objects,
+                &en_de("Exits", "Ausgänge"),
+                &en_de(
+                    "The sure, then the possible exits.",
+                    "Die sicheren, dann die möglichen Ausgänge.",
+                ),
+            ),
+            field(
+                "separated",
+                TRUTH,
+                &en_de("Separated", "Getrennt"),
+                &en_de(
+                    "True on the item measuring how far apart the exits lie.",
+                    "Wahr am Element, das den Abstand der Ausgänge misst.",
+                ),
+            ),
+            field(
+                "separation",
+                LENGTH,
+                &en_de("Separation", "Abstand"),
+                &en_de(
+                    "With `pairs` `any` the greatest, with `all` the least separation of the pairs measured; `null` where none is, undecided with fewer than two sure exits.",
+                    "Mit `pairs` `any` der größte, mit `all` der kleinste Abstand der gemessenen Paare; `null`, wo keines gemessen ist, unentschieden bei weniger als zwei sicheren Ausgängen.",
+                ),
+            ),
+            field(
+                "required",
+                LENGTH,
+                &en_de("Required", "Erforderlich"),
+                &en_de(
+                    "The share of the longest diagonal; an interval over both shares where the flag is unknown.",
+                    "Der Anteil der längsten Diagonale; ein Intervall über beide Anteile, wo die Eigenschaft unbekannt ist.",
+                ),
+            ),
+            field(
+                "short",
+                TRUTH,
+                &en_de("Too few", "Zu wenige"),
+                &en_de(
+                    "Whether the space surely has fewer exits than `minimum_exits`.",
+                    "Ob der Raum sicher weniger Ausgänge als `minimum_exits` hat.",
+                ),
+            ),
+            field(
+                "undecided_fail",
+                TRUTH,
+                &en_de("Open shortfall", "Offenes Unterschreiten"),
+                &en_de(
+                    "Whether a shortfall stays open, pairs not measured or exits undecided.",
+                    "Ob ein Unterschreiten offen bleibt, weil Paare ungemessen oder Ausgänge unentschieden sind.",
+                ),
+            ),
+            field(
+                "undecided_pass",
+                TRUTH,
+                &en_de("Open pass", "Offenes Bestehen"),
+                &en_de(
+                    "Whether a pass stays open, pairs not measured or exits undecided.",
+                    "Ob ein Bestehen offen bleibt, weil Paare ungemessen oder Ausgänge unentschieden sind.",
+                ),
+            ),
+            field(
+                "open",
+                MemberFieldKind::Text,
+                &en_de("Open", "Offen"),
+                &en_de("Why pairs are open.", "Warum Paare offen sind."),
+            ),
+            field(
+                "requirement",
+                MemberFieldKind::Text,
+                &en_de("Requirement", "Anforderung"),
+                &en_de(
+                    "Words naming the required separation.",
+                    "Worte, die den erforderlichen Abstand nennen.",
+                ),
+            ),
+            field(
+                "failed",
+                MemberFieldKind::Text,
+                &en_de("Too close", "Zu nah"),
+                &en_de(
+                    "Words naming the pairs too close.",
+                    "Worte, die die Paare nennen, die zu nah liegen.",
+                ),
+            ),
+            field(
+                "related",
+                MemberFieldKind::Objects,
+                &en_de("Related", "Bezogen"),
+                &en_de(
+                    "The exits of the pairs too close and the objects the flag was read on.",
+                    "Die Ausgänge der zu nahen Paare und die Objekte, an denen die Eigenschaft gelesen wurde.",
+                ),
+            ),
+        ],
+    },
+    MemberDescriptor {
+        list: MeasuredDescriptor {
             name: FACE_PIECES,
             parameters: &[FACE, FACING[0], FACING[1]],
             dimension: None,

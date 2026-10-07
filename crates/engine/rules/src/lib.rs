@@ -197,6 +197,7 @@ pub mod reference {
     pub use crate::door_swing_direction::reference::DoorSwing;
     pub use crate::effective_coverage::reference::EffectiveCoverage;
     pub use crate::empty_host::reference::EmptyHost;
+    pub use crate::exit_separation::reference::ExitSeparation;
     pub use crate::external_wall_validation::reference::ExternalWallValidation;
     pub use crate::horizontal_guard::reference::HorizontalGuard;
     pub use crate::keyed_limit::reference::KeyedLimit;
@@ -325,6 +326,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(horizontal_guard::GuardMeasures))
         .and_then(|registry| registry.register_measured(measured_plan::PlanMeasures))
         .and_then(|registry| registry.register_measured(component_visibility::ViewMeasures))
+        .and_then(|registry| registry.register_measured(exit_separation::ExitMeasures))
         .and_then(|registry| registry.register_measured(axioval_engine::FacePieceMeasures))
         .and_then(|registry| registry.register_measured(escape_route::TravelMeasures))
         .and_then(|registry| registry.register_measured(free_floor::PlacementMeasures))

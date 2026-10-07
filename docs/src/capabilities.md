@@ -795,7 +795,7 @@ A door's type row is the first row whose `operation` pattern and `applies_to` se
 
 ### Exit separation
 
-`exit-separation` requires each selected space's exits to lie far enough apart for its size: at least `fraction` (one half by default) of the space's longest plan diagonal, or `flagged_fraction` (say one third) when a boolean `flag` is `true`.
+`exit-separation` requires each selected space's exits to lie far enough apart for its size: at least `fraction` (one half by default) of the space's longest plan diagonal, or `flagged_fraction` (say one third) when a boolean `flag` is `true`. It runs as a template ([Capability templates](./templates.md#exit-separation)) over the measured `exit_separation`.
 
 | Parameter | Type | Meaning |
 |---|---|---|

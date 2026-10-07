@@ -420,18 +420,28 @@ impl Traversal {
         anchor: &ObjectId,
         universe: &[&Object],
     ) -> Result<(Vec<ObjectId>, Vec<Evidence>), Unavailable> {
+        let universe: Vec<ObjectId> = universe.iter().map(|object| object.id.clone()).collect();
+        self.related_ids(context, anchor, &universe)
+    }
+
+    /// [`Self::related`], the universe named by identity.
+    pub(crate) fn related_ids(
+        &self,
+        context: &RuleContext<'_>,
+        anchor: &ObjectId,
+        universe: &[ObjectId],
+    ) -> Result<(Vec<ObjectId>, Vec<Evidence>), Unavailable> {
         let service = relationship_service(context)?;
         let everything: Vec<ObjectId> = context
             .project
             .objects()
             .map(|object| object.id.clone())
             .collect();
-        let universe: Vec<ObjectId> = universe.iter().map(|object| object.id.clone()).collect();
         let mut frontier = vec![anchor.clone()];
         let mut evidence = Vec::new();
         for (index, step) in self.steps.iter().enumerate() {
             let last = index + 1 == self.steps.len();
-            let scope = if last { &universe } else { &everything };
+            let scope: &[ObjectId] = if last { universe } else { &everything };
             let mut reached = BTreeSet::new();
             for from in &frontier {
                 let chain = self.follow_chain || step.chain();

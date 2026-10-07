@@ -411,9 +411,9 @@ fn searched(
     let exact = evidence.iter().all(|evidence| evidence.exact);
     let (found, finding) = match check {
         Check::Pass => (truth(false, label.to_owned()), String::new()),
-        Check::Fail(message) | Check::Graded(message, _) => {
-            (truth(true, label.to_owned()), message)
-        }
+        Check::Fail(message) => (truth(true, label.to_owned()), message),
+        #[cfg(feature = "parity-reference")]
+        Check::Graded(message, _) => (truth(true, label.to_owned()), message),
         Check::Undecided(why) => (undecided(why), String::new()),
     };
     member(
@@ -872,7 +872,9 @@ fn rails(
             object,
             stretch,
             label: &label,
+            #[cfg(feature = "parity-reference")]
             width,
+            #[cfg(feature = "parity-reference")]
             risers: None,
         };
         let measured = measured_rails(
@@ -967,7 +969,9 @@ fn rails(
                     object,
                     stretch,
                     label: &label,
+                    #[cfg(feature = "parity-reference")]
                     width,
+                    #[cfg(feature = "parity-reference")]
                     risers: None,
                 };
                 let extension = |rail: &ObjectId,
@@ -1074,7 +1078,9 @@ fn rails(
                     object,
                     stretch,
                     label: &label,
+                    #[cfg(feature = "parity-reference")]
                     width,
+                    #[cfg(feature = "parity-reference")]
                     risers: None,
                 };
                 for side in [RailSide::Left, RailSide::Right] {

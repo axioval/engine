@@ -10,26 +10,35 @@
 //! Pieces the contract cannot put in order leave the side's extension and
 //! continuity not evaluated.
 
+#[cfg(feature = "parity-reference")]
 use std::collections::BTreeSet;
 
+#[cfg(feature = "parity-reference")]
+use axioval_engine::{Deviation, RailMeasurement};
 use axioval_engine::{
-    Deviation, HandrailEvidence, HandrailRequest, MeasuredInterval, ParameterDescriptor,
-    ParameterType, RailMeasurement, RailSide, RiserClosure, Tread, TreadFlight, WalkingStretch,
-    WalkingSurfaceServiceHandle,
+    HandrailEvidence, HandrailRequest, MeasuredInterval, ParameterDescriptor, ParameterType,
+    RailSide, RiserClosure, Tread, TreadFlight, WalkingStretch, WalkingSurfaceServiceHandle,
 };
 use axioval_ir::ObjectId;
 use axioval_ir::contract::Selector;
 
-use super::{Check, Checks, Range, bound_words, length, range, service_error, slack};
+#[cfg(feature = "parity-reference")]
+use super::{Check, Checks, bound_words, length, range, slack};
+use super::{Range, service_error};
+#[cfg(feature = "parity-reference")]
 use crate::level_spacing::{metres, shown};
+#[cfg(feature = "parity-reference")]
 use crate::plan_area::{Verdict, deviation, judge};
+#[cfg(feature = "parity-reference")]
 use crate::support::{Parameters, Unavailable, invalid};
 
 /// A rail's top rising or falling less than this over its extension is
 /// level: the rounding placements leave in coordinates, not a slope.
+#[cfg(feature = "parity-reference")]
 const LEVEL_RISE: f64 = 1e-6;
 
 /// The sides a handrail must run along.
+#[cfg(feature = "parity-reference")]
 #[derive(Clone, Copy)]
 enum Required {
     One,
@@ -40,23 +49,31 @@ enum Required {
 
 /// The handrail checks of one rule.
 pub(super) struct HandrailCheck<'a> {
+    #[cfg(feature = "parity-reference")]
     pub(super) rails: &'a Selector,
     reach: f64,
     above: f64,
+    #[cfg(feature = "parity-reference")]
     height: Range,
     /// The least and greatest extension beyond each end.
     extension: Range,
     /// Whether a flight's extension is measured from its first and last
     /// riser rather than its nosings.
+    #[cfg(feature = "parity-reference")]
     from_riser: bool,
     gap: Option<f64>,
+    #[cfg(feature = "parity-reference")]
     sides: Option<Required>,
     /// Whether the handrail along each side must continue across the
     /// landings between a stair's flights.
+    #[cfg(feature = "parity-reference")]
     pub(super) continuous: bool,
     /// With `check_continuous_handrails`, the largest gap allowed along
     /// each side across the landings between a ramp's runs.
+    #[cfg(feature = "parity-reference")]
     pub(super) ramp_continuity: Option<f64>,
+    // The selector's lifetime, which only the parity reference reads.
+    marker: std::marker::PhantomData<&'a Selector>,
 }
 
 impl<'a> HandrailCheck<'a> {
@@ -68,17 +85,26 @@ impl<'a> HandrailCheck<'a> {
         (reach, above): (f64, f64),
         level_over: f64,
     ) -> Self {
+        #[cfg(not(feature = "parity-reference"))]
+        let _ = rails;
         Self {
+            #[cfg(feature = "parity-reference")]
             rails,
             reach,
             above,
+            #[cfg(feature = "parity-reference")]
             height: (None, None),
             extension: (Some(level_over), None),
+            #[cfg(feature = "parity-reference")]
             from_riser: false,
             gap: None,
+            #[cfg(feature = "parity-reference")]
             sides: None,
+            #[cfg(feature = "parity-reference")]
             continuous: false,
+            #[cfg(feature = "parity-reference")]
             ramp_continuity: None,
+            marker: std::marker::PhantomData,
         }
     }
 }
@@ -129,6 +155,7 @@ pub(super) fn ramp_descriptors() -> Vec<ParameterDescriptor> {
 
 /// The handrail checks the rule declares; `ramp` refuses measuring an
 /// extension from a riser, which a ramp does not have.
+#[cfg(feature = "parity-reference")]
 pub(super) fn parse<'a>(
     parameters: &Parameters<'a>,
     ramp: bool,
@@ -201,6 +228,7 @@ pub(super) fn parse<'a>(
             sides,
             continuous,
             ramp_continuity,
+            marker: std::marker::PhantomData,
         })),
         (None, None, None, false) => Ok(None),
         (_, _, _, true) => Err(invalid(
@@ -216,6 +244,7 @@ pub(super) fn parse<'a>(
 /// The gap `check_continuous_handrails` allows across a ramp's landings:
 /// `handrail_continuity_tolerance`, else `handrail_gap_maximum`,
 /// else none.
+#[cfg(feature = "parity-reference")]
 fn ramp_continuity(
     parameters: &Parameters<'_>,
     gap: Option<f64>,
@@ -240,9 +269,11 @@ pub(super) struct Along<'a> {
     /// The stretch in a message: `the flight`, `run 1 of 2`.
     pub(super) label: &'a str,
     /// Its width, when measured.
+    #[cfg(feature = "parity-reference")]
     pub(super) width: Option<MeasuredInterval>,
     /// Where a flight's first and last risers lie from its pitch line's
     /// ends; `None` for a ramp's run.
+    #[cfg(feature = "parity-reference")]
     pub(super) risers: Option<RiserOffsets>,
 }
 
@@ -327,6 +358,7 @@ impl RiserOffsets {
 }
 
 /// The handrails along one stretch against the rule's handrail checks.
+#[cfg(feature = "parity-reference")]
 pub(super) fn handrails(
     stairs: &WalkingSurfaceServiceHandle,
     check: &HandrailCheck<'_>,
@@ -408,6 +440,7 @@ pub(super) fn measure(
 
 /// Pushes each failing or undecided check with the rails it names, or
 /// `passing` when every one passes.
+#[cfg(feature = "parity-reference")]
 fn push_all(
     push: &mut impl FnMut(Check, Vec<ObjectId>),
     checks: Vec<(Check, Vec<ObjectId>)>,
@@ -445,6 +478,7 @@ pub(super) fn scale(measured: &HandrailEvidence) -> f64 {
 }
 
 /// A rail's height above the pitch line against the rule's range.
+#[cfg(feature = "parity-reference")]
 fn height(
     rail: &ObjectId,
     measurement: &RailMeasurement,
@@ -495,6 +529,7 @@ fn height(
 }
 
 /// Which end of the pitch line a rail extends beyond.
+#[cfg(feature = "parity-reference")]
 #[derive(Clone, Copy)]
 enum End {
     Bottom,
@@ -502,6 +537,7 @@ enum End {
 }
 
 /// One stretch's handrails and how they are judged.
+#[cfg(feature = "parity-reference")]
 struct Judged<'m> {
     measured: &'m HandrailEvidence,
     slack: f64,
@@ -514,6 +550,7 @@ struct Judged<'m> {
     risers: Option<&'m RiserOffsets>,
 }
 
+#[cfg(feature = "parity-reference")]
 impl Judged<'_> {
     /// A pass not evaluated when an undecided object may be a rail.
     fn pending(&self, check: Check) -> Check {
@@ -759,6 +796,7 @@ pub(super) fn unordered(side: RailSide, pieces: &[ObjectId], along: &Along<'_>) 
 }
 
 /// Whether a rail's top runs level over the extension it must reach.
+#[cfg(feature = "parity-reference")]
 fn level(rail: &ObjectId, rise: Option<MeasuredInterval>, minimum: f64, place: &str) -> Check {
     let Some(rise) = rise else {
         return Check::Undecided(format!(
@@ -788,6 +826,7 @@ pub(super) fn side_words(side: RailSide) -> &'static str {
 }
 
 /// The sides handrails run along against the sides required.
+#[cfg(feature = "parity-reference")]
 fn sides(
     measured: &HandrailEvidence,
     required: Required,

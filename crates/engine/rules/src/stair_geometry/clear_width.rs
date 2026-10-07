@@ -11,27 +11,41 @@
 //! landing between flights of the stair, is judged against
 //! `total_clear_width_minimum`.
 
+#[cfg(feature = "parity-reference")]
+use axioval_engine::Deviation;
 use axioval_engine::{
-    ClearWidthRequest, Deviation, LandingClearWidthRequest, LandingRequest, MeasuredInterval,
+    ClearWidthRequest, LandingClearWidthRequest, LandingRequest, MeasuredInterval,
     ParameterDescriptor, ParameterType, WalkingEnd, WalkingStretch, WalkingSurfaceServiceHandle,
 };
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, ObjectId};
 
-use super::{Check, Checks, Selected, length, service_error, slack};
+#[cfg(feature = "parity-reference")]
+use super::{Check, Checks, length, slack};
+use super::{Selected, service_error};
+#[cfg(feature = "parity-reference")]
 use crate::level_spacing::{metres, shown};
+#[cfg(feature = "parity-reference")]
 use crate::plan_area::{Verdict, judge};
+#[cfg(feature = "parity-reference")]
 use crate::support::{Parameters, Unavailable, invalid};
 
 /// The clear-width checks of one rule.
 pub(super) struct ClearWidthCheck<'a> {
+    #[cfg(feature = "parity-reference")]
     pub(super) obstacles: &'a Selector,
+    #[cfg(feature = "parity-reference")]
     minimum: Option<f64>,
+    #[cfg(feature = "parity-reference")]
     landing: Option<f64>,
+    #[cfg(feature = "parity-reference")]
     total: Option<f64>,
     band: (f64, f64),
+    // The selector's lifetime, which only the parity reference reads.
+    marker: std::marker::PhantomData<&'a Selector>,
 }
 
+#[cfg(feature = "parity-reference")]
 impl ClearWidthCheck<'_> {
     /// Whether landings are measured: for their own minimum or the total.
     pub(super) fn landings(&self) -> bool {
@@ -66,6 +80,7 @@ pub(super) fn stair_descriptors() -> Vec<ParameterDescriptor> {
     ]
 }
 
+#[cfg(feature = "parity-reference")]
 pub(super) fn parse<'a>(
     parameters: &Parameters<'a>,
 ) -> Result<Option<ClearWidthCheck<'a>>, Unavailable> {
@@ -83,6 +98,7 @@ pub(super) fn parse<'a>(
             landing,
             total,
             band: (from, to),
+            marker: std::marker::PhantomData,
         })),
         (false, None, None, None) => Ok(None),
         _ => Err(invalid(
@@ -97,12 +113,19 @@ pub(super) fn parse<'a>(
 impl<'a> ClearWidthCheck<'a> {
     /// A check measuring only, over `obstacles` between the heights `band`.
     pub(super) fn measuring(obstacles: &'a Selector, band: (f64, f64)) -> Self {
+        #[cfg(not(feature = "parity-reference"))]
+        let _ = obstacles;
         Self {
+            #[cfg(feature = "parity-reference")]
             obstacles,
+            #[cfg(feature = "parity-reference")]
             minimum: None,
+            #[cfg(feature = "parity-reference")]
             landing: None,
+            #[cfg(feature = "parity-reference")]
             total: None,
             band,
+            marker: std::marker::PhantomData,
         }
     }
 }
@@ -177,6 +200,7 @@ impl Width {
             .map_or(&[], |measured| measured.governing.as_slice())
     }
 
+    #[cfg(feature = "parity-reference")]
     fn evidence(&self) -> Vec<Evidence> {
         self.measured
             .as_ref()
@@ -307,6 +331,7 @@ pub(super) fn landing_width(
 /// The clear widths one flight's checks measure: the flight's own when
 /// `clear_width_minimum` or the total asks for it, and its landings at
 /// `ends` when the landing minimum or the total does.
+#[cfg(feature = "parity-reference")]
 pub(super) fn flight_widths(
     stairs: &WalkingSurfaceServiceHandle,
     check: &ClearWidthCheck<'_>,
@@ -347,6 +372,7 @@ pub(super) fn flight_widths(
 /// `clear_width_minimum`, a landing's against the landing minimum. An
 /// obstacle the selection could not decide can only narrow it: too narrow
 /// stands, wide enough is not evaluated.
+#[cfg(feature = "parity-reference")]
 pub(super) fn judge_each(check: &ClearWidthCheck<'_>, widths: &[Width], undecided: bool) -> Checks {
     let mut checks = Vec::new();
     for width in widths {
@@ -389,6 +415,7 @@ pub(super) fn judge_each(check: &ClearWidthCheck<'_>, widths: &[Width], undecide
 /// flight and its landings`); `owned` names each width's flight, and
 /// `missing` says why widths may be missing. A width not measured can only
 /// lower the least: too narrow stands, wide enough is not evaluated.
+#[cfg(feature = "parity-reference")]
 pub(super) fn judge_total(
     minimum: f64,
     widths: &[Width],
@@ -456,6 +483,7 @@ pub(super) fn judge_total(
 
 /// A width against a minimum, worded by `words`; `pending` words a pass an
 /// undecided obstacle may narrow.
+#[cfg(feature = "parity-reference")]
 fn against(
     minimum: f64,
     width: MeasuredInterval,
@@ -478,6 +506,7 @@ fn against(
     }
 }
 
+#[cfg(feature = "parity-reference")]
 fn joined(objects: &[ObjectId]) -> String {
     objects
         .iter()

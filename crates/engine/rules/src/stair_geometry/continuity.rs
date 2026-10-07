@@ -248,7 +248,9 @@ pub(super) fn across_runs(
                 object,
                 stretch: WalkingStretch::Run(index),
                 label: &label,
+                #[cfg(feature = "parity-reference")]
                 width: runs[index].width(),
+                #[cfg(feature = "parity-reference")]
                 risers: None,
             },
         )

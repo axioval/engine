@@ -119,7 +119,9 @@ impl Across<'_> {
                     object: flight.object(),
                     stretch: WalkingStretch::Flight,
                     label: "the flight",
+                    #[cfg(feature = "parity-reference")]
                     width: flight.width(),
+                    #[cfg(feature = "parity-reference")]
                     risers: None,
                 },
             )
@@ -238,7 +240,9 @@ impl Across<'_> {
         );
         evidence.insert(0, measured.evidence().clone());
         match found {
-            Check::Fail(_) | Check::Graded(..) => (Tri::Sure, String::new(), evidence),
+            Check::Fail(_) => (Tri::Sure, String::new(), evidence),
+            #[cfg(feature = "parity-reference")]
+            Check::Graded(..) => (Tri::Sure, String::new(), evidence),
             Check::Pass => (Tri::No, String::new(), evidence),
             Check::Undecided(message) => (
                 Tri::Maybe,

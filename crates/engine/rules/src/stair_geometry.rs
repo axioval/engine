@@ -11,13 +11,6 @@
 //! A turning flight is walked along the line the rule places
 //! (`walking_line_offset`), and its goings are measured along it.
 
-// The replaced implementations (`reference.rs`) read the shared search code
-// and helpers here; without them some of it is only the searches'.
-#![cfg_attr(not(feature = "parity-reference"), allow(dead_code, unused_imports))]
-
-use std::collections::BTreeSet;
-use std::fmt::Write as _;
-
 mod clear_width;
 mod continuity;
 mod defects;
@@ -35,22 +28,20 @@ mod whole;
 pub(crate) use items::StairItems;
 pub(crate) use measured::StairMeasures;
 
+#[cfg(feature = "parity-reference")]
+use axioval_engine::Deviation;
 use axioval_engine::{
-    CapabilityEvaluation, ClearanceBelowRequest, ColumnKind, CompiledRule, Deviation,
-    ElevationInterval, FreeSpaceServiceHandle, HeadroomRequest, Landing, LandingEvidence,
-    MeasuredInterval, NotEvaluatedReason, ParameterDescriptor, ParameterType, RiserClosure,
-    RuleCapability, RuleContext, SlopedRun, TableColumn, Tread, TreadFlight, TreadFlightRequest,
-    WalkingEnd, WalkingSurfaceError, WalkingSurfaceServiceHandle,
+    CapabilityEvaluation, ColumnKind, CompiledRule, ElevationInterval, Landing, LandingEvidence,
+    MeasuredInterval, NotEvaluatedReason, ParameterDescriptor, ParameterType, RuleCapability,
+    RuleContext, SlopedRun, TableColumn, TreadFlight, WalkingEnd, WalkingSurfaceError,
 };
-use axioval_ir::contract::Selector;
-use axioval_ir::{Evidence, Object, ObjectId, QuantityDimension};
+#[cfg(feature = "parity-reference")]
+use axioval_ir::QuantityDimension;
+use axioval_ir::{Evidence, ObjectId};
 
-use crate::counts::real;
-use crate::level_spacing::{metres, shown};
-use crate::plan_area::{Verdict, deviation, judge};
-use crate::selection::select_objects;
-use crate::support::table::Row;
-use crate::support::{Parameters, Unavailable, finding, invalid, si_quantity};
+use crate::support::Unavailable;
+#[cfg(feature = "parity-reference")]
+use crate::support::{Parameters, invalid};
 
 /// Requires each selected stair flight's steps, measured from its body, to
 /// lie within the declared ranges.
@@ -217,6 +208,7 @@ const SLOPE_LIMITS: &[TableColumn] = &[
 /// Inclusive bounds on a length.
 type Range = (Option<f64>, Option<f64>);
 
+#[cfg(feature = "parity-reference")]
 fn length(parameters: &Parameters<'_>, name: &str) -> Result<Option<f64>, Unavailable> {
     match parameters.quantity(name)? {
         None => Ok(None),
@@ -226,6 +218,7 @@ fn length(parameters: &Parameters<'_>, name: &str) -> Result<Option<f64>, Unavai
     }
 }
 
+#[cfg(feature = "parity-reference")]
 fn range(parameters: &Parameters<'_>, name: &str) -> Result<Range, Unavailable> {
     let minimum = length(parameters, &format!("{name}_minimum"))?;
     let maximum = length(parameters, &format!("{name}_maximum"))?;
@@ -308,6 +301,7 @@ fn service_error(error: &WalkingSurfaceError) -> Unavailable {
 }
 
 /// `lower` and `upper` shown as a bound's words: `at most 0.19 m`.
+#[cfg(feature = "parity-reference")]
 fn bound_words(minimum: Option<f64>, maximum: Option<f64>, unit: fn(f64) -> String) -> String {
     match (minimum, maximum) {
         (Some(minimum), Some(maximum)) => format!("{} to {}", unit(minimum), unit(maximum)),
@@ -323,10 +317,12 @@ enum Check {
     Pass,
     Fail(String),
     /// A failure of a value missing a bound by the deviation.
+    #[cfg(feature = "parity-reference")]
     Graded(String, Deviation),
     Undecided(String),
 }
 
+#[cfg(feature = "parity-reference")]
 impl Check {
     /// A failure, graded when its deviation is known.
     fn failed(message: String, deviation: Option<Deviation>) -> Self {

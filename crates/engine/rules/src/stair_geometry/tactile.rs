@@ -22,10 +22,14 @@ use axioval_engine::{
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, ObjectId};
 
-use super::{Check, length, service_error, slack};
+#[cfg(feature = "parity-reference")]
+use super::length;
+use super::{Check, service_error, slack};
+#[cfg(feature = "parity-reference")]
 use crate::counts::Population;
 use crate::level_spacing::{extent, extents, metres};
 use crate::plan_area::footprint;
+#[cfg(feature = "parity-reference")]
 use crate::support::{Parameters, Unavailable, invalid};
 
 /// How far above or below the level at a flight's end a tactile object may
@@ -34,22 +38,31 @@ const ON_LEVEL: f64 = 0.05;
 
 /// The tactile check of one rule.
 pub(super) struct TactileCheck<'a> {
+    #[cfg(feature = "parity-reference")]
     objects: &'a Selector,
     offset: f64,
     depth: f64,
     /// Whether the landings between a stair's flights need strips too.
+    #[cfg(feature = "parity-reference")]
     pub(super) intermediate: bool,
+    // The selector's lifetime, which only the parity reference reads.
+    marker: std::marker::PhantomData<&'a Selector>,
 }
 
 impl<'a> TactileCheck<'a> {
     /// A check measuring a strip `depth` deep `offset` beyond the end,
     /// covered by the objects `objects` names.
     pub(super) fn measuring(objects: &'a Selector, (offset, depth): (f64, f64)) -> Self {
+        #[cfg(not(feature = "parity-reference"))]
+        let _ = objects;
         Self {
+            #[cfg(feature = "parity-reference")]
             objects,
             offset,
             depth,
+            #[cfg(feature = "parity-reference")]
             intermediate: false,
+            marker: std::marker::PhantomData,
         }
     }
 }
@@ -63,6 +76,7 @@ pub(super) fn descriptors() -> Vec<ParameterDescriptor> {
     ]
 }
 
+#[cfg(feature = "parity-reference")]
 pub(super) fn parse<'a>(
     parameters: &Parameters<'a>,
 ) -> Result<Option<TactileCheck<'a>>, Unavailable> {
@@ -76,6 +90,7 @@ pub(super) fn parse<'a>(
             offset,
             depth,
             intermediate: intermediate.unwrap_or(false),
+            marker: std::marker::PhantomData,
         })),
         (None, None, None) if intermediate.is_none() => Ok(None),
         _ => Err(invalid(
@@ -111,6 +126,7 @@ pub(super) struct Tactile {
 }
 
 /// The objects `check` selects or may select, each measured once.
+#[cfg(feature = "parity-reference")]
 pub(super) fn read(context: &RuleContext<'_>, check: &TactileCheck<'_>) -> Vec<Tactile> {
     let population = Population::of(context, check.objects);
     let matched: Vec<ObjectId> = population.matched.iter().cloned().collect();

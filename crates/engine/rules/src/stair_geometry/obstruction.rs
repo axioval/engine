@@ -16,19 +16,23 @@ use axioval_engine::{
     ProximityProjection, ProximityRequest, ProximityServiceHandle, SlopedRun, WalkingStretch,
     WalkingSurfaceServiceHandle,
 };
+#[cfg(feature = "parity-reference")]
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, ObjectId};
 
 use super::continuity::{Tri, touching};
 use super::handrails::{self, HandrailCheck};
 use super::{Check, Checks, Selected};
+#[cfg(feature = "parity-reference")]
 use crate::support::{Parameters, Unavailable, invalid};
 
 /// The rail-obstruction check of one rule.
+#[cfg(feature = "parity-reference")]
 pub(super) struct ObstructionCheck<'a> {
     pub(super) surfaces: &'a Selector,
 }
 
+#[cfg(feature = "parity-reference")]
 pub(super) fn parse<'a>(
     parameters: &Parameters<'a>,
     handrail: Option<&HandrailCheck<'_>>,
@@ -191,11 +195,15 @@ fn members(
     let total = runs.len();
     for (index, run) in runs.iter().enumerate() {
         let label = format!("run {} of {total}", index + 1);
+        #[cfg(not(feature = "parity-reference"))]
+        let _ = run;
         let along = handrails::Along {
             object,
             stretch: WalkingStretch::Run(index),
             label: &label,
+            #[cfg(feature = "parity-reference")]
             width: run.width(),
+            #[cfg(feature = "parity-reference")]
             risers: None,
         };
         match handrails::measure(stairs, check, candidates, &along) {

@@ -5,15 +5,26 @@
 
 #![allow(clippy::wildcard_imports)]
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Write as _;
 
 use super::clear_width::Width;
 use super::handrails::HandrailCheck;
 use super::whole::{Across, Rise, meets, ordered, rise};
 use super::*;
-use crate::counts::Population;
-use crate::support::Traversal;
-use axioval_engine::{LandingRequest, ProximityServiceHandle, WalkingStretch};
+use crate::counts::{Population, real};
+use crate::level_spacing::{metres, shown};
+use crate::plan_area::{Verdict, deviation, judge};
+use crate::selection::select_objects;
+use crate::support::table::Row;
+use crate::support::{Traversal, finding, si_quantity};
+use axioval_engine::{
+    ClearanceBelowRequest, FreeSpaceServiceHandle, HeadroomRequest, LandingRequest,
+    ProximityServiceHandle, RiserClosure, Tread, TreadFlightRequest, WalkingStretch,
+    WalkingSurfaceServiceHandle,
+};
+use axioval_ir::Object;
+use axioval_ir::contract::Selector;
 
 /// The replaced `stair-geometry`.
 pub struct StairGeometryReference;

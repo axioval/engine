@@ -17,25 +17,36 @@ use axioval_engine::{
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, ObjectId};
 
-use super::{Check, length};
+use super::Check;
+#[cfg(feature = "parity-reference")]
+use super::length;
 use crate::door_swing::{self, Footprint};
 use crate::level_spacing::{extent, metres};
-use crate::support::{Parameters, Unavailable, invalid};
+use crate::support::Unavailable;
+#[cfg(feature = "parity-reference")]
+use crate::support::{Parameters, invalid};
 
 /// The free space a ramp or a flight needs at each end.
 pub(super) struct EndSpaceCheck<'a> {
+    #[cfg(feature = "parity-reference")]
     pub(super) obstacles: &'a Selector,
     depth: f64,
     width: f64,
     height: f64,
+    // The selector's lifetime, which only the parity reference reads.
+    marker: std::marker::PhantomData<&'a Selector>,
 }
 
 /// Doors must not stand on the landings of a ramp or a flight, nor, with
 /// `swing`, swing over them.
 pub(super) struct DoorCheck<'a> {
+    #[cfg(feature = "parity-reference")]
     pub(super) doors: &'a Selector,
     height: f64,
+    #[cfg(feature = "parity-reference")]
     pub(super) swing: bool,
+    // The selector's lifetime, which only the parity reference reads.
+    marker: std::marker::PhantomData<&'a Selector>,
 }
 
 /// The end-space parameters a ramp and a flight share.
@@ -52,11 +63,15 @@ impl<'a> EndSpaceCheck<'a> {
     /// The free space `depth` deep, `width` wide and `height` high, which
     /// none of the objects `obstacles` names may reach into.
     pub(super) fn new(obstacles: &'a Selector, (depth, width, height): (f64, f64, f64)) -> Self {
+        #[cfg(not(feature = "parity-reference"))]
+        let _ = obstacles;
         Self {
+            #[cfg(feature = "parity-reference")]
             obstacles,
             depth,
             width,
             height,
+            marker: std::marker::PhantomData,
         }
     }
 }
@@ -65,10 +80,15 @@ impl<'a> DoorCheck<'a> {
     /// No door `doors` names standing in the column `height` high over a
     /// landing.
     pub(super) fn new(doors: &'a Selector, height: f64) -> Self {
+        #[cfg(not(feature = "parity-reference"))]
+        let _ = doors;
         Self {
+            #[cfg(feature = "parity-reference")]
             doors,
             height,
+            #[cfg(feature = "parity-reference")]
             swing: true,
+            marker: std::marker::PhantomData,
         }
     }
 }
@@ -82,6 +102,7 @@ pub(super) fn door_descriptors() -> Vec<ParameterDescriptor> {
     ]
 }
 
+#[cfg(feature = "parity-reference")]
 fn positive(parameters: &Parameters<'_>, name: &str) -> Result<Option<f64>, Unavailable> {
     match length(parameters, name)? {
         Some(value) if value <= 0.0 => Err(invalid(format!("`{name}` must be positive"))),
@@ -89,6 +110,7 @@ fn positive(parameters: &Parameters<'_>, name: &str) -> Result<Option<f64>, Unav
     }
 }
 
+#[cfg(feature = "parity-reference")]
 pub(super) fn parse_end_space<'a>(
     parameters: &Parameters<'a>,
 ) -> Result<Option<EndSpaceCheck<'a>>, Unavailable> {
@@ -102,6 +124,7 @@ pub(super) fn parse_end_space<'a>(
             depth,
             width,
             height,
+            marker: std::marker::PhantomData,
         })),
         (None, None, None, None) => Ok(None),
         _ => Err(invalid(
@@ -113,6 +136,7 @@ pub(super) fn parse_end_space<'a>(
 
 /// The landing-door check; `break_doors` says whether the rule declares
 /// `handrail_break_doors`, which takes `landing_door_height` too.
+#[cfg(feature = "parity-reference")]
 pub(super) fn parse_doors<'a>(
     parameters: &Parameters<'a>,
     break_doors: bool,
@@ -126,6 +150,7 @@ pub(super) fn parse_doors<'a>(
             doors,
             height,
             swing: swing.unwrap_or(false),
+            marker: std::marker::PhantomData,
         })),
         (None, None) if swing.is_some() => Err(invalid(
             "`landing_door_swing` needs `landing_doors` and `landing_door_height`",

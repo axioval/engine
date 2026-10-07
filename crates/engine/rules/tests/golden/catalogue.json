@@ -9657,7 +9657,528 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "containment",
+        "refusals": "objects",
+        "declaration": [
+          {
+            "kind": "arguments",
+            "when": [],
+            "value": "containment_items;counterparts=@counterparts;minimum_volume_ratio=@minimum_volume_ratio;combine_adjacent=@combine_adjacent;cover=@cover;minimum_count=@minimum_count;maximum_count=@maximum_count;report_orphans=@report_orphans;selection=@selection"
+          }
+        ],
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "judged",
+                "expression": {
+                  "kind": "literal",
+                  "value": {
+                    "type": "integer",
+                    "value": 1
+                  },
+                  "label": "the inner element is judged"
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "judged",
+              "rounding": []
+            },
+            "fail": "",
+            "undecided": "",
+            "checks": [
+              {
+                "values": [],
+                "decision": {
+                  "kind": "items",
+                  "applies": {},
+                  "list": "containment_items;counterparts=@counterparts;minimum_volume_ratio=@minimum_volume_ratio;combine_adjacent=@combine_adjacent;cover=@cover;minimum_count=@minimum_count;maximum_count=@maximum_count;report_orphans=@report_orphans;selection=@selection",
+                  "refused": "{why}",
+                  "checks": [
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "field",
+                          "field": "orphan_checked",
+                          "value": true
+                        }
+                      ],
+                      "judge": {
+                        "kind": "truth",
+                        "value": "orphan",
+                        "finding": true
+                      },
+                      "fail": "{orphan_words}",
+                      "undecided": "{why}"
+                    },
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "field",
+                          "field": "band_checked",
+                          "value": true
+                        }
+                      ],
+                      "judge": {
+                        "kind": "range",
+                        "value": "distance",
+                        "unit": "length",
+                        "atLeast": [
+                          {
+                            "name": "minimum",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "value",
+                                    "name": "low"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "allowance": {
+                          "kind": "none"
+                        },
+                        "grade": false,
+                        "null": {
+                          "kind": "skip"
+                        }
+                      },
+                      "fail": "{below_words}",
+                      "undecided": "{straddle_words}",
+                      "related": "related"
+                    },
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "field",
+                          "field": "band_checked",
+                          "value": true
+                        }
+                      ],
+                      "judge": {
+                        "kind": "range",
+                        "value": "distance",
+                        "unit": "length",
+                        "atMost": [
+                          {
+                            "name": "maximum",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "value",
+                                    "name": "high"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "allowance": {
+                          "kind": "none"
+                        },
+                        "grade": false,
+                        "null": {
+                          "kind": "skip"
+                        }
+                      },
+                      "fail": "{above_words}",
+                      "undecided": "{straddle_words}",
+                      "related": "related"
+                    },
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "field",
+                          "field": "open_checked",
+                          "value": true
+                        }
+                      ],
+                      "judge": {
+                        "kind": "truth",
+                        "value": "open",
+                        "finding": true
+                      },
+                      "fail": "",
+                      "undecided": "{why}"
+                    }
+                  ],
+                  "reason": "reason",
+                  "joined": "; "
+                },
+                "fail": "",
+                "undecided": ""
+              }
+            ],
+            "project": [
+              {
+                "values": [],
+                "decision": {
+                  "kind": "items",
+                  "applies": {},
+                  "list": "containment_counts;counterparts=@counterparts;minimum_volume_ratio=@minimum_volume_ratio;combine_adjacent=@combine_adjacent;cover=@cover;minimum_count=@minimum_count;maximum_count=@maximum_count;report_orphans=@report_orphans;selection=@selection",
+                  "checks": [
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "field",
+                          "field": "count_checked",
+                          "value": true
+                        }
+                      ],
+                      "judge": {
+                        "kind": "range",
+                        "value": "count",
+                        "unit": "count",
+                        "atLeast": [
+                          {
+                            "name": "minimum",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "parameter",
+                                    "name": "minimum_count"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "allowance": {
+                          "kind": "none"
+                        },
+                        "grade": false,
+                        "null": {
+                          "kind": "skip"
+                        }
+                      },
+                      "fail": "{fewer_words}",
+                      "undecided": "{between_words}",
+                      "related": "related"
+                    },
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "field",
+                          "field": "count_checked",
+                          "value": true
+                        }
+                      ],
+                      "judge": {
+                        "kind": "range",
+                        "value": "count",
+                        "unit": "count",
+                        "atMost": [
+                          {
+                            "name": "maximum",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "parameter",
+                                    "name": "maximum_count"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "allowance": {
+                          "kind": "none"
+                        },
+                        "grade": false,
+                        "null": {
+                          "kind": "skip"
+                        }
+                      },
+                      "fail": "{more_words}",
+                      "undecided": "{between_words}",
+                      "related": "related"
+                    },
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "field",
+                          "field": "open_checked",
+                          "value": true
+                        }
+                      ],
+                      "judge": {
+                        "kind": "truth",
+                        "value": "open",
+                        "finding": true
+                      },
+                      "fail": "",
+                      "undecided": "{why}"
+                    }
+                  ],
+                  "at": "object",
+                  "reason": "reason",
+                  "joined": "; "
+                },
+                "fail": "",
+                "undecided": ""
+              }
+            ]
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "aggregate",
+                  "function": "none",
+                  "over": {
+                    "kind": "measured",
+                    "name": "containment_items;counterparts=@counterparts;minimum_volume_ratio=@minimum_volume_ratio;combine_adjacent=@combine_adjacent;cover=@cover;minimum_count=@minimum_count;maximum_count=@maximum_count;report_orphans=@report_orphans;selection=@selection"
+                  },
+                  "value": {
+                    "kind": "not",
+                    "operand": {
+                      "kind": "and",
+                      "operands": [
+                        {
+                          "kind": "not",
+                          "operand": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "orphan"
+                          }
+                        },
+                        {
+                          "kind": "compare",
+                          "operator": "greaterThanOrEquals",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "distance"
+                          },
+                          "right": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "low"
+                          }
+                        },
+                        {
+                          "kind": "compare",
+                          "operator": "lessThanOrEquals",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "distance"
+                          },
+                          "right": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "high"
+                          }
+                        },
+                        {
+                          "kind": "not",
+                          "operand": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "open"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "label": "no item fails"
+                },
+                {
+                  "kind": "isDefined",
+                  "operand": {
+                    "kind": "literal",
+                    "value": {
+                      "type": "integer",
+                      "value": 1
+                    },
+                    "label": "the inner element is judged"
+                  },
+                  "label": "read"
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.aggregate",
+                      "label": "no item fails",
+                      "fields": {
+                        "function": "none"
+                      },
+                      "inputs": {
+                        "over": {
+                          "block": {
+                            "type": "members.containment_items",
+                            "fields": {
+                              "combine_adjacent": "@combine_adjacent",
+                              "counterparts": "@counterparts",
+                              "cover": "@cover",
+                              "maximum_count": "@maximum_count",
+                              "minimum_count": "@minimum_count",
+                              "minimum_volume_ratio": "@minimum_volume_ratio",
+                              "report_orphans": "@report_orphans",
+                              "selection": "@selection"
+                            }
+                          }
+                        },
+                        "value": {
+                          "block": {
+                            "type": "expression.not",
+                            "inputs": {
+                              "operand": {
+                                "block": {
+                                  "type": "expression.and",
+                                  "inputs": {
+                                    "operands": {
+                                      "blocks": [
+                                        {
+                                          "type": "expression.not",
+                                          "inputs": {
+                                            "operand": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "orphan",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "type": "expression.compare",
+                                          "fields": {
+                                            "operator": "greaterThanOrEquals"
+                                          },
+                                          "inputs": {
+                                            "left": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "distance",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "low",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "type": "expression.compare",
+                                          "fields": {
+                                            "operator": "lessThanOrEquals"
+                                          },
+                                          "inputs": {
+                                            "left": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "distance",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "high",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "type": "expression.not",
+                                          "inputs": {
+                                            "operand": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "open",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.isDefined",
+                      "label": "read",
+                      "inputs": {
+                        "operand": {
+                          "block": {
+                            "type": "expression.literal",
+                            "label": "the inner element is judged",
+                            "fields": {
+                              "value": {
+                                "type": "integer",
+                                "value": 1
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.coordinate-consistency",
@@ -78855,6 +79376,999 @@
             {
               "language": "de",
               "text": "Die Wirtswände und die Räume, auf die es sich sicher bezieht."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
+      "name": "containment_counts",
+      "parameters": [
+        {
+          "key": "counterparts",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The outer elements (`@counterparts`)."
+            },
+            {
+              "language": "de",
+              "text": "Die äußeren Elemente (`@counterparts`)."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "minimum_volume_ratio",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The share of the smaller body's volume an inner element must share."
+            },
+            {
+              "language": "de",
+              "text": "Der Anteil am Volumen des kleineren Körpers, den ein inneres Element teilen muss."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "combine_adjacent",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether outer elements whose surfaces meet are taken together."
+            },
+            {
+              "language": "de",
+              "text": "Ob äußere Elemente, deren Oberflächen sich berühren, zusammen genommen werden."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "cover",
+          "kind": {
+            "type": "table"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The cover bands, as the rule states them (`@cover`)."
+            },
+            {
+              "language": "de",
+              "text": "Die Überdeckungsbänder, wie die Regel sie angibt (`@cover`)."
+            }
+          ],
+          "references": "table"
+        },
+        {
+          "key": "minimum_count",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The fewest inner elements an outer element may hold."
+            },
+            {
+              "language": "de",
+              "text": "Die wenigsten inneren Elemente, die ein äußeres Element halten darf."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "maximum_count",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The most inner elements an outer element may hold."
+            },
+            {
+              "language": "de",
+              "text": "Die meisten inneren Elemente, die ein äußeres Element halten darf."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "report_orphans",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether an inner element lying in none is reported."
+            },
+            {
+              "language": "de",
+              "text": "Ob ein inneres Element, das in keinem liegt, gemeldet wird."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "selection",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's inner elements (`@selection`)."
+            },
+            {
+              "language": "de",
+              "text": "Die inneren Elemente der Regel (`@selection`)."
+            }
+          ],
+          "references": "selector"
+        }
+      ],
+      "services": [
+        "proximity"
+      ],
+      "exactness": "stated",
+      "subject": "project",
+      "notEvaluated": [
+        "the proximity service is not registered"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Containment counts"
+        },
+        {
+          "language": "de",
+          "text": "Enthaltensein-Zählungen"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "How many inner elements each outer element holds, from sure to possible, and the objects `containment` leaves open beyond its inner elements."
+        },
+        {
+          "language": "de",
+          "text": "Wie viele innere Elemente jedes äußere Element hält, von sicher bis möglich, und die Objekte, die `containment` über seine inneren Elemente hinaus offen lässt."
+        }
+      ],
+      "fields": [
+        {
+          "name": "count_checked",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Count"
+            },
+            {
+              "language": "de",
+              "text": "Zählung"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "True on the item of an outer element's count."
+            },
+            {
+              "language": "de",
+              "text": "Wahr am Element der Zählung eines äußeren Elements."
+            }
+          ]
+        },
+        {
+          "name": "object",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Object"
+            },
+            {
+              "language": "de",
+              "text": "Objekt"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The object the item is on."
+            },
+            {
+              "language": "de",
+              "text": "Das Objekt, auf dem das Element steht."
+            }
+          ]
+        },
+        {
+          "name": "count",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Held"
+            },
+            {
+              "language": "de",
+              "text": "Gehalten"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "From the inner elements it surely holds to every one it may hold."
+            },
+            {
+              "language": "de",
+              "text": "Von den inneren Elementen, die es sicher hält, bis zu jedem, das es halten kann."
+            }
+          ]
+        },
+        {
+          "name": "fewer_words",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Fewer"
+            },
+            {
+              "language": "de",
+              "text": "Weniger"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The finding of fewer than the minimum, worded."
+            },
+            {
+              "language": "de",
+              "text": "Der Befund von weniger als dem Minimum, in Worten."
+            }
+          ]
+        },
+        {
+          "name": "more_words",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "More"
+            },
+            {
+              "language": "de",
+              "text": "Mehr"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The finding of more than the maximum, worded."
+            },
+            {
+              "language": "de",
+              "text": "Der Befund von mehr als dem Maximum, in Worten."
+            }
+          ]
+        },
+        {
+          "name": "between_words",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Between"
+            },
+            {
+              "language": "de",
+              "text": "Zwischen"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Why the count cannot be judged, worded."
+            },
+            {
+              "language": "de",
+              "text": "Warum die Zählung nicht beurteilt werden kann, in Worten."
+            }
+          ]
+        },
+        {
+          "name": "related",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Held"
+            },
+            {
+              "language": "de",
+              "text": "Gehalten"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The inner elements it surely holds."
+            },
+            {
+              "language": "de",
+              "text": "Die inneren Elemente, die es sicher hält."
+            }
+          ]
+        },
+        {
+          "name": "open_checked",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Open"
+            },
+            {
+              "language": "de",
+              "text": "Offen"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "True on the item of an object left open."
+            },
+            {
+              "language": "de",
+              "text": "Wahr am Element eines offen gelassenen Objekts."
+            }
+          ]
+        },
+        {
+          "name": "open",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Why"
+            },
+            {
+              "language": "de",
+              "text": "Warum"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Refused for why the object is open."
+            },
+            {
+              "language": "de",
+              "text": "Verweigert mit dem Grund, warum das Objekt offen ist."
+            }
+          ]
+        },
+        {
+          "name": "reason",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Reason"
+            },
+            {
+              "language": "de",
+              "text": "Grund"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Why the item is undecided where not for incomplete evidence, as a report writes it (`missing_service`)."
+            },
+            {
+              "language": "de",
+              "text": "Warum das Element unentschieden ist, wo nicht wegen unvollständiger Belege, wie ein Bericht es schreibt (`missing_service`)."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
+      "name": "containment_items",
+      "parameters": [
+        {
+          "key": "counterparts",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The outer elements (`@counterparts`)."
+            },
+            {
+              "language": "de",
+              "text": "Die äußeren Elemente (`@counterparts`)."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "minimum_volume_ratio",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The share of the smaller body's volume an inner element must share."
+            },
+            {
+              "language": "de",
+              "text": "Der Anteil am Volumen des kleineren Körpers, den ein inneres Element teilen muss."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "combine_adjacent",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether outer elements whose surfaces meet are taken together."
+            },
+            {
+              "language": "de",
+              "text": "Ob äußere Elemente, deren Oberflächen sich berühren, zusammen genommen werden."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "cover",
+          "kind": {
+            "type": "table"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The cover bands, as the rule states them (`@cover`)."
+            },
+            {
+              "language": "de",
+              "text": "Die Überdeckungsbänder, wie die Regel sie angibt (`@cover`)."
+            }
+          ],
+          "references": "table"
+        },
+        {
+          "key": "minimum_count",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The fewest inner elements an outer element may hold."
+            },
+            {
+              "language": "de",
+              "text": "Die wenigsten inneren Elemente, die ein äußeres Element halten darf."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "maximum_count",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The most inner elements an outer element may hold."
+            },
+            {
+              "language": "de",
+              "text": "Die meisten inneren Elemente, die ein äußeres Element halten darf."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "report_orphans",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether an inner element lying in none is reported."
+            },
+            {
+              "language": "de",
+              "text": "Ob ein inneres Element, das in keinem liegt, gemeldet wird."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "selection",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's inner elements (`@selection`)."
+            },
+            {
+              "language": "de",
+              "text": "Die inneren Elemente der Regel (`@selection`)."
+            }
+          ],
+          "references": "selector"
+        }
+      ],
+      "services": [
+        "proximity"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the proximity service is not registered",
+        "the inner element's extent cannot be read"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Containment"
+        },
+        {
+          "language": "de",
+          "text": "Enthaltensein"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "What `containment` reads of an inner element: whether it lies in none, each cover distance with its band, and why something of it is not checked."
+        },
+        {
+          "language": "de",
+          "text": "Was `containment` an einem inneren Element liest: ob es in keinem liegt, jeden Überdeckungsabstand mit seinem Band und warum etwas davon nicht geprüft wird."
+        }
+      ],
+      "fields": [
+        {
+          "name": "orphan_checked",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Orphan"
+            },
+            {
+              "language": "de",
+              "text": "Verwaist"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "True on the item of whether it lies in none."
+            },
+            {
+              "language": "de",
+              "text": "Wahr am Element, ob es in keinem liegt."
+            }
+          ]
+        },
+        {
+          "name": "orphan",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "In none"
+            },
+            {
+              "language": "de",
+              "text": "In keinem"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether it lies in no outer element; refused for why that is undecided."
+            },
+            {
+              "language": "de",
+              "text": "Ob es in keinem äußeren Element liegt; verweigert mit dem Grund, warum das offen ist."
+            }
+          ]
+        },
+        {
+          "name": "orphan_words",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Words"
+            },
+            {
+              "language": "de",
+              "text": "Worte"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The finding that it lies in none, worded."
+            },
+            {
+              "language": "de",
+              "text": "Der Befund, dass es in keinem liegt, in Worten."
+            }
+          ]
+        },
+        {
+          "name": "band_checked",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Band"
+            },
+            {
+              "language": "de",
+              "text": "Band"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "True on the item of a cover band."
+            },
+            {
+              "language": "de",
+              "text": "Wahr am Element eines Überdeckungsbands."
+            }
+          ]
+        },
+        {
+          "name": "distance",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Distance"
+            },
+            {
+              "language": "de",
+              "text": "Abstand"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The distance the band bounds: a cover, or a protrusion; refused for why it could not be measured."
+            },
+            {
+              "language": "de",
+              "text": "Der Abstand, den das Band begrenzt: eine Überdeckung oder ein Überstand; verweigert mit dem Grund, warum er nicht gemessen werden konnte."
+            }
+          ]
+        },
+        {
+          "name": "low",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Least"
+            },
+            {
+              "language": "de",
+              "text": "Mindestens"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The band's least distance, if any."
+            },
+            {
+              "language": "de",
+              "text": "Der kleinste Abstand des Bands, falls angegeben."
+            }
+          ]
+        },
+        {
+          "name": "high",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Most"
+            },
+            {
+              "language": "de",
+              "text": "Höchstens"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The band's greatest distance, if any."
+            },
+            {
+              "language": "de",
+              "text": "Der größte Abstand des Bands, falls angegeben."
+            }
+          ]
+        },
+        {
+          "name": "below_words",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Below"
+            },
+            {
+              "language": "de",
+              "text": "Darunter"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The finding below the least distance, worded."
+            },
+            {
+              "language": "de",
+              "text": "Der Befund unter dem kleinsten Abstand, in Worten."
+            }
+          ]
+        },
+        {
+          "name": "above_words",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Above"
+            },
+            {
+              "language": "de",
+              "text": "Darüber"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The finding above the greatest distance, worded."
+            },
+            {
+              "language": "de",
+              "text": "Der Befund über dem größten Abstand, in Worten."
+            }
+          ]
+        },
+        {
+          "name": "straddle_words",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Straddles"
+            },
+            {
+              "language": "de",
+              "text": "Überspannt"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Why the band cannot be judged, worded."
+            },
+            {
+              "language": "de",
+              "text": "Warum das Band nicht beurteilt werden kann, in Worten."
+            }
+          ]
+        },
+        {
+          "name": "related",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Outer"
+            },
+            {
+              "language": "de",
+              "text": "Äußeres"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The outer element the band is measured to."
+            },
+            {
+              "language": "de",
+              "text": "Das äußere Element, zu dem das Band gemessen wird."
+            }
+          ]
+        },
+        {
+          "name": "open_checked",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Open"
+            },
+            {
+              "language": "de",
+              "text": "Offen"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "True on the item of something not checked."
+            },
+            {
+              "language": "de",
+              "text": "Wahr am Element von etwas nicht Geprüftem."
+            }
+          ]
+        },
+        {
+          "name": "open",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Why"
+            },
+            {
+              "language": "de",
+              "text": "Warum"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Refused for why something of it is not checked."
+            },
+            {
+              "language": "de",
+              "text": "Verweigert mit dem Grund, warum etwas davon nicht geprüft wird."
+            }
+          ]
+        },
+        {
+          "name": "reason",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Reason"
+            },
+            {
+              "language": "de",
+              "text": "Grund"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Why the item is undecided where not for incomplete evidence, as a report writes it (`missing_service`)."
+            },
+            {
+              "language": "de",
+              "text": "Warum das Element unentschieden ist, wo nicht wegen unvollständiger Belege, wie ein Bericht es schreibt (`missing_service`)."
             }
           ]
         }

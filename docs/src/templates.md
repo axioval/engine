@@ -45,7 +45,7 @@ table, and `light-well`, `centre-line-distance`, `component-visibility`
 and `exit-separation` (whose required separation stays an interval over
 both shares where its flag is unknown) follow, and `name-sequence` is the
 first judging the items of a list on objects of their own (`at`), and
-`numbering-consistency`, `wall-spacing`, `parking-bay` and `distance` follow; `coordinate-consistency` is the first judging the sources themselves,
+`numbering-consistency`, `wall-spacing`, `parking-bay`, `distance` and `containment` follow; `coordinate-consistency` is the first judging the sources themselves,
 against a reference read once per rule, and `external-wall-validation`
 the first leading one measurement to outcomes at source and at object
 level ([#291](https://github.com/axioval/engine/issues/291)): every
@@ -1442,6 +1442,31 @@ vertical-extent service, refused once for the rule (`services` with
 `only` and `whole`). Computed bounds run per object, as for any template
 (`object_parameters`).
 
+### `containment`
+
+| Form | When | Values | Checks |
+| --- | --- | --- | --- |
+| one | always | `judged` = 1 | `Items` over `containment_items;counterparts=@counterparts;…;selection=@selection` (every parameter under its own name, unstated ones dropped, the rule's inner elements bound), joined by `; `; of the project, `Items` over `containment_counts` with the same arguments, each item's outcome on its `object` |
+
+The lists are the capability's own reading (`assess`): one broad phase per
+rule over the bound inner and outer elements, each inner element placed
+in the outer elements (alone, or with `combine_adjacent` in adjacent ones
+taken together), each cover band's face distance to an outer element it
+lies in, and the inner elements each outer element surely and possibly
+holds. An inner element's items, ordered as the capability reported what
+it left open: whether it lies in none (`orphan`, a finding worded
+`{orphan_words}`, or open for why), each band's distance within its
+bounds (`distance` at least `low`, then at most `high`, items of the
+band: `{below_words}`, `{above_words}`, a straddle `{straddle_words}`,
+relating the outer element) and why something of it is not checked
+(`open`). The project's items: each outer element's count (`count`, from
+sure to possible, at least `minimum_count`, then at most `maximum_count`:
+`{fewer_words}`, `{more_words}`, open `{between_words}`, relating what it
+surely holds), where the rule bounds counts, and each object the
+selections and the broad phase leave open beyond the inner elements. The
+declaration is the capability's own (`arguments`,
+`containment::check_arguments`), refused for each inner element.
+
 ### `coordinate-consistency`
 
 | Form | When | Once | Scopes | Decision |
@@ -2251,6 +2276,16 @@ tessellated and unreadable counterparts and counterparts scoped to
 containers of an undecided kind, some declarations refused; and by the
 `distance` rules of the `proximity` case, recorded before the switch. It
 is never forked (D36).
+
+`containment` is held to `containment/reference.rs`
+(`axioval_rules::reference::Containment`, which judges the same
+`assess`) on every fixture of `tests/containment.rs`; by generated
+declarations over columns in two adjacent walls (containments sure,
+straddling and absent, a column at the junction, unmeasured columns and
+walls, face distances measured, straddling and refused, inside and
+outside bands, orphans, counts and combining, some declarations refused);
+and by the `containment` rules of the `proximity` case, recorded before
+the switch. It is never forked (D37).
 `coordinate-consistency` is held to `coordinate_consistency/reference.rs`
 (`axioval_rules::reference::CoordinateConsistencyCheck`, which shares the
 comparison and the choice of the reference) through `common::Held` on

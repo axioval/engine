@@ -25,23 +25,43 @@
 //! Every verdict is three-valued: an undecided containment, an unmeasured
 //! volume or a straddling interval is reported not evaluated, and a count
 //! is judged only when the undecided inner elements cannot change it.
+//!
+//! It runs as a template ([`axioval_engine::template`]) over the measured
+//! `containment_items` of each inner element (the capability's own
+//! placement and cover reading, `assess`), the template judging each cover
+//! distance against its band and each outer element's count, of the
+//! project's `containment_counts`, against the bounds.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::LazyLock;
 
+use axioval_engine::template::Template;
 use axioval_engine::{
     CapabilityEvaluation, ColumnKind, CompiledRule, FaceClass, FaceDistanceError,
     FaceDistanceEvidence, FaceDistanceRequest, NotEvaluatedReason, ParameterDescriptor,
-    ParameterType, ProximityEvidence, ProximityProjection, ProximityServiceHandle, RuleCapability,
-    RuleContext, TableColumn, VolumeInterval,
+    ParameterType, ProximityEvidence, ProximityServiceHandle, RuleCapability, RuleContext,
+    TableColumn, VolumeInterval,
 };
-use axioval_ir::{Evidence, Finding, ObjectId, Scope};
+use axioval_ir::contract::ParameterValue;
+use axioval_ir::{Evidence, ObjectId};
 
 use crate::clash::measure;
-use crate::pairs::{Unevaluated, fidelity_note, prepare, refuse_declaration, severity};
+use crate::pairs::{Prepared, Unevaluated, fidelity_note};
 use crate::support::{Parameters, Unavailable, invalid};
+
+mod items;
+#[cfg(feature = "parity-reference")]
+pub(crate) mod reference;
+mod template;
+
+pub(crate) use items::ContainmentItems;
 
 /// Checks that inner elements lie in outer elements, keep their cover to
 /// the outer element's faces, and are held in the declared numbers.
+///
+/// It runs as a template ([`axioval_engine::template`]) over the measured
+/// `containment_items` of each inner element and `containment_counts` of
+/// the project.
 pub struct Containment;
 
 const COVER_COLUMNS: &[TableColumn] = &[
@@ -69,23 +89,23 @@ impl Side {
     }
 }
 
-struct Band {
+pub(crate) struct Band {
     faces: FaceClass,
     side: Side,
-    minimum: Option<f64>,
-    maximum: Option<f64>,
+    pub(crate) minimum: Option<f64>,
+    pub(crate) maximum: Option<f64>,
 }
 
-struct Declaration {
+pub(crate) struct Declaration {
     ratio: f64,
     combine: bool,
-    bands: Vec<Band>,
-    minimum_count: Option<usize>,
-    maximum_count: Option<usize>,
+    pub(crate) bands: Vec<Band>,
+    pub(crate) minimum_count: Option<usize>,
+    pub(crate) maximum_count: Option<usize>,
     report_orphans: bool,
 }
 
-fn declaration(rule: &CompiledRule) -> Result<Declaration, Unavailable> {
+pub(crate) fn declaration(rule: &CompiledRule) -> Result<Declaration, Unavailable> {
     let parameters = Parameters(rule);
     let ratio = parameters
         .number("minimum_volume_ratio")?
@@ -528,16 +548,24 @@ fn metres(lower: f64, upper: f64) -> String {
     }
 }
 
+/// A cover band's reading of one measured distance: the distance the band
+/// bounds and the words of each outcome.
+pub(crate) struct Banded {
+    pub(crate) lower: f64,
+    pub(crate) upper: f64,
+    /// Below the minimum, where one is declared.
+    pub(crate) below: String,
+    /// Above the maximum, where one is declared.
+    pub(crate) above: String,
+    /// Straddling a bound.
+    pub(crate) straddles: String,
+}
+
 impl Band {
-    /// The band's outcome for one measured distance: a finding message,
-    /// `None` when it holds, or why it is undecided.
-    fn judge(
-        &self,
-        measured: &FaceDistanceEvidence,
-        outer: &ObjectId,
-    ) -> Result<Option<String>, String> {
+    /// The distance the band bounds, a protrusion the signed distance's
+    /// negation, with the words of each outcome.
+    pub(crate) fn read(&self, measured: &FaceDistanceEvidence, outer: &ObjectId) -> Banded {
         let signed = measured.signed();
-        // A protrusion is the signed distance's negation.
         let (lower, upper) = match self.side {
             Side::Inside => (signed.lower_metres(), signed.upper_metres()),
             Side::Outside => (-signed.upper_metres(), -signed.lower_metres()),
@@ -548,342 +576,286 @@ impl Band {
         };
         let value = metres(lower, upper);
         let note = fidelity_note(measured.fidelity());
-        let below = self
-            .minimum
-            .map(|minimum| (upper < minimum, lower < minimum, minimum));
-        let above = self
-            .maximum
-            .map(|maximum| (lower > maximum, upper > maximum, maximum));
-        if let Some((true, _, minimum)) = below {
-            return Ok(Some(format!(
-                "{what} is {value}, below the minimum {minimum:.4} m{note}"
-            )));
-        }
-        if let Some((true, _, maximum)) = above {
-            return Ok(Some(format!(
-                "{what} is {value}, above the maximum {maximum:.4} m{note}"
-            )));
-        }
-        if below.is_some_and(|(_, possibly, _)| possibly)
-            || above.is_some_and(|(_, possibly, _)| possibly)
-        {
-            return Err(format!(
+        Banded {
+            lower,
+            upper,
+            below: self.minimum.map_or_else(String::new, |minimum| {
+                format!("{what} is {value}, below the minimum {minimum:.4} m{note}")
+            }),
+            above: self.maximum.map_or_else(String::new, |maximum| {
+                format!("{what} is {value}, above the maximum {maximum:.4} m{note}")
+            }),
+            straddles: format!(
                 "whether the {what} keeps its bounds cannot be decided: it is {value}{note}"
-            ));
+            ),
         }
-        Ok(None)
     }
 }
 
 /// Counts of inner elements one outer element holds.
 #[derive(Default)]
-struct Held {
-    sure: BTreeSet<ObjectId>,
-    possible: BTreeSet<ObjectId>,
+pub(crate) struct Held {
+    pub(crate) sure: BTreeSet<ObjectId>,
+    pub(crate) possible: BTreeSet<ObjectId>,
 }
 
-struct Run<'r> {
-    rule: &'r CompiledRule,
-    declared: Declaration,
-    evaluation: CapabilityEvaluation,
-    unevaluated: Unevaluated,
-}
-
-impl Run<'_> {
-    fn finding(
-        &mut self,
-        scope: &ObjectId,
-        message: String,
-        related: Vec<ObjectId>,
-        evidence: Vec<Evidence>,
-    ) {
-        self.evaluation.push_finding(
-            Finding {
-                explanation: None,
-                id: None,
-                decision: None,
-                rule_id: self.rule.id.clone(),
-                scope: Scope::Object(scope.clone()),
-                severity: severity(self.rule),
-                message,
-                related: Vec::new(),
-                evidence,
-                location: None,
-                categories: Vec::new(),
-            }
-            .with_related(related),
-        );
+impl Held {
+    /// The inner elements it surely holds, and every one it may hold.
+    pub(crate) fn counts(&self) -> (usize, usize) {
+        (self.sure.len(), self.sure.len() + self.possible.len())
     }
+}
 
-    fn cover(&mut self, service: &ProximityServiceHandle, inner: &ObjectId, link: &Link) {
+/// What one inner element comes to, in the capability's order.
+pub(crate) enum Item {
+    /// It lies in no outer element (a finding, its words and the evidence
+    /// of every link), or why that cannot be decided.
+    Orphan(Result<(String, Vec<Evidence>), Unavailable>),
+    /// One cover band against one outer element it lies in: the face
+    /// distance measured, or why it could not be.
+    Band {
+        band: usize,
+        outer: ObjectId,
+        measured: Result<Box<FaceDistanceEvidence>, Unavailable>,
+        /// The containment's evidence.
+        link: Vec<Evidence>,
+    },
+    /// Why something of it is not checked.
+    Open(Unavailable),
+}
+
+/// What the capability reads of a rule's elements: each inner element's
+/// items, what each outer element holds, and what the selections and the
+/// extents left open.
+pub(crate) struct Assessed {
+    pub(crate) inner: Vec<(ObjectId, Vec<Item>)>,
+    pub(crate) held: BTreeMap<ObjectId, Held>,
+    pub(crate) unmeasurable_subjects: BTreeSet<ObjectId>,
+    pub(crate) unevaluated: Unevaluated,
+}
+
+impl Declaration {
+    /// Each cover band's distance to `link`'s outer element, measured once
+    /// per class of faces.
+    fn cover(&self, service: &ProximityServiceHandle, inner: &ObjectId, link: &Link) -> Vec<Item> {
         let mut measured: BTreeMap<FaceClass, Result<FaceDistanceEvidence, FaceDistanceError>> =
             BTreeMap::new();
-        let mut outcomes = Vec::new();
-        for band in &self.declared.bands {
+        let mut items = Vec::new();
+        for (index, band) in self.bands.iter().enumerate() {
             let answer = measured.entry(band.faces).or_insert_with(|| {
                 FaceDistanceRequest::try_new(inner.clone(), link.outer.clone(), band.faces)
                     .and_then(|request| service.measure_face_distance(&request))
             });
-            outcomes.push(match answer {
-                Err(error) => Err((
-                    face_reason(*error),
-                    format!(
-                        "its {} distance to {} could not be measured: {error}",
-                        band.faces.name(),
-                        link.outer
-                    ),
-                )),
-                Ok(evidence) => match band.judge(evidence, &link.outer) {
-                    Ok(finding) => {
-                        Ok(finding.map(|message| (message, evidence.evidence().clone())))
-                    }
-                    Err(message) => Err((NotEvaluatedReason::IncompleteEvidence, message)),
-                },
+            items.push(Item::Band {
+                band: index,
+                outer: link.outer.clone(),
+                measured: answer.clone().map(Box::new).map_err(|error| {
+                    (
+                        face_reason(error),
+                        format!(
+                            "its {} distance to {} could not be measured: {error}",
+                            band.faces.name(),
+                            link.outer
+                        ),
+                    )
+                }),
+                link: link.evidence(),
             });
         }
-        for outcome in outcomes {
-            match outcome {
-                Ok(None) => {}
-                Ok(Some((message, evidence))) => {
-                    let mut evidence = vec![evidence];
-                    evidence.extend(link.evidence());
-                    self.finding(inner, message, vec![link.outer.clone()], evidence);
-                }
-                Err((reason, message)) => self.unevaluated.push(inner.clone(), reason, message),
-            }
-        }
-    }
-
-    /// Judges one outer element's count.
-    fn count(&mut self, outer: &ObjectId, held: &Held) {
-        let (sure, possible) = (held.sure.len(), held.sure.len() + held.possible.len());
-        let mut undecided = false;
-        if let Some(minimum) = self.declared.minimum_count {
-            if possible < minimum {
-                self.finding(
-                    outer,
-                    format!("holds {sure} inner elements, fewer than the minimum {minimum}"),
-                    held.sure.iter().cloned().collect(),
-                    Vec::new(),
-                );
-                return;
-            }
-            undecided |= sure < minimum;
-        }
-        if let Some(maximum) = self.declared.maximum_count {
-            if sure > maximum {
-                self.finding(
-                    outer,
-                    format!("holds {sure} inner elements, more than the maximum {maximum}"),
-                    held.sure.iter().cloned().collect(),
-                    Vec::new(),
-                );
-                return;
-            }
-            undecided |= possible > maximum;
-        }
-        if undecided {
-            self.unevaluated.push(
-                outer.clone(),
-                NotEvaluatedReason::IncompleteEvidence,
-                format!(
-                    "holds between {sure} and {possible} inner elements, so its count cannot be judged"
-                ),
-            );
-        }
+        items
     }
 }
 
-impl RuleCapability for Containment {
-    fn id(&self) -> &'static str {
-        "axioval:capability.containment"
-    }
-
-    fn parameters(&self) -> Vec<ParameterDescriptor> {
-        vec![
-            ParameterDescriptor::required("counterparts", ParameterType::Selector),
-            ParameterDescriptor::required("minimum_volume_ratio", ParameterType::Number),
-            ParameterDescriptor::optional("combine_adjacent", ParameterType::Boolean),
-            ParameterDescriptor::optional("cover", ParameterType::Table(COVER_COLUMNS)),
-            ParameterDescriptor::optional("minimum_count", ParameterType::Integer),
-            ParameterDescriptor::optional("maximum_count", ParameterType::Integer),
-            ParameterDescriptor::optional("report_orphans", ParameterType::Boolean),
-        ]
-    }
-
-    #[allow(clippy::too_many_lines)]
-    fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
-        let declared = match declaration(rule) {
-            Ok(declared) => declared,
-            Err((_, message)) => return refuse_declaration(context, rule, &message),
-        };
-        let prepared = match prepare(context, rule, Some(0.0), ProximityProjection::Minimum3d) {
-            Ok(prepared) => prepared,
-            Err(refused) => return refused,
-        };
-        let service = prepared.service;
-        let subjects: BTreeSet<&ObjectId> = prepared.subjects.iter().collect();
-        // Each pair is measured once and read from whichever end is inner.
-        let mut links: BTreeMap<ObjectId, Vec<Link>> = BTreeMap::new();
-        for pair in &prepared.pairs {
-            let (subject, counterpart) = (pair.subject(), pair.counterpart());
-            let measured = measure(service, subject, counterpart);
-            let reverse = subjects.contains(counterpart) && prepared.counterparts.contains(subject);
-            if reverse {
-                links.entry(counterpart.clone()).or_default().push(Link {
-                    outer: subject.clone(),
-                    measured: measured.clone(),
-                    inner_is_subject: false,
-                });
-            }
-            links.entry(subject.clone()).or_default().push(Link {
-                outer: counterpart.clone(),
-                measured,
-                inner_is_subject: true,
+/// Places every inner element of `prepared` in the outer elements and
+/// reads its cover, counting what each outer element holds.
+#[allow(clippy::too_many_lines)]
+pub(crate) fn assess(declared: &Declaration, prepared: Prepared<'_>) -> Assessed {
+    let service = prepared.service;
+    let subjects: BTreeSet<&ObjectId> = prepared.subjects.iter().collect();
+    // Each pair is measured once and read from whichever end is inner.
+    let mut links: BTreeMap<ObjectId, Vec<Link>> = BTreeMap::new();
+    for pair in &prepared.pairs {
+        let (subject, counterpart) = (pair.subject(), pair.counterpart());
+        let measured = measure(service, subject, counterpart);
+        let reverse = subjects.contains(counterpart) && prepared.counterparts.contains(subject);
+        if reverse {
+            links.entry(counterpart.clone()).or_default().push(Link {
+                outer: subject.clone(),
+                measured: measured.clone(),
+                inner_is_subject: false,
             });
         }
-        let mut pairs = OuterPairs {
-            service,
-            measured: BTreeMap::new(),
-        };
-        let mut run = Run {
-            rule,
-            declared,
-            evaluation: CapabilityEvaluation::default(),
-            unevaluated: prepared.unevaluated,
-        };
-        let mut held: BTreeMap<ObjectId, Held> = prepared
-            .counterparts
-            .iter()
-            .map(|outer| (outer.clone(), Held::default()))
-            .collect();
-        // An inner element whose extent is unknown may lie in any outer one.
-        for inner in &prepared.unmeasurable_subjects {
-            for (outer, count) in &mut held {
-                if outer != inner {
-                    count.possible.insert(inner.clone());
-                }
+        links.entry(subject.clone()).or_default().push(Link {
+            outer: counterpart.clone(),
+            measured,
+            inner_is_subject: true,
+        });
+    }
+    let mut pairs = OuterPairs {
+        service,
+        measured: BTreeMap::new(),
+    };
+    let mut held: BTreeMap<ObjectId, Held> = prepared
+        .counterparts
+        .iter()
+        .map(|outer| (outer.clone(), Held::default()))
+        .collect();
+    // An inner element whose extent is unknown may lie in any outer one.
+    for inner in &prepared.unmeasurable_subjects {
+        for (outer, count) in &mut held {
+            if outer != inner {
+                count.possible.insert(inner.clone());
             }
         }
-        let unmeasurable_outer = !prepared.unmeasurable_counterparts.is_empty();
-        let no_links = Vec::new();
-        for inner in &prepared.subjects {
-            let links = links.get(inner).unwrap_or(&no_links);
-            let placement = run.declared.place(links, &mut pairs);
-            for &index in &placement.inside {
-                if let Some(count) = held.get_mut(&links[index].outer) {
-                    count.sure.insert(inner.clone());
-                }
+    }
+    let unmeasurable_outer = !prepared.unmeasurable_counterparts.is_empty();
+    let no_links = Vec::new();
+    let mut assessed = Vec::new();
+    for inner in &prepared.subjects {
+        let mut items = Vec::new();
+        let links = links.get(inner).unwrap_or(&no_links);
+        let placement = declared.place(links, &mut pairs);
+        for &index in &placement.inside {
+            if let Some(count) = held.get_mut(&links[index].outer) {
+                count.sure.insert(inner.clone());
             }
-            for (index, _, _) in &placement.undecided {
-                if let Some(count) = held.get_mut(&links[*index].outer) {
-                    count.possible.insert(inner.clone());
-                }
+        }
+        for (index, _, _) in &placement.undecided {
+            if let Some(count) = held.get_mut(&links[*index].outer) {
+                count.possible.insert(inner.clone());
             }
-            if let Some(component) = &placement.combined {
-                for &index in component {
-                    let Some(count) = held.get_mut(&links[index].outer) else {
-                        continue;
-                    };
-                    match links[index].volumes() {
-                        Some((shared, _, _)) if shared.lower_cubic_metres() > 0.0 => {
-                            count.sure.insert(inner.clone());
-                        }
-                        _ => {
-                            count.possible.insert(inner.clone());
-                        }
+        }
+        if let Some(component) = &placement.combined {
+            for &index in component {
+                let Some(count) = held.get_mut(&links[index].outer) else {
+                    continue;
+                };
+                match links[index].volumes() {
+                    Some((shared, _, _)) if shared.lower_cubic_metres() > 0.0 => {
+                        count.sure.insert(inner.clone());
                     }
-                }
-            }
-            if placement.combination_undecided.is_some() {
-                for link in links {
-                    if link
-                        .volumes()
-                        .is_none_or(|(shared, _, _)| shared.upper_cubic_metres() > 0.0)
-                        && let Some(count) = held.get_mut(&link.outer)
-                    {
+                    _ => {
                         count.possible.insert(inner.clone());
                     }
                 }
             }
-
-            let held_somewhere = !placement.inside.is_empty() || placement.combined.is_some();
-            let undecided = placement
-                .undecided
-                .first()
-                .map(|(_, reason, message)| (reason.clone(), message.clone()))
-                .or_else(|| placement.combination_undecided.clone());
-            if run.declared.report_orphans && !held_somewhere {
-                match (&undecided, unmeasurable_outer) {
-                    (Some((reason, message)), _) => {
-                        run.unevaluated
-                            .push(inner.clone(), reason.clone(), message.clone());
-                    }
-                    (None, true) => run.unevaluated.push(
-                        inner.clone(),
-                        NotEvaluatedReason::IncompleteEvidence,
-                        "an outer element could not be measured, so whether this lies in none cannot be decided"
-                            .to_owned(),
-                    ),
-                    (None, false) => {
-                        let evidence = links.iter().flat_map(Link::evidence).collect();
-                        run.finding(
-                            inner,
-                            format!(
-                                "lies in no outer element: none shares {:.4} of the smaller body's volume",
-                                run.declared.ratio
-                            ),
-                            Vec::new(),
-                            evidence,
-                        );
-                    }
+        }
+        if placement.combination_undecided.is_some() {
+            for link in links {
+                if link
+                    .volumes()
+                    .is_none_or(|(shared, _, _)| shared.upper_cubic_metres() > 0.0)
+                    && let Some(count) = held.get_mut(&link.outer)
+                {
+                    count.possible.insert(inner.clone());
                 }
             }
-            if run.declared.bands.is_empty() {
-                continue;
-            }
+        }
+
+        let held_somewhere = !placement.inside.is_empty() || placement.combined.is_some();
+        let undecided = placement
+            .undecided
+            .first()
+            .map(|(_, reason, message)| (reason.clone(), message.clone()))
+            .or_else(|| placement.combination_undecided.clone());
+        if declared.report_orphans && !held_somewhere {
+            items.push(Item::Orphan(match (&undecided, unmeasurable_outer) {
+                (Some(open), _) => Err(open.clone()),
+                (None, true) => Err((
+                    NotEvaluatedReason::IncompleteEvidence,
+                    "an outer element could not be measured, so whether this lies in none cannot be decided"
+                        .to_owned(),
+                )),
+                (None, false) => Ok((
+                    format!(
+                        "lies in no outer element: none shares {:.4} of the smaller body's volume",
+                        declared.ratio
+                    ),
+                    links.iter().flat_map(Link::evidence).collect(),
+                )),
+            }));
+        }
+        if !declared.bands.is_empty() {
             for &index in &placement.inside {
-                run.cover(service, inner, &links[index]);
+                items.extend(declared.cover(service, inner, &links[index]));
             }
             for (index, reason, message) in &placement.undecided {
-                run.unevaluated.push(
-                    inner.clone(),
+                items.push(Item::Open((
                     reason.clone(),
                     format!(
                         "its cover to {} is not checked: {message}",
                         links[*index].outer
                     ),
-                );
+                )));
             }
             if placement.combined.is_some() {
-                run.unevaluated.push(
-                    inner.clone(),
+                items.push(Item::Open((
                     NotEvaluatedReason::BackendUnavailable,
                     "it lies only in a combination of outer elements, whose faces are not measured as one body, so its cover is not checked"
                         .to_owned(),
-                );
+                )));
             } else if placement.inside.is_empty()
                 && let Some((reason, message)) = &placement.combination_undecided
             {
-                run.unevaluated.push(
-                    inner.clone(),
+                items.push(Item::Open((
                     reason.clone(),
                     format!("its cover is not checked: {message}"),
-                );
+                )));
             }
         }
-        if run.declared.minimum_count.is_some() || run.declared.maximum_count.is_some() {
-            for (outer, count) in &held {
-                run.count(outer, count);
-            }
-        }
-        let Run {
-            mut evaluation,
-            unevaluated,
-            ..
-        } = run;
-        unevaluated.drain_into(&mut evaluation);
-        evaluation
+        assessed.push((inner.clone(), items));
+    }
+    Assessed {
+        inner: assessed,
+        held,
+        unmeasurable_subjects: prepared.unmeasurable_subjects,
+        unevaluated: prepared.unevaluated,
+    }
+}
+
+/// The capability's parameters.
+pub(crate) fn parameters() -> Vec<ParameterDescriptor> {
+    vec![
+        ParameterDescriptor::required("counterparts", ParameterType::Selector),
+        ParameterDescriptor::required("minimum_volume_ratio", ParameterType::Number),
+        ParameterDescriptor::optional("combine_adjacent", ParameterType::Boolean),
+        ParameterDescriptor::optional("cover", ParameterType::Table(COVER_COLUMNS)),
+        ParameterDescriptor::optional("minimum_count", ParameterType::Integer),
+        ParameterDescriptor::optional("maximum_count", ParameterType::Integer),
+        ParameterDescriptor::optional("report_orphans", ParameterType::Boolean),
+    ]
+}
+
+/// Checks the rule parameters `containment_items` names, as the rule
+/// states them: what the capability refused of its declaration, in its
+/// order and words.
+pub(crate) fn check_arguments(
+    arguments: &BTreeMap<String, ParameterValue>,
+) -> Result<(), Unavailable> {
+    let rule = crate::light_area::synthesised(arguments.clone());
+    declaration(&rule).map(|_| ())
+}
+
+static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
+
+/// The plans of the rules bound to it, kept across runs.
+static PLANS: crate::templates::Plans = crate::templates::Plans::new();
+
+impl RuleCapability for Containment {
+    fn id(&self) -> &'static str {
+        template::ID
+    }
+
+    fn parameters(&self) -> Vec<ParameterDescriptor> {
+        TEMPLATE.parameters.clone()
+    }
+
+    fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
+        crate::templates::run((&TEMPLATE, &PLANS), context, rule)
+    }
+
+    fn template(&self) -> Option<&Template> {
+        Some(&TEMPLATE)
     }
 }
 

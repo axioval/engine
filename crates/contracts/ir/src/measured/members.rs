@@ -948,6 +948,427 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
     },
     MemberDescriptor {
         list: MeasuredDescriptor {
+            name: "containment_counts",
+            parameters: &[
+                MeasuredParameter {
+                    key: "counterparts",
+                    kind: MeasuredParameterKind::Objects,
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The outer elements (`@counterparts`).",
+                        "Die äußeren Elemente (`@counterparts`).",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "minimum_volume_ratio",
+                    kind: MeasuredParameterKind::Number { minimum: 0.0 },
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The share of the smaller body's volume an inner element must share.",
+                        "Der Anteil am Volumen des kleineren Körpers, den ein inneres Element teilen muss.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "combine_adjacent",
+                    kind: MeasuredParameterKind::Truth,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "Whether outer elements whose surfaces meet are taken together.",
+                        "Ob äußere Elemente, deren Oberflächen sich berühren, zusammen genommen werden.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "cover",
+                    kind: MeasuredParameterKind::Table,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The cover bands, as the rule states them (`@cover`).",
+                        "Die Überdeckungsbänder, wie die Regel sie angibt (`@cover`).",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "minimum_count",
+                    kind: MeasuredParameterKind::Number { minimum: 0.0 },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The fewest inner elements an outer element may hold.",
+                        "Die wenigsten inneren Elemente, die ein äußeres Element halten darf.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "maximum_count",
+                    kind: MeasuredParameterKind::Number { minimum: 0.0 },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The most inner elements an outer element may hold.",
+                        "Die meisten inneren Elemente, die ein äußeres Element halten darf.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "report_orphans",
+                    kind: MeasuredParameterKind::Truth,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "Whether an inner element lying in none is reported.",
+                        "Ob ein inneres Element, das in keinem liegt, gemeldet wird.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "selection",
+                    kind: MeasuredParameterKind::Objects,
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The rule's inner elements (`@selection`).",
+                        "Die inneren Elemente der Regel (`@selection`).",
+                    ),
+                },
+            ],
+            dimension: None,
+            services: &["proximity"],
+            exactness: MeasuredExactness::Stated,
+            subject: MeasuredSubject::Project,
+            not_evaluated: &["the proximity service is not registered"],
+            label: &en_de("Containment counts", "Enthaltensein-Zählungen"),
+            help: &en_de(
+                "How many inner elements each outer element holds, from sure to possible, and the \
+                 objects `containment` leaves open beyond its inner elements.",
+                "Wie viele innere Elemente jedes äußere Element hält, von sicher bis möglich, und \
+                 die Objekte, die `containment` über seine inneren Elemente hinaus offen lässt.",
+            ),
+        },
+        fields: &[
+            field(
+                "count_checked",
+                TRUTH,
+                &en_de("Count", "Zählung"),
+                &en_de(
+                    "True on the item of an outer element's count.",
+                    "Wahr am Element der Zählung eines äußeren Elements.",
+                ),
+            ),
+            field(
+                "object",
+                MemberFieldKind::Objects,
+                &en_de("Object", "Objekt"),
+                &en_de(
+                    "The object the item is on.",
+                    "Das Objekt, auf dem das Element steht.",
+                ),
+            ),
+            field(
+                "count",
+                RATIO,
+                &en_de("Held", "Gehalten"),
+                &en_de(
+                    "From the inner elements it surely holds to every one it may hold.",
+                    "Von den inneren Elementen, die es sicher hält, bis zu jedem, das es halten kann.",
+                ),
+            ),
+            field(
+                "fewer_words",
+                MemberFieldKind::Text,
+                &en_de("Fewer", "Weniger"),
+                &en_de(
+                    "The finding of fewer than the minimum, worded.",
+                    "Der Befund von weniger als dem Minimum, in Worten.",
+                ),
+            ),
+            field(
+                "more_words",
+                MemberFieldKind::Text,
+                &en_de("More", "Mehr"),
+                &en_de(
+                    "The finding of more than the maximum, worded.",
+                    "Der Befund von mehr als dem Maximum, in Worten.",
+                ),
+            ),
+            field(
+                "between_words",
+                MemberFieldKind::Text,
+                &en_de("Between", "Zwischen"),
+                &en_de(
+                    "Why the count cannot be judged, worded.",
+                    "Warum die Zählung nicht beurteilt werden kann, in Worten.",
+                ),
+            ),
+            field(
+                "related",
+                MemberFieldKind::Objects,
+                &en_de("Held", "Gehalten"),
+                &en_de(
+                    "The inner elements it surely holds.",
+                    "Die inneren Elemente, die es sicher hält.",
+                ),
+            ),
+            field(
+                "open_checked",
+                TRUTH,
+                &en_de("Open", "Offen"),
+                &en_de(
+                    "True on the item of an object left open.",
+                    "Wahr am Element eines offen gelassenen Objekts.",
+                ),
+            ),
+            field(
+                "open",
+                TRUTH,
+                &en_de("Why", "Warum"),
+                &en_de(
+                    "Refused for why the object is open.",
+                    "Verweigert mit dem Grund, warum das Objekt offen ist.",
+                ),
+            ),
+            field(
+                "reason",
+                MemberFieldKind::Text,
+                &en_de("Reason", "Grund"),
+                &en_de(
+                    "Why the item is undecided where not for incomplete evidence, as a report writes it (`missing_service`).",
+                    "Warum das Element unentschieden ist, wo nicht wegen unvollständiger Belege, wie ein Bericht es schreibt (`missing_service`).",
+                ),
+            ),
+        ],
+    },
+    MemberDescriptor {
+        list: MeasuredDescriptor {
+            name: "containment_items",
+            parameters: &[
+                MeasuredParameter {
+                    key: "counterparts",
+                    kind: MeasuredParameterKind::Objects,
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The outer elements (`@counterparts`).",
+                        "Die äußeren Elemente (`@counterparts`).",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "minimum_volume_ratio",
+                    kind: MeasuredParameterKind::Number { minimum: 0.0 },
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The share of the smaller body's volume an inner element must share.",
+                        "Der Anteil am Volumen des kleineren Körpers, den ein inneres Element teilen muss.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "combine_adjacent",
+                    kind: MeasuredParameterKind::Truth,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "Whether outer elements whose surfaces meet are taken together.",
+                        "Ob äußere Elemente, deren Oberflächen sich berühren, zusammen genommen werden.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "cover",
+                    kind: MeasuredParameterKind::Table,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The cover bands, as the rule states them (`@cover`).",
+                        "Die Überdeckungsbänder, wie die Regel sie angibt (`@cover`).",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "minimum_count",
+                    kind: MeasuredParameterKind::Number { minimum: 0.0 },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The fewest inner elements an outer element may hold.",
+                        "Die wenigsten inneren Elemente, die ein äußeres Element halten darf.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "maximum_count",
+                    kind: MeasuredParameterKind::Number { minimum: 0.0 },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The most inner elements an outer element may hold.",
+                        "Die meisten inneren Elemente, die ein äußeres Element halten darf.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "report_orphans",
+                    kind: MeasuredParameterKind::Truth,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "Whether an inner element lying in none is reported.",
+                        "Ob ein inneres Element, das in keinem liegt, gemeldet wird.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "selection",
+                    kind: MeasuredParameterKind::Objects,
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The rule's inner elements (`@selection`).",
+                        "Die inneren Elemente der Regel (`@selection`).",
+                    ),
+                },
+            ],
+            dimension: None,
+            services: &["proximity"],
+            exactness: MeasuredExactness::Measured,
+            subject: MeasuredSubject::Object,
+            not_evaluated: &[
+                "the proximity service is not registered",
+                "the inner element's extent cannot be read",
+            ],
+            label: &en_de("Containment", "Enthaltensein"),
+            help: &en_de(
+                "What `containment` reads of an inner element: whether it lies in none, each \
+                 cover distance with its band, and why something of it is not checked.",
+                "Was `containment` an einem inneren Element liest: ob es in keinem liegt, jeden \
+                 Überdeckungsabstand mit seinem Band und warum etwas davon nicht geprüft wird.",
+            ),
+        },
+        fields: &[
+            field(
+                "orphan_checked",
+                TRUTH,
+                &en_de("Orphan", "Verwaist"),
+                &en_de(
+                    "True on the item of whether it lies in none.",
+                    "Wahr am Element, ob es in keinem liegt.",
+                ),
+            ),
+            field(
+                "orphan",
+                TRUTH,
+                &en_de("In none", "In keinem"),
+                &en_de(
+                    "Whether it lies in no outer element; refused for why that is undecided.",
+                    "Ob es in keinem äußeren Element liegt; verweigert mit dem Grund, warum das offen ist.",
+                ),
+            ),
+            field(
+                "orphan_words",
+                MemberFieldKind::Text,
+                &en_de("Words", "Worte"),
+                &en_de(
+                    "The finding that it lies in none, worded.",
+                    "Der Befund, dass es in keinem liegt, in Worten.",
+                ),
+            ),
+            field(
+                "band_checked",
+                TRUTH,
+                &en_de("Band", "Band"),
+                &en_de(
+                    "True on the item of a cover band.",
+                    "Wahr am Element eines Überdeckungsbands.",
+                ),
+            ),
+            field(
+                "distance",
+                LENGTH,
+                &en_de("Distance", "Abstand"),
+                &en_de(
+                    "The distance the band bounds: a cover, or a protrusion; refused for why it could not be measured.",
+                    "Der Abstand, den das Band begrenzt: eine Überdeckung oder ein Überstand; verweigert mit dem Grund, warum er nicht gemessen werden konnte.",
+                ),
+            ),
+            field(
+                "low",
+                LENGTH,
+                &en_de("Least", "Mindestens"),
+                &en_de(
+                    "The band's least distance, if any.",
+                    "Der kleinste Abstand des Bands, falls angegeben.",
+                ),
+            ),
+            field(
+                "high",
+                LENGTH,
+                &en_de("Most", "Höchstens"),
+                &en_de(
+                    "The band's greatest distance, if any.",
+                    "Der größte Abstand des Bands, falls angegeben.",
+                ),
+            ),
+            field(
+                "below_words",
+                MemberFieldKind::Text,
+                &en_de("Below", "Darunter"),
+                &en_de(
+                    "The finding below the least distance, worded.",
+                    "Der Befund unter dem kleinsten Abstand, in Worten.",
+                ),
+            ),
+            field(
+                "above_words",
+                MemberFieldKind::Text,
+                &en_de("Above", "Darüber"),
+                &en_de(
+                    "The finding above the greatest distance, worded.",
+                    "Der Befund über dem größten Abstand, in Worten.",
+                ),
+            ),
+            field(
+                "straddle_words",
+                MemberFieldKind::Text,
+                &en_de("Straddles", "Überspannt"),
+                &en_de(
+                    "Why the band cannot be judged, worded.",
+                    "Warum das Band nicht beurteilt werden kann, in Worten.",
+                ),
+            ),
+            field(
+                "related",
+                MemberFieldKind::Objects,
+                &en_de("Outer", "Äußeres"),
+                &en_de(
+                    "The outer element the band is measured to.",
+                    "Das äußere Element, zu dem das Band gemessen wird.",
+                ),
+            ),
+            field(
+                "open_checked",
+                TRUTH,
+                &en_de("Open", "Offen"),
+                &en_de(
+                    "True on the item of something not checked.",
+                    "Wahr am Element von etwas nicht Geprüftem.",
+                ),
+            ),
+            field(
+                "open",
+                TRUTH,
+                &en_de("Why", "Warum"),
+                &en_de(
+                    "Refused for why something of it is not checked.",
+                    "Verweigert mit dem Grund, warum etwas davon nicht geprüft wird.",
+                ),
+            ),
+            field(
+                "reason",
+                MemberFieldKind::Text,
+                &en_de("Reason", "Grund"),
+                &en_de(
+                    "Why the item is undecided where not for incomplete evidence, as a report writes it (`missing_service`).",
+                    "Warum das Element unentschieden ist, wo nicht wegen unvollständiger Belege, wie ein Bericht es schreibt (`missing_service`).",
+                ),
+            ),
+        ],
+    },
+    MemberDescriptor {
+        list: MeasuredDescriptor {
             name: "coordinate_differences",
             parameters: &COORDINATE_DIFFERENCES,
             dimension: None,

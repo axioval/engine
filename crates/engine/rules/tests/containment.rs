@@ -54,6 +54,8 @@ struct Stub {
     boxes: BTreeMap<String, Extent>,
     pairs: BTreeMap<(String, String), Result<Pair, ProximityError>>,
     faces: BTreeMap<FaceKey, FaceAnswer>,
+    /// How face distances are measured: exactly unless stated.
+    fidelity: Option<GeometryFidelity>,
 }
 
 impl Stub {
@@ -166,8 +168,11 @@ impl ProximityService for Stub {
         FaceDistanceEvidence::try_new(
             request.clone(),
             SignedDistanceInterval::try_new(lower, upper).unwrap(),
-            GeometryFidelity::Exact,
-            evidence(format!("faces:{}:{}", key.0, key.1)),
+            self.fidelity.unwrap_or(GeometryFidelity::Exact),
+            Evidence {
+                exact: self.fidelity.is_none_or(|fidelity| fidelity.is_exact()),
+                ..evidence(format!("faces:{}:{}", key.0, key.1))
+            },
         )
     }
 }
@@ -244,13 +249,33 @@ fn run(project: &Project, stub: Stub, rule: &CompiledRule) -> CapabilityEvaluati
     services
         .register(ProximityServiceHandle::new(Arc::new(stub)))
         .unwrap();
-    Containment.evaluate(
-        &RuleContext {
-            project,
-            services: &services,
-        },
-        rule,
-    )
+    // `containment` runs as a template over measured lists, held to the
+    // implementation it replaced under the parity contract.
+    let registry =
+        axioval_rules::register_builtins(axioval_engine::CapabilityRegistry::new()).unwrap();
+    let mut inner = services.clone();
+    registry.install_measured(&mut inner, project);
+    let values = axioval_engine::MeasuredValues::of(&inner, project);
+    registry.install_measured(&mut services, project);
+    services.register(values).unwrap();
+    let context = RuleContext {
+        project,
+        services: &services,
+    };
+    let template = Containment.evaluate(&context, rule);
+    let reference = axioval_rules::reference::Containment.evaluate(&context, rule);
+    let parity = axioval_rules::parity::Parity::contract().compare(
+        (
+            "containment",
+            &axioval_rules::parity::Observations::of_evaluation(&reference),
+        ),
+        (
+            "template",
+            &axioval_rules::parity::Observations::of_evaluation(&template),
+        ),
+    );
+    assert!(parity.holds(), "{}", parity.diff());
+    template
 }
 
 fn messages(outcome: &CapabilityEvaluation) -> Vec<String> {
@@ -311,7 +336,9 @@ fn a_column_inside_a_wall_with_too_little_side_cover_is_found() {
         finding.message,
         "side cover to cad:model/wall is 0.0200 m, below the minimum 0.0500 m"
     );
-    assert_eq!(finding.evidence.len(), 2);
+    // The finding cites the item measured, as exactly as the face distance
+    // and the containment were measured.
+    assert!(!finding.evidence.is_empty() && finding.evidence.iter().all(|evidence| evidence.exact));
 }
 
 /// Each face class is judged against its own band: one test per class, each
@@ -654,5 +681,136 @@ fn unusable_declarations_are_refused() {
             panic!("the column is refused: {:?}", open(&outcome));
         };
         assert_eq!(refused.reason(), &NotEvaluatedReason::InvalidDeclaration);
+    }
+}
+
+/// Generated declarations over columns in two adjacent walls: containments
+/// sure, straddling and absent, a column at the junction lying half in
+/// each, unmeasured columns and walls, face distances measured, straddling
+/// and refused, inside and outside bands, orphans, counts and combining,
+/// some declarations refused; each held to the implementation the template
+/// replaced (`run`).
+#[test]
+fn generated_declarations_hold_containment_parity() {
+    let mut judged = 0;
+    for pattern in 0..144_usize {
+        #[allow(clippy::cast_precision_loss)]
+        let step = |modulus: usize, by: usize| (pattern / by % modulus) as f64;
+        let shares = [(1.0, 1.0), (0.8, 0.95), (0.1, 0.1)];
+        let mut stub = Stub::default()
+            .object("wall", [0.0, 0.0, 0.0], [10.0, 0.3, 3.0])
+            .object("a", [1.0, 0.05, 0.5], [1.2, 0.25, 2.5])
+            .object("c", [5.0, 0.05, 0.5], [5.2, 0.25, 2.5])
+            .object("d", [9.9, 0.05, 0.5], [10.1, 0.25, 2.5])
+            .pair("a", "wall", sharing(1.0, 1.0))
+            .pair("b", "wall", sharing(1.0, 1.0))
+            .pair("c", "wall", {
+                let (lower, upper) = shares[pattern % 3];
+                sharing(lower, upper)
+            })
+            .pair("d", "wall", sharing(0.5, 0.5))
+            .pair("d", "w2", sharing(0.5, 0.5))
+            .pair(
+                "wall",
+                "w2",
+                Pair {
+                    separation: 0.0,
+                    shared: (0.0, 0.0),
+                    first: (9.0, 9.0),
+                    second: (3.6, 3.6),
+                },
+            );
+        stub = if pattern % 5 == 0 {
+            stub.unmeasured("b")
+        } else {
+            stub.object("b", [3.0, 0.05, 0.5], [3.2, 0.25, 2.5])
+        };
+        stub = if pattern % 7 == 0 {
+            stub.unmeasured("w2")
+        } else {
+            stub.object("w2", [10.0, 0.0, 0.0], [14.0, 0.3, 3.0])
+        };
+        for column in ["a", "b", "c", "d"] {
+            for host in ["wall", "w2"] {
+                for (class, base) in [
+                    (FaceClass::Side, 0.02),
+                    (FaceClass::Top, 0.5),
+                    (FaceClass::Bottom, 0.4),
+                    (FaceClass::Any, 0.02),
+                ] {
+                    let lower = base + 0.01 * step(4, 1);
+                    let upper = if pattern % 4 == 1 {
+                        lower + 0.04
+                    } else {
+                        lower
+                    };
+                    stub = if pattern % 3 == 0 && column == "a" && class == FaceClass::Side {
+                        stub.face_error(column, host, class, FaceDistanceError::Unavailable)
+                    } else {
+                        stub.face(column, host, class, lower, upper)
+                    };
+                }
+            }
+        }
+        let mut parameters = Vec::new();
+        match pattern % 4 {
+            1 => parameters.push(cover(vec![band("side", None, Some(0.04), None)])),
+            2 => parameters.push(cover(vec![
+                band("top", Some("inside"), Some(0.45), Some(0.52)),
+                band("side", None, None, Some(0.03)),
+            ])),
+            3 => parameters.push(cover(vec![band("any", Some("outside"), None, Some(0.01))])),
+            _ => {}
+        }
+        if pattern / 2 % 2 == 1 {
+            parameters.push(("report_orphans", ParameterValue::Boolean { value: true }));
+        }
+        let count = |value: i64| ParameterValue::Integer { value };
+        match pattern / 4 % 3 {
+            1 => parameters.push(("maximum_count", count(2))),
+            2 => parameters.push(("minimum_count", count(3))),
+            _ => {}
+        }
+        if pattern / 12 % 2 == 1 {
+            parameters.push(("combine_adjacent", ParameterValue::Boolean { value: true }));
+        }
+        let project = project(&[
+            ("a", "column"),
+            ("b", "column"),
+            ("c", "column"),
+            ("d", "column"),
+            ("wall", "wall"),
+            ("w2", "wall"),
+        ]);
+        let outcome = run(&project, stub, &rule(parameters));
+        judged += outcome.findings().len() + outcome.not_evaluated_outcomes().len();
+    }
+    assert!(judged > 0);
+}
+
+/// A cover measured on a tessellated host is cited as inexact, as the
+/// capability cited it; on exact geometry it is exact.
+#[test]
+fn a_cover_measured_on_a_tessellation_is_inexact() {
+    for (exact, fidelity) in [
+        (false, GeometryFidelity::tessellated(0.001).unwrap()),
+        (true, GeometryFidelity::Exact),
+    ] {
+        let mut stub = column_in_wall();
+        stub.fidelity = Some(fidelity);
+        let outcome = run(
+            &column_and_walls(),
+            stub,
+            &rule(vec![cover(vec![band("side", None, Some(0.05), None)])]),
+        );
+        let [finding] = outcome.findings() else {
+            panic!("one finding expected: {:?}", messages(&outcome));
+        };
+        assert_eq!(
+            finding.evidence.iter().all(|evidence| evidence.exact),
+            exact,
+            "{:?}",
+            finding.evidence
+        );
     }
 }

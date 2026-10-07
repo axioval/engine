@@ -72,7 +72,10 @@ fn selection(
                 first_undecided.get_or_insert_with(|| {
                     (outcome.reason().clone(), outcome.message().to_owned())
                 });
-                reasons.insert(object.clone(), outcome.message().to_owned());
+                reasons.insert(
+                    object.clone(),
+                    (outcome.reason().clone(), outcome.message().to_owned()),
+                );
             }
             None => {
                 return Err((
@@ -134,7 +137,10 @@ impl Arguments {
                     first_undecided.get_or_insert_with(|| {
                         (outcome.reason().clone(), outcome.message().to_owned())
                     });
-                    reasons.insert(object.clone(), outcome.message().to_owned());
+                    reasons.insert(
+                        object.clone(),
+                        (outcome.reason().clone(), outcome.message().to_owned()),
+                    );
                 }
                 // The selection cannot be listed whole: read it as bound.
                 None => return self,
@@ -625,6 +631,30 @@ mod tests {
                 &ParameterValue::Boolean { value: true }
             ),
             Ok(MeasuredArgument::Truth(true))
+        );
+    }
+
+    /// A bound selection keeps, for each undecided object, the reason and
+    /// the words the selection left it undecided with.
+    #[test]
+    fn an_undecided_object_keeps_its_reason() {
+        let object =
+            axioval_ir::ObjectId::new(axioval_ir::SourceId::new("model", "ifc").unwrap(), "pipe")
+                .unwrap();
+        let mut outcomes = axioval_engine::CapabilityEvaluation::default();
+        outcomes.push_object_not_evaluated(
+            object.clone(),
+            NotEvaluatedReason::MissingService,
+            "no service",
+        );
+        let arguments = super::Arguments::default().selected(&[], &outcomes);
+        let selections = arguments.selections.borrow();
+        let selection = selections[axioval_engine::template::SELECTION]
+            .as_ref()
+            .unwrap();
+        assert_eq!(
+            selection.reasons.get(&object),
+            Some(&(NotEvaluatedReason::MissingService, "no service".to_owned()))
         );
     }
 }

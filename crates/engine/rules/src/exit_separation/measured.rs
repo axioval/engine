@@ -99,7 +99,11 @@ fn picked(context: &RuleContext<'_>, call: &MeasuredCall) -> Result<Arc<Picked>,
                 .undecided
                 .iter()
                 .map(|object| {
-                    let why = selection.reasons.get(object).cloned().unwrap_or_default();
+                    let why = selection
+                        .reasons
+                        .get(object)
+                        .map(|(_, why)| why.clone())
+                        .unwrap_or_default();
                     (object.clone(), why)
                 })
                 .collect();

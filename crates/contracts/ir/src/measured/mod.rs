@@ -461,8 +461,9 @@ pub struct MeasuredSelection {
     /// Why the selection could not decide the first undecided object, in
     /// the project's order: its reason and message.
     pub first_undecided: Option<(crate::NotEvaluatedReason, String)>,
-    /// Why the selector cannot decide each undecided object, where known.
-    pub reasons: std::collections::BTreeMap<crate::ObjectId, String>,
+    /// Why the selector cannot decide each undecided object, where known:
+    /// its reason and message, as the selection reported it.
+    pub reasons: std::collections::BTreeMap<crate::ObjectId, (crate::NotEvaluatedReason, String)>,
 }
 
 impl MeasuredSelection {

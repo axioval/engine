@@ -102,7 +102,7 @@ impl CorridorEndSearch {
                 };
                 let (chosen, unpicked) = match picked.reasons.get(opening) {
                     _ if picked.matched.contains(opening) => (truth(true), String::new()),
-                    Some(why) => (MemberValue::Undecided { why: why.clone() }, why.clone()),
+                    Some((_, why)) => (MemberValue::Undecided { why: why.clone() }, why.clone()),
                     None => (
                         MemberValue::Undecided {
                             why: format!("whether {opening} is selected is undecided"),

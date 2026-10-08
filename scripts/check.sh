@@ -50,7 +50,15 @@ check_lint() {
 }
 
 check_test() {
-  cargo test --workspace --all-features
+  # cargo-nextest, where installed, runs the test binaries in parallel
+  # (cargo test runs them one after another); it runs no doctests, so those
+  # run apart. CI and machines without it use cargo test.
+  if cargo nextest --version >/dev/null 2>&1; then
+    cargo nextest run --workspace --all-features --no-fail-fast
+    cargo test --workspace --all-features --doc
+  else
+    cargo test --workspace --all-features
+  fi
   # The buildingSMART IDS corpus is CC BY-ND 4.0 and is not vendored, so its
   # conformance test is ignored by default and runs only where a maintainer
   # points IDS_TEST_CASES at a checkout of it.

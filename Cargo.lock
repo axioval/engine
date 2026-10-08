@@ -1988,9 +1988,9 @@ checksum = "34c684331685f7678a2766f3990cca967b3053a6e75ea1523e3e8449ec07217c"
 
 [[package]]
 name = "openbim-ids"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7048665ae43c69d1b191d247130cf858562d041bd03de326b211771b7c8e707"
+checksum = "df94942a39f4e3376c0ef418f4688648c43bcdccd34cf0e00bd119d458bb7054"
 dependencies = [
  "ifc-schema",
  "openbim-core",

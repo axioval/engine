@@ -35,12 +35,12 @@ which need `openbim-ids`'s `audit` feature and its embedded template data
 (see [Publishing](#publishing)). A misspelt standard property is therefore
 not refused; it is a property no model holds.
 
-The audit in `openbim-ids` 0.2.1 compares a required entity with the
-applicable one without the IFC2X3 type mapping table, so an IFC2X3
-specification applying to `IFCFLOWTERMINAL` and requiring `IFCAIRTERMINAL`
-is refused although the translation checks it exactly
-(openbimrs/ids#15, #215). The refusal fails closed: such a document is not
-checked at all, never checked wrongly.
+From `openbim-ids` 0.2.2 on, the audit compares a required entity with the
+applicable one through the IFC2X3 occurrence/type mapping table, so an
+IFC2X3 specification applying to `IFCFLOWTERMINAL` and requiring
+`IFCAIRTERMINAL` is translated and flags the flow terminals not typed by an
+air terminal type (openbimrs/ids#15, #215). Two mapped names, or a mapped
+name and a different occurrence class, still contradict and are refused.
 
 ## What each facet becomes
 
@@ -338,7 +338,7 @@ A complex property or quantity (`IfcComplexProperty`, `IfcPhysicalComplexQuantit
 
 ## Publishing
 
-`axioval-ids` is a workspace member under `crates/packages/ids` and is published with the other crates at the workspace version. It reads IDS with the `openbim-ids` reader (`openbim_ids::read`, `from_str`, `from_slice`) and writes it with its writer (`openbim_ids::to_string`), and audits it (`openbim_ids::audit`) with the `audit-schema` feature, from 0.2.1 on. `scripts/package.sh` packages and verifies it with the rest of the workspace (`EXPECTED` in `scripts/check_package_contents.py`).
+`axioval-ids` is a workspace member under `crates/packages/ids` and is published with the other crates at the workspace version. It reads IDS with the `openbim-ids` reader (`openbim_ids::read`, `from_str`, `from_slice`) and writes it with its writer (`openbim_ids::to_string`), and audits it (`openbim_ids::audit`) with the `audit-schema` feature, from 0.2.2 on. `scripts/package.sh` packages and verifies it with the rest of the workspace (`EXPECTED` in `scripts/check_package_contents.py`).
 
 `audit-schema` runs every audit check against the IFC schema tables of `ifc-schema` (AGPL-3.0-or-later, as the crate already used it), and adds only `regex`. The `audit` feature is not enabled: it adds the standard property and quantity set template checks and pulls in `ifc-template-catalog`, whose licence is `AGPL-3.0-or-later AND CC-BY-ND-4.0`: its embedded template data (`data/*.bin`, compiled in through `include_bytes!`) is buildingSMART's PSD/QTO content under CC BY-ND 4.0. `cargo deny` does not allow CC-BY-ND-4.0, and whether distributing that data inside the published crates is acceptable is the maintainers' decision, not a dependency bump's. `cargo tree -i ifc-template-catalog -e normal` prints nothing.
 

@@ -64,7 +64,7 @@ back as a document. See `docs/src/ids.md` for the mapping of every facet.
   profile and the comparator), `axioval-engine` (the
   capability descriptors, so definitions follow every new parameter or
   column), `axioval-rules` (XML Schema pattern translation only),
-  `openbim-ids` 0.2.1 (the reader, the writer, and the document audit
+  `openbim-ids` 0.2.2 (the reader, the writer, and the document audit
   with its `audit-schema` feature) and `ifc-schema` (which IDS classes are
   occurrences, per release). Never a source adapter: the architecture gate
   exempts exactly `openbim-ids` and `ifc-schema` for this crate

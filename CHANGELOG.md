@@ -4,6 +4,15 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+### Fixed
+
+- **IDS**: an IFC2X3 specification requiring a class of the occurrence/type
+  mapping table of the applicable occurrence class (applying to
+  `IFCFLOWTERMINAL`, requiring `IFCAIRTERMINAL`) is translated instead of
+  refused: `openbim-ids` 0.2.2 maps IFC2X3 names in its
+  `entity-requirement-contradicts-applicability` audit check
+  ([#215](https://github.com/axioval/engine/issues/215)).
+
 ## [0.4.0] - 2026-10-07
 
 Composable rules ([#225](https://github.com/axioval/engine/issues/225)).

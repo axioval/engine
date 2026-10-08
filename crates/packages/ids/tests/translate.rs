@@ -522,16 +522,15 @@ fn ifc2x3_classes_the_type_mapping_table_renames_are_translated() {
         ["#6"]
     );
     // Required of every flow terminal, the mapped class is one some of them
-    // are, but the audit compares the names without the mapping table and
-    // refuses the document; failing closed until upstream maps them.
+    // are: the flow terminals not typed by an air terminal type fail it.
     assert_eq!(
-        refused(
+        flagged_in(
+            IFC2X3_TERMINALS,
             "IFC2X3",
-            OPTIONAL,
             &entity("IFCFLOWTERMINAL", ""),
             &entity("IFCAIRTERMINAL", "")
         ),
-        ["entity-requirement-contradicts-applicability"]
+        ["#3", "#5"]
     );
     // In an IFC4 model of a specification for both releases, the class is
     // IFC4's own; a flow terminal typed by an air terminal type is none.

@@ -125,7 +125,7 @@ axiolid-surface = "0.3.0"
 openbim-bcf = "0.6.0"
 # `audit-schema` is the document audit against the IFC schemas (AGPL
 # `ifc-schema`). Never `audit`: it embeds the CC BY-ND template catalog.
-openbim-ids = { version = "0.2.1", features = ["audit-schema"] }
+openbim-ids = { version = "0.2.2", features = ["audit-schema"] }
 # Door and window operation geometry (openbimrs/ifc#148, #170) is published
 # only in the IFC facade, which joins `ifc-geometry` and `ifc-properties`; `geometry-select`
 # compiles no geometry kernel.

@@ -226,6 +226,28 @@ The two kernel gaps of #298 (rows 1, 7 and 13) now account for 4,494
 outcomes, more than a third. The 76 MB model's causes (rows 2–5 and 8) are
 the next to triage.
 
+### Fourth ranking triaged
+
+The 76 MB model's causes were each traced to their code path and rebuilt
+as a synthetic case (constructed coordinates). Its plan coordinates are
+about 6·10⁵ and 5.6·10⁶ m under a site turned by about 2.3°. Three of the
+five causes come from that georeferencing:
+
+| # | Cause | Outcomes | What it is | Classification | Issue |
+|---|---|---:|---|---|---|
+| 2 | Curved surface without a certified bound (non-forward planar extrusion) | 2,451 | A boolean with a curved operand and an extrusion against its profile normal (`ExtrudedDirection (0, 0, -1)`): an opening cut down from a slab's top, and grilles clipped by half-spaces. The exact compiler refuses the extrusion, so the boolean has no certified deviation. The one unmeasured slab has no bound, so it refuses every space of m14 | Kernel gap | #301 (axiolid/kernel#275) |
+| 3 | Free floor: placement evidence not exact | 1,264 | A tessellated obstacle within reach refuses the scene. Floor slabs with arcs in their outline or openings are tessellated and span whole storeys | Engine gap | #302 |
+| 4 | Difference result touches itself along an edge | 981 | Door and window openings as deep as their wall is thick, flush with both faces. Net lowering subtracts them in world coordinates, where the turned placements round the faces apart | IFC adapter gap | #303 (openbimrs/ifc#388) |
+| 5 | Space validation: plan overlay refuses a footprint whose edges cross | 905 | A curved space's chord-fan triangles, about 10⁻⁴ m², wound by a shoelace over the raw coordinates, which rounds such areas to zero or the wrong sign there. The overlay does the same. One such space refused every space of its height | Kernel gap, with an engine part | #304 (axiolid/kernel#274) |
+| 8 | Space evidence not exact and reviewable | 328 | Curved spaces, slabs and walls touching a space refuse its exact-only measurements | Engine gap | #305 |
+
+For row 5 the engine now winds projected triangles by their area about a
+vertex. It also measures a space only against candidates whose plan box
+meets its own. On a one-storey reduction of m14 that leaves 34 of 155
+refusals, now reported as `ZeroArea` until the overlay is fixed. Row 17
+("Difference result touches itself at the point", 48 outcomes) is
+probably row 4's case.
+
 Cases 3 and 5 are resolved upstream (`axiolid-mesh-compile` 0.3.13). A
 warped authored face is now meshed, and the body is tessellated within
 the width of the slab the face's corners span about its fit plane, which

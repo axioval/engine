@@ -67,7 +67,14 @@ Every not-evaluated outcome and every unmeasured object (the result's
 
 Messages are reduced to patterns: object references become `<object>`,
 instance ids `#<id>` and numbers `<n>`, so one cause on many objects is one
-row. Causes are ranked by the outcomes they account for, then by unmeasured
+row. A product without a body is one of two causes: `unmeasured (model
+data): no shape representation`, a product with no representation at all,
+which its author can fix (the result also lists it once as the integrity
+warning `shape.no-representation`); and `unmeasured: no body
+representation; it has <identifiers>`, a product whose representations
+(`Axis`, `FootPrint`, …) include none the engine measures as a body, which
+is a gap in the engine or its adapters. `--format json` marks the first
+with `"model_data": true`. Causes are ranked by the outcomes they account for, then by unmeasured
 objects, then by models affected.
 
 ## Ranking
@@ -94,7 +101,7 @@ observed, or hidden behind another, in that run.
 
 | # | Case | Outcomes before | Outcomes after | Unmeasured before | Unmeasured after | Models after | Cause (after) | Upstream dependency | Issue |
 |---|---|---:|---:|---:|---:|---:|---|---|---|
-| 1 | `no body representation` | 6,937 | 771 | 2,079 | 467 | 5 | Wholes made of parts are measured through them (#211); every remaining object has no representation at all, which is model data | none | #219 |
+| 1 | `no body representation` | 6,937 | 771 | 2,079 | 467 | 5 | Wholes made of parts are measured through them (#211); every remaining object has no representation at all, which is model data. Since #219 these are `no shape representation` (model data) and no longer mixed with `no body representation; it has …` | none (model data) | #219 |
 | 2 | Opening without a `Body` cannot be subtracted | 216 | 691 | 36 | 36 | 3 | Reference View exports author openings as a `Reference` representation over hosts already voided; the hosts are refused, and since #212 so is every space they reach | `ifc-geometry`: take reference-only openings as applied | #218 |
 | 3 | Space measurement "unavailable for the requested aspect" | 547 | 611 | 0 | 0 | 2 | Before: any unmeasured object refused every space (fixed, #212). Now: the space adapter's plan overlay refuses sliver triangles (`RepeatedVertex`) | none | #217 |
 | 4 | Clash pair: proximity "unavailable for the requested object" | 19,177 | 293 | 0 | 0 | 3 | Before: the plan overlap refused slivers (fixed, #210). Now: a mesh with a zero-area triangle, mostly bodies with warped faces measured since #213 | none | #221 |

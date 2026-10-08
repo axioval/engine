@@ -4,6 +4,18 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+### Changed
+
+- **Geometry**: a physical product with no body and no parts is unmeasured
+  as `no shape representation` when it has no representation at all, and as
+  `no body representation; it has Axis, FootPrint` (naming the identifiers
+  it has) when none of its representations is a body. The first is model
+  data and is also listed once per object as the integrity warning
+  `shape.no-representation`; its outcomes stay not evaluated. The
+  not-evaluated inventory groups them as two causes and labels the first
+  `unmeasured (model data)`
+  ([#219](https://github.com/axioval/engine/issues/219)).
+
 ### Fixed
 
 - **IDS**: an IFC2X3 specification requiring a class of the occurrence/type

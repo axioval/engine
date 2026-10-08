@@ -475,7 +475,7 @@
   ],
   "not_evaluated": [
     {
-      "message": "triangle count: triangle count unavailable: ifc-step:bs-ifc2x3-building-architecture.ifc/#460 has a body that was not meshed: no body representation",
+      "message": "triangle count: triangle count unavailable: ifc-step:bs-ifc2x3-building-architecture.ifc/#460 has a body that was not meshed: no shape representation",
       "object_id": {
         "local_id": "#460",
         "source": {

@@ -21,8 +21,12 @@ under one cause:
 - an unmeasured object no outcome names still counts under its reason.
 
 Messages and reasons are reduced to patterns: object references become
-`<object>`, instance ids `#<id>` and numbers `<n>`, so one cause on many
-objects is one row. Causes are ranked by the number of not-evaluated
+`<object>`, instance ids `#<id>` and numbers `<n>`, and the representation
+identifiers a product without a body has (`no body representation; it has
+Axis`) `<identifiers>`, so one cause on many objects is one row. An
+unmeasured reason that is a fact about the model data (`no shape
+representation`: a product with no representation at all) is labelled
+`unmeasured (model data): ...`. Causes are ranked by the number of not-evaluated
 outcomes they account for, then unmeasured objects, then models affected,
 then the pattern, so the table is deterministic for the same inputs.
 
@@ -49,6 +53,11 @@ OBJECT_REFERENCE = re.compile(r"[A-Za-z][\w.+-]*:[^\s,;`']*?/#\d+")
 INSTANCE = re.compile(r"#\d+")
 NUMBER = re.compile(r"(?<![\w<])-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?(?![\w>])")
 SPACES = re.compile(r"\s+")
+# The identifiers of the representations a product without a body has.
+IDENTIFIERS = re.compile(r"(no body representation; it has )[^;]+$")
+# Unmeasured reasons that are facts about the model data its author can
+# fix, not gaps in the engine or its adapters.
+MODEL_DATA = frozenset({"no shape representation"})
 
 
 def pattern(message: str) -> str:
@@ -57,6 +66,11 @@ def pattern(message: str) -> str:
     text = INSTANCE.sub("#<id>", text)
     text = NUMBER.sub("<n>", text)
     return SPACES.sub(" ", text).strip()
+
+
+def reason_pattern(reason: str) -> str:
+    """An unmeasured reason's pattern, with the identifiers it lists abstracted."""
+    return IDENTIFIERS.sub(r"\1<identifiers>", pattern(reason))
 
 
 def object_key(object_id: dict) -> str:
@@ -101,7 +115,12 @@ class Cause:
     def key(self) -> tuple:
         return (-self.outcomes, -self.objects, -len(self.models), self.kind, self.text)
 
+    def model_data(self) -> bool:
+        return self.kind == "unmeasured" and self.text in MODEL_DATA
+
     def label(self) -> str:
+        if self.model_data():
+            return f"unmeasured (model data): {self.text}"
         return f"unmeasured: {self.text}" if self.kind == "unmeasured" else self.text
 
 
@@ -122,7 +141,7 @@ def inventory(results: list[tuple[str, dict]], rules: dict[str, str]) -> list[Ca
         unmeasured: dict[str, str] = {}
         for record in (result.get("geometry") or {}).get("unmeasured", []):
             key = object_key(record["object"])
-            reason = pattern(record["reason"])
+            reason = reason_pattern(record["reason"])
             unmeasured[key] = reason
             found = cause("unmeasured", reason)
             found.objects += 1
@@ -179,6 +198,7 @@ def as_json(causes: list[Cause], labels: list[str]) -> str:
             "rank": rank,
             "cause": found.label(),
             "kind": found.kind,
+            "model_data": found.model_data(),
             "outcomes": found.outcomes,
             "unmeasured_objects": found.objects,
             "models": sorted(found.models),

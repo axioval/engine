@@ -2,7 +2,7 @@
   "findings": [],
   "not_evaluated": [
     {
-      "message": "vertical extent unavailable: ifc-step:bs-ifc4-building-hvac.ifc/#50 has a body that was not measured: no body representation",
+      "message": "vertical extent unavailable: ifc-step:bs-ifc4-building-hvac.ifc/#50 has a body that was not measured: no shape representation",
       "object_id": {
         "local_id": "#45",
         "source": {

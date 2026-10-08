@@ -96,6 +96,33 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual(inventory.as_json(causes, ["a", "b"]),
                          inventory.as_json(again, ["a", "b"]))
 
+    def test_no_shape_is_model_data_apart_from_no_body(self) -> None:
+        shapes = result(
+            [("#1", "IFCBUILDINGELEMENTPROXY", "no shape representation"),
+             ("#2", "IFCBUILDINGELEMENTPROXY", "no shape representation"),
+             ("#3", "IFCMEMBER", "no body representation; it has Axis"),
+             ("#4", "IFCBEAM", "no body representation; it has Axis, FootPrint")],
+            [outcome("clash", "#1", "incomplete_evidence", "proximity unavailable"),
+             outcome("clash", "#3", "incomplete_evidence", "proximity unavailable")],
+        )
+        causes = inventory.inventory([("a", shapes)], RULES)
+        rows = {cause.label(): cause for cause in causes}
+        self.assertEqual(
+            sorted(rows),
+            ["unmeasured (model data): no shape representation",
+             "unmeasured: no body representation; it has <identifiers>"],
+        )
+        shapeless = rows["unmeasured (model data): no shape representation"]
+        self.assertEqual((shapeless.outcomes, shapeless.objects), (1, 2))
+        bodiless = rows["unmeasured: no body representation; it has <identifiers>"]
+        self.assertEqual((bodiless.outcomes, bodiless.objects), (1, 2))
+        rendered = json.loads(inventory.as_json(causes, ["a"]))["causes"]
+        self.assertEqual(
+            {row["cause"]: row["model_data"] for row in rendered},
+            {"unmeasured (model data): no shape representation": True,
+             "unmeasured: no body representation; it has <identifiers>": False},
+        )
+
     def test_rule_ids_map_to_capabilities_through_the_packages(self) -> None:
         rules = inventory.capabilities([inventory.DEFAULT_RULESET],
                                        [inventory.DEFAULT_DEFINITIONS])

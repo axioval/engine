@@ -38,8 +38,13 @@
 //! parts' bodies (`AxiolidGeometry::compose`): exact when every part is,
 //! tessellated within the largest deviation of its parts otherwise, with an
 //! exact body where every part has one. If any part is unmeasured, the whole
-//! is too, with a reason naming the first such part; a product with no body
-//! and no parts stays unmeasured as `no body representation`. The whole
+//! is too, with a reason naming the first such part. A product with no body
+//! and no parts stays unmeasured: as `no shape representation` when it has
+//! no representation at all, which is model data its author can fix and is
+//! also reported once per object as the integrity warning
+//! [`NO_SHAPE_REPRESENTATION`], or as `no body representation; it has …`
+//! naming the identifiers of the representations it has, none of which the
+//! bridge measures as a body. The whole
 //! keeps its own identity, and a whole and its own parts share material, so
 //! no pairwise rule ever pairs them (`ProximityService::shares_body`).
 //!
@@ -181,12 +186,94 @@ pub struct GeometryReport {
     pub composed: usize,
     /// Physical objects that could not be meshed, with the reason.
     pub unmeasured: Vec<(ObjectId, String)>,
+    /// Facts about the model data found while meshing, once per object:
+    /// every physical product with no shape representation and no parts
+    /// ([`NO_SHAPE_REPRESENTATION`]). Its measurements stay not evaluated.
+    pub model_data: Vec<ModelData>,
     /// Openings taken as already applied to a measured host's `Body`:
     /// host, opening and the reason, in identity order.
     pub applied_openings: Vec<(ObjectId, ObjectId, String)>,
     /// Every meshed object's triangles, kept only when asked for, to draw
     /// BCF snapshots from.
     pub meshes: BTreeMap<ObjectId, bcf_snapshot::Mesh>,
+}
+
+/// The integrity code of a physical product with no shape representation
+/// and no parts: it has no geometry at all, so it is unmeasured, never
+/// measured as empty.
+pub const NO_SHAPE_REPRESENTATION: &str = "shape.no-representation";
+
+/// A fact about the model data the bridge found, for the host to report as
+/// an integrity warning.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ModelData {
+    /// The integrity code, such as [`NO_SHAPE_REPRESENTATION`].
+    pub code: &'static str,
+    pub message: String,
+    /// `ifc:<fingerprint>:<detail>`, as the IFC adapter locates its own.
+    pub locator: String,
+}
+
+/// Why a product with no `Body` of its own is unmeasured when it has no
+/// parts either.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Bodiless {
+    /// No representation at all (`Representation` is `$`, or lists none):
+    /// model data.
+    Shapeless,
+    /// Representations none of which is measured as a body, by identifier
+    /// (`unidentified` for one stating none), or none when they cannot be
+    /// read.
+    Shapes(Vec<String>),
+}
+
+impl Bodiless {
+    /// Reads `product`'s representations.
+    fn of(model: &Model, product: EntityId) -> Self {
+        let Some(entity) = model.get(product) else {
+            return Self::Shapes(Vec::new());
+        };
+        let Some(shape) = ifc_geometry::Slots::new(product, entity).opt_ref(PRODUCT_REPRESENTATION)
+        else {
+            return Self::Shapeless;
+        };
+        let Some(representations) = model.get(shape).and_then(|entity| {
+            ifc_geometry::ProductShape::new(shape, entity)
+                .representations()
+                .ok()
+        }) else {
+            return Self::Shapes(Vec::new());
+        };
+        if representations.is_empty() {
+            return Self::Shapeless;
+        }
+        let mut identifiers: Vec<String> = representations
+            .into_iter()
+            .map(|id| {
+                model
+                    .get(id)
+                    .and_then(|entity| ifc_geometry::Representation::new(id, entity).identifier())
+                    .filter(|identifier| !identifier.trim().is_empty())
+                    .unwrap_or_else(|| "unidentified".to_owned())
+            })
+            .collect();
+        identifiers.sort();
+        identifiers.dedup();
+        Self::Shapes(identifiers)
+    }
+
+    /// The unmeasured reason.
+    fn reason(&self) -> String {
+        match self {
+            Self::Shapeless => "no shape representation".to_owned(),
+            Self::Shapes(identifiers) if identifiers.is_empty() => {
+                "no body representation".to_owned()
+            }
+            Self::Shapes(identifiers) => {
+                format!("no body representation; it has {}", identifiers.join(", "))
+            }
+        }
+    }
 }
 
 /// How [`attach`] meshes the model.
@@ -673,6 +760,8 @@ pub fn attach(
     // Physical products with no body of their own, measured through their
     // parts once every part is.
     let mut wholes: Vec<ObjectId> = Vec::new();
+    // Why each whole is unmeasured if it has no parts.
+    let mut unbodied: BTreeMap<ObjectId, Bodiless> = BTreeMap::new();
     // The box each whole's `Box` representation states, if any.
     let mut stated: BTreeMap<ObjectId, ([f64; 3], [f64; 3])> = BTreeMap::new();
     // Openings some measured host's `Body` already carries.
@@ -782,6 +871,7 @@ pub fn attach(
                 if let Some(bound) = stated_box(model, units, linear, entity) {
                     stated.insert(id.clone(), bound);
                 }
+                unbodied.insert(id.clone(), Bodiless::of(model, entity));
                 wholes.push(id);
             }
             Err(error) => {
@@ -818,6 +908,7 @@ pub fn attach(
         geometry,
         parts: decompositions(relationships, &kinds),
         wholes: wholes.iter().cloned().collect(),
+        bodiless: unbodied,
         stated,
         decided: BTreeSet::new(),
         report: &mut report,
@@ -825,6 +916,7 @@ pub fn attach(
     }
     .compose_all(&wholes);
     report.unmeasured.sort_by(|a, b| a.0.cmp(&b.0));
+    report.model_data = shapeless_records(&report.unmeasured, &snapshots, &kinds);
     for (group, members) in groups(relationships, &kinds, &is_a) {
         geometry = match members {
             Ok(members) => geometry.with_group(group, members),
@@ -897,6 +989,8 @@ struct Composer<'r> {
     parts: Result<BTreeMap<ObjectId, Vec<ObjectId>>, String>,
     /// The products with no body of their own.
     wholes: BTreeSet<ObjectId>,
+    /// Why each of them is unmeasured if it has no parts.
+    bodiless: BTreeMap<ObjectId, Bodiless>,
     /// The box a whole's `Box` representation states.
     stated: BTreeMap<ObjectId, ([f64; 3], [f64; 3])>,
     /// Wholes measured or left unmeasured, and those being decided.
@@ -920,18 +1014,23 @@ impl Composer<'_> {
         if !self.decided.insert(whole.clone()) {
             return;
         }
+        let bodiless = self
+            .bodiless
+            .get(whole)
+            .map_or_else(|| "no body representation".to_owned(), Bodiless::reason);
         let parts = match &self.parts {
             Ok(decompositions) => decompositions.get(whole).cloned().unwrap_or_default(),
             Err(error) => {
                 let reason = format!(
-                    "no body representation, and whether it decomposes into parts that                      carry its body cannot be read: {error}"
+                    "{bodiless}, and whether it decomposes into parts that carry its body \
+                     cannot be read: {error}"
                 );
                 self.unmeasured(whole, reason, None);
                 return;
             }
         };
         if parts.is_empty() {
-            self.unmeasured(whole, "no body representation".to_owned(), None);
+            self.unmeasured(whole, bodiless, None);
             return;
         }
         for part in &parts {
@@ -987,6 +1086,36 @@ impl Composer<'_> {
         self.geometry = geometry;
         self.report.unmeasured.push((whole.clone(), reason));
     }
+}
+
+/// Every product left unmeasured for having no shape representation (and
+/// no parts), once each, as an integrity warning about the model data.
+fn shapeless_records(
+    unmeasured: &[(ObjectId, String)],
+    snapshots: &[SourceSnapshot],
+    kinds: &BTreeMap<ObjectId, String>,
+) -> Vec<ModelData> {
+    let shapeless = Bodiless::Shapeless.reason();
+    unmeasured
+        .iter()
+        .filter(|(_, reason)| *reason == shapeless)
+        .map(|(id, _)| {
+            let fingerprint = snapshots
+                .iter()
+                .find(|snapshot| *snapshot.source() == id.source)
+                .map_or("", SourceSnapshot::fingerprint);
+            let kind = kinds.get(id).map_or("", String::as_str);
+            ModelData {
+                code: NO_SHAPE_REPRESENTATION,
+                message: format!(
+                    "{} {kind} has no shape representation and no parts; every \
+                     measurement of it is not evaluated",
+                    id.local_id
+                ),
+                locator: format!("ifc:{fingerprint}:no-shape:{}", id.local_id),
+            }
+        })
+        .collect()
 }
 
 /// Registers the boundaries that agree with their meshes, when one of them

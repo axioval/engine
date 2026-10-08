@@ -184,10 +184,16 @@ pub fn compare(mut args: CompareArgs) -> Result<Outcome, Box<dyn Error>> {
         // Only the surface distance reads exact boundaries: bounds never do.
         let keep = geometry::Options::meshes(args.output.bcf_view.snapshots)
             .with_exact_boundaries(args.geometry_mode == "mesh" && !args.no_exact_boundaries);
-        let (base, before) = geometry::attach(base, &base_bytes, keep)
+        let (base, mut before) = geometry::attach(base, &base_bytes, keep)
             .map_err(|error| format!("geometry of {}: {error}", args.base.display()))?;
-        let (revised, after) = geometry::attach(revised, &revised_bytes, keep)
+        let (revised, mut after) = geometry::attach(revised, &revised_bytes, keep)
             .map_err(|error| format!("geometry of {}: {error}", args.revised.display()))?;
+        records.extend(crate::model_data_records(std::mem::take(
+            &mut before.model_data,
+        )));
+        records.extend(crate::model_data_records(std::mem::take(
+            &mut after.model_data,
+        )));
         (base, revised, Some(combined(before, after)))
     } else {
         (base, revised, None)

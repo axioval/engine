@@ -1487,17 +1487,17 @@ fn with_geometry_a_clash_between_real_ifc_bodies_is_found() {
     assert!(message.contains("penetration 0.1000 m"), "{message}");
 
     // Both walls are rectangular extrusions: exact, not tessellated. The
-    // proxy has no body representation, so it is unmeasured, not ignored.
+    // proxy has no shape representation, so it is unmeasured, not ignored.
     let geometry = &result["geometry"];
     assert_eq!(geometry["exact"], 2, "{geometry:#}");
     assert_eq!(geometry["tessellated"], 0);
     assert_eq!(geometry["unmeasured"][0]["object"]["local_id"], "#30");
     assert_eq!(
         geometry["unmeasured"][0]["reason"],
-        "no body representation"
+        "no shape representation"
     );
     assert!(
-        stderr(&output).contains("#30 was not meshed: no body representation"),
+        stderr(&output).contains("#30 was not meshed: no shape representation"),
         "{}",
         stderr(&output)
     );
@@ -1512,6 +1512,98 @@ fn with_geometry_a_clash_between_real_ifc_bodies_is_found() {
     assert!(
         listing.contains("#30 IFCBUILDINGELEMENTPROXY 0000000000000000000030"),
         "{listing}"
+    );
+}
+
+/// A product with no representation at all and one whose only
+/// representation is an `Axis` are unmeasured for different reasons: the
+/// first is model data, reported once as an integrity warning however many
+/// rules measure it, the second names the identifiers it has. Neither is
+/// ever measured as empty: every clash involving them is not evaluated.
+#[test]
+fn with_geometry_a_product_without_shape_is_told_apart_from_one_without_body() {
+    let case = Case::new("geometry-shapeless");
+    let model = crossing_walls().replace(
+        "ENDSEC;\nEND-ISO-10303-21;",
+        "#41=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #42=IFCCARTESIANPOINT((1.,0.,0.));\n\
+         #43=IFCPOLYLINE((#41,#42));\n\
+         #44=IFCSHAPEREPRESENTATION(#5,'Axis','Curve3D',(#43));\n\
+         #45=IFCPRODUCTDEFINITIONSHAPE($,$,(#44));\n\
+         #40=IFCBUILDINGELEMENTPROXY('0000000000000000000040',$,$,$,$,#3,#45,$,$);\n\
+         ENDSEC;\nEND-ISO-10303-21;",
+    );
+    let (output, result) = case.geometry_rule(
+        &model,
+        &[("element", "IfcElement")],
+        "axioval:capability.clash",
+        &registry_signature("axioval:capability.clash"),
+        entity("element"),
+        json!({
+            "counterparts": {"type": "selector", "value": entity("element")},
+            "penetration_tolerance_metres": {"type": "number", "value": 0.01},
+        }),
+    );
+    let geometry = &result["geometry"];
+    let unmeasured: Vec<(&str, &str)> = geometry["unmeasured"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| {
+            (
+                entry["object"]["local_id"].as_str().unwrap(),
+                entry["reason"].as_str().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        unmeasured,
+        [
+            ("#30", "no shape representation"),
+            ("#40", "no body representation; it has Axis"),
+        ],
+        "{}",
+        stderr(&output)
+    );
+
+    // The model-data note: once, for the product with no shape only.
+    let notes: Vec<&Value> = result["integrity"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|record| record["code"] == "shape.no-representation")
+        .collect();
+    assert_eq!(notes.len(), 1, "{:#}", result["integrity"]);
+    assert_eq!(notes[0]["severity"], "warning");
+    let message = notes[0]["message"].as_str().unwrap();
+    assert!(
+        message.starts_with("#30 IFCBUILDINGELEMENTPROXY has no shape representation"),
+        "{message}"
+    );
+    assert!(
+        notes[0]["locator"]
+            .as_str()
+            .unwrap()
+            .ends_with(":no-shape:#30"),
+        "{:#}",
+        notes[0]
+    );
+
+    // Both stay not evaluated, in every clash they are part of.
+    let not_evaluated = result["report"]["not_evaluated"].as_array().unwrap();
+    for id in ["#30", "#40"] {
+        assert!(
+            not_evaluated
+                .iter()
+                .filter(|outcome| outcome["object_id"]["local_id"] == id)
+                .count()
+                >= 1,
+            "{id}: {not_evaluated:#?}"
+        );
+    }
+    assert!(
+        !result["report"]["findings"].to_string().contains("\"#30\""),
+        "{result:#}"
     );
 }
 
@@ -1637,18 +1729,18 @@ fn with_geometry_a_whole_is_measured_through_its_parts_and_never_paired_with_the
         })
         .collect();
     assert_eq!(unmeasured.len(), 3, "{unmeasured:?}");
-    assert_eq!(unmeasured[0], ("#30", "no body representation"));
+    assert_eq!(unmeasured[0], ("#30", "no shape representation"));
     assert_eq!(unmeasured[1].0, "#300");
     assert!(
         unmeasured[1].1.starts_with(
             "no body representation of its own, and its body is the union of its 2 parts, and part "
         ) && unmeasured[1]
             .1
-            .ends_with("/#330 is unmeasured: no body representation"),
+            .ends_with("/#330 is unmeasured: no shape representation"),
         "{}",
         unmeasured[1].1
     );
-    assert_eq!(unmeasured[2], ("#330", "no body representation"));
+    assert_eq!(unmeasured[2], ("#330", "no shape representation"));
     assert!(
         stderr(&output).contains("2 measured through their parts"),
         "{}",
@@ -1719,8 +1811,19 @@ fn a_real_without_a_decimal_point_is_read_and_reported_as_an_integrity_warning()
     assert_eq!(findings.len(), 1, "{result:#}");
     assert_eq!(result["geometry"]["exact"], 2, "{result:#}");
 
-    let integrity = result["integrity"].as_array().unwrap();
+    // Beside the proxy with no shape, the two reals.
+    let integrity: Vec<&Value> = result["integrity"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|issue| issue["code"] != "shape.no-representation")
+        .collect();
     assert_eq!(integrity.len(), 2, "{result:#}");
+    assert_eq!(
+        result["integrity"].as_array().unwrap().len(),
+        3,
+        "{result:#}"
+    );
     for (issue, token) in integrity.iter().zip(["1E-05", "3E0"]) {
         assert_eq!(issue["code"], axioval::ifc::REAL_WITHOUT_DECIMAL_POINT);
         assert_eq!(issue["severity"], "warning");
@@ -1868,7 +1971,7 @@ fn with_geometry_ifc4x3_families_are_measured_or_unmeasured_by_name() {
         !geometry["unmeasured"].to_string().contains("\"#83\""),
         "{geometry:#}"
     );
-    assert_eq!(reason("#30"), "no body representation");
+    assert_eq!(reason("#30"), "no shape representation");
     assert_eq!(unmeasured.len(), 3, "{geometry:#}");
 }
 
@@ -2027,7 +2130,7 @@ fn with_geometry_a_linear_placement_is_placed_along_its_basis_curve() {
         stale.contains("#152") && stale.contains("cached CartesianPosition"),
         "{stale}"
     );
-    assert_eq!(reason("#30"), "no body representation");
+    assert_eq!(reason("#30"), "no shape representation");
     assert_eq!(unmeasured.len(), 3, "{geometry:#}");
 }
 

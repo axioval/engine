@@ -1267,7 +1267,7 @@
       "rule_id": "exit-closest"
     },
     {
-      "message": "vertical extent unavailable: ifc-step:bs-ifc2x3-building-architecture.ifc/#460 has a body that was not measured: no body representation",
+      "message": "vertical extent unavailable: ifc-step:bs-ifc2x3-building-architecture.ifc/#460 has a body that was not measured: no shape representation",
       "object_id": {
         "local_id": "#36",
         "source": {

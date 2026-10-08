@@ -333,6 +333,9 @@ supplied pair of a ruleset's
 model does not hold, or several, and as `relation-pairs-not-supplied`
 warnings every supplied relation given no `--relations` file; the rules
 following them are not evaluated, and the exit status follows from them.
+With `--geometry` it lists, as `shape.no-representation` warnings, every
+physical product with no shape representation and no parts, once each (see
+[Geometry](#geometry)).
 `objects` maps every object the report names to its kind and, when it has one,
 its GlobalId, so a reader can tell what `#4711` is without the model. A
 resource object a rule selected by its class (an `IFCMATERIAL`; see
@@ -948,7 +951,17 @@ states:
 | exact | every face is planar (polygonal extrusions, including steel sections without fillets or rounded edges, faceted B-reps and polygon meshes whose faces keep within 1 mm of their planes, booleans of these and clips by half-spaces, bounded by a polygon or not), so the mesh is the shape; a whole measured through its parts when every part is exact | measured as exact |
 | tessellated | some face is curved, or an authored polygon face is warped more than 1 mm off its plane; the mesh is within the deviation the mesh compiler certifies for it (the 1 mm chord budget, or the bound it computed), and within the reported slab width of a warped face; a whole measured through its parts when some part is tessellated, within the largest deviation of its parts | measured as approximate, never exact |
 | no body | the object occupies no material: spatial structure, openings, annotations, grids, ports, structural analysis items, non-products | ignored as an obstacle |
-| unmeasured | a physical product that could not be meshed: one without a Body representation and without parts (`no body representation`), a whole one of whose parts is unmeasured, or a curved one whose mesh the compiler certifies no deviation for | measurements it could affect are not evaluated; with a bound (below), space measurements it cannot reach are evaluated |
+| unmeasured | a physical product that could not be meshed: one with no representation at all and without parts (`no shape representation`, model data; see below), one whose representations include no body and without parts (`no body representation; it has Axis, FootPrint`, naming their identifiers), a whole one of whose parts is unmeasured, or a curved one whose mesh the compiler certifies no deviation for | measurements it could affect are not evaluated; with a bound (below), space measurements it cannot reach are evaluated |
+
+The two bodiless reasons tell model data from engine coverage. A product
+whose `Representation` is `$` has no shape at all: its author can fix that,
+so besides its unmeasured reason it is reported once per object as the
+integrity warning `shape.no-representation` (located
+`ifc:<fingerprint>:no-shape:#<id>`), however many rules measure it. It is
+never measured as empty: its outcomes stay not evaluated. A product with
+representations none of which is a body (an `Axis`, a `FootPrint`, an
+identifier the bridge does not read as one) is a gap in the engine or its
+adapters, and its reason names the identifiers it has.
 
 The planarity check is conservative. Anything it does not recognise counts as
 tessellated, which only loses exactness, never presents an approximation as
@@ -988,7 +1001,8 @@ that occupies no material (an opening, say) adds nothing. The whole fails
 closed: if any part is unmeasured, the whole is too, with the reason naming
 the first such part in identity order (`no body representation of its own,
 and its body is the union of its 2 parts, and part … is unmeasured: …`); a
-product with neither a body nor parts stays `no body representation`. The
+product with neither a body nor parts stays unmeasured as `no shape
+representation` or `no body representation; it has …`. The
 result's additive `geometry.composed` counts the wholes measured this way
 (they are counted as exact or tessellated too), and the stderr line adds
 `N measured through their parts`. Evidence about such a whole states it:

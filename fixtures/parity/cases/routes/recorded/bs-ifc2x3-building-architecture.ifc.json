@@ -427,7 +427,7 @@
       "rule_id": "er-passages"
     },
     {
-      "message": "escape-route use 0: the farthest point of ifc-step:bs-ifc2x3-building-architecture.ifc/#183 from an exit: metric routing query unavailable: ifc-step:bs-ifc2x3-building-architecture.ifc/#460 has a body that was not measured, so free space is unknown: no body representation; the longest travel to the nearest exit is at least 0 m walking, and use 0 allows at most 25 m of travel",
+      "message": "escape-route use 0: the farthest point of ifc-step:bs-ifc2x3-building-architecture.ifc/#183 from an exit: metric routing query unavailable: ifc-step:bs-ifc2x3-building-architecture.ifc/#460 has a body that was not measured, so free space is unknown: no shape representation; the longest travel to the nearest exit is at least 0 m walking, and use 0 allows at most 25 m of travel",
       "object_id": {
         "local_id": "#183",
         "source": {
@@ -439,7 +439,7 @@
       "rule_id": "er-sections"
     },
     {
-      "message": "escape-route use 0: the farthest point of ifc-step:bs-ifc2x3-building-architecture.ifc/#296 from an exit: metric routing query unavailable: ifc-step:bs-ifc2x3-building-architecture.ifc/#460 has a body that was not measured, so free space is unknown: no body representation; the longest travel to the nearest exit is at least 0 m walking, and use 0 allows at most 25 m of travel",
+      "message": "escape-route use 0: the farthest point of ifc-step:bs-ifc2x3-building-architecture.ifc/#296 from an exit: metric routing query unavailable: ifc-step:bs-ifc2x3-building-architecture.ifc/#460 has a body that was not measured, so free space is unknown: no shape representation; the longest travel to the nearest exit is at least 0 m walking, and use 0 allows at most 25 m of travel",
       "object_id": {
         "local_id": "#296",
         "source": {
@@ -451,7 +451,7 @@
       "rule_id": "er-sections"
     },
     {
-      "message": "escape-route use 0: the farthest point of ifc-step:bs-ifc2x3-building-architecture.ifc/#183 from an exit: metric routing query unavailable: ifc-step:bs-ifc2x3-building-architecture.ifc/#460 has a body that was not measured, so free space is unknown: no body representation; the longest travel to the nearest exit is at least 0 m walking, and use 0 allows at most 0.5 m of travel",
+      "message": "escape-route use 0: the farthest point of ifc-step:bs-ifc2x3-building-architecture.ifc/#183 from an exit: metric routing query unavailable: ifc-step:bs-ifc2x3-building-architecture.ifc/#460 has a body that was not measured, so free space is unknown: no shape representation; the longest travel to the nearest exit is at least 0 m walking, and use 0 allows at most 0.5 m of travel",
       "object_id": {
         "local_id": "#183",
         "source": {
@@ -463,7 +463,7 @@
       "rule_id": "er-short"
     },
     {
-      "message": "escape-route use 0: the farthest point of ifc-step:bs-ifc2x3-building-architecture.ifc/#296 from an exit: metric routing query unavailable: ifc-step:bs-ifc2x3-building-architecture.ifc/#460 has a body that was not measured, so free space is unknown: no body representation; the longest travel to the nearest exit is at least 0 m walking, and use 0 allows at most 0.5 m of travel",
+      "message": "escape-route use 0: the farthest point of ifc-step:bs-ifc2x3-building-architecture.ifc/#296 from an exit: metric routing query unavailable: ifc-step:bs-ifc2x3-building-architecture.ifc/#460 has a body that was not measured, so free space is unknown: no shape representation; the longest travel to the nearest exit is at least 0 m walking, and use 0 allows at most 0.5 m of travel",
       "object_id": {
         "local_id": "#296",
         "source": {
@@ -475,7 +475,7 @@
       "rule_id": "er-short"
     },
     {
-      "message": "escape-route use 0 (rooms): the farthest point of ifc-step:bs-ifc2x3-building-architecture.ifc/#183 from an exit: metric routing query unavailable: ifc-step:bs-ifc2x3-building-architecture.ifc/#460 has a body that was not measured, so free space is unknown: no body representation; the longest travel to the nearest exit is at least 0 m walking, and use 0 (rooms) allows at most 30 m of travel",
+      "message": "escape-route use 0 (rooms): the farthest point of ifc-step:bs-ifc2x3-building-architecture.ifc/#183 from an exit: metric routing query unavailable: ifc-step:bs-ifc2x3-building-architecture.ifc/#460 has a body that was not measured, so free space is unknown: no shape representation; the longest travel to the nearest exit is at least 0 m walking, and use 0 (rooms) allows at most 30 m of travel",
       "object_id": {
         "local_id": "#183",
         "source": {
@@ -487,7 +487,7 @@
       "rule_id": "er-travel"
     },
     {
-      "message": "escape-route use 0 (rooms): the farthest point of ifc-step:bs-ifc2x3-building-architecture.ifc/#296 from an exit: metric routing query unavailable: ifc-step:bs-ifc2x3-building-architecture.ifc/#460 has a body that was not measured, so free space is unknown: no body representation; the longest travel to the nearest exit is at least 0 m walking, and use 0 (rooms) allows at most 30 m of travel",
+      "message": "escape-route use 0 (rooms): the farthest point of ifc-step:bs-ifc2x3-building-architecture.ifc/#296 from an exit: metric routing query unavailable: ifc-step:bs-ifc2x3-building-architecture.ifc/#460 has a body that was not measured, so free space is unknown: no shape representation; the longest travel to the nearest exit is at least 0 m walking, and use 0 (rooms) allows at most 30 m of travel",
       "object_id": {
         "local_id": "#296",
         "source": {

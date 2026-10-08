@@ -227,7 +227,7 @@
       "rule_id": "space-share"
     },
     {
-      "message": "facade area unavailable: ifc-step:bs-ifc4-building-architecture.ifc/#220 has a body that was not measured (no body representation), so what the faces look at is unknown",
+      "message": "facade area unavailable: ifc-step:bs-ifc4-building-architecture.ifc/#220 has a body that was not measured (no shape representation), so what the faces look at is unknown",
       "object_id": {
         "local_id": "#45",
         "source": {
@@ -263,7 +263,7 @@
       "rule_id": "storey-space-area"
     },
     {
-      "message": "facade area unavailable: ifc-step:bs-ifc4-building-architecture.ifc/#220 has a body that was not measured (no body representation), so what the faces look at is unknown",
+      "message": "facade area unavailable: ifc-step:bs-ifc4-building-architecture.ifc/#220 has a body that was not measured (no shape representation), so what the faces look at is unknown",
       "object_id": {
         "local_id": "#158",
         "source": {
@@ -275,7 +275,7 @@
       "rule_id": "wall-facade"
     },
     {
-      "message": "facade area unavailable: ifc-step:bs-ifc4-building-architecture.ifc/#220 has a body that was not measured (no body representation), so what the faces look at is unknown",
+      "message": "facade area unavailable: ifc-step:bs-ifc4-building-architecture.ifc/#220 has a body that was not measured (no shape representation), so what the faces look at is unknown",
       "object_id": {
         "local_id": "#182",
         "source": {
@@ -287,7 +287,7 @@
       "rule_id": "wall-facade"
     },
     {
-      "message": "facade area unavailable: ifc-step:bs-ifc4-building-architecture.ifc/#220 has a body that was not measured (no body representation), so what the faces look at is unknown",
+      "message": "facade area unavailable: ifc-step:bs-ifc4-building-architecture.ifc/#220 has a body that was not measured (no shape representation), so what the faces look at is unknown",
       "object_id": {
         "local_id": "#201",
         "source": {
@@ -299,7 +299,7 @@
       "rule_id": "wall-facade"
     },
     {
-      "message": "facade area unavailable: ifc-step:bs-ifc4-building-architecture.ifc/#220 has a body that was not measured (no body representation), so what the faces look at is unknown",
+      "message": "facade area unavailable: ifc-step:bs-ifc4-building-architecture.ifc/#220 has a body that was not measured (no shape representation), so what the faces look at is unknown",
       "object_id": {
         "local_id": "#228",
         "source": {
@@ -311,7 +311,7 @@
       "rule_id": "wall-facade"
     },
     {
-      "message": "facade area unavailable: ifc-step:bs-ifc4-building-architecture.ifc/#220 has a body that was not measured (no body representation), so what the faces look at is unknown",
+      "message": "facade area unavailable: ifc-step:bs-ifc4-building-architecture.ifc/#220 has a body that was not measured (no shape representation), so what the faces look at is unknown",
       "object_id": {
         "local_id": "#45",
         "source": {

@@ -19,7 +19,7 @@ use axioval_engine::{
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
-use crate::geometry::{AxiolidGeometry, Triangle, extent_gap, triangles};
+use crate::geometry::{AxiolidGeometry, Extent, Triangle, extent_gap, triangles};
 use crate::planar::{
     BoundedOverlap, boundary_rings, bounded_footprint, bounded_plan_overlap, footprint_polygons,
     overlay_refusal, plan_frame, polygon_area, ring_segments, snapping_area,
@@ -227,6 +227,18 @@ impl AxiolidSpaceService {
         }
     }
 
+    /// Whether `candidate` lies apart from the space in plan: its enclosing
+    /// box (its mesh's, grown by its chord deviation) and `subject`'s share
+    /// no point, so their footprints share no area and neither can contain
+    /// or cover the other. Such a candidate is never measured, so a
+    /// footprint the overlay refuses elsewhere on the storey cannot refuse
+    /// this space. Without a box either way it is measured.
+    fn apart_in_plan(&self, subject: Option<&Extent>, candidate: &ObjectId) -> bool {
+        subject
+            .zip(self.geometry.enclosing_extent(candidate))
+            .is_some_and(|(subject, candidate)| extent_gap(subject, &candidate, true) > 0.0)
+    }
+
     fn role(&self, object: &ObjectId) -> Option<Role> {
         self.roles.get(object).copied()
     }
@@ -408,11 +420,15 @@ impl SpaceService for AxiolidSpaceService {
         self.require_exact(space, 0.0, false, |candidate| self.is_space(candidate))?;
         let tolerance = tolerance()?;
         let subject_span = vertical_span(&subject).ok_or(SpaceError::Unavailable)?;
+        let extent = self.geometry.enclosing_extent(space);
         let mut subject_area = None;
 
         let mut duplicates = Vec::new();
         for (candidate, mesh) in self.geometry.objects() {
-            if candidate == space || !self.is_space(candidate) {
+            if candidate == space
+                || !self.is_space(candidate)
+                || self.apart_in_plan(extent.as_ref(), candidate)
+            {
                 continue;
             }
             let other = triangles(mesh);
@@ -555,11 +571,15 @@ impl SpaceService for AxiolidSpaceService {
         self.require_exact(space, 0.0, false, chosen)?;
         let tolerance = tolerance()?;
         let subject_span = vertical_span(&subject).ok_or(SpaceError::Unavailable)?;
+        let extent = self.geometry.enclosing_extent(space);
         let mut subject_area = None;
 
         let mut overlaps = Vec::new();
         for (candidate, mesh) in self.geometry.objects() {
-            if candidate == space || !chosen(candidate) {
+            if candidate == space
+                || !chosen(candidate)
+                || self.apart_in_plan(extent.as_ref(), candidate)
+            {
                 continue;
             }
             let other = triangles(mesh);
@@ -643,13 +663,17 @@ impl SpaceService for AxiolidSpaceService {
             return Err(SpaceError::Refused(SLIVERS_COULD_DECIDE));
         }
         let (floor, ceiling) = vertical_span(&subject).ok_or(SpaceError::Unavailable)?;
+        let extent = self.geometry.enclosing_extent(space);
 
         let mut covering = Vec::new();
         let mut cover = Vec::new();
         for (candidate, mesh) in self.geometry.objects() {
             // Only cap elements cap a space; a wall crossing the ceiling
             // plane is not a cap. The space never caps itself.
-            if candidate == space || !self.caps(request, candidate) {
+            if candidate == space
+                || !self.caps(request, candidate)
+                || self.apart_in_plan(extent.as_ref(), candidate)
+            {
                 continue;
             }
             let other = triangles(mesh);

@@ -1038,3 +1038,63 @@ fn a_thin_triangle_far_from_the_origin_keeps_its_winding() {
         coverage.covered_ratio()
     );
 }
+
+/// A prism over a 1e-4 m² triangle at georeferenced coordinates, whose
+/// plan the overlay refuses (`ZeroArea`): it takes a ring's area from a
+/// shoelace over the coordinates, which rounds this one to zero.
+fn far_sliver(z0: f64, z1: f64) -> TriMesh {
+    let corners = [
+        (600_000.0, 5_600_000.0),
+        (600_000.02, 5_600_000.0),
+        (600_000.0, 5_600_000.01),
+    ];
+    let mut positions = Vec::new();
+    for z in [z0, z1] {
+        positions.extend(corners.iter().map(|&(x, y)| Point3::new(x, y, z)));
+    }
+    TriMesh::new(positions, vec![0, 1, 2, 3, 4, 5])
+}
+
+/// A space is measured against the bodies that can reach it in plan only:
+/// a space, wall or slab elsewhere at its height, whose footprint the
+/// overlay refuses, neither duplicates, overlaps nor caps it, and so does
+/// not refuse it.
+#[test]
+fn a_footprint_refused_elsewhere_leaves_the_space_measured() {
+    let space = closed_box(0.0, 4.0, 0.0, 4.0, 0.0, 3.0);
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("space"), space.clone())
+        .with_mesh(id("copy"), space)
+        .with_mesh(id("far space"), far_sliver(0.0, 3.0))
+        .with_mesh(id("far slab"), far_sliver(3.0, 3.2))
+        .with_mesh(id("slab"), closed_box(0.0, 4.0, 0.0, 4.0, 3.0, 3.2));
+    let service = AxiolidSpaceService::new(geometry, source())
+        .with_space(id("space"))
+        .with_space(id("copy"))
+        .with_space(id("far space"))
+        .with_slab(id("far slab"))
+        .with_slab(id("slab"));
+    assert_eq!(
+        service.measure_duplicates(&id("space")).expect("measured"),
+        vec![id("copy")]
+    );
+    let overlaps = service
+        .measure_overlaps(&id("space"), &OverlapRequest::new())
+        .expect("measured");
+    let others: Vec<_> = overlaps
+        .iter()
+        .map(|overlap| overlap.other().clone())
+        .collect();
+    assert_eq!(others, vec![id("copy")], "{overlaps:?}");
+    let coverage = service
+        .measure_cap_coverage(&id("space"), &CapRequest::new(Cap::Top))
+        .expect("measured");
+    assert_eq!(coverage.elements(), &[id("slab")]);
+    // The far space's own cap, which needs its footprint, is still
+    // refused by name, never measured empty.
+    let far_cap = service.measure_cap_coverage(&id("far space"), &CapRequest::new(Cap::Top));
+    assert!(
+        matches!(far_cap, Err(SpaceError::Refused(_))),
+        "{far_cap:?}"
+    );
+}

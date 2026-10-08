@@ -183,8 +183,15 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   area read "not mutually contained" and passed duplicates), and map every
   overlay refusal to `SpaceError::Refused(overlay_refusal(..))`, never
   `Unavailable`. Spans and heights are checked before any overlay runs, so
-  a pair they rule out never refuses. `tests/space.rs` pins a room with a
-  leaning face (`leaning_room`) in all three aspects.
+  a pair they rule out never refuses, and so is the plan box
+  (`apart_in_plan`: enclosing extents grown by the chord deviation): a
+  candidate apart from the space is never measured, so a footprint the
+  overlay refuses elsewhere refuses nothing here (#304). `tests/space.rs`
+  pins a room with a leaning face (`leaning_room`) in all three aspects.
+  `projected_polygons` winds each triangle by its area about a vertex
+  (`triangle_area`), never by `ring_area`'s sum over the raw coordinates,
+  whose products swamp a thin triangle's area at georeferenced
+  coordinates and flip its winding (#304).
 - `src/envelope_membership.rs` derives envelope membership: an object bounds
   the envelope when its plan footprint meets a bounding space. The bounding
   spaces are the request's (the rule's selection), never host-declared; a

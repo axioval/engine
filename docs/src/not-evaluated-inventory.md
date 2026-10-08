@@ -190,6 +190,42 @@ outcomes are unchanged. The two kernel gaps stay unmeasured until
 `axiolid-mesh-compile` ships the fixes. Together they account for 962 of
 the 1,024 outcomes.
 
+### Fourth ranking: the whole corpus
+
+The fourth ranking ran later on 2026-10-08, after #222 and #220, and is the
+first since the first ranking to include all 15 models.
+
+- **Large models:** with checks timed per phase, envelope declarations read only on request, and a whole's volume computed once (#220), the 29 MB model finishes in 373 s and the 76 MB model in 1,717 s.
+- **Free floor:** the band footprints of obstacles with faces standing on edge are built and cached per band (#222). `plan Union failed: SelfIntersection` is gone from every model.
+
+All 15 models recorded **12,514 outcomes and 753 unmeasured objects**
+under 37 causes. The 13 models of the third ranking account for 2,826 of
+those outcomes, 7 fewer than in the third ranking because #222 decides 7 more
+spaces. The two large models add the rest, so the
+shares shift:
+
+| # | Cause | Outcomes | Unmeasured | Models | Issue |
+|---|---|---:|---:|---:|---|
+| 1 | Whole made of parts, one part's planar face finds no ear | 3,845 | 16 | 3 | #299 (axiolid/kernel#269) |
+| 2 | Curved surface without a certified bound (non-forward planar extrusion) | 2,451 | 4 | 2 | — |
+| 3 | Free floor: placement evidence not exact | 1,264 | 0 | 2 | — |
+| 4 | Difference result touches itself along an edge (void tangent to its host's face) | 981 | 28 | 1 | — |
+| 5 | Space validation: plan overlay refuses a footprint whose edges cross | 905 | 0 | 1 | — |
+| 6 | No shape representation (model data) | 771 | 467 | 5 | #219 |
+| 7 | Planar face: outer ring overlaps itself (keyhole) | 523 | 35 | 1 | #299 (axiolid/kernel#270) |
+| 8 | Space evidence not exact and reviewable | 328 | 0 | 1 | — |
+| 9 | Clash: neither body is a closed solid | 242 | 0 | 8 | — |
+| 10 | Mesh compilation produced no triangles | 227 | 58 | 1 | — |
+| 11 | Containment: shared volume not measured | 172 | 0 | 5 | — |
+| 12 | Free floor: obstacle below the band is not a closed solid | 169 | 0 | 4 | — |
+| 13 | Planar face finds no ear | 126 | 61 | 4 | #299 (axiolid/kernel#269) |
+| 14–16 | Stair of separate treads; space boundary on curved faces; curve-bounded boundary with too few points | 197 | 0 | ≤ 2 | — |
+| 17–37 | Smaller causes, among them `dilation: Overlay(ZeroArea)` (8) | 313 | 84 | — | — |
+
+The two kernel gaps of #298 (rows 1, 7 and 13) now account for 4,494
+outcomes, more than a third. The 76 MB model's causes (rows 2–5 and 8) are
+the next to triage.
+
 Cases 3 and 5 are resolved upstream (`axiolid-mesh-compile` 0.3.13). A
 warped authored face is now meshed, and the body is tessellated within
 the width of the slab the face's corners span about its fit plane, which

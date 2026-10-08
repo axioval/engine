@@ -95,7 +95,11 @@ fn measure(
     counterpart: &str,
 ) -> axioval_engine::ProximityEvidence {
     AxiolidProximityService::new(geometry)
-        .measure_proximity(&ProximityRequest::try_new(id(subject), id(counterpart)).unwrap())
+        .measure_proximity(
+            &ProximityRequest::try_new(id(subject), id(counterpart))
+                .unwrap()
+                .with_plan_overlap(),
+        )
         .expect("measurable")
 }
 
@@ -112,6 +116,30 @@ fn a_pipe_through_a_wall_penetrates_by_half_the_wall() {
     assert!((depth - 0.1).abs() < 1e-9, "depth {depth}");
     assert!((measured.plan_overlap_square_metres().expect("measured") - 0.02).abs() < 1e-6);
     assert!(measured.evidence().exact);
+}
+
+/// The plan overlap costs an overlay per pair; a request that does not ask
+/// for it leaves it unmeasured and every measurement in space unchanged.
+#[test]
+fn a_request_not_asking_for_the_plan_overlap_leaves_it_unmeasured() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("wall"), wall())
+        .with_mesh(id("pipe"), cuboid([1.0, -1.0, 1.0], [1.1, 1.2, 1.1]));
+    let asked = measure(geometry.clone(), "pipe", "wall");
+    let unasked = AxiolidProximityService::new(geometry)
+        .measure_proximity(&ProximityRequest::try_new(id("pipe"), id("wall")).unwrap())
+        .expect("measurable");
+    assert!(asked.plan_overlap_square_metres().is_some());
+    assert_eq!(unasked.plan_overlap_square_metres(), None);
+    assert_eq!(
+        unasked.separation_metres().to_bits(),
+        asked.separation_metres().to_bits()
+    );
+    assert_eq!(
+        unasked.penetration_metres().map(f64::to_bits),
+        asked.penetration_metres().map(f64::to_bits)
+    );
+    assert_eq!(unasked.intersection_volume(), asked.intersection_volume());
 }
 
 /// A wall whose front face leans by `lean` metres over its height: both
@@ -315,7 +343,11 @@ fn missing_geometry_and_bad_deviation_are_refused() {
             .with_mesh(id("wall"), wall())
             .with_tessellated_mesh(id("bad"), column([9.0, 9.0], 0.2, [0.0, 3.0], 8), f64::NAN),
     );
-    let request = |subject: &str| ProximityRequest::try_new(id(subject), id("wall")).unwrap();
+    let request = |subject: &str| {
+        ProximityRequest::try_new(id(subject), id("wall"))
+            .unwrap()
+            .with_plan_overlap()
+    };
     assert_eq!(
         service.measure_proximity(&request("ghost")).unwrap_err(),
         ProximityError::Unavailable

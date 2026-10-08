@@ -422,6 +422,7 @@ pub struct ProximityRequest {
     subject: ObjectId,
     counterpart: ObjectId,
     projection: ProximityProjection,
+    plan_overlap: bool,
 }
 
 impl ProximityRequest {
@@ -446,7 +447,24 @@ impl ProximityRequest {
             subject,
             counterpart,
             projection,
+            plan_overlap: false,
         })
+    }
+    /// The same request, asking also for the plan overlap of the two
+    /// footprints ([`ProximityEvidence::plan_overlap_square_metres`]).
+    /// Unasked, a service leaves it unmeasured (`None`): it costs a polygon
+    /// overlay per pair, and no separation, penetration or containment
+    /// rests on it.
+    #[must_use]
+    pub fn with_plan_overlap(self) -> Self {
+        Self {
+            plan_overlap: true,
+            ..self
+        }
+    }
+    /// Whether the request asks for the plan overlap ([`Self::with_plan_overlap`]).
+    pub fn asks_plan_overlap(&self) -> bool {
+        self.plan_overlap
     }
     pub fn subject(&self) -> &ObjectId {
         &self.subject
@@ -1126,7 +1144,8 @@ impl ProximityEvidence {
     /// - `penetration_metres`: depth of the deepest witnessed point of either
     ///   body inside the other; `None` when neither body is a closed solid.
     /// - `plan_overlap_square_metres`: area of the two footprints' overlap;
-    ///   `None` when the service could not measure it. No separation,
+    ///   `None` when the service could not measure it or the request did
+    ///   not ask for it ([`ProximityRequest::with_plan_overlap`]). No separation,
     ///   penetration or containment rests on it, so an unmeasured plan
     ///   overlap leaves them standing.
     pub fn try_new(

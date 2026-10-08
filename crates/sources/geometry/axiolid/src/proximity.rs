@@ -107,6 +107,9 @@
 //! decided the same way: a tessellated end may move by the deviation, so ends
 //! nearer each other than the combined deviation leave the side open.
 
+use std::collections::BTreeMap;
+use std::sync::{Mutex, PoisonError};
+
 use axiolid_core::{Aabb, Point3, Ray3, Tolerance};
 use axiolid_inspect::{enclosed_volume, intersection_volume};
 use axiolid_measure::{
@@ -179,17 +182,27 @@ pub const CERTIFIED_ACCURACY_METRES: f64 = 1e-6;
 /// above the tolerance, unchanged within it, undetermined across it.
 pub const BOUNDARY_HAUSDORFF_SPLITS: usize = 4096;
 
+/// An enclosed volume as `(lower, upper)`, or why it cannot be measured.
+type Volume = Result<(f64, f64), ProximityError>;
+
 /// Measures pairwise proximity between registered meshes using Axiolid.
 #[derive(Debug)]
 pub struct AxiolidProximityService {
     geometry: AxiolidGeometry,
+    /// Each whole measured through its parts' enclosed volume
+    /// (`union_volume`), taken once: every pair the whole is in reads it,
+    /// and it costs a mesh boolean per two of its pieces.
+    volumes: Mutex<BTreeMap<ObjectId, Volume>>,
 }
 
 impl AxiolidProximityService {
     /// Creates a service over the supplied geometry.
     #[must_use]
     pub fn new(geometry: AxiolidGeometry) -> Self {
-        Self { geometry }
+        Self {
+            geometry,
+            volumes: Mutex::new(BTreeMap::new()),
+        }
     }
 
     /// One closed body's enclosed volume, widened by its tessellation band,
@@ -241,9 +254,29 @@ impl AxiolidProximityService {
         if let [single] = pieces.as_slice() {
             return self.piece_volume(single);
         }
+        let cached = self
+            .volumes
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(object)
+            .copied();
+        if let Some(volume) = cached {
+            return volume;
+        }
+        // Measured outside the lock: two rules may ask for two wholes at once.
+        let volume = self.pieces_volume(&pieces);
+        self.volumes
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(object.clone(), volume);
+        volume
+    }
+
+    /// The enclosed volume of the union of several pieces (`union_volume`).
+    fn pieces_volume(&self, pieces: &[&ObjectId]) -> Result<(f64, f64), ProximityError> {
         let mut sum = (0.0, 0.0);
         let mut largest: f64 = 0.0;
-        for piece in &pieces {
+        for piece in pieces {
             let (lower, upper) = self.piece_volume(piece)?;
             sum = (sum.0 + lower, sum.1 + upper);
             largest = largest.max(lower);
@@ -2015,9 +2048,13 @@ impl ProximityService for AxiolidProximityService {
         let separation = separation(&subject.soup, &counterpart.soup)?;
         // No separation, penetration or containment rests on the plan
         // overlap, so an overlay refusing the footprints leaves it unknown
-        // instead of the whole pair unmeasured.
-        let plan_overlap =
-            plan_overlap_area(&subject.soup.items, &counterpart.soup.items, tolerance()?);
+        // instead of the whole pair unmeasured. It costs an overlay per
+        // pair, so it is measured only when the request asks for it.
+        let plan_overlap = if request.asks_plan_overlap() {
+            plan_overlap_area(&subject.soup.items, &counterpart.soup.items, tolerance()?)
+        } else {
+            None
+        };
 
         let (penetration, containment) = penetration(&subject, &counterpart, separation)?;
         let subject_fidelity = self.geometry.fidelity(request.subject())?;

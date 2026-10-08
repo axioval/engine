@@ -18,7 +18,8 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   host states which and why, nothing is subtracted here). Volumes of a
   whole are bounded piece by piece in `proximity.rs` (`union_volume`,
   `composed_intersection`), never on the concatenated mesh, which would
-  count overlaps twice. `tests/composed_bodies.rs`,
+  count overlaps twice. A whole's `union_volume` (a boolean per two of its
+  pieces) is taken once per service and cached, never per pair it is in. `tests/composed_bodies.rs`,
   `tests/applied_openings.rs` and `tests/exact_bodies.rs` pin it.
 - `src/exact_boundary.rs` builds a body's exact solid from the Axiolid
   geometry graph a host meshes (`exact_boundary`), and
@@ -406,7 +407,8 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   counterparts are measured independently and can double-count a shared region.
 - `src/proximity.rs` implements `ProximityService` for clash and distance
   checks: separation from `closest_points_on_triangles`, plan overlap from
-  the oriented footprint overlay in `planar.rs`, and penetration witnessed by
+  the oriented footprint overlay in `planar.rs` (only when the request asks,
+  `ProximityRequest::with_plan_overlap`: an overlay per pair), and penetration witnessed by
   sampling points (including midpoints between an edge's crossings of the
   other surface, via `axiolid-ray-mesh`) against winding numbers. Only closed
   two-manifold meshes have an inside; a pair with one is measured, two open

@@ -179,11 +179,16 @@ must_use_candidate = "allow"
 
 # Line tables are enough for a backtrace's file and line, and keep test
 # binaries small and fast to link; dependencies carry no debug info.
+# Dependencies are optimized: the geometry tests spend nearly all their time
+# in the axiolid kernels and their hashing and overlay dependencies, which
+# run five to ten times faster at opt-level 2. Debug assertions and overflow
+# checks stay on, and the workspace's own crates stay unoptimized.
 [profile.dev]
 debug = "line-tables-only"
 
 [profile.dev.package."*"]
 debug = false
+opt-level = 2
 
 [profile.release]
 lto = "thin"

@@ -126,30 +126,45 @@ The first five cases now account for 76 % of the outcomes, and only case
 and the space refusals of case 3 now have a cause of their own, which
 also turns overlay refusals into zero plan areas (case 14).
 
-Case 4 is fixed in the adapter (#221): a zero-area triangle is measured as
-the segment it is, and a mesh closed only with such triangles is a closed
-solid (see [Clash](./clash.md#axiolid-measurement)). The rankings above
-predate it too; the next run shows how many of the 293 outcomes move.
+The third ranking ran on 2026-10-08 after #217, #218, #219 and #221, with
+`ifc-geometry` 0.10.0 and `axiolid-mesh-compile` 0.3.14. The 29 MB and
+76 MB models did not finish within 30 minutes (#220).
+The 13 others are the same as in the second ranking and recorded **2,833
+outcomes and 621 unmeasured objects** under 21 causes:
 
-Case 2's upstream entry point is published (`ifc-geometry` 0.10,
-openbimrs/ifc#351), and since #218 `--geometry` takes an IFC4 or IFC4X3
-opening whose every representation is `Reference` as already applied, so
-its host is measured from its `Body` as authored. The rankings above
-predate it; the next run shows whether the cause is gone from the three
-models.
+- Cases 2, 3, 4, 9 and 14 of the second ranking are gone: 1,667 outcomes.
+  Reference View hosts are measured with their openings taken as applied
+  (#218), spaces are measured past the overlay's slivers (#217), and clash
+  pairs with zero-area triangles are measured (#221).
+- Case 1 is now named `unmeasured (model data): no shape representation`
+  (#219): 771 outcomes, 467 objects, all model data.
+- Measuring the spaces of one model reaches one wall whose part cannot be
+  triangulated, and since #212 every space it reaches is refused for it:
+  867 outcomes from one object.
+- Planar faces the triangulation refuses (no ear left, an outer ring that
+  crosses, overlaps or folds back on itself) are now their own rows: 157
+  outcomes and 81 objects over six models. A build from before the second
+  ranking refuses the same objects, so they are not new refusals; the
+  ranking had grouped them differently.
 
-Cases 3 and 14 of the second ranking are fixed by #217: the space
-adapter leaves the slivers the overlay refuses out of its plan areas, as
-clash pairs do since #210, bounds what they could add, and refuses by
-name (`SpaceError::Refused`) only a decision they could tip; no refused
-plan area is read as zero any more. Run with `space-validation` alone on
-one office model of 255 spaces, its 380 "unavailable for the requested
-aspect" and 6 "finite and non-negative" outcomes went to none, and 79
-more findings were reported, 6 of them duplicate spaces not reported
-before. The same run showed a fully covered cap measured a hair over its
-own area by the overlay's snapping, which the adapter now reads as fully
-covered within that snapping. The corpus re-run that moves both cases
-in the ranking is still to come.
+| # | Cause | Outcomes | Unmeasured | Models | Issue |
+|---|---|---:|---:|---:|---|
+| 1 | Whole made of parts, one part's planar face finds no ear (one wall) | 867 | 1 | 1 | — |
+| 2 | No shape representation (model data) | 771 | 467 | 5 | #219 |
+| 3 | Free floor: plan union `SelfIntersection` | 330 | 0 | 2 | #222 |
+| 4 | Mesh compilation produced no triangles | 227 | 58 | 1 | — |
+| 5 | Clash: neither body is a closed solid | 188 | 0 | 7 | — |
+| 6 | Containment: shared volume not measured | 144 | 0 | 4 | — |
+| 7 | Space boundary: curve-bounded boundary with too few points | 58 | 0 | 2 | — |
+| 8 | Planar face finds no ear | 54 | 25 | 2 | — |
+| 9–10 | Authored polygon face: outer ring intersects or overlaps itself | 86 | 42 | 3 | — |
+| 11 | Free floor: placement evidence not exact | 41 | 0 | 1 | — |
+| 12 | `IfcIndexedPolyCurve` profile boundary | 28 | 9 | 1 | — |
+| 13–21 | Planar face ring crosses or folds back, free-floor obstacle not closed, uncertified curved bodies, uncomputable storey footprint, `RepeatedVertex` footprint, a space sliver bound | 39 | 19 | ≤ 2 | — |
+
+The triangulation refusals (rows 1, 8, 9, 10 and part of 13–21) now
+account for 1,024 outcomes, more than a third, and are the next case to
+triage.
 
 Cases 3 and 5 are resolved upstream (`axiolid-mesh-compile` 0.3.13). A
 warped authored face is now meshed, and the body is tessellated within

@@ -126,6 +126,11 @@ The first five cases now account for 76 % of the outcomes, and only case
 and the space refusals of case 3 now have a cause of their own, which
 also turns overlay refusals into zero plan areas (case 14).
 
+Case 4 is fixed in the adapter (#221): a zero-area triangle is measured as
+the segment it is, and a mesh closed only with such triangles is a closed
+solid (see [Clash](./clash.md#axiolid-measurement)). The rankings above
+predate it too; the next run shows how many of the 293 outcomes move.
+
 Case 2's upstream entry point is published (`ifc-geometry` 0.10,
 openbimrs/ifc#351), and since #218 `--geometry` takes an IFC4 or IFC4X3
 opening whose every representation is `Reference` as already applied, so

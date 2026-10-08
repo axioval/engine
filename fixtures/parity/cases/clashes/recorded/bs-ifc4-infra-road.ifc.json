@@ -1,774 +1,6 @@
 {
   "findings": [
     {
-      "evidence": [
-        {
-          "exact": true,
-          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#108:ifc-step:bs-ifc4-infra-road.ifc/#350",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        },
-        {
-          "exact": true,
-          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:attribute:#108:Name",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        },
-        {
-          "exact": true,
-          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:attribute:#350:Name",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        },
-        {
-          "exact": true,
-          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#108:Pset_WallCommon:IsExternal",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        },
-        {
-          "exact": true,
-          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#350:Pset_WallCommon:IsExternal",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "id": "0fbabd9e-1ed6-586b-b23a-88c5ff271790",
-      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#350: the surfaces lie within 0.0000 m of each other, tolerance 0.0010 m; the copies agree in type, axioval:attributes.axioval:parity.public.clashes.name, axioval:parity.public.clashes.wall-common.axioval:parity.public.clashes.is-external; whether they differ in volume is unknown",
-      "object_id": {
-        "local_id": "#108",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "related": [
-        {
-          "local_id": "#350",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "rule_id": "clash-structure",
-      "severity": "error"
-    },
-    {
-      "evidence": [
-        {
-          "exact": true,
-          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#131:ifc-step:bs-ifc4-infra-road.ifc/#363",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        },
-        {
-          "exact": true,
-          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:attribute:#131:Name",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        },
-        {
-          "exact": true,
-          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:attribute:#363:Name",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        },
-        {
-          "exact": true,
-          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#131:Pset_WallCommon:IsExternal",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        },
-        {
-          "exact": true,
-          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#363:Pset_WallCommon:IsExternal",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "id": "c76c7060-2324-5cfe-8855-e963b2774f3e",
-      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#363: the surfaces lie within 0.0000 m of each other, tolerance 0.0010 m; the copies agree in type, axioval:attributes.axioval:parity.public.clashes.name, axioval:parity.public.clashes.wall-common.axioval:parity.public.clashes.is-external; whether they differ in volume is unknown",
-      "object_id": {
-        "local_id": "#131",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "related": [
-        {
-          "local_id": "#363",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "rule_id": "clash-structure",
-      "severity": "error"
-    },
-    {
-      "evidence": [
-        {
-          "exact": true,
-          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#188:ifc-step:bs-ifc4-infra-road.ifc/#398",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        },
-        {
-          "exact": true,
-          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:attribute:#188:Name",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        },
-        {
-          "exact": true,
-          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:attribute:#398:Name",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        },
-        {
-          "exact": true,
-          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#188:Pset_WallCommon:IsExternal",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        },
-        {
-          "exact": true,
-          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#398:Pset_WallCommon:IsExternal",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "id": "667a8ef1-5d8e-5089-8fa5-a40c3586a905",
-      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#398: the surfaces lie within 0.0000 m of each other, tolerance 0.0010 m; the copies agree in type, axioval:attributes.axioval:parity.public.clashes.name, axioval:parity.public.clashes.wall-common.axioval:parity.public.clashes.is-external; whether they differ in volume is unknown",
-      "object_id": {
-        "local_id": "#188",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "related": [
-        {
-          "local_id": "#398",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "rule_id": "clash-structure",
-      "severity": "error"
-    },
-    {
-      "evidence": [
-        {
-          "exact": true,
-          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#207:ifc-step:bs-ifc4-infra-road.ifc/#412",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        },
-        {
-          "exact": true,
-          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:attribute:#207:Name",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        },
-        {
-          "exact": true,
-          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:attribute:#412:Name",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        },
-        {
-          "exact": true,
-          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#207:Pset_WallCommon:IsExternal",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        },
-        {
-          "exact": true,
-          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#412:Pset_WallCommon:IsExternal",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "id": "84118ba1-4a23-52c6-b9ac-e8eee9f973c3",
-      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#412: the surfaces lie within 0.0000 m of each other, tolerance 0.0010 m; the copies agree in type, axioval:attributes.axioval:parity.public.clashes.name, axioval:parity.public.clashes.wall-common.axioval:parity.public.clashes.is-external; whether they differ in volume is unknown",
-      "object_id": {
-        "local_id": "#207",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "related": [
-        {
-          "local_id": "#412",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "rule_id": "clash-structure",
-      "severity": "error"
-    },
-    {
-      "evidence": [
-        {
-          "exact": true,
-          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#276:ifc-step:bs-ifc4-infra-road.ifc/#460",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        },
-        {
-          "exact": true,
-          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:attribute:#276:Name",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        },
-        {
-          "exact": true,
-          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:attribute:#460:Name",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        },
-        {
-          "exact": true,
-          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#276:Pset_WallCommon:IsExternal",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        },
-        {
-          "exact": true,
-          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#460:Pset_WallCommon:IsExternal",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "id": "96a613d8-3b19-5ae7-a276-981d571d81dc",
-      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#460: the surfaces lie within 0.0000 m of each other, tolerance 0.0010 m; the copies agree in type, axioval:attributes.axioval:parity.public.clashes.name, axioval:parity.public.clashes.wall-common.axioval:parity.public.clashes.is-external; whether they differ in volume is unknown",
-      "object_id": {
-        "local_id": "#276",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "related": [
-        {
-          "local_id": "#460",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "rule_id": "clash-structure",
-      "severity": "error"
-    },
-    {
-      "evidence": [
-        {
-          "exact": true,
-          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#294:ifc-step:bs-ifc4-infra-road.ifc/#473",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        },
-        {
-          "exact": true,
-          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:attribute:#294:Name",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        },
-        {
-          "exact": true,
-          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:attribute:#473:Name",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        },
-        {
-          "exact": true,
-          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#294:Pset_WallCommon:IsExternal",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        },
-        {
-          "exact": true,
-          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#473:Pset_WallCommon:IsExternal",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "id": "9c4cca27-e3fd-54be-a89a-3a1190a9759e",
-      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#473: the surfaces lie within 0.0000 m of each other, tolerance 0.0010 m; the copies agree in type, axioval:attributes.axioval:parity.public.clashes.name, axioval:parity.public.clashes.wall-common.axioval:parity.public.clashes.is-external; whether they differ in volume is unknown",
-      "object_id": {
-        "local_id": "#294",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "related": [
-        {
-          "local_id": "#473",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "rule_id": "clash-structure",
-      "severity": "error"
-    },
-    {
-      "evidence": [
-        {
-          "exact": true,
-          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#323:ifc-step:bs-ifc4-infra-road.ifc/#61",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        },
-        {
-          "exact": true,
-          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:attribute:#323:Name",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        },
-        {
-          "exact": true,
-          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:attribute:#61:Name",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        },
-        {
-          "exact": true,
-          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#323:Pset_WallCommon:IsExternal",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        },
-        {
-          "exact": true,
-          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#61:Pset_WallCommon:IsExternal",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "id": "34635589-8608-5a4b-88c7-eddffdb66e2c",
-      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#61: the surfaces lie within 0.0000 m of each other, tolerance 0.0010 m; the copies agree in type, axioval:attributes.axioval:parity.public.clashes.name, axioval:parity.public.clashes.wall-common.axioval:parity.public.clashes.is-external; whether they differ in volume is unknown",
-      "object_id": {
-        "local_id": "#323",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "related": [
-        {
-          "local_id": "#61",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "rule_id": "clash-structure",
-      "severity": "error"
-    },
-    {
-      "evidence": [
-        {
-          "exact": true,
-          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#337:ifc-step:bs-ifc4-infra-road.ifc/#85",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        },
-        {
-          "exact": true,
-          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:attribute:#337:Name",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        },
-        {
-          "exact": true,
-          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:attribute:#85:Name",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        },
-        {
-          "exact": true,
-          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#337:Pset_WallCommon:IsExternal",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        },
-        {
-          "exact": true,
-          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#85:Pset_WallCommon:IsExternal",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "id": "7aa9bc59-a982-54da-b810-03e999f5b44a",
-      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#85: the surfaces lie within 0.0000 m of each other, tolerance 0.0010 m; the copies agree in type, axioval:attributes.axioval:parity.public.clashes.name, axioval:parity.public.clashes.wall-common.axioval:parity.public.clashes.is-external; whether they differ in volume is unknown",
-      "object_id": {
-        "local_id": "#337",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "related": [
-        {
-          "local_id": "#85",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "rule_id": "clash-structure",
-      "severity": "error"
-    },
-    {
-      "evidence": [
-        {
-          "exact": true,
-          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#108:ifc-step:bs-ifc4-infra-road.ifc/#350",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "id": "d382502c-c375-559c-b387-68106698ad1a",
-      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#350: the surfaces lie within 0.0000 m of each other, tolerance 0.0000 m; the copies agree in type; whether they differ in volume is unknown",
-      "object_id": {
-        "local_id": "#108",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "related": [
-        {
-          "local_id": "#350",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "rule_id": "clash-subjects",
-      "severity": "info"
-    },
-    {
-      "evidence": [
-        {
-          "exact": true,
-          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#131:ifc-step:bs-ifc4-infra-road.ifc/#363",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "id": "d8f09d5f-6c4d-5fda-8345-22ff9719b3cd",
-      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#363: the surfaces lie within 0.0000 m of each other, tolerance 0.0000 m; the copies agree in type; whether they differ in volume is unknown",
-      "object_id": {
-        "local_id": "#131",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "related": [
-        {
-          "local_id": "#363",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "rule_id": "clash-subjects",
-      "severity": "info"
-    },
-    {
-      "evidence": [
-        {
-          "exact": true,
-          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#188:ifc-step:bs-ifc4-infra-road.ifc/#398",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "id": "a132c34f-f38c-5083-99c2-ecf6f66e55fb",
-      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#398: the surfaces lie within 0.0000 m of each other, tolerance 0.0000 m; the copies agree in type; whether they differ in volume is unknown",
-      "object_id": {
-        "local_id": "#188",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "related": [
-        {
-          "local_id": "#398",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "rule_id": "clash-subjects",
-      "severity": "info"
-    },
-    {
-      "evidence": [
-        {
-          "exact": true,
-          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#207:ifc-step:bs-ifc4-infra-road.ifc/#412",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "id": "a30c3169-148e-5528-aebd-699c99fbd811",
-      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#412: the surfaces lie within 0.0000 m of each other, tolerance 0.0000 m; the copies agree in type; whether they differ in volume is unknown",
-      "object_id": {
-        "local_id": "#207",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "related": [
-        {
-          "local_id": "#412",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "rule_id": "clash-subjects",
-      "severity": "info"
-    },
-    {
-      "evidence": [
-        {
-          "exact": true,
-          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#276:ifc-step:bs-ifc4-infra-road.ifc/#460",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "id": "f98ba66e-f122-59c9-b53e-91a617bc1fc2",
-      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#460: the surfaces lie within 0.0000 m of each other, tolerance 0.0000 m; the copies agree in type; whether they differ in volume is unknown",
-      "object_id": {
-        "local_id": "#276",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "related": [
-        {
-          "local_id": "#460",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "rule_id": "clash-subjects",
-      "severity": "info"
-    },
-    {
-      "evidence": [
-        {
-          "exact": true,
-          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#294:ifc-step:bs-ifc4-infra-road.ifc/#473",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "id": "e3d305e7-7a0b-5a9e-baa6-3a74aa690f90",
-      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#473: the surfaces lie within 0.0000 m of each other, tolerance 0.0000 m; the copies agree in type; whether they differ in volume is unknown",
-      "object_id": {
-        "local_id": "#294",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "related": [
-        {
-          "local_id": "#473",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "rule_id": "clash-subjects",
-      "severity": "info"
-    },
-    {
-      "evidence": [
-        {
-          "exact": true,
-          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#323:ifc-step:bs-ifc4-infra-road.ifc/#61",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "id": "bcc5c8c5-51da-591f-a8b3-4cb9f170abb0",
-      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#61: the surfaces lie within 0.0000 m of each other, tolerance 0.0000 m; the copies agree in type; whether they differ in volume is unknown",
-      "object_id": {
-        "local_id": "#323",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "related": [
-        {
-          "local_id": "#61",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "rule_id": "clash-subjects",
-      "severity": "info"
-    },
-    {
-      "evidence": [
-        {
-          "exact": true,
-          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#337:ifc-step:bs-ifc4-infra-road.ifc/#85",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "id": "c2ff0301-12f8-5cf3-8660-f9e911189ab4",
-      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#85: the surfaces lie within 0.0000 m of each other, tolerance 0.0000 m; the copies agree in type; whether they differ in volume is unknown",
-      "object_id": {
-        "local_id": "#337",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "related": [
-        {
-          "local_id": "#85",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "rule_id": "clash-subjects",
-      "severity": "info"
-    },
-    {
       "evidence": [],
       "id": "24aff514-9309-5328-9401-2d4915f8b6f5",
       "message": "no clash matrix cell covers ifc-step:bs-ifc4-infra-road.ifc/#1014 against ifc-step:bs-ifc4-infra-road.ifc/#276",
@@ -3964,6 +3196,774 @@
       ],
       "rule_id": "matrix-selectors",
       "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#108:ifc-step:bs-ifc4-infra-road.ifc/#350",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#108:Pset_WallCommon:IsExternal",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#350:Pset_WallCommon:IsExternal",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:attribute:#108:Name",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:attribute:#350:Name",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "0fbabd9e-1ed6-586b-b23a-88c5ff271790",
+      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#350: the surfaces lie within 0.0000 m of each other, tolerance 0.0010 m; the copies agree in type, axioval:attributes.axioval:parity.public.clashes.name, axioval:parity.public.clashes.wall-common.axioval:parity.public.clashes.is-external; whether they differ in volume is unknown",
+      "object_id": {
+        "local_id": "#108",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#350",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-structure",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#131:ifc-step:bs-ifc4-infra-road.ifc/#363",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#131:Pset_WallCommon:IsExternal",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#363:Pset_WallCommon:IsExternal",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:attribute:#131:Name",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:attribute:#363:Name",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "c76c7060-2324-5cfe-8855-e963b2774f3e",
+      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#363: the surfaces lie within 0.0000 m of each other, tolerance 0.0010 m; the copies agree in type, axioval:attributes.axioval:parity.public.clashes.name, axioval:parity.public.clashes.wall-common.axioval:parity.public.clashes.is-external; whether they differ in volume is unknown",
+      "object_id": {
+        "local_id": "#131",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#363",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-structure",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#188:ifc-step:bs-ifc4-infra-road.ifc/#398",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#188:Pset_WallCommon:IsExternal",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#398:Pset_WallCommon:IsExternal",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:attribute:#188:Name",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:attribute:#398:Name",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "667a8ef1-5d8e-5089-8fa5-a40c3586a905",
+      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#398: the surfaces lie within 0.0000 m of each other, tolerance 0.0010 m; the copies agree in type, axioval:attributes.axioval:parity.public.clashes.name, axioval:parity.public.clashes.wall-common.axioval:parity.public.clashes.is-external; whether they differ in volume is unknown",
+      "object_id": {
+        "local_id": "#188",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#398",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-structure",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#207:ifc-step:bs-ifc4-infra-road.ifc/#412",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#207:Pset_WallCommon:IsExternal",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#412:Pset_WallCommon:IsExternal",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:attribute:#207:Name",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:attribute:#412:Name",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "84118ba1-4a23-52c6-b9ac-e8eee9f973c3",
+      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#412: the surfaces lie within 0.0000 m of each other, tolerance 0.0010 m; the copies agree in type, axioval:attributes.axioval:parity.public.clashes.name, axioval:parity.public.clashes.wall-common.axioval:parity.public.clashes.is-external; whether they differ in volume is unknown",
+      "object_id": {
+        "local_id": "#207",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#412",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-structure",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#276:ifc-step:bs-ifc4-infra-road.ifc/#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#276:Pset_WallCommon:IsExternal",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#460:Pset_WallCommon:IsExternal",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:attribute:#276:Name",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:attribute:#460:Name",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "96a613d8-3b19-5ae7-a276-981d571d81dc",
+      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#460: the surfaces lie within 0.0000 m of each other, tolerance 0.0010 m; the copies agree in type, axioval:attributes.axioval:parity.public.clashes.name, axioval:parity.public.clashes.wall-common.axioval:parity.public.clashes.is-external; whether they differ in volume is unknown",
+      "object_id": {
+        "local_id": "#276",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-structure",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#294:ifc-step:bs-ifc4-infra-road.ifc/#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#294:Pset_WallCommon:IsExternal",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#473:Pset_WallCommon:IsExternal",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:attribute:#294:Name",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:attribute:#473:Name",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "9c4cca27-e3fd-54be-a89a-3a1190a9759e",
+      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#473: the surfaces lie within 0.0000 m of each other, tolerance 0.0010 m; the copies agree in type, axioval:attributes.axioval:parity.public.clashes.name, axioval:parity.public.clashes.wall-common.axioval:parity.public.clashes.is-external; whether they differ in volume is unknown",
+      "object_id": {
+        "local_id": "#294",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-structure",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#323:ifc-step:bs-ifc4-infra-road.ifc/#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#323:Pset_WallCommon:IsExternal",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#61:Pset_WallCommon:IsExternal",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:attribute:#323:Name",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:attribute:#61:Name",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "34635589-8608-5a4b-88c7-eddffdb66e2c",
+      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#61: the surfaces lie within 0.0000 m of each other, tolerance 0.0010 m; the copies agree in type, axioval:attributes.axioval:parity.public.clashes.name, axioval:parity.public.clashes.wall-common.axioval:parity.public.clashes.is-external; whether they differ in volume is unknown",
+      "object_id": {
+        "local_id": "#323",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-structure",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#337:ifc-step:bs-ifc4-infra-road.ifc/#85",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#337:Pset_WallCommon:IsExternal",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#85:Pset_WallCommon:IsExternal",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:attribute:#337:Name",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:attribute:#85:Name",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "7aa9bc59-a982-54da-b810-03e999f5b44a",
+      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#85: the surfaces lie within 0.0000 m of each other, tolerance 0.0010 m; the copies agree in type, axioval:attributes.axioval:parity.public.clashes.name, axioval:parity.public.clashes.wall-common.axioval:parity.public.clashes.is-external; whether they differ in volume is unknown",
+      "object_id": {
+        "local_id": "#337",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#85",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-structure",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#108:ifc-step:bs-ifc4-infra-road.ifc/#350",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "d382502c-c375-559c-b387-68106698ad1a",
+      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#350: the surfaces lie within 0.0000 m of each other, tolerance 0.0000 m; the copies agree in type; whether they differ in volume is unknown",
+      "object_id": {
+        "local_id": "#108",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#350",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "info"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#131:ifc-step:bs-ifc4-infra-road.ifc/#363",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "d8f09d5f-6c4d-5fda-8345-22ff9719b3cd",
+      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#363: the surfaces lie within 0.0000 m of each other, tolerance 0.0000 m; the copies agree in type; whether they differ in volume is unknown",
+      "object_id": {
+        "local_id": "#131",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#363",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "info"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#188:ifc-step:bs-ifc4-infra-road.ifc/#398",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "a132c34f-f38c-5083-99c2-ecf6f66e55fb",
+      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#398: the surfaces lie within 0.0000 m of each other, tolerance 0.0000 m; the copies agree in type; whether they differ in volume is unknown",
+      "object_id": {
+        "local_id": "#188",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#398",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "info"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#207:ifc-step:bs-ifc4-infra-road.ifc/#412",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "a30c3169-148e-5528-aebd-699c99fbd811",
+      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#412: the surfaces lie within 0.0000 m of each other, tolerance 0.0000 m; the copies agree in type; whether they differ in volume is unknown",
+      "object_id": {
+        "local_id": "#207",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#412",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "info"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#276:ifc-step:bs-ifc4-infra-road.ifc/#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "f98ba66e-f122-59c9-b53e-91a617bc1fc2",
+      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#460: the surfaces lie within 0.0000 m of each other, tolerance 0.0000 m; the copies agree in type; whether they differ in volume is unknown",
+      "object_id": {
+        "local_id": "#276",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "info"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#294:ifc-step:bs-ifc4-infra-road.ifc/#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "e3d305e7-7a0b-5a9e-baa6-3a74aa690f90",
+      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#473: the surfaces lie within 0.0000 m of each other, tolerance 0.0000 m; the copies agree in type; whether they differ in volume is unknown",
+      "object_id": {
+        "local_id": "#294",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "info"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#323:ifc-step:bs-ifc4-infra-road.ifc/#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "bcc5c8c5-51da-591f-a8b3-4cb9f170abb0",
+      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#61: the surfaces lie within 0.0000 m of each other, tolerance 0.0000 m; the copies agree in type; whether they differ in volume is unknown",
+      "object_id": {
+        "local_id": "#323",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "info"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#337:ifc-step:bs-ifc4-infra-road.ifc/#85",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "c2ff0301-12f8-5cf3-8660-f9e911189ab4",
+      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#85: the surfaces lie within 0.0000 m of each other, tolerance 0.0000 m; the copies agree in type; whether they differ in volume is unknown",
+      "object_id": {
+        "local_id": "#337",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#85",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "info"
     }
   ],
   "not_evaluated": [
@@ -4208,18 +4208,6 @@
       "rule_id": "clash-structure"
     },
     {
-      "message": "proximity to ifc-step:bs-ifc4-infra-road.ifc/#578 could not be measured: proximity measurement is unavailable for the requested object",
-      "object_id": {
-        "local_id": "#188",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
       "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#207, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#188",
@@ -4316,6 +4304,18 @@
       "rule_id": "clash-structure"
     },
     {
+      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#578, but neither body is a closed solid, so touching cannot be told from crossing",
+      "object_id": {
+        "local_id": "#188",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "clash-structure"
+    },
+    {
       "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#61, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#188",
@@ -4367,18 +4367,6 @@
       "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#998, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#188",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "proximity to ifc-step:bs-ifc4-infra-road.ifc/#578 could not be measured: proximity measurement is unavailable for the requested object",
-      "object_id": {
-        "local_id": "#207",
         "source": {
           "document": "bs-ifc4-infra-road.ifc",
           "system": "ifc-step"
@@ -4487,18 +4475,6 @@
       "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#936, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#207",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "proximity to ifc-step:bs-ifc4-infra-road.ifc/#578 could not be measured: proximity measurement is unavailable for the requested object",
-      "object_id": {
-        "local_id": "#276",
         "source": {
           "document": "bs-ifc4-infra-road.ifc",
           "system": "ifc-step"
@@ -4592,6 +4568,18 @@
       "rule_id": "clash-structure"
     },
     {
+      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#578, but neither body is a closed solid, so touching cannot be told from crossing",
+      "object_id": {
+        "local_id": "#276",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "clash-structure"
+    },
+    {
       "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#61, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#276",
@@ -4880,18 +4868,6 @@
       "rule_id": "clash-structure"
     },
     {
-      "message": "proximity to ifc-step:bs-ifc4-infra-road.ifc/#578 could not be measured: proximity measurement is unavailable for the requested object",
-      "object_id": {
-        "local_id": "#398",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
       "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#412, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#398",
@@ -4928,6 +4904,18 @@
       "rule_id": "clash-structure"
     },
     {
+      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#578, but neither body is a closed solid, so touching cannot be told from crossing",
+      "object_id": {
+        "local_id": "#398",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "clash-structure"
+    },
+    {
       "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#61, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#398",
@@ -4979,18 +4967,6 @@
       "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#998, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#398",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "proximity to ifc-step:bs-ifc4-infra-road.ifc/#578 could not be measured: proximity measurement is unavailable for the requested object",
-      "object_id": {
-        "local_id": "#412",
         "source": {
           "document": "bs-ifc4-infra-road.ifc",
           "system": "ifc-step"
@@ -5072,18 +5048,6 @@
       "rule_id": "clash-structure"
     },
     {
-      "message": "proximity to ifc-step:bs-ifc4-infra-road.ifc/#578 could not be measured: proximity measurement is unavailable for the requested object",
-      "object_id": {
-        "local_id": "#460",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
       "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#473, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#460",
@@ -5097,6 +5061,18 @@
     },
     {
       "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#541, but neither body is a closed solid, so touching cannot be told from crossing",
+      "object_id": {
+        "local_id": "#460",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "clash-structure"
+    },
+    {
+      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#578, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#460",
         "source": {
@@ -5168,7 +5144,7 @@
       "rule_id": "clash-structure"
     },
     {
-      "message": "proximity to ifc-step:bs-ifc4-infra-road.ifc/#578 could not be measured: proximity measurement is unavailable for the requested object",
+      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#578, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#541",
         "source": {
@@ -5180,7 +5156,7 @@
       "rule_id": "clash-structure"
     },
     {
-      "message": "proximity to ifc-step:bs-ifc4-infra-road.ifc/#578 could not be measured: proximity measurement is unavailable for the requested object",
+      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#578, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#560",
         "source": {
@@ -5216,7 +5192,7 @@
       "rule_id": "clash-structure"
     },
     {
-      "message": "proximity to ifc-step:bs-ifc4-infra-road.ifc/#672 could not be measured: proximity measurement is unavailable for the requested object",
+      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#672, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#645",
         "source": {
@@ -5252,7 +5228,7 @@
       "rule_id": "clash-structure"
     },
     {
-      "message": "proximity to ifc-step:bs-ifc4-infra-road.ifc/#672 could not be measured: proximity measurement is unavailable for the requested object",
+      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#672, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#659",
         "source": {
@@ -5300,7 +5276,7 @@
       "rule_id": "clash-structure"
     },
     {
-      "message": "proximity to ifc-step:bs-ifc4-infra-road.ifc/#744 could not be measured: proximity measurement is unavailable for the requested object",
+      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#744, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#672",
         "source": {
@@ -5312,19 +5288,7 @@
       "rule_id": "clash-structure"
     },
     {
-      "message": "proximity to ifc-step:bs-ifc4-infra-road.ifc/#761 could not be measured: proximity measurement is unavailable for the requested object",
-      "object_id": {
-        "local_id": "#672",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "proximity to ifc-step:bs-ifc4-infra-road.ifc/#823 could not be measured: proximity measurement is unavailable for the requested object",
+      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#823, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#672",
         "source": {
@@ -5648,18 +5612,6 @@
       "rule_id": "clash-subjects"
     },
     {
-      "message": "proximity to ifc-step:bs-ifc4-infra-road.ifc/#578 could not be measured: proximity measurement is unavailable for the requested object",
-      "object_id": {
-        "local_id": "#188",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
       "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#207, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#188",
@@ -5756,6 +5708,18 @@
       "rule_id": "clash-subjects"
     },
     {
+      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#578, but neither body is a closed solid, so touching cannot be told from crossing",
+      "object_id": {
+        "local_id": "#188",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "clash-subjects"
+    },
+    {
       "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#596, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#188",
@@ -5819,18 +5783,6 @@
       "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#998, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#188",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "proximity to ifc-step:bs-ifc4-infra-road.ifc/#578 could not be measured: proximity measurement is unavailable for the requested object",
-      "object_id": {
-        "local_id": "#207",
         "source": {
           "document": "bs-ifc4-infra-road.ifc",
           "system": "ifc-step"
@@ -5939,18 +5891,6 @@
       "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#936, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#207",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "proximity to ifc-step:bs-ifc4-infra-road.ifc/#578 could not be measured: proximity measurement is unavailable for the requested object",
-      "object_id": {
-        "local_id": "#276",
         "source": {
           "document": "bs-ifc4-infra-road.ifc",
           "system": "ifc-step"
@@ -6056,6 +5996,18 @@
       "rule_id": "clash-subjects"
     },
     {
+      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#578, but neither body is a closed solid, so touching cannot be told from crossing",
+      "object_id": {
+        "local_id": "#276",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "clash-subjects"
+    },
+    {
       "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#61, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#276",
@@ -6083,18 +6035,6 @@
       "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#998, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#276",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "proximity to ifc-step:bs-ifc4-infra-road.ifc/#578 could not be measured: proximity measurement is unavailable for the requested object",
-      "object_id": {
-        "local_id": "#294",
         "source": {
           "document": "bs-ifc4-infra-road.ifc",
           "system": "ifc-step"
@@ -6141,6 +6081,18 @@
     },
     {
       "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#541, but neither body is a closed solid, so touching cannot be told from crossing",
+      "object_id": {
+        "local_id": "#294",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "clash-subjects"
+    },
+    {
+      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#578, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#294",
         "source": {
@@ -6356,18 +6308,6 @@
       "rule_id": "clash-subjects"
     },
     {
-      "message": "proximity to ifc-step:bs-ifc4-infra-road.ifc/#578 could not be measured: proximity measurement is unavailable for the requested object",
-      "object_id": {
-        "local_id": "#398",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
       "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#412, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#398",
@@ -6393,6 +6333,18 @@
     },
     {
       "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#560, but neither body is a closed solid, so touching cannot be told from crossing",
+      "object_id": {
+        "local_id": "#398",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "clash-subjects"
+    },
+    {
+      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#578, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#398",
         "source": {
@@ -6476,18 +6428,6 @@
       "rule_id": "clash-subjects"
     },
     {
-      "message": "proximity to ifc-step:bs-ifc4-infra-road.ifc/#578 could not be measured: proximity measurement is unavailable for the requested object",
-      "object_id": {
-        "local_id": "#412",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
       "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#560, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#412",
@@ -6551,18 +6491,6 @@
       "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#936, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#412",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "proximity to ifc-step:bs-ifc4-infra-road.ifc/#578 could not be measured: proximity measurement is unavailable for the requested object",
-      "object_id": {
-        "local_id": "#460",
         "source": {
           "document": "bs-ifc4-infra-road.ifc",
           "system": "ifc-step"
@@ -6608,6 +6536,18 @@
       "rule_id": "clash-subjects"
     },
     {
+      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#578, but neither body is a closed solid, so touching cannot be told from crossing",
+      "object_id": {
+        "local_id": "#460",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "clash-subjects"
+    },
+    {
       "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#61, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#460",
@@ -6644,7 +6584,7 @@
       "rule_id": "clash-subjects"
     },
     {
-      "message": "proximity to ifc-step:bs-ifc4-infra-road.ifc/#578 could not be measured: proximity measurement is unavailable for the requested object",
+      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#541, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#473",
         "source": {
@@ -6656,7 +6596,7 @@
       "rule_id": "clash-subjects"
     },
     {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#541, but neither body is a closed solid, so touching cannot be told from crossing",
+      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#578, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#473",
         "source": {
@@ -6680,7 +6620,7 @@
       "rule_id": "clash-subjects"
     },
     {
-      "message": "proximity to ifc-step:bs-ifc4-infra-road.ifc/#578 could not be measured: proximity measurement is unavailable for the requested object",
+      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#578, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#541",
         "source": {
@@ -6692,7 +6632,7 @@
       "rule_id": "clash-subjects"
     },
     {
-      "message": "proximity to ifc-step:bs-ifc4-infra-road.ifc/#578 could not be measured: proximity measurement is unavailable for the requested object",
+      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#578, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#560",
         "source": {
@@ -6728,7 +6668,7 @@
       "rule_id": "clash-subjects"
     },
     {
-      "message": "proximity to ifc-step:bs-ifc4-infra-road.ifc/#672 could not be measured: proximity measurement is unavailable for the requested object",
+      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#672, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#645",
         "source": {
@@ -6764,7 +6704,7 @@
       "rule_id": "clash-subjects"
     },
     {
-      "message": "proximity to ifc-step:bs-ifc4-infra-road.ifc/#672 could not be measured: proximity measurement is unavailable for the requested object",
+      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#672, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#659",
         "source": {
@@ -6824,7 +6764,7 @@
       "rule_id": "clash-subjects"
     },
     {
-      "message": "proximity to ifc-step:bs-ifc4-infra-road.ifc/#744 could not be measured: proximity measurement is unavailable for the requested object",
+      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#744, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#672",
         "source": {
@@ -6836,7 +6776,7 @@
       "rule_id": "clash-subjects"
     },
     {
-      "message": "proximity to ifc-step:bs-ifc4-infra-road.ifc/#761 could not be measured: proximity measurement is unavailable for the requested object",
+      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#823, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#672",
         "source": {
@@ -6848,19 +6788,7 @@
       "rule_id": "clash-subjects"
     },
     {
-      "message": "proximity to ifc-step:bs-ifc4-infra-road.ifc/#823 could not be measured: proximity measurement is unavailable for the requested object",
-      "object_id": {
-        "local_id": "#672",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "proximity to ifc-step:bs-ifc4-infra-road.ifc/#839 could not be measured: proximity measurement is unavailable for the requested object",
+      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#839, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#672",
         "source": {

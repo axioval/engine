@@ -1,7 +1,16 @@
 {
   "findings": [
     {
-      "evidence": [],
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "clash_matrix_pairs;subjects=@selection;counterparts=@counterparts;cells=@cells;key_1=@key_1;key_2=@key_2;key_3=@key_3;case_sensitive=@case_sensitive;symmetric=@symmetric;report_unmatched=@report_unmatched;exclude_same_system=@exclude_same_system;system_path=@system_path;exclude_paths=@exclude_paths;exclude_target_property=@exclude_target_property;exclude_same_layer=@exclude_same_layer;group_by=@group_by;per_storey=@per_storey;storey_path=@storey_path;group_property=@group_property;group_tolerance_metres=@group_tolerance_metres;duplicate_quantities=@duplicate_quantities;tolerance_cases=@tolerance_cases#10",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
       "id": "adfcad0e-0c8a-534c-b51b-457dd4eb2038",
       "message": "no clash matrix cell covers ifc-step:bs-ifc4-building-architecture.ifc/#261 against ifc-step:bs-ifc4-building-architecture.ifc/#285",
       "object_id": {
@@ -60,31 +69,7 @@
       }
     },
     {
-      "message": "proximity to ifc-step:bs-ifc4-building-architecture.ifc/#53 could not be measured: proximity measurement is unavailable for the requested object",
-      "object_id": {
-        "local_id": "#158",
-        "source": {
-          "document": "bs-ifc4-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-similar"
-    },
-    {
-      "message": "proximity to ifc-step:bs-ifc4-building-architecture.ifc/#53 could not be measured: proximity measurement is unavailable for the requested object",
-      "object_id": {
-        "local_id": "#201",
-        "source": {
-          "document": "bs-ifc4-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-similar"
-    },
-    {
-      "message": "proximity to ifc-step:bs-ifc4-building-architecture.ifc/#53 could not be measured: proximity measurement is unavailable for the requested object",
+      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#285, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#158",
         "source": {
@@ -96,7 +81,7 @@
       "rule_id": "clash-structure"
     },
     {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#285, but neither body is a closed solid, so touching cannot be told from crossing",
+      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#53, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#158",
         "source": {
@@ -132,7 +117,7 @@
       "rule_id": "clash-structure"
     },
     {
-      "message": "proximity to ifc-step:bs-ifc4-building-architecture.ifc/#53 could not be measured: proximity measurement is unavailable for the requested object",
+      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#261, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#201",
         "source": {
@@ -144,7 +129,7 @@
       "rule_id": "clash-structure"
     },
     {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#261, but neither body is a closed solid, so touching cannot be told from crossing",
+      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#53, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#201",
         "source": {
@@ -334,7 +319,7 @@
       "rule_id": "matrix-selectors"
     },
     {
-      "message": "proximity to ifc-step:bs-ifc4-building-architecture.ifc/#53 could not be measured: proximity measurement is unavailable for the requested object",
+      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#285, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#158",
         "source": {
@@ -346,7 +331,7 @@
       "rule_id": "matrix-selectors"
     },
     {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#285, but neither body is a closed solid, so touching cannot be told from crossing",
+      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#53, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#158",
         "source": {
@@ -382,7 +367,7 @@
       "rule_id": "matrix-selectors"
     },
     {
-      "message": "proximity to ifc-step:bs-ifc4-building-architecture.ifc/#53 could not be measured: proximity measurement is unavailable for the requested object",
+      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#261, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#201",
         "source": {
@@ -394,7 +379,7 @@
       "rule_id": "matrix-selectors"
     },
     {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#261, but neither body is a closed solid, so touching cannot be told from crossing",
+      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#53, but neither body is a closed solid, so touching cannot be told from crossing",
       "object_id": {
         "local_id": "#201",
         "source": {

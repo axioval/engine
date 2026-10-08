@@ -473,6 +473,22 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   the same way; an open surface refuses. A tessellated overlap is asserted
   only from a witness deeper than the deviations and denied only beyond the
   combined deviation; otherwise it stays open. Never decide it on the mesh.
+  Zero-area triangles (#221) go through `src/proximity/zero_area.rs`:
+  every distance to one (`point_triangle_distance`,
+  `triangle_pair_distance`) is the distance to its edges and every edge
+  crossing (`segment_hit`) meets it only within `LINEAR_TOLERANCE` of an
+  edge; one whose corner lies farther than that off its longest edge is
+  refused by name. Never call the kernel's triangle or ray primitives on a
+  body's soup directly, and never skip such a triangle in a distance: it
+  stands for its segment. A body is `solid` when its triangles, zero-area
+  ones counted and those repeating an index left out, use every edge
+  twice, once each way (`closed_chain`); its winding number
+  (`Body::winding`) is taken without the audit's degenerate triangles, and
+  a point within reach of the area left out (shift `A / (4π d²)` of a
+  quarter or more) witnesses nothing and refuses a containment by name.
+  Kernel refusals of the measurement are `ProximityError::Refused` with
+  the kernel's reason (`volume_refusal`, `ray_refusal`); keep
+  `Unavailable` for an object without a readable mesh.
 - `src/face_distance.rs` answers `measure_face_distance` for the proximity
   service. Face classes come from outward normals (outward by the host's
   signed volume); a triangle within `CLASS_TOLERANCE` of 45° refuses the
@@ -618,7 +634,10 @@ registry source, not the kernel checkout, before relying on an API.
   an edge a neighbouring face shares leaves a T-junction in that face; the
   mesh audit reads the edge as open, so such a body is a surface here,
   never a closed solid (`tests/proximity.rs`). Asked upstream: insert the
-  touching vertex into the neighbour's edge too, so the shell closes.
+  touching vertex into the neighbour's edge too, so the shell closes. The
+  same shell closed by a zero-area triangle along the edge is a closed
+  solid to proximity (#221,
+  `a_closed_box_with_a_zero_area_triangle_is_measured_as_the_box`).
 - Pinched rings (axiolid/kernel#253, #262): axiolid-construct 0.3.15's
   plain `triangulate` and the extrusions refuse rings touching at a single
   point; `profile::triangulate_with(rings, PinchPolicy::Accept)` takes

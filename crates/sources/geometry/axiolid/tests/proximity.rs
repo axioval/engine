@@ -551,6 +551,229 @@ fn a_box_with_a_t_junction_is_no_closed_solid() {
     assert_volume(volume.shared(), 0.25);
 }
 
+/// The box of `a_box_with_a_t_junction_is_no_closed_solid` with the gap
+/// closed by a zero-area triangle along the right face's top edge, as a
+/// warped face's triangulation leaves one (#221). Closed, zero-area
+/// triangle counted.
+fn box_with_a_sliver() -> TriMesh {
+    let mut box_ = cuboid([0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
+    box_.positions.push(Point3::new(1.0, 0.5, 1.0));
+    let top = 6;
+    box_.indices.splice(top..top + 3, [4, 5, 8, 4, 8, 6]);
+    box_.indices.extend([5, 6, 8]);
+    box_
+}
+
+/// A closed rod with one edge from `start` to `end`, `width` along y and
+/// `thickness` along `normal` (a unit vector square to the edge and to y).
+fn rod(start: [f64; 3], end: [f64; 3], width: f64, normal: [f64; 3], thickness: f64) -> TriMesh {
+    let at = |base: [f64; 3], wide: bool, thick: bool| {
+        Point3::new(
+            base[0] + if thick { normal[0] * thickness } else { 0.0 },
+            base[1] + if wide { width } else { 0.0 },
+            base[2] + if thick { normal[2] * thickness } else { 0.0 },
+        )
+    };
+    let mut positions = Vec::new();
+    for base in [start, end] {
+        for (wide, thick) in [(false, false), (true, false), (true, true), (false, true)] {
+            positions.push(at(base, wide, thick));
+        }
+    }
+    // Closed and consistently wound; the winding number takes it either
+    // way round.
+    TriMesh::new(
+        positions,
+        vec![
+            0, 1, 2, 0, 2, 3, // start cap
+            4, 6, 5, 4, 7, 6, // end cap
+            0, 4, 5, 0, 5, 1, // sides
+            1, 5, 6, 1, 6, 2, //
+            2, 6, 7, 2, 7, 3, //
+            3, 7, 4, 3, 4, 0, //
+        ],
+    )
+}
+
+/// Every quantity two measurements share, compared within rounding.
+fn assert_same_measurement(
+    with_sliver: &axioval_engine::ProximityEvidence,
+    plain: &axioval_engine::ProximityEvidence,
+    same_penetration: bool,
+) {
+    let close = |what: &str, a: f64, b: f64| {
+        assert!((a - b).abs() < 1e-12, "{what}: {a} against {b}");
+    };
+    close(
+        "separation",
+        with_sliver.separation_metres(),
+        plain.separation_metres(),
+    );
+    assert_eq!(
+        with_sliver.penetration_metres().is_some(),
+        plain.penetration_metres().is_some()
+    );
+    if let (Some(a), Some(b), true) = (
+        with_sliver.penetration_metres(),
+        plain.penetration_metres(),
+        same_penetration,
+    ) {
+        close("penetration", a, b);
+    }
+    assert_eq!(with_sliver.containment(), plain.containment());
+    let (a, b) = (
+        with_sliver.overlap_extents().map(|e| [e.x(), e.y(), e.z()]),
+        plain.overlap_extents().map(|e| [e.x(), e.y(), e.z()]),
+    );
+    assert_eq!(a.is_some(), b.is_some());
+    if let (Some(a), Some(b)) = (a, b) {
+        for (a, b) in a.iter().zip(&b) {
+            close("extent lower", a.lower_metres(), b.lower_metres());
+            close("extent upper", a.upper_metres(), b.upper_metres());
+        }
+    }
+    let (a, b) = (
+        with_sliver.hausdorff_interval_metres().unwrap(),
+        plain.hausdorff_interval_metres().unwrap(),
+    );
+    // The bounds follow the triangulation (the sliver's box has another
+    // top), but both hold the one true distance, so they overlap.
+    assert!(
+        a.lower_metres().max(b.lower_metres()) <= a.upper_metres().min(b.upper_metres()) + 1e-12,
+        "hausdorff {a:?} against {b:?}"
+    );
+    assert_eq!(
+        with_sliver.plan_overlap_square_metres().is_some(),
+        plain.plan_overlap_square_metres().is_some()
+    );
+    if let (Some(a), Some(b)) = (
+        with_sliver.plan_overlap_square_metres(),
+        plain.plan_overlap_square_metres(),
+    ) {
+        assert!((a - b).abs() < 1e-6, "{a} against {b}");
+    }
+    assert_eq!(with_sliver.evidence().exact, plain.evidence().exact);
+}
+
+/// A closed box holding a zero-area triangle is measured as the box it
+/// is: the sliver lies on an edge the remaining faces share, so every
+/// separation, penetration, containment, extent and Hausdorff distance
+/// agrees with the plain box's, in either order (#221).
+#[test]
+fn a_closed_box_with_a_zero_area_triangle_is_measured_as_the_box() {
+    let diagonal = std::f64::consts::FRAC_1_SQRT_2;
+    let counterparts = [
+        ("pipe", cuboid([0.4, -1.0, 0.4], [0.6, 2.0, 0.6])),
+        ("slab", cuboid([0.5, 0.0, 0.5], [2.0, 1.0, 2.0])),
+        ("apart", cuboid([3.0, 0.0, 0.0], [4.0, 1.0, 1.0])),
+        ("inner", cuboid([0.25, 0.25, 0.25], [0.75, 0.75, 0.75])),
+        ("around", cuboid([-1.0, -1.0, -1.0], [2.0, 2.0, 2.0])),
+        ("over-the-edge", cuboid([0.9, 0.4, 0.9], [1.1, 0.6, 1.1])),
+        // A rod whose edge runs through the sliver's segment (not at its
+        // corner), standing on the box's top edge and reaching into it.
+        (
+            "touching-rod",
+            rod(
+                [0.5, 0.25, 1.5],
+                [1.5, 0.25, 0.5],
+                0.1,
+                [diagonal, 0.0, diagonal],
+                0.1,
+            ),
+        ),
+        (
+            "reaching-rod",
+            rod(
+                [0.45, 0.25, 1.45],
+                [1.45, 0.25, 0.45],
+                0.1,
+                [diagonal, 0.0, diagonal],
+                0.1,
+            ),
+        ),
+    ];
+    for (name, counterpart) in counterparts {
+        let with_sliver = AxiolidGeometry::new()
+            .with_mesh(id("box"), box_with_a_sliver())
+            .with_mesh(id(name), counterpart.clone());
+        let plain = AxiolidGeometry::new()
+            .with_mesh(id("box"), cuboid([0.0, 0.0, 0.0], [1.0, 1.0, 1.0]))
+            .with_mesh(id(name), counterpart);
+        for (subject, other) in [("box", name), (name, "box")] {
+            let measured = measure(with_sliver.clone(), subject, other);
+            let expected = measure(plain.clone(), subject, other);
+            if name == "around" {
+                // The box's deepest witness is the centroid of its
+                // triangles' corners, which follows the triangulation (the
+                // sliver's box has another top). Both are witnesses: at
+                // least a corner's depth of 1, at most the centre's 1.5.
+                let depth = measured.penetration_metres().expect("contained");
+                assert!((1.0..=1.5).contains(&depth), "{depth}");
+                assert_same_measurement(&measured, &expected, false);
+            } else {
+                assert_same_measurement(&measured, &expected, true);
+            }
+            // The volume kernel refuses a mesh holding a zero-area
+            // triangle; that leaves the volume unmeasured, never zero.
+            assert!(measured.intersection_volume().is_none(), "{name}");
+        }
+    }
+    // The pipe through the sliver's box is witnessed at the box's centre,
+    // half a box deep: the box has an inside although the audit counts a
+    // zero-area triangle in it.
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("box"), box_with_a_sliver())
+        .with_mesh(id("pipe"), cuboid([0.4, -1.0, 0.4], [0.6, 2.0, 0.6]));
+    let measured = measure(geometry, "box", "pipe");
+    assert!(measured.separation_metres().abs() < f64::EPSILON);
+    let depth = measured.penetration_metres().expect("the box is closed");
+    assert!((depth - 0.5).abs() < 1e-9, "depth {depth}");
+}
+
+/// An open sheet holding a zero-area triangle along one edge measures as
+/// the sheet: the sliver adds no surface and decides no distance.
+#[test]
+fn an_open_sheet_with_a_zero_area_triangle_is_measured_as_the_sheet() {
+    let mut sheet = quad(1.5);
+    sheet.positions.push(Point3::new(0.5, 0.0, 1.5));
+    sheet.indices.extend([0, 4, 1]);
+    let with_sliver = AxiolidGeometry::new()
+        .with_mesh(id("sheet"), sheet)
+        .with_mesh(id("box"), cuboid([0.0, 0.0, 0.0], [1.0, 1.0, 1.0]));
+    let plain = AxiolidGeometry::new()
+        .with_mesh(id("sheet"), quad(1.5))
+        .with_mesh(id("box"), cuboid([0.0, 0.0, 0.0], [1.0, 1.0, 1.0]));
+    let measured = measure(with_sliver, "sheet", "box");
+    assert!((measured.separation_metres() - 0.5).abs() < 1e-12);
+    assert_same_measurement(&measured, &measure(plain, "sheet", "box"), true);
+}
+
+/// A mesh whose every triangle has zero area bounds no surface. It is
+/// refused with that reason, never as a bare "unavailable".
+#[test]
+fn a_mesh_of_zero_area_triangles_only_is_refused_by_name() {
+    let wire = TriMesh::new(
+        vec![
+            Point3::new(0.0, 0.0, 0.0),
+            Point3::new(1.0, 0.0, 0.0),
+            Point3::new(2.0, 0.0, 0.0),
+        ],
+        vec![0, 1, 2, 2, 1, 0],
+    );
+    let service = AxiolidProximityService::new(
+        AxiolidGeometry::new()
+            .with_mesh(id("wire"), wire)
+            .with_mesh(id("box"), cuboid([0.0, 0.0, 1.0], [1.0, 1.0, 2.0])),
+    );
+    let refused = service
+        .measure_proximity(&ProximityRequest::try_new(id("wire"), id("box")).unwrap())
+        .unwrap_err();
+    let ProximityError::Refused(reason) = refused else {
+        panic!("refused by name expected, got {refused:?}");
+    };
+    assert!(reason.contains("zero area"), "{reason}");
+}
+
 /// A tessellated column's volumes widen by the band within its chord
 /// deviation, so the true cylinder's volumes lie inside.
 #[test]
@@ -686,7 +909,9 @@ fn a_closed_body_encloses_its_certified_volume() {
     // volume to measure.
     assert_eq!(
         service.measure_body_volume(&id("sheet")),
-        Err(ProximityError::Unavailable)
+        Err(ProximityError::Refused(
+            "the body's mesh is an open surface, which encloses no volume"
+        ))
     );
     assert_eq!(
         service.measure_body_volume(&id("storey")),

@@ -24,6 +24,19 @@ All notable changes are documented here. This project follows Semantic Versionin
   refused: `openbim-ids` 0.2.2 maps IFC2X3 names in its
   `entity-requirement-contradicts-applicability` audit check
   ([#215](https://github.com/axioval/engine/issues/215)).
+- Clash, containment and distance pairs are no longer left unmeasured when
+  a mesh holds a zero-area triangle (#221), the fourth cause of the
+  not-evaluated inventory, mostly bodies with warped faces measured since
+  #213. The proximity adapter measures such a triangle as the segment it
+  is: the distance to it is the distance to its edges, and an edge of the
+  other body meets it only where it comes within the contact tolerance of
+  one of them. A mesh closed only with zero-area triangles (a T-junction
+  closed by a sliver) is a closed solid, its winding number taken without
+  them and bounded for the area left out, so its penetration and
+  containment are measured as well. Remaining refusals name their cause
+  (`ProximityError::Refused`): the volume kernel's reason, an open surface
+  asked for its volume, a mesh of zero-area triangles only, a triangle
+  whose corner lies off its longest edge beyond the tolerance.
 
 ## [0.4.0] - 2026-10-07
 

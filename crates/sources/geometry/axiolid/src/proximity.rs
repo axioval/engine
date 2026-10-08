@@ -51,6 +51,10 @@
 //! two-manifold mesh. A surface reaching into a solid is measured; two open
 //! surfaces share no volume and report `None` rather than a depth of zero.
 //!
+//! A zero-area triangle is measured as the segment it is, and a mesh closed
+//! only with such triangles is a solid whose winding number is taken
+//! without them (`zero_area`).
+//!
 //! Distances in a projection ([`ProximityService::measure_distance`]) reuse
 //! the same pieces:
 //!
@@ -106,7 +110,7 @@
 use axiolid_core::{Aabb, Point3, Ray3, Tolerance};
 use axiolid_inspect::{enclosed_volume, intersection_volume};
 use axiolid_measure::{
-    BodyPlanOverlap, DistanceBounds, PlacedBody, PlanOverlap, WindingMesh, body_boundary_distance,
+    BodyPlanOverlap, DistanceBounds, PlacedBody, PlanOverlap, body_boundary_distance,
     body_plan_boundary_clearance, body_plan_boundary_distance, body_plan_overlap,
     boundary_distance, closest_point_on_triangle, closest_points_on_segments,
     closest_points_on_triangles, one_sided_body_boundary_hausdorff_with_budget,
@@ -114,7 +118,6 @@ use axiolid_measure::{
     plan_overlap,
 };
 use axiolid_mesh::{TriMesh, audit_mesh};
-use axiolid_ray_mesh::intersect_triangle;
 use axiolid_spatial::{Bvh, SpatialItem};
 use axioval_engine::{
     BodyContainment, BodyVolume, Bounds3, ConvexPlanRegion, FaceDistanceError,
@@ -133,6 +136,11 @@ use crate::exact_boundary::ExactBody;
 use crate::geometry::{AxiolidGeometry, Triangle, triangles};
 use crate::planar::{BoundedOverlap, bounded_plan_overlap, plan_overlap_area, polygon_area};
 use axiolid_overlay::OverlayError;
+
+mod zero_area;
+
+pub(crate) use zero_area::Winding;
+use zero_area::{Surface, point_triangle_distance, segment_hit, triangle_pair_distance};
 
 /// Linear tolerance for mesh audits, overlay and crossing tests.
 ///
@@ -189,10 +197,11 @@ impl AxiolidProximityService {
         let body = self.body(object)?;
         // Only a closed two-manifold encloses a volume.
         if !body.solid {
-            return Err(ProximityError::Unavailable);
+            return Err(ProximityError::Refused(OPEN_SURFACE));
         }
         let deviation = self.geometry.fidelity(object)?.deviation_metres();
-        let enclosed = enclosed_volume(body.mesh).map_err(|_| ProximityError::Unavailable)?;
+        let enclosed = enclosed_volume(body.mesh)
+            .map_err(|error| ProximityError::Refused(volume_refusal(error)))?;
         let band = tube_volume(&body, deviation);
         Ok(((enclosed.lower - band).max(0.0), enclosed.upper + band))
     }
@@ -206,7 +215,7 @@ impl AxiolidProximityService {
     ) -> Result<(f64, f64), ProximityError> {
         let (one, other) = (self.body(first)?, self.body(second)?);
         if !one.solid || !other.solid {
-            return Err(ProximityError::Unavailable);
+            return Err(ProximityError::Refused(OPEN_SURFACE));
         }
         let apart = (0..3).any(|axis| {
             one.soup.bounds.max()[axis] < other.soup.bounds.min()[axis]
@@ -215,8 +224,8 @@ impl AxiolidProximityService {
         if apart {
             return Ok((0.0, 0.0));
         }
-        let shared =
-            intersection_volume(one.mesh, other.mesh).map_err(|_| ProximityError::Unavailable)?;
+        let shared = intersection_volume(one.mesh, other.mesh)
+            .map_err(|error| ProximityError::Refused(volume_refusal(error)))?;
         let band = tube_volume(&one, self.geometry.fidelity(first)?.deviation_metres())
             + tube_volume(&other, self.geometry.fidelity(second)?.deviation_metres());
         Ok(((shared.lower - band).max(0.0), shared.upper + band))
@@ -302,14 +311,32 @@ impl AxiolidProximityService {
         let health = audit_mesh(mesh, tolerance);
         // Every coordinate feeds a measurement reported as evidence; a mesh
         // with bad indices or non-finite positions cannot be measured at all.
+        if health.invalid_indices == 0
+            && health.non_finite_positions == 0
+            && health.usable_triangles == 0
+            && health.degenerate_triangles > 0
+        {
+            return Err(ProximityError::Refused(
+                "every triangle of the body's mesh has zero area, so it bounds no surface",
+            ));
+        }
         if triangles.is_empty() || !health.is_surface_usable() {
             return Err(ProximityError::Unavailable);
         }
         let boxes: Vec<Bounds3> = triangles.iter().map(triangle_box).collect();
+        // Zero-area triangles add no surface. A mesh closed only with them
+        // (a T-junction closed by a sliver) still bounds a solid, whose
+        // winding number is taken without them.
+        let surface = Surface::of(mesh, health.degenerate_triangles);
+        let solid = match &surface {
+            None => health.is_closed_two_manifold(),
+            Some(surface) => surface.closed,
+        };
         Ok(Body {
             mesh,
             soup: Indexed::build(triangles, boxes)?,
-            solid: health.is_closed_two_manifold(),
+            solid,
+            surface,
         })
     }
 
@@ -565,7 +592,43 @@ impl<T> Indexed<T> {
 pub(crate) struct Body<'a> {
     pub(crate) mesh: &'a TriMesh,
     pub(crate) soup: Indexed<Triangle>,
+    /// Closed and consistently wound, zero-area triangles counted, so it
+    /// has an inside.
     pub(crate) solid: bool,
+    /// The mesh without its zero-area triangles, when it holds any.
+    surface: Option<Surface>,
+}
+
+impl Body<'_> {
+    /// The body's winding number, taken without its zero-area triangles.
+    pub(crate) fn winding(&self) -> Result<Winding<'_>, ProximityError> {
+        match &self.surface {
+            None => Winding::prepare(self.mesh, 0.0),
+            Some(surface) => Winding::prepare(surface.mesh(), surface.omitted_area()),
+        }
+    }
+}
+
+/// Why a body has no volume to measure.
+const OPEN_SURFACE: &str = "the body's mesh is an open surface, which encloses no volume";
+
+/// Why the volume kernel refused, in a report's words.
+fn volume_refusal(error: axiolid_inspect::OverlapError) -> &'static str {
+    use axiolid_inspect::OverlapError;
+    match error {
+        OverlapError::NonFinite { .. } => "the volume kernel refused a non-finite coordinate",
+        OverlapError::NotClosed { .. } => {
+            "the volume kernel refused a mesh that is not a closed, consistently wound \
+             two-manifold without zero-area triangles (NotClosed)"
+        }
+        OverlapError::SelfIntersecting { .. } => {
+            "the volume kernel refused a self-intersecting mesh (SelfIntersecting)"
+        }
+        OverlapError::NoVolume { .. } => {
+            "the volume kernel could not certify a nonzero volume (NoVolume)"
+        }
+        _ => "the volume kernel refused the mesh",
+    }
 }
 
 fn aabb(bounds: &Bounds3) -> Aabb {
@@ -635,11 +698,7 @@ pub(crate) fn separation(
     first: &Indexed<Triangle>,
     second: &Indexed<Triangle>,
 ) -> Result<f64, ProximityError> {
-    nearest(first, second, |a, b| {
-        closest_points_on_triangles(*a, *b)
-            .map(|pair| pair.distance_squared.sqrt())
-            .map_err(|_| ProximityError::Unavailable)
-    })
+    nearest(first, second, |a, b| triangle_pair_distance(*a, *b))
 }
 
 /// One projected triangle: a triangle in the plan, or a segment when the
@@ -1207,11 +1266,7 @@ pub(crate) fn soup_distance_above(
     soup: &Indexed<Triangle>,
     floor: f64,
 ) -> Result<f64, ProximityError> {
-    let to = |index: usize| -> Result<f64, ProximityError> {
-        closest_point_on_triangle(point, soup.items[index])
-            .map(|closest| closest.distance(point))
-            .map_err(|_| ProximityError::Unavailable)
-    };
+    let to = |index: usize| point_triangle_distance(point, soup.items[index]);
     let nearest = soup
         .index
         .nearest_to(&Aabb::from_point(point), |_| true)
@@ -1270,10 +1325,9 @@ fn crossing_midpoints(
     };
     let mut crossings = vec![0.0, 1.0];
     for index in other.soup.near(&segment) {
-        let hit = intersect_triangle(&ray, other.soup.items[index], tolerance, index)
-            .map_err(|_| ProximityError::Unavailable)?;
-        if let Some(hit) = hit.filter(|hit| (0.0..=1.0).contains(&hit.t)) {
-            crossings.push(hit.t);
+        let hit = segment_hit(&ray, other.soup.items[index], tolerance, index)?;
+        if let Some(t) = hit.filter(|t| (0.0..=1.0).contains(t)) {
+            crossings.push(t);
         }
     }
     if crossings.len() == 2 {
@@ -1314,10 +1368,10 @@ fn deepest_inside(body: &Body<'_>, other: &Body<'_>) -> Result<f64, ProximityErr
                 .unwrap_or(std::cmp::Ordering::Equal)
         })
     });
-    let winding =
-        WindingMesh::prepare(other.mesh, tolerance()?).map_err(|_| ProximityError::Unavailable)?;
+    let winding = other.winding()?;
     for (depth, point) in candidates {
-        if inside(&winding, point)? {
+        // A point too near a left-out zero-area triangle witnesses nothing.
+        if winding.inside(point, || Ok(depth))? == Some(true) {
             return Ok(depth);
         }
     }
@@ -1325,24 +1379,15 @@ fn deepest_inside(body: &Body<'_>, other: &Body<'_>) -> Result<f64, ProximityErr
     Ok(0.0)
 }
 
-pub(crate) fn inside(
-    winding: &WindingMesh<'_, TriMesh>,
-    point: Point3,
-) -> Result<bool, ProximityError> {
-    let number = winding
-        .winding_number(point)
-        .map_err(|_| ProximityError::Unavailable)?;
-    Ok(number.value.abs() >= INSIDE_WINDING)
-}
-
 /// Whether separated body `inner` lies inside `outer`.
 ///
 /// With the surfaces apart, a body is wholly inside or wholly outside the
-/// other, so one vertex decides.
-fn contained(inner: &Body<'_>, outer: &Body<'_>) -> Result<bool, ProximityError> {
-    let winding =
-        WindingMesh::prepare(outer.mesh, tolerance()?).map_err(|_| ProximityError::Unavailable)?;
-    inside(&winding, inner.soup.items[0][0])
+/// other, so one vertex decides; it lies at least `separation` from the
+/// other surface.
+fn contained(inner: &Body<'_>, outer: &Body<'_>, separation: f64) -> Result<bool, ProximityError> {
+    outer
+        .winding()?
+        .decide(inner.soup.items[0][0], || Ok(separation))
 }
 
 /// Witnessed penetration and containment between two bodies.
@@ -1363,13 +1408,13 @@ fn penetration(
     if separation > 0.0 {
         // Apart at the surface: one body is wholly inside the other or they
         // share nothing. Only a closed body can hold the other.
-        if counterpart.solid && contained(subject, counterpart)? {
+        if counterpart.solid && contained(subject, counterpart, separation)? {
             return Ok((
                 Some(deepest_inside(subject, counterpart)?),
                 Some(BodyContainment::SubjectInsideCounterpart),
             ));
         }
-        if subject.solid && contained(counterpart, subject)? {
+        if subject.solid && contained(counterpart, subject, separation)? {
             return Ok((
                 Some(deepest_inside(counterpart, subject)?),
                 Some(BodyContainment::CounterpartInsideSubject),
@@ -1490,10 +1535,9 @@ pub(crate) fn crossings(body: &Body<'_>, other: &Body<'_>) -> Result<Vec<Point3>
                 direction,
             };
             for index in other.soup.near(&segment) {
-                let hit = intersect_triangle(&ray, other.soup.items[index], tolerance, index)
-                    .map_err(|_| ProximityError::Unavailable)?;
-                if let Some(hit) = hit.filter(|hit| (0.0..=1.0).contains(&hit.t)) {
-                    points.push(start + direction * hit.t);
+                let hit = segment_hit(&ray, other.soup.items[index], tolerance, index)?;
+                if let Some(t) = hit.filter(|t| (0.0..=1.0).contains(t)) {
+                    points.push(start + direction * t);
                 }
             }
         }
@@ -1613,8 +1657,7 @@ fn add_inside_vertices(
     if points.is_empty() {
         return Ok(());
     }
-    let winding =
-        WindingMesh::prepare(other.mesh, tolerance()?).map_err(|_| ProximityError::Unavailable)?;
+    let winding = other.winding()?;
     let mut known: Vec<Option<bool>> = vec![None; points.len()];
     for (index, direction) in witnessed.directions.iter().enumerate() {
         let positions: Vec<f64> = points
@@ -1634,7 +1677,11 @@ fn add_inside_vertices(
                 let inside_other = if let Some(answer) = known[point] {
                     answer
                 } else {
-                    let answer = inside(&winding, points[point])?;
+                    // A vertex too near a left-out zero-area triangle
+                    // witnesses nothing.
+                    let answer = winding
+                        .inside(points[point], || surface_distance(points[point], other))?
+                        == Some(true);
                     known[point] = Some(answer);
                     answer
                 };
@@ -1737,9 +1784,7 @@ fn overlap_extents(
 
 /// Distance from `point` to one triangle.
 fn triangle_distance(point: Point3, triangle: Triangle) -> Result<f64, ProximityError> {
-    closest_point_on_triangle(point, triangle)
-        .map(|closest| closest.distance(point))
-        .map_err(|_| ProximityError::Unavailable)
+    point_triangle_distance(point, triangle)
 }
 
 /// An upper bound on how far any point of `triangle` lies from `other`'s

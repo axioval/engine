@@ -34,7 +34,6 @@
 //! its chord deviation, and its vertices decide a side only when farther
 //! than the deviation from the host surface.
 
-use axiolid_measure::WindingMesh;
 use axioval_engine::{
     Bounds3, FaceClass, FaceDistanceError, FaceDistanceEvidence, FaceDistanceRequest,
     ProximityError, SignedDistanceInterval,
@@ -43,8 +42,8 @@ use axioval_ir::Evidence;
 
 use crate::geometry::{AxiolidGeometry, Triangle};
 use crate::proximity::{
-    AxiolidProximityService, Body, Indexed, LINEAR_TOLERANCE, crossings, inside, separation,
-    soup_distance_above, surface_distance, tolerance, triangle_box, vertices,
+    AxiolidProximityService, Body, Indexed, LINEAR_TOLERANCE, crossings, separation,
+    soup_distance_above, surface_distance, triangle_box, vertices,
 };
 
 /// How close to 45° a face's normal may come before its class is undecided.
@@ -154,22 +153,21 @@ fn signed(
     // A vertex nearer the host surface than this may lie on either side of
     // it once the body's true surface is taken into account.
     let margin = LINEAR_TOLERANCE + deviation;
-    let winding = WindingMesh::prepare(host.mesh, tolerance().map_err(refusal)?)
-        .map_err(|_| FaceDistanceError::Unavailable)?;
+    let winding = host.winding().map_err(refusal)?;
     let mut all_inside = to_host > margin;
     let mut upper = f64::INFINITY;
     // Points spanning the part of the body outside the host: every vertex
     // not proven inside, and the points where the two surfaces cross.
     let mut outside = Vec::new();
     for point in vertices(body) {
-        let clear = surface_distance(point, host).map_err(refusal)? > margin;
-        if !clear {
+        let depth = surface_distance(point, host).map_err(refusal)?;
+        if depth <= margin {
             all_inside = false;
             outside.push(point);
             continue;
         }
         let from_faces = soup_distance_above(point, faces, 0.0).map_err(refusal)?;
-        if inside(&winding, point).map_err(refusal)? {
+        if winding.decide(point, || Ok(depth)).map_err(refusal)? {
             upper = upper.min(from_faces);
         } else {
             all_inside = false;

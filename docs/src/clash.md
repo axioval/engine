@@ -334,7 +334,38 @@ Projected distances reuse the same pieces:
   plan relations** below).
 
 Points are tested only against closed two-manifold meshes. A pair needs at
-least one of them to report a penetration. Hosts declare curved parts with
+least one of them to report a penetration.
+
+**Zero-area triangles.** A mesh may hold triangles whose corners lie on one
+line: a warped face's triangulation leaves them, and so does a T-junction
+closed with a sliver. The kernel's triangle primitives refuse such a
+triangle and the winding number refuses a mesh holding one, so before #221
+the whole pair was reported unmeasured. A zero-area triangle adds no
+surface: all of its points lie on its edges, which cover its longest edge.
+So the distance to it is the distance to its edges, never less, and an edge
+of the other body meets it only where it comes within the contact
+tolerance (1 nm) of one of them. The triangle never decides a distance
+beyond what its segment allows: where the segment is an edge of the
+remaining faces, every distance and crossing is the one the faces give. A
+triangle the kernel reads as zero-area whose corner lies off its longest
+edge by more than the contact tolerance (rounding of very large
+coordinates) is refused by name.
+
+Such a mesh is still a closed solid when its triangles, the zero-area ones
+counted, use every edge exactly twice, once each way: a T-junction closed
+by a sliver bounds a solid. Its winding number is taken without the
+zero-area triangles (the audit's: doubled area at most the square of the
+tolerance). Area `A` left out at distance at least `d` moves the winding
+number by at most `A / (4π d²)`; a point for which that reaches a quarter
+witnesses no penetration, and a containment it would decide is refused by
+name. The certified volume integrals refuse such a mesh, which leaves the
+intersection volume unmeasured, never zero.
+
+Every refusal of the measurement now names its cause with
+`ProximityError::Refused`: the volume kernel's (`NotClosed`,
+`SelfIntersecting`, `NoVolume`), an open surface asked for its volume, a
+mesh whose every triangle has zero area. `Unavailable` is left for an object
+without a readable mesh. Hosts declare curved parts with
 `AxiolidGeometry::with_tessellated_mesh(object, mesh, chord_deviation_metres)`.
 A mesh registered with `with_mesh` asserts planar faces.
 

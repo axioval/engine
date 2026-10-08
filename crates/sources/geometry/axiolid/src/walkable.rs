@@ -38,7 +38,7 @@ use std::collections::BTreeMap;
 
 use crate::derived_relationships::{convex_hull, span, thin_axis};
 use crate::geometry::{AxiolidGeometry, Extent, Triangle, mesh_extent, triangles};
-use crate::planar::{plan_frame, polygon_area, projected_polygons, ring_area};
+use crate::planar::{collinear, plan_frame, polygon_area, projected_polygons, ring_area};
 
 /// Distance below which two points coincide, and the kernel tolerance.
 pub(crate) const ON_SURFACE: f64 = 1e-9;
@@ -340,6 +340,121 @@ fn projected(face: &[Point3]) -> Option<Polygon> {
     })
 }
 
+/// A clipped face projected to plan as the fan of triangles from its first
+/// corner, each with the orientation its corners give it.
+///
+/// The fan's windings add up to the face's own at every point off their
+/// edges: the diagonals the fan adds are walked once each way. So the
+/// non-zero union of the fans is the non-zero union of the faces, while
+/// every operand is a triangle, which the overlay never refuses as
+/// self-intersecting. A projected face itself can be: the projection of a
+/// (near-)vertical face clipped to the band is a quadrilateral or pentagon
+/// whose corners lie on one line up to rounding, and the overlay takes its
+/// edges, which double back along that line, for crossing ones.
+/// Triangles without area are left out: those [`projected`] leaves out,
+/// and those on one line up to the rounding of their coordinates
+/// ([`collinear`]), as every plan shadow here is.
+fn projected_fan(face: &[Point3]) -> impl Iterator<Item = Polygon> + '_ {
+    (1..face.len().saturating_sub(1))
+        .filter_map(move |index| projected(&[face[0], face[index], face[index + 1]]))
+        .filter(|triangle| !collinear(&triangle.outer.points))
+}
+
+/// Units in the last place of a footprint's largest coordinate within which
+/// [`band_footprint`] first takes two features for one.
+const SNAP_ULPS: f64 = 8.0;
+
+/// How much coarser each retry of a refused band footprint snaps.
+const SNAP_STEP: f64 = 4.0;
+
+/// The tolerances [`band_footprint`] hands the overlay for `polygons`, in
+/// the order they are tried: from a few units in the last place of their
+/// largest coordinate (at least a metre), never below [`overlay_tolerance`]'s,
+/// coarser by [`SNAP_STEP`] up to [`ON_SURFACE`].
+///
+/// The overlay takes features closer than its tolerance as touching and
+/// decides everything else exactly. Clipped corners of faces that meet in
+/// the model come out a few units in the last place apart, and the overlay
+/// fails to link the boundary of an arrangement holding such
+/// near-coincident points (`SelfIntersection`), so they must snap; a
+/// coarser snap merges more of them. Snapping moves a point by no more than
+/// the tolerance, at most [`ON_SURFACE`], far below [`MARGIN`], which
+/// every witness keeps from the obstacles, and below the overlay's own grid
+/// snapping of its output (axiolid/kernel#173).
+fn snapping_tolerances<'p>(
+    polygons: impl IntoIterator<Item = &'p Polygon>,
+) -> Result<Vec<Tolerance>, String> {
+    let magnitude = polygons
+        .into_iter()
+        .flat_map(|polygon| &polygon.outer.points)
+        .flat_map(|point| [point.x.abs(), point.y.abs()])
+        .fold(1.0, f64::max);
+    let mut linear = (SNAP_ULPS * f64::EPSILON * magnitude).max(overlay_tolerance()?.linear());
+    let mut tolerances = Vec::new();
+    while linear <= ON_SURFACE {
+        tolerances
+            .push(Tolerance::new(linear, linear).map_err(|_| "invalid tolerance".to_owned())?);
+        linear *= SNAP_STEP;
+    }
+    Ok(tolerances)
+}
+
+/// The union of the non-zero fills of `crossings` and of `above`, at the
+/// first of `tolerances` the overlay accepts.
+///
+/// At each tolerance it is tried in one overlay, `crossings` the subject
+/// and `above` the clip: the overlay fills each by its own windings before
+/// it unites them, so `above` keeps its section's winding however
+/// `crossings` overlaps it. The overlay may fail to link one arrangement and
+/// not another of the same region, so it is then tried in two steps, each
+/// soup united alone and the settled results joined. Every attempt measures
+/// the same region within its snapping.
+fn snapped_union(
+    crossings: &[Polygon],
+    above: &[Polygon],
+    tolerances: &[Tolerance],
+) -> Result<Plan, String> {
+    if crossings.is_empty() && above.is_empty() {
+        return Ok(Plan::empty());
+    }
+    let unite = |subject: Vec<Polygon>, clip: Vec<Polygon>, tolerance: Tolerance| {
+        let frame = plan_frame();
+        overlay(
+            &OverlayInput {
+                frame,
+                polygons: subject,
+            },
+            &OverlayInput {
+                frame,
+                polygons: clip,
+            },
+            OverlayOperation::Union,
+            FillRule::NonZero,
+            tolerance,
+        )
+        .map(|result| result.polygons)
+    };
+    let mut refusal = None;
+    for &tolerance in tolerances {
+        let error = match unite(crossings.to_vec(), above.to_vec(), tolerance) {
+            Ok(polygons) => return Ok(Plan { polygons }),
+            Err(error) => error,
+        };
+        refusal.get_or_insert(error);
+        let stepped = unite(crossings.to_vec(), Vec::new(), tolerance).and_then(|crossings| {
+            unite(Vec::new(), above.to_vec(), tolerance)
+                .and_then(|above| unite(crossings, above, tolerance))
+        });
+        if let Ok(polygons) = stepped {
+            return Ok(Plan { polygons });
+        }
+    }
+    Err(refusal.map_or_else(
+        || "no snapping tolerance".to_owned(),
+        |error| format!("plan Union failed: {error:?}"),
+    ))
+}
+
 /// Plan projection of the part of `mesh` inside the open band `lo < z < hi`.
 ///
 /// A vertical line meets the body within the band exactly when its foot just
@@ -349,10 +464,15 @@ fn projected(face: &[Point3]) -> Option<Polygon> {
 /// below, which needs a closed, consistently wound body. A body touching the
 /// band only at `lo` or `hi` does not obstruct it.
 ///
+/// Faces go to the overlay as triangle fans ([`projected_fan`]), united
+/// ([`snapped_union`]) at a tolerance scaled to their coordinates
+/// ([`snapping_tolerances`]). The overlay's output is settled, so it goes
+/// back to the overlay at the tighter tolerance every other plan uses.
+///
 /// # Errors
 ///
 /// When a body reaching down to the band is not a closed solid, or the
-/// overlay fails.
+/// overlay fails; both name `object`.
 pub(crate) fn band_footprint(
     object: &ObjectId,
     mesh: &TriMesh,
@@ -375,14 +495,14 @@ pub(crate) fn band_footprint(
         {
             continue;
         }
-        if let Some(mut face) = projected(&clipped) {
+        for mut face in projected_fan(&clipped) {
             if ring_area(&face.outer) < 0.0 {
                 face.outer.points.reverse();
             }
             crossings.push(face);
         }
     }
-    let mut region = union(crossings)?;
+    let mut above = Vec::new();
     if min[2] <= lo + ON_SURFACE {
         let health = audit_mesh(mesh, tolerance()?);
         if !health.is_closed_two_manifold() {
@@ -391,17 +511,17 @@ pub(crate) fn band_footprint(
                  it occupies in the band is undecided"
             ));
         }
-        let mut above = Vec::new();
         for [a, b, c] in &faces {
             let clipped = clip_z(&[*a, *b, *c], lo, true);
             if clipped.len() < 3 || clipped.iter().all(|p| p.z <= lo + ON_SURFACE) {
                 continue;
             }
-            above.extend(projected(&clipped));
+            above.extend(projected_fan(&clipped));
         }
-        region = join(&region, &union(above)?)?;
     }
-    Ok(region)
+    let tolerances = snapping_tolerances(crossings.iter().chain(&above))?;
+    snapped_union(&crossings, &above, &tolerances)
+        .map_err(|error| format!("the band footprint of {object} failed: {error}"))
 }
 
 /// A walkable surface: a closed exact body standing on one horizontal floor.

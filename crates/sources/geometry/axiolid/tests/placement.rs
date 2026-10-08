@@ -75,6 +75,10 @@ fn turned_square(cx: f64, cy: f64, side: f64, degrees: f64) -> [(f64, f64); 4] {
     [(-h, -h), (h, -h), (h, h), (-h, h)].map(|(x, y)| (cx + x * c - y * s, cy + x * s + y * c))
 }
 
+fn room_at(quad: &[(f64, f64); 4]) -> AxiolidGeometry {
+    room(&[*quad])
+}
+
 fn room(quads: &[[(f64, f64); 4]]) -> AxiolidGeometry {
     AxiolidGeometry::new().with_mesh(id("room"), prisms(quads, 0.0, 3.0))
 }
@@ -732,4 +736,86 @@ fn a_turning_circle_behind_a_bed_is_not_reached_by_a_wide_path() {
     let any = || rectangle(1.5, 1.5, PlacementOrientation::Any);
     nowhere(reached_from_the_door(any(), 1.2));
     found(reached_from_the_door(any(), 0.7));
+}
+
+/// A closed, outward-wound wall of `thickness` along `degrees` in plan,
+/// centred on `centre` and `length` long, standing from `bottom` up to a top
+/// raked from `tops.0` at one end to `tops.1` at the other.
+fn raked_wall(
+    centre: (f64, f64),
+    degrees: f64,
+    (length, thickness): (f64, f64),
+    bottom: f64,
+    tops: (f64, f64),
+) -> TriMesh {
+    let (sin, cos) = degrees.to_radians().sin_cos();
+    let corner = |u: f64, v: f64| (centre.0 + u * cos - v * sin, centre.1 + u * sin + v * cos);
+    let (along, across) = (length / 2.0, thickness / 2.0);
+    let plan = [
+        corner(-along, -across),
+        corner(along, -across),
+        corner(along, across),
+        corner(-along, across),
+    ];
+    let heights = [tops.0, tops.1, tops.1, tops.0];
+    let mut positions: Vec<Point3> = plan
+        .iter()
+        .map(|(x, y)| Point3::new(*x, *y, bottom))
+        .collect();
+    positions.extend(
+        plan.iter()
+            .zip(heights)
+            .map(|((x, y), z)| Point3::new(*x, *y, z)),
+    );
+    let mut indices = vec![0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7];
+    for i in 0..4 {
+        let j = (i + 1) % 4;
+        indices.extend([i, j, 4 + j, i, 4 + j, 4 + i]);
+    }
+    TriMesh::new(positions, indices)
+}
+
+/// A wall turned in plan, reaching below the floor and raked across the
+/// band's top, leaves a 0.9 m strip on either side in a 2 m wide room
+/// turned with it: a 0.8 m square fits beside it, a 1.0 m one nowhere.
+///
+/// Clipped to the band, its side faces are quadrilaterals standing on edge,
+/// whose shadows have their corners on one line only up to rounding. The
+/// overlay took them for self-intersecting rings and refused the wall's
+/// footprint, so the space was not evaluated at most of these angles.
+#[test]
+fn a_raked_wall_on_edge_in_the_band_is_measured() {
+    let (cx, cy) = (17.5, -2.5);
+    for degrees in [28.0_f64, 62.0, 90.0, 117.0] {
+        let (s, c) = degrees.to_radians().sin_cos();
+        let corner = |u: f64, v: f64| (cx + u * c - v * s, cy + u * s + v * c);
+        let geometry = || {
+            room_at(&[
+                corner(-1.5, -1.0),
+                corner(1.5, -1.0),
+                corner(1.5, 1.0),
+                corner(-1.5, 1.0),
+            ])
+            .with_mesh(
+                id("wall"),
+                raked_wall((cx, cy), degrees, (4.0, 0.2), -0.3, (1.9, 2.7)),
+            )
+        };
+        let ([x, y, _], _) = found(place(
+            geometry(),
+            rectangle(0.8, 0.8, along(c, s)),
+            &["wall"],
+        ));
+        // The witness stands in one of the strips, clear of the wall.
+        let across = (y - cy) * c - (x - cx) * s;
+        assert!(
+            (0.5..=0.6).contains(&across.abs()),
+            "{degrees}°: the square stands {across} m off the wall's axis"
+        );
+        nowhere(place(
+            geometry(),
+            rectangle(1.0, 1.0, along(c, s)),
+            &["wall"],
+        ));
+    }
 }

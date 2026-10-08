@@ -253,7 +253,14 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   Plans are `Plan`: overlay output, handed back to the overlay as it is
   (settled output is a valid operand from axiolid-overlay 0.3.3) and
   validated and settled with a tight tolerance, since thin slivers fail at
-  `ON_SURFACE`. `trapezoids` remains for convex pieces (an inner point,
+  `ON_SURFACE`. Band footprints hand the overlay triangle fans of the
+  clipped faces (`projected_fan`, collinear ones left out), never the
+  clipped polygons: a face on edge projects to a ring the overlay refuses
+  as self-intersecting (#222). They are united in one overlay (crossings
+  the subject, the section the clip) at `snapping_tolerances` (a few ulps
+  of the coordinates, coarser up to `ON_SURFACE`), else in two steps,
+  because the overlay fails to link arrangements with corners a few ulps
+  apart; a refusal names the obstacle. `trapezoids` remains for convex pieces (an inner point,
   placement obstacles as rings). Test against the published crates, not a
   local kernel checkout.
 - `src/walkability.rs` implements `WalkabilityService`: a region per surface

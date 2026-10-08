@@ -75,7 +75,9 @@ back as a document. See `docs/src/ids.md` for the mapping of every facet.
   whole document (`TranslateError::Invalid`, every finding kept), and
   warnings refuse nothing and travel in `Translation::warnings`. On export
   every specification a rule or folder reads as is audited alone
-  (`Refusal::Invalid`), and `write::document` audits the whole document
+  (`Refusal::Invalid`; a rule refused for some releases only is read again
+  for the others, kept only when that reading still `matches` the rule),
+  and `write::document` audits the whole document
   again before writing, so `Export::to_xml` never writes an invalid IDS
   (`DocumentError::Invalid`). Never write a document around the audit.
   The gaps an audited document cannot reach (`UnknownEntity`,

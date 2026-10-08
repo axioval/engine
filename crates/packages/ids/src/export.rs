@@ -326,7 +326,9 @@ const TYPE_SYSTEMS: [&str; 3] = [
 /// - Any other rule is read as one specification: an entity facet and the
 ///   facets its selector states, and one property, attribute,
 ///   classification, material or part-of requirement, or `object-count` as
-///   the applicability's cardinality.
+///   the applicability's cardinality. It lists every release IDS names,
+///   or, when the audit refuses that for some releases only, the releases
+///   it accepts, provided translating that reading still gives the rule.
 ///
 /// The result lists every rule it left out with its [`Refusal`];
 /// [`Export::is_complete`] says whether any was.
@@ -685,7 +687,47 @@ impl<'p> Catalog<'p> {
         };
         self.matches(&specification, &[rule])?;
         writable(&specification)?;
-        audited(&specification)?;
+        match audited(&specification) {
+            Ok(()) => Ok(specification),
+            Err(refusal) => self.narrowed(specification, rule, refusal),
+        }
+    }
+
+    /// The reading of `specification` for the releases the audit accepts,
+    /// when the all-releases reading is refused for some releases only and
+    /// translating the narrowed reading still gives exactly `rule`;
+    /// otherwise the audit's `refusal`.
+    fn narrowed(
+        &self,
+        mut specification: Specification,
+        rule: &RuleInstance,
+        refusal: Refusal,
+    ) -> Result<Specification, Refusal> {
+        let Refusal::Invalid { findings, .. } = &refusal else {
+            return Err(refusal);
+        };
+        let mut refused = Vec::new();
+        for finding in findings
+            .iter()
+            .filter(|finding| finding.severity() == crate::AuditSeverity::Error)
+        {
+            // A finding for every release leaves none to narrow to.
+            let Some(release) = finding.ifc_version else {
+                return Err(refusal);
+            };
+            refused.push(release);
+        }
+        // `IfcVersion::ALL` order, so the export is deterministic.
+        specification
+            .ifc_versions
+            .retain(|release| !refused.contains(release));
+        if specification.ifc_versions.is_empty()
+            || self.matches(&specification, &[rule]).is_err()
+            || writable(&specification).is_err()
+            || audited(&specification).is_err()
+        {
+            return Err(refusal);
+        }
         Ok(specification)
     }
 

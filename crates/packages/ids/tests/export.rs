@@ -841,11 +841,13 @@ fn an_export_the_audit_refuses_is_never_written() {
 }
 
 #[test]
-fn a_rule_reading_as_an_invalid_specification_is_refused() {
+fn a_rule_is_read_for_the_releases_that_define_what_it_names() {
     // IFCCHIMNEY is an IFC4 class. Translated for IFC4, its folder is
     // written back as it was read; read on its own, the rule would be a
     // specification for every release, IFC2X3 included, which does not
-    // define the class: refused, never written.
+    // define the class. The audit refuses that reading for IFC2X3 only, so
+    // the rule is read for IFC4 and IFC4X3_ADD2, and translates back to
+    // itself.
     let text = r#"<ids xmlns="http://standards.buildingsmart.org/IDS"><info><title>T</title></info><specifications><specification name="Chimneys" ifcVersion="IFC4"><applicability minOccurs="0" maxOccurs="unbounded"><entity><name><simpleValue>IFCCHIMNEY</simpleValue></name></entity></applicability><requirements><property><propertySet><simpleValue>P</simpleValue></propertySet><baseName><simpleValue>N</simpleValue></baseName></property></requirements></specification></specifications></ids>"#;
     let ids = openbim_ids::from_str(text).unwrap();
     let translation = translate(&ids, &Options::new("ids:t", "1.0.0")).unwrap();
@@ -857,18 +859,74 @@ fn a_rule_reading_as_an_invalid_specification_is_refused() {
 
     let mut detached = translation.ruleset.clone();
     detached.root.folders[0].annotations.clear();
-    let refused = export(definitions, &detached);
+    let read = export(definitions, &detached);
+    assert!(read.is_complete(), "{:?}", read.not_exported);
+    assert_eq!(read.specifications.len(), 1);
+    assert_eq!(
+        read.specifications[0].specification.ifc_versions,
+        [
+            openbim_ids::IfcVersion::Ifc4,
+            openbim_ids::IfcVersion::Ifc4x3Add2
+        ]
+    );
+    let xml = read.to_xml().unwrap().unwrap();
+    assert!(xml.contains(r#"ifcVersion="IFC4 IFC4X3_ADD2""#), "{xml}");
+    // Translating it again gives the rule.
+    let back = translate(
+        &openbim_ids::from_str(&xml).unwrap(),
+        &Options::new("ids:t", "1.0.0"),
+    )
+    .unwrap();
+    let again = export(std::slice::from_ref(&back.definitions), &back.ruleset);
+    assert!(again.is_complete(), "{:?}", again.not_exported);
+    assert_eq!(
+        again.specifications[0].specification,
+        read.specifications[0].specification
+    );
+    let rules = |ruleset: &RuleSetPackage| {
+        ruleset.root.folders[0]
+            .rules
+            .iter()
+            .map(|rule| (rule.parameters.clone(), rule.applicability.clone()))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(rules(&back.ruleset), rules(&translation.ruleset));
+}
+
+#[test]
+fn a_rule_no_release_defines_is_refused() {
+    // IFCCHIMNEY is no IFC2X3 class and IFCEQUIPMENTELEMENT only one: no
+    // release defines both, so the rule reads as no specification the
+    // audit accepts, and is refused, never written.
+    let text = r#"<ids xmlns="http://standards.buildingsmart.org/IDS"><info><title>T</title></info><specifications><specification name="Chimneys" ifcVersion="IFC4"><applicability minOccurs="0" maxOccurs="unbounded"><entity><name><xs:restriction xmlns:xs="http://www.w3.org/2001/XMLSchema" base="xs:string"><xs:enumeration value="IFCCHIMNEY"/><xs:enumeration value="IFCWALL"/></xs:restriction></name></entity></applicability><requirements><property><propertySet><simpleValue>P</simpleValue></propertySet><baseName><simpleValue>N</simpleValue></baseName></property></requirements></specification></specifications></ids>"#;
+    let ids = openbim_ids::from_str(text).unwrap();
+    let mut translation = translate(&ids, &Options::new("ids:t", "1.0.0")).unwrap();
+    // The wall becomes an IFC2X3 equipment element.
+    let wall = translation
+        .definitions
+        .object_types
+        .values_mut()
+        .find(|concept| concept.name.default == "IFCWALL")
+        .unwrap();
+    wall.name.default = "IFCEQUIPMENTELEMENT".to_owned();
+    for name in &mut wall.external_names {
+        name.name = "IFCEQUIPMENTELEMENT".to_owned();
+    }
+    let mut detached = translation.ruleset.clone();
+    detached.root.folders[0].annotations.clear();
+    let refused = export(std::slice::from_ref(&translation.definitions), &detached);
     assert!(refused.specifications.is_empty());
     let Refusal::Invalid { findings, .. } = &refused.not_exported[0].reason else {
         panic!("{:?}", refused.not_exported);
     };
-    assert!(
-        findings.iter().any(|finding| {
-            finding.code == axioval_ids::AuditCode::EntityUnknown
-                && finding.ifc_version == Some(openbim_ids::IfcVersion::Ifc2x3)
-        }),
-        "{findings:?}"
-    );
+    let releases: Vec<Option<openbim_ids::IfcVersion>> = findings
+        .iter()
+        .filter(|finding| finding.code == axioval_ids::AuditCode::EntityUnknown)
+        .map(|finding| finding.ifc_version)
+        .collect();
+    for release in openbim_ids::IfcVersion::ALL {
+        assert!(releases.contains(&Some(release)), "{findings:?}");
+    }
     assert!(
         refused.not_exported[0]
             .to_string()

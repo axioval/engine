@@ -204,7 +204,8 @@ A specification comes from one of two places:
   `object-count` is the applicability's `minOccurs`/`maxOccurs` with no
   requirement. The specification is named after the rule, identified by
   its id, and lists all three releases, since every concept a translation
-  writes is named in all three.
+  writes is named in all three; when the audit refuses that reading for
+  some releases only, it lists the others (see below).
 
 Among the refusals: a capability no facet states (`clash`, `distance`,
 every geometric or counting capability), a selector no facet states (a
@@ -277,11 +278,16 @@ refuses every rule, naming the location.
 
 No invalid IDS is ever written. Every specification a rule or a folder
 reads as is [audited](#audit) on its own before it is exported, and one
-the audit refuses is not (`Refusal::Invalid`, with the findings): a rule
-read as one specification lists all three releases, so a rule over a
-class one of them lacks (`IFCCHIMNEY`, which IFC2X3 does not define) is
-refused rather than written as a specification that cannot work for
-IFC2X3. `Export::to_xml` audits the whole document again before writing
+the audit refuses is not (`Refusal::Invalid`, with the findings). A rule
+read as one specification lists all three releases; when the audit
+refuses that reading for some releases only, every error naming its
+release, the rule is read again for the releases left, in `IfcVersion`
+order, and exported when translating that reading still gives exactly the
+rule. A rule over `IFCCHIMNEY`, which IFC2X3 does not define, is so
+written as a specification for `IFC4 IFC4X3_ADD2`. It stays refused, with
+the findings of the all-releases reading, when an error holds for every
+release, when no release is left, or when the narrowed reading translates
+differently. `Export::to_xml` audits the whole document again before writing
 it; an error then is an exporter bug, and it returns
 `DocumentError::Invalid` with the findings instead of a document, which
 the `ids` profile turns into a refused loss for every rule.
@@ -330,7 +336,7 @@ A specification's `ifcVersion` is metadata that never changes a verdict, as the 
 
 It also asserts the [audit](#audit): every one of the 27 `invalid-` cases is refused, and the 307 `pass-` and `fail-` cases audit without a single finding, warnings included. None of the `invalid-` cases needs the template checks the audit leaves out; one that did would be listed in `TEMPLATE_ONLY` with the check it needs, and skipped.
 
-The same run checks the [round trip](#round-trip) of every case that translates without a gap: all 307 are exported again, read back to the original specifications and info, translate to identical packages and report identical findings, and 565 of their 603 rules are also exported one by one without their origin, reporting on the same objects. The other 38 read as specifications for all three releases over a class or attribute IFC2X3 lacks (`IFCTASKTIME`, `IfcPerson.Identification`), which the audit refuses. Every exported document is validated against `Schema/ids.xsd` of the checkout, which needs `python3` with `lxml`.
+The same run checks the [round trip](#round-trip) of every case that translates without a gap: all 307 are exported again, read back to the original specifications and info, translate to identical packages and report identical findings, and 593 of their 603 rules are also exported one by one without their origin, reporting on the same objects; 28 of them over a class or attribute IFC2X3 lacks (`IFCTASKTIME`, `IfcPerson.Identification`) are read for the releases that define it. The other 10 name, through a class pattern, classes no single release defines all of, which the audit refuses for every release. Every exported document is validated against `Schema/ids.xsd` of the checkout, which needs `python3` with `lxml`.
 
 Some facets translate but cannot be decided on some models, and are reported not evaluated rather than as gaps: a property whose value is an `IfcPropertyReferenceValue` referencing an entity, which the adapter refuses (one referencing nothing is no value, and fails a required facet as IDS requires); and the value of a measure whose unit the model does not resolve. Such a measure's declared type is still exact, so its `dataType` is judged: `IFCMASSMEASURE(2.)` fails `dataType="IFCTIMEMEASURE"` whatever its value, as the buildingSMART case "measures are used to specify an IFC data type" requires, and a required facet without a value is met.
 

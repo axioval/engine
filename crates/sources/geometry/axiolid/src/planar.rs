@@ -42,7 +42,7 @@ pub(crate) fn projected_polygons(triangles: &[Triangle]) -> Vec<Polygon> {
                     Point2::new(c.x, c.y),
                 ],
             };
-            let area = ring_area(&ring);
+            let area = triangle_area([ring.points[0], ring.points[1], ring.points[2]]);
             if area < 0.0 {
                 ring.points.reverse();
             }
@@ -113,6 +113,23 @@ pub(crate) fn ring_area(ring: &Ring) -> f64 {
         sum += current.x * next.y - next.x * current.y;
     }
     sum * 0.5
+}
+
+/// Signed area of a plan triangle, taken about its first vertex.
+///
+/// [`ring_area`] sums the shoelace over the coordinates themselves, which
+/// cancels products of the coordinates' size: at georeferenced coordinates
+/// (some 10⁶ m) each term is about 10¹² m², whose rounding exceeds the area
+/// of a thin triangle and can flip its sign. That wound such a triangle
+/// clockwise in [`projected_polygons`], and the overlay refused the
+/// footprint as self-intersecting. Edge vectors from the first vertex are
+/// exact up to their own rounding, so this is accurate to the triangle's
+/// size, not to where it lies. The overlay still takes a ring's orientation
+/// and its `ZeroArea` check from the coordinates (axiolid/kernel#274), so
+/// such a triangle may yet be refused there.
+fn triangle_area(points: [Point2; 3]) -> f64 {
+    let [a, b, c] = points;
+    0.5 * (b - a).perp_dot(c - a)
 }
 
 /// The plan boundary of a triangle set, as its outer rings.

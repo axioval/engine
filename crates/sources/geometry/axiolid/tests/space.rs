@@ -992,3 +992,49 @@ fn a_body_abutting_a_sliver_face_shares_nothing() {
     );
     assert!(coverage.elements().is_empty());
 }
+
+/// Two plan triangles sharing an edge some 10⁶ m from the origin, as a
+/// fan of a round corner's chords lies in a georeferenced model, at two
+/// heights; the first is thin and wound clockwise. A shoelace sum over
+/// the coordinates rounds its area (about 7.7e-5 m²) to the wrong sign
+/// there, which left it clockwise in the plan soup and made the overlay
+/// refuse the footprint as self-intersecting.
+fn far_fan(z0: f64, z1: f64) -> TriMesh {
+    let corners = [
+        (600_026.029_859_079, 5_599_990.725_323_705),
+        (600_026.142_665_062_9, 5_599_990.741_066_861),
+        (600_026.086_448_961, 5_599_990.731_856_141),
+        (600_026.253_470_314_9, 5_599_990.767_434_134),
+    ];
+    let mut positions = Vec::new();
+    for z in [z0, z1] {
+        positions.extend(corners.iter().map(|&(x, y)| Point3::new(x, y, z)));
+    }
+    TriMesh::new(positions, vec![0, 1, 2, 0, 1, 3, 4, 5, 6, 4, 5, 7])
+}
+
+/// A space whose plan holds a thin triangle far from the origin is
+/// measured: its footprint keeps every triangle's winding.
+#[test]
+fn a_thin_triangle_far_from_the_origin_keeps_its_winding() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("space"), far_fan(0.0, 3.0))
+        .with_mesh(id("copy"), far_fan(0.0, 3.0))
+        .with_mesh(id("slab"), far_fan(3.0, 3.2));
+    let service = AxiolidSpaceService::new(geometry, source())
+        .with_space(id("space"))
+        .with_space(id("copy"))
+        .with_slab(id("slab"));
+    assert_eq!(
+        service.measure_duplicates(&id("space")).expect("measured"),
+        vec![id("copy")]
+    );
+    let coverage = service
+        .measure_cap_coverage(&id("space"), &CapRequest::new(Cap::Top))
+        .expect("measured");
+    assert!(
+        (coverage.covered_ratio() - 1.0).abs() < 1e-6,
+        "{}",
+        coverage.covered_ratio()
+    );
+}

@@ -25,8 +25,10 @@ Messages and reasons are reduced to patterns: object references become
 identifiers a product without a body has (`no body representation; it has
 Axis`) `<identifiers>`, so one cause on many objects is one row. An
 unmeasured reason that is a fact about the model data (`no shape
-representation`: a product with no representation at all) is labelled
-`unmeasured (model data): ...`. Causes are ranked by the number of not-evaluated
+representation`: a product with no representation at all; a face whose
+boundary crosses or runs back along itself, which the mesh compiler refuses
+as `... profile outer ring intersects itself` or `... folds back on itself
+at vertex <n>`) is labelled `unmeasured (model data): ...`. Causes are ranked by the number of not-evaluated
 outcomes they account for, then unmeasured objects, then models affected,
 then the pattern, so the table is deterministic for the same inputs.
 
@@ -58,6 +60,18 @@ IDENTIFIERS = re.compile(r"(no body representation; it has )[^;]+$")
 # Unmeasured reasons that are facts about the model data its author can
 # fix, not gaps in the engine or its adapters.
 MODEL_DATA = frozenset({"no shape representation"})
+# Reason patterns that are model data too: a face ring that crosses or runs
+# back along itself bounds no region (#298, the CLI's
+# `shape.self-intersecting-face`). A ring that overlaps itself is not: the
+# corpus's are holes joined to the outer boundary by a seam, which the
+# compiler does not accept yet (axiolid/kernel#270).
+MODEL_DATA_PATTERNS = re.compile(
+    r"mesh compilation refused: invalid geometry input: "
+    r"(?:planar face|authored polygon face <n>) cannot be triangulated: "
+    r"(?:its rings do not bound a region: )?"
+    r"profile (?:outer ring|hole <n>) "
+    r"(?:intersects itself|folds back on itself at vertex <n>)"
+)
 
 
 def pattern(message: str) -> str:
@@ -116,7 +130,9 @@ class Cause:
         return (-self.outcomes, -self.objects, -len(self.models), self.kind, self.text)
 
     def model_data(self) -> bool:
-        return self.kind == "unmeasured" and self.text in MODEL_DATA
+        return self.kind == "unmeasured" and (
+            self.text in MODEL_DATA or MODEL_DATA_PATTERNS.fullmatch(self.text) is not None
+        )
 
     def label(self) -> str:
         if self.model_data():

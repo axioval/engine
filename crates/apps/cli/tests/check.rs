@@ -1607,6 +1607,184 @@ fn with_geometry_a_product_without_shape_is_told_apart_from_one_without_body() {
     );
 }
 
+/// A wall whose `Body` is one open `IfcPolygonalFaceSet` face, its ring
+/// given by `corners` (x, y; z = 0) and the one-based `ring` indices into
+/// them, as instances `first..first + 4`.
+fn face_set_wall(first: u32, corners: &[(f64, f64)], ring: &[usize]) -> String {
+    let [points, face, set, shape, definition] = [0, 1, 2, 3, 4].map(|offset| first + offset);
+    let wall = first + 9;
+    let coordinates: Vec<String> = corners
+        .iter()
+        .map(|(x, y)| format!("({x:?},{y:?},0.)"))
+        .collect();
+    let indices: Vec<String> = ring.iter().map(ToString::to_string).collect();
+    format!(
+        "#{points}=IFCCARTESIANPOINTLIST3D(({}),$);\n\
+         #{face}=IFCINDEXEDPOLYGONALFACE(({}));\n\
+         #{set}=IFCPOLYGONALFACESET(#{points},.F.,(#{face}),$);\n\
+         #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','Tessellation',(#{set}));\n\
+         #{definition}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n\
+         #{wall}=IFCWALL('00000000000000000000{wall}',$,$,$,$,#3,#{definition},$,$);\n",
+        coordinates.join(","),
+        indices.join(","),
+    )
+}
+
+/// The crossing walls with four walls of one face each, after the corpus
+/// behind #298: `#49` a quad written in Z order, `#59` a square with a spike
+/// out and back, `#69` a square less a hole joined to it by a seam
+/// traversed both ways, and `#79` a rectangle the clipper finds no ear in.
+fn self_intersecting_faces() -> String {
+    let crossing = face_set_wall(
+        40,
+        &[
+            (10.03, 0.024),
+            (10.03, 0.006),
+            (9.97, 0.006),
+            (9.97, -0.036),
+        ],
+        &[1, 2, 3, 4],
+    );
+    let spike = face_set_wall(
+        50,
+        &[
+            (20.0, 0.0),
+            (21.0, 0.0),
+            (21.0, 1.0),
+            (20.0, 1.0),
+            (19.5, 1.0),
+        ],
+        &[1, 2, 3, 4, 5, 4],
+    );
+    let keyhole = face_set_wall(
+        60,
+        &[
+            (30.0, 0.0),
+            (34.0, 0.0),
+            (34.0, 4.0),
+            (30.0, 4.0),
+            (31.0, 1.0),
+            (31.0, 3.0),
+            (33.0, 3.0),
+            (33.0, 1.0),
+        ],
+        &[1, 2, 3, 4, 1, 5, 6, 7, 8, 5],
+    );
+    // A valid rectangle with a straight corner on one side, a render
+    // layer's end face in the corpus: projected onto its plane, the corners
+    // level with the first get -0.0, and the clipper reads the ring as
+    // clockwise and finds no ear (axiolid/kernel#269). Not model data.
+    let rectangle = "#70=IFCCARTESIANPOINT((211.2679299712594,127.1711345978437,2.66));\n\
+         #71=IFCCARTESIANPOINT((211.1655923859374,127.13083957435984,2.66));\n\
+         #72=IFCCARTESIANPOINT((211.1655923859374,127.13083957435984,-0.3));\n\
+         #73=IFCCARTESIANPOINT((211.2679299712594,127.1711345978437,-0.3));\n\
+         #74=IFCCARTESIANPOINT((211.2679299712594,127.1711345978437,0.));\n\
+         #75=IFCPOLYLOOP((#70,#71,#72,#73,#74));\n\
+         #76=IFCFACEOUTERBOUND(#75,.T.);\n\
+         #77=IFCFACE((#76));\n\
+         #78=IFCOPENSHELL((#77));\n\
+         #80=IFCSHELLBASEDSURFACEMODEL((#78));\n\
+         #81=IFCSHAPEREPRESENTATION(#5,'Body','SurfaceModel',(#80));\n\
+         #82=IFCPRODUCTDEFINITIONSHAPE($,$,(#81));\n\
+         #79=IFCWALL('0000000000000000000079',$,$,$,$,#3,#82,$,$);\n";
+    crossing_walls_with(&format!("{crossing}{spike}{keyhole}{rectangle}"))
+}
+
+/// A face whose boundary crosses itself (a quad written in Z order) or runs
+/// back along itself (a spike out of a square and back) bounds no region:
+/// the mesh compiler refuses it, the wall is unmeasured with the refusal,
+/// and since that is model data it is also reported once as the integrity
+/// warning `shape.self-intersecting-face` (#298). The rings are the
+/// smallest of their kind in the corpus behind #298. Two valid faces the
+/// compiler does not accept yet are never reported as model data: a square
+/// less a hole joined to it by a seam traversed both ways
+/// (axiolid/kernel#270), and a rectangle the clipper finds no ear in
+/// (axiolid/kernel#269).
+#[test]
+fn with_geometry_a_face_crossing_itself_is_model_data() {
+    let case = Case::new("geometry-self-intersecting-face");
+    let (output, result) = case.wall_clash(&self_intersecting_faces(), &json!({}));
+    let unmeasured: Vec<(&str, &str)> = result["geometry"]["unmeasured"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| {
+            (
+                entry["object"]["local_id"].as_str().unwrap(),
+                entry["reason"].as_str().unwrap(),
+            )
+        })
+        .collect();
+    let reason = |id: &str| {
+        unmeasured
+            .iter()
+            .find(|(local, _)| *local == id)
+            .map_or_else(
+                || panic!("{id} is measured: {}", stderr(&output)),
+                |(_, reason)| *reason,
+            )
+    };
+    assert!(
+        reason("#49").ends_with("profile outer ring intersects itself"),
+        "{unmeasured:?}"
+    );
+    assert!(
+        reason("#59").ends_with("profile outer ring folds back on itself at vertex 4"),
+        "{unmeasured:?}"
+    );
+    // Refused until axiolid/kernel#270 and #269, measured after.
+    let refused = |id: &str| unmeasured.iter().find(|(local, _)| *local == id);
+    if let Some((_, keyhole)) = refused("#69") {
+        assert!(
+            keyhole.ends_with("profile outer ring overlaps itself"),
+            "{keyhole}"
+        );
+    }
+    if let Some((_, rectangle)) = refused("#79") {
+        assert!(
+            rectangle.ends_with("found no ear among 5 remaining vertices"),
+            "{rectangle}"
+        );
+    }
+
+    let notes: Vec<&Value> = result["integrity"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|record| record["code"] == "shape.self-intersecting-face")
+        .collect();
+    let located: Vec<&str> = notes
+        .iter()
+        .map(|note| note["locator"].as_str().unwrap())
+        .collect();
+    assert_eq!(notes.len(), 2, "{:#}", result["integrity"]);
+    assert!(
+        located[0].ends_with(":self-intersecting-face:#49")
+            && located[1].ends_with(":self-intersecting-face:#59"),
+        "{located:?}"
+    );
+    assert_eq!(notes[0]["severity"], "warning");
+    assert_eq!(
+        notes[0]["message"],
+        "#49 IFCWALL has a face whose boundary crosses itself, so it bounds no region; \
+         every measurement of it is not evaluated"
+    );
+    assert_eq!(
+        notes[1]["message"],
+        "#59 IFCWALL has a face whose boundary runs back along itself, so it bounds no \
+         region; every measurement of it is not evaluated"
+    );
+
+    // Never measured as empty: their clashes are not evaluated.
+    let not_evaluated = result["report"]["not_evaluated"].to_string();
+    for id in ["#49", "#59"] {
+        assert!(
+            not_evaluated.contains(&format!("\"{id}\"")),
+            "{id}: {result:#}"
+        );
+    }
+}
+
 /// A box `lx` by `ly` centred on `(cx, cy)`, 3 m high, as instances
 /// `first..first + 5`; `product` is the product line with `REP` for its
 /// shape.

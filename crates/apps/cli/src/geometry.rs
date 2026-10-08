@@ -188,7 +188,9 @@ pub struct GeometryReport {
     pub unmeasured: Vec<(ObjectId, String)>,
     /// Facts about the model data found while meshing, once per object:
     /// every physical product with no shape representation and no parts
-    /// ([`NO_SHAPE_REPRESENTATION`]). Its measurements stay not evaluated.
+    /// ([`NO_SHAPE_REPRESENTATION`]), and every product unmeasured for a
+    /// face whose boundary crosses or runs back along itself
+    /// ([`SELF_INTERSECTING_FACE`]). Their measurements stay not evaluated.
     pub model_data: Vec<ModelData>,
     /// Openings taken as already applied to a measured host's `Body`:
     /// host, opening and the reason, in identity order.
@@ -202,6 +204,12 @@ pub struct GeometryReport {
 /// and no parts: it has no geometry at all, so it is unmeasured, never
 /// measured as empty.
 pub const NO_SHAPE_REPRESENTATION: &str = "shape.no-representation";
+
+/// The integrity code of a product whose body has a face the mesh compiler
+/// refuses because the face's boundary, as written, crosses itself or runs
+/// back along itself: that boundary bounds no region, so no surface fills
+/// it (#298).
+pub const SELF_INTERSECTING_FACE: &str = "shape.self-intersecting-face";
 
 /// A fact about the model data the bridge found, for the host to report as
 /// an integrity warning.
@@ -916,7 +924,7 @@ pub fn attach(
     }
     .compose_all(&wholes);
     report.unmeasured.sort_by(|a, b| a.0.cmp(&b.0));
-    report.model_data = shapeless_records(&report.unmeasured, &snapshots, &kinds);
+    report.model_data = model_data_notes(&report.unmeasured, &snapshots, &kinds);
     for (group, members) in groups(relationships, &kinds, &is_a) {
         geometry = match members {
             Ok(members) => geometry.with_group(group, members),
@@ -1088,9 +1096,10 @@ impl Composer<'_> {
     }
 }
 
-/// Every product left unmeasured for having no shape representation (and
-/// no parts), once each, as an integrity warning about the model data.
-fn shapeless_records(
+/// Every product left unmeasured for a fact about the model data, once
+/// each, as an integrity warning: no shape representation (and no parts),
+/// or a face whose boundary crosses or runs back along itself.
+fn model_data_notes(
     unmeasured: &[(ObjectId, String)],
     snapshots: &[SourceSnapshot],
     kinds: &BTreeMap<ObjectId, String>,
@@ -1098,24 +1107,71 @@ fn shapeless_records(
     let shapeless = Bodiless::Shapeless.reason();
     unmeasured
         .iter()
-        .filter(|(_, reason)| *reason == shapeless)
-        .map(|(id, _)| {
+        .filter_map(|(id, reason)| {
             let fingerprint = snapshots
                 .iter()
                 .find(|snapshot| *snapshot.source() == id.source)
                 .map_or("", SourceSnapshot::fingerprint);
             let kind = kinds.get(id).map_or("", String::as_str);
-            ModelData {
-                code: NO_SHAPE_REPRESENTATION,
-                message: format!(
-                    "{} {kind} has no shape representation and no parts; every \
-                     measurement of it is not evaluated",
-                    id.local_id
-                ),
-                locator: format!("ifc:{fingerprint}:no-shape:{}", id.local_id),
+            let local = &id.local_id;
+            if *reason == shapeless {
+                return Some(ModelData {
+                    code: NO_SHAPE_REPRESENTATION,
+                    message: format!(
+                        "{local} {kind} has no shape representation and no parts; every \
+                         measurement of it is not evaluated"
+                    ),
+                    locator: format!("ifc:{fingerprint}:no-shape:{local}"),
+                });
             }
+            let defect = self_intersecting_face(reason)?;
+            Some(ModelData {
+                code: SELF_INTERSECTING_FACE,
+                message: format!(
+                    "{local} {kind} has a face whose boundary {defect}, so it bounds no \
+                     region; every measurement of it is not evaluated"
+                ),
+                locator: format!("ifc:{fingerprint}:self-intersecting-face:{local}"),
+            })
         })
         .collect()
+}
+
+/// What is wrong with a face's boundary, when `reason` is the mesh
+/// compiler refusing to triangulate a face because one of its rings, as
+/// written, crosses itself or runs back along itself (#298).
+///
+/// The compiler's ring checks are exact on the face's projection onto its
+/// plane. On the corpus behind #298 every such crossing lies at least
+/// 10 um inside the other edge, far above rounding, or follows from a
+/// boundary that runs back along itself. A ring that overlaps itself is
+/// not read as model data: a hole joined to the outer boundary by a seam
+/// traversed both ways bounds a region the compiler does not yet accept
+/// (axiolid/kernel#270). Neither is a ring refused for other reasons.
+fn self_intersecting_face(reason: &str) -> Option<&'static str> {
+    let refusal = reason.strip_prefix("mesh compilation refused: invalid geometry input: ")?;
+    let (face, ring) = refusal.split_once(" cannot be triangulated: ")?;
+    if face != "planar face" && !face.starts_with("authored polygon face ") {
+        return None;
+    }
+    let ring = ring
+        .strip_prefix("its rings do not bound a region: ")
+        .unwrap_or(ring);
+    let defect = if let Some(defect) = ring.strip_prefix("profile outer ring ") {
+        defect
+    } else {
+        let (hole, defect) = ring.strip_prefix("profile hole ")?.split_once(' ')?;
+        hole.parse::<usize>().ok()?;
+        defect
+    };
+    if defect == "intersects itself" {
+        return Some("crosses itself");
+    }
+    let vertex = defect.strip_prefix("folds back on itself at vertex ")?;
+    vertex
+        .parse::<usize>()
+        .ok()
+        .map(|_| "runs back along itself")
 }
 
 /// Registers the boundaries that agree with their meshes, when one of them
@@ -2458,6 +2514,67 @@ mod tests {
     };
     use axioval::ifc::import_ifc_session;
     use axioval::ir::ObjectId;
+
+    /// Only the compiler's refusals of a face ring that crosses or runs
+    /// back along itself are model data (#298); a ring overlapping itself
+    /// (a keyhole, axiolid/kernel#270), a triangulation finding no ear
+    /// (axiolid/kernel#269) and refusals of anything but a face are not.
+    #[test]
+    fn only_a_face_ring_crossing_or_folding_back_is_model_data() {
+        use super::self_intersecting_face as defect;
+        let refused = "mesh compilation refused: invalid geometry input: ";
+        for (reason, expected) in [
+            (
+                "planar face cannot be triangulated: profile outer ring intersects itself",
+                Some("crosses itself"),
+            ),
+            (
+                "authored polygon face 0 cannot be triangulated: its rings do not bound a \
+                 region: profile outer ring intersects itself",
+                Some("crosses itself"),
+            ),
+            (
+                "planar face cannot be triangulated: profile outer ring folds back on itself \
+                 at vertex 6",
+                Some("runs back along itself"),
+            ),
+            (
+                "authored polygon face 3 cannot be triangulated: its rings do not bound a \
+                 region: profile hole 2 intersects itself",
+                Some("crosses itself"),
+            ),
+            (
+                "authored polygon face 21 cannot be triangulated: its rings do not bound a \
+                 region: profile outer ring overlaps itself",
+                None,
+            ),
+            (
+                "planar face cannot be triangulated: profile hole 0 touches or crosses the \
+                 outer ring",
+                None,
+            ),
+            ("profile outer ring intersects itself", None),
+            (
+                "planar face cannot be triangulated: profile outer ring folds back on itself \
+                 at vertex x",
+                None,
+            ),
+        ] {
+            assert_eq!(defect(&format!("{refused}{reason}")), expected, "{reason}");
+        }
+        assert_eq!(
+            defect(
+                "mesh compilation refused: numerically degenerate input: planar face cannot be \
+                 triangulated: profile triangulation found no ear among 5 remaining vertices"
+            ),
+            None
+        );
+        assert_eq!(
+            defect("profile outer ring intersects itself"),
+            None,
+            "not a mesh compilation refusal"
+        );
+    }
 
     /// Rooms `#16` (x 0..4) and `#26` (x 4.2..8.2) with a 0.9 m door body
     /// `#40` in the gap between them, and nothing else.

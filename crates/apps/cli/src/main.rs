@@ -850,7 +850,6 @@ fn decide(args: &DecideArgs) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-/// What `--geometry` measured, as the result records it.
 /// The bridge's facts about the model data, as integrity warnings.
 pub(crate) fn model_data_records(found: Vec<geometry::ModelData>) -> Vec<IntegrityRecord> {
     found
@@ -864,6 +863,7 @@ pub(crate) fn model_data_records(found: Vec<geometry::ModelData>) -> Vec<Integri
         .collect()
 }
 
+/// What `--geometry` measured, as the result records it.
 fn geometry_record(report: geometry::GeometryReport) -> digest::GeometryRecord {
     digest::GeometryRecord {
         exact: report.exact,
@@ -958,7 +958,8 @@ fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     let mut integrity = integrity(&session)?;
     integrity.extend(relation_records(unknown_pairs));
     integrity.extend(unsupplied);
-    // Products with no shape at all: model data, once per object.
+    // Model data the bridge found (no shape at all, a face whose boundary
+    // crosses itself), once per object.
     if let Some(report) = meshed.as_mut() {
         integrity.extend(model_data_records(std::mem::take(&mut report.model_data)));
     }

@@ -123,6 +123,33 @@ class InventoryTests(unittest.TestCase):
              "unmeasured: no body representation; it has <identifiers>": False},
         )
 
+    def test_a_face_crossing_itself_is_model_data_but_a_keyhole_is_not(self) -> None:
+        refused = "mesh compilation refused: "
+        faces = result(
+            [("#1", "IFCPIPEFITTING", refused + "invalid geometry input: planar face cannot "
+              "be triangulated: profile outer ring intersects itself"),
+             ("#2", "IFCBUILDINGELEMENTPROXY", refused + "invalid geometry input: authored "
+              "polygon face 0 cannot be triangulated: its rings do not bound a region: "
+              "profile outer ring intersects itself"),
+             ("#3", "IFCWALL", refused + "invalid geometry input: planar face cannot be "
+              "triangulated: profile outer ring folds back on itself at vertex 6"),
+             ("#4", "IFCSANITARYTERMINAL", refused + "invalid geometry input: authored "
+              "polygon face 21 cannot be triangulated: its rings do not bound a region: "
+              "profile outer ring overlaps itself"),
+             ("#5", "IFCDOOR", refused + "numerically degenerate input: planar face cannot "
+              "be triangulated: profile triangulation found no ear among 12 remaining "
+              "vertices")],
+            [],
+        )
+        causes = inventory.inventory([("a", faces)], RULES)
+        labelled = sorted(cause.label() for cause in causes if cause.model_data())
+        self.assertEqual(len(labelled), 3, labelled)
+        self.assertTrue(all(label.startswith("unmeasured (model data): ") for label in labelled))
+        others = sorted(cause.text for cause in causes if not cause.model_data())
+        self.assertEqual(len(others), 2, others)
+        self.assertTrue(others[0].endswith("overlaps itself"), others)
+        self.assertTrue(others[1].endswith("found no ear among <n> remaining vertices"), others)
+
     def test_rule_ids_map_to_capabilities_through_the_packages(self) -> None:
         rules = inventory.capabilities([inventory.DEFAULT_RULESET],
                                        [inventory.DEFAULT_DEFINITIONS])

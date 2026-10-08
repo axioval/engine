@@ -334,7 +334,9 @@ model does not hold, or several, and as `relation-pairs-not-supplied`
 warnings every supplied relation given no `--relations` file; the rules
 following them are not evaluated, and the exit status follows from them.
 With `--geometry` it lists, as `shape.no-representation` warnings, every
-physical product with no shape representation and no parts, once each (see
+physical product with no shape representation and no parts, and as
+`shape.self-intersecting-face` warnings every product unmeasured for a face
+whose boundary crosses or runs back along itself, once each (see
 [Geometry](#geometry)).
 `objects` maps every object the report names to its kind and, when it has one,
 its GlobalId, so a reader can tell what `#4711` is without the model. A
@@ -962,6 +964,18 @@ never measured as empty: its outcomes stay not evaluated. A product with
 representations none of which is a body (an `Axis`, a `FootPrint`, an
 identifier the bridge does not read as one) is a gap in the engine or its
 adapters, and its reason names the identifiers it has.
+
+A face whose boundary, as written, crosses itself (a quad given in Z order,
+a twisted strip quad) or runs back along itself (a spike out to a corner and
+back) bounds no region, so the mesh compiler refuses it and the product is
+unmeasured with the refusal (`... profile outer ring intersects itself`,
+`... folds back on itself at vertex 6`). That too is model data, reported
+once per object as the integrity warning `shape.self-intersecting-face`
+(located `ifc:<fingerprint>:self-intersecting-face:#<id>`). A ring that
+overlaps itself is not: the ones seen are a hole joined to the outer
+boundary by a seam traversed both ways, a valid face the compiler does not
+accept yet (axiolid/kernel#270). Neither is a face the clipper finds no
+ear in (axiolid/kernel#269).
 
 The planarity check is conservative. Anything it does not recognise counts as
 tessellated, which only loses exactness, never presents an approximation as

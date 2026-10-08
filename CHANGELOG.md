@@ -15,6 +15,17 @@ All notable changes are documented here. This project follows Semantic Versionin
   not-evaluated inventory groups them as two causes and labels the first
   `unmeasured (model data)`
   ([#219](https://github.com/axioval/engine/issues/219)).
+- **Geometry**: a product unmeasured because the mesh compiler refuses a
+  face whose boundary crosses itself or runs back along itself (`profile
+  outer ring intersects itself`, `folds back on itself at vertex <n>`) is
+  also listed once per object as the integrity warning
+  `shape.self-intersecting-face`, as model data; its outcomes stay not
+  evaluated and its reason is unchanged. The not-evaluated inventory labels
+  these reasons `unmeasured (model data)`. Faces the compiler should accept
+  are filed upstream: a ring whose lowest corner has a `-0.0` twin
+  (axiolid/kernel#269) and a hole joined to its outer boundary by a seam
+  (axiolid/kernel#270)
+  ([#298](https://github.com/axioval/engine/issues/298)).
 
 ### Fixed
 

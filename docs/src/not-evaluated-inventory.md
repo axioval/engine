@@ -73,8 +73,11 @@ which its author can fix (the result also lists it once as the integrity
 warning `shape.no-representation`); and `unmeasured: no body
 representation; it has <identifiers>`, a product whose representations
 (`Axis`, `FootPrint`, …) include none the engine measures as a body, which
-is a gap in the engine or its adapters. `--format json` marks the first
-with `"model_data": true`. Causes are ranked by the outcomes they account for, then by unmeasured
+is a gap in the engine or its adapters. A face whose boundary crosses or
+runs back along itself (`… profile outer ring intersects itself`, `… folds
+back on itself at vertex <n>`) is model data too (#298; the result lists it
+once as `shape.self-intersecting-face`), and is labelled the same way.
+`--format json` marks model-data causes with `"model_data": true`. Causes are ranked by the outcomes they account for, then by unmeasured
 objects, then by models affected.
 
 ## Ranking
@@ -165,6 +168,27 @@ outcomes and 621 unmeasured objects** under 21 causes:
 The triangulation refusals (rows 1, 8, 9, 10 and part of 13–21) now
 account for 1,024 outcomes, more than a third, and are the next case to
 triage.
+
+### Triangulation refusals classified (#298)
+
+Every refused face of the 82 objects was extracted from its model, with
+its IFC entity chain, and run through the same projection and clipper
+(`axiolid-construct` 0.3.15, `axiolid-mesh-compile` 0.3.14). Each of the
+four reasons has a single cause:
+
+| Reason | Outcomes | Unmeasured | Models | Faces | What the faces are | Classification | Evidence |
+|---|---:|---:|---:|---:|---|---|---|
+| Found no ear (rows 1 and 8) | 921 | 26 | 2 | 35 | Rectangles, some with straight corners, in faceted B-reps of doors, windows, walls and one wall layer (the wall of row 1 is the whole it belongs to) | Kernel gap: once projected, the corners level with the first get `-0.0`, the clipper's lowest-vertex search orders `-0.0` before `0.0`, reads the ring as clockwise, and finds no ear. All 35 triangulate once `-0.0` is read as `0.0` | axiolid/kernel#269; `tests/check.rs` `with_geometry_a_face_crossing_itself_is_model_data` (wall `#79`) |
+| Outer ring overlaps itself (row 10) | 41 | 41 | 2 | 216 | `IfcPolygonalFaceSet` faces of sanitary terminals, each an outer loop and a hole joined by one seam edge traversed both ways (seams 0.1 mm to 75 mm), nothing else touching | Kernel gap: a weakly simple ring bounding a well-defined region, the ring the clipper itself builds when it bridges a hole | axiolid/kernel#270; same test (wall `#69`) |
+| Outer ring intersects itself (row 9 and part of 13–21) | 58 | 14 | 3 | 64 | Bowtie quads: a proxy's quads written in Z order (crossing 13 mm in), and twisted strip quads of pipe fittings and flexible ducts (crossing at least 10 µm in, far above rounding) | Model data | same test (wall `#49`) |
+| Outer ring folds back on itself (part of 13–21) | 4 | 1 | 1 | 2 | A wall face whose loop runs out to a corner 24 mm away and back to the same point; a second face of the wall does the same 26 mm past its first corner, which rounding then reads as a crossing | Model data | same test (wall `#59`) |
+
+The two model-data reasons are now labelled as such in the ranking
+(`unmeasured (model data): …`), and the result lists each such product once
+as the integrity warning `shape.self-intersecting-face`. Their reasons and
+outcomes are unchanged. The two kernel gaps stay unmeasured until
+`axiolid-mesh-compile` ships the fixes. Together they account for 962 of
+the 1,024 outcomes.
 
 Cases 3 and 5 are resolved upstream (`axiolid-mesh-compile` 0.3.13). A
 warped authored face is now meshed, and the body is tessellated within

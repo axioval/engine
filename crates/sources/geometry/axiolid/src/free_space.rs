@@ -9,7 +9,9 @@
 //! search found nowhere it fits. Neither may be returned on a hunch -- an
 //! adapter that cannot search exhaustively must say so instead.
 
+use std::collections::BTreeMap;
 use std::fmt::Write as _;
+use std::sync::{Mutex, PoisonError};
 
 use axiolid_core::{Point2, Point3};
 use axiolid_measure::WindingMesh;
@@ -28,7 +30,7 @@ use axioval_ir::{Evidence, ObjectId, SourceId};
 use crate::geometry::{AxiolidGeometry, Extent, Triangle, extent_gap, mesh_extent, triangles};
 use crate::placement::{self, Axis, Scene, Search, Window};
 use crate::planar::{plan_frame, polygon_area, projected_polygons};
-use crate::walkable::{band_footprint, trapezoids};
+use crate::walkable::{Plan, band_footprint, trapezoids};
 use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, Polygon, Ring, overlay};
 
 /// The audit tolerance every measurement here shares.
@@ -44,13 +46,51 @@ pub(crate) const AREA_EPSILON_M2: f64 = 1.0e-9;
 pub struct AxiolidFreeSpaceService {
     geometry: AxiolidGeometry,
     source: SourceId,
+    /// Each obstacle's band footprint, by the band's exact limits: spaces on
+    /// one floor share their band and many of their obstacles, and a large
+    /// obstacle's footprint can take the overlay seconds.
+    footprints: Mutex<BTreeMap<FootprintKey, Result<Plan, String>>>,
 }
+
+/// An obstacle and the bit patterns of its band's open limits.
+type FootprintKey = (ObjectId, u64, u64);
 
 impl AxiolidFreeSpaceService {
     /// Creates a service over the supplied geometry.
     #[must_use]
     pub fn new(geometry: AxiolidGeometry, source: SourceId) -> Self {
-        Self { geometry, source }
+        Self {
+            geometry,
+            source,
+            footprints: Mutex::new(BTreeMap::new()),
+        }
+    }
+
+    /// [`band_footprint`] of `obstacle` in the open band `low < z < high`,
+    /// built once per service.
+    fn band_footprint(
+        &self,
+        obstacle: &ObjectId,
+        mesh: &TriMesh,
+        low: f64,
+        high: f64,
+    ) -> Result<Plan, String> {
+        let key = (obstacle.clone(), low.to_bits(), high.to_bits());
+        let cached = self
+            .footprints
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(&key)
+            .cloned();
+        if let Some(footprint) = cached {
+            return footprint;
+        }
+        let footprint = band_footprint(obstacle, mesh, low, high);
+        self.footprints
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(key, footprint.clone());
+        footprint
     }
 
     fn evidence(&self) -> Evidence {
@@ -489,8 +529,9 @@ impl AxiolidFreeSpaceService {
                 .geometry
                 .mesh(obstacle)
                 .ok_or_else(|| missing(obstacle))?;
-            let occupied =
-                band_footprint(obstacle, mesh, low, high).map_err(FreeSpaceError::Unavailable)?;
+            let occupied = self
+                .band_footprint(obstacle, mesh, low, high)
+                .map_err(FreeSpaceError::Unavailable)?;
             obstacle_rings.extend(trapezoids(&occupied).into_iter().map(|piece| piece.outer));
         }
         let (inner, outer) = swept_rings(swept, floor, high);

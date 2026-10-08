@@ -97,7 +97,10 @@ Geometry evidence for any source, measured with the Axiolid kernel.
 - `src/free_space.rs` implements `FreeSpaceService` for clearance, placement
   and free area. `find_placement` builds the scene (scope footprint, and each
   obstacle's `walkable::band_footprint` in the open band from the scope's
-  floor up by the shape's height, never its whole projection) and hands it to
+  floor up by the shape's height, never its whole projection; built once
+  per service and band, cached by obstacle and the band limits' bits,
+  since spaces on one floor share obstacles and a large one's footprint
+  can take the overlay minutes) and hands it to
   `src/placement.rs`: the configuration space by Minkowski erosion and sum
   with the convex rectangle, one-sided disc morphology for circles, angle
   interval search for `Any`. Witnesses are re-verified by direct overlap;

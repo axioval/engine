@@ -118,7 +118,8 @@ use axioval::axiolid::{
 };
 use axioval::engine::{
     AlignmentServiceHandle, BoundaryCoverageServiceHandle, ContactServiceHandle,
-    CoordinateSystemServiceHandle, DerivedRelationshipServiceHandle,
+    CoordinateSystemServiceHandle, DerivedRelationshipServiceHandle, EnvelopeMembershipError,
+    EnvelopeMembershipEvidence, EnvelopeMembershipRequest, EnvelopeMembershipService,
     EnvelopeMembershipServiceHandle, EvidenceSession, FacadeAreaServiceHandle,
     FreeSpaceServiceHandle, GuardServiceHandle, LinearQuantityServiceHandle,
     MetricRoutingServiceHandle, PlanAreaServiceHandle, PlanSpanServiceHandle, PropertyRequest,
@@ -140,9 +141,10 @@ use ifc_geometry::{CachedPositionPolicy, GeometryError, RepresentationPurpose, T
 use ifc_model::{EntityId, Model};
 use ifc_spatial::relation::boundary::{ConnectionGeometryAnomaly, SpaceBoundary};
 use ifc_spatial::{SpatialAnomaly, SpatialKind, SpatialTree};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 mod alignment;
+pub mod timings;
 
 /// Linear tolerance handed to the mesh compiler: with no explicit chord
 /// budget, its chord budget. Each tessellated mesh is declared with the
@@ -292,6 +294,8 @@ pub struct Options {
     pub keep_meshes: bool,
     /// Build and register exact boundaries where the construction is exact.
     pub exact_boundaries: bool,
+    /// Print each phase's time on stderr (`--timings`).
+    pub timings: bool,
 }
 
 impl Options {
@@ -300,6 +304,16 @@ impl Options {
         Self {
             keep_meshes: keep,
             exact_boundaries: false,
+            timings: false,
+        }
+    }
+
+    /// The same, printing each phase's time on stderr when `on` is set.
+    #[must_use]
+    pub fn with_timings(self, on: bool) -> Self {
+        Self {
+            timings: on,
+            ..self
         }
     }
 
@@ -741,7 +755,9 @@ pub fn attach(
     // Set-level evidence (free space, guard, envelope, storey residuals) is
     // cited under one source; evidence about one object cites its own.
     let source = first.source().clone();
+    let mut clock = timings::Stopwatch::new(options.timings);
     let parsed = parse(&snapshots, models)?;
+    clock.lap("geometry: parse");
     let hierarchy = session
         .service::<TypeHierarchyServiceHandle>()
         .ok_or("the session has no type hierarchy to classify objects with")?
@@ -892,7 +908,9 @@ pub fn attach(
         }
     }
 
+    clock.lap("geometry: mesh");
     geometry = with_boundaries(geometry, boundaries, &mut report);
+    clock.lap("geometry: exact boundaries");
     report.applied_openings.sort();
     // An opening taken as applied has no `Body` to mesh its void from; its
     // `Reference` solid is the void the file authors.
@@ -923,6 +941,7 @@ pub fn attach(
         keep_meshes: options.keep_meshes,
     }
     .compose_all(&wholes);
+    clock.lap("geometry: compose wholes");
     report.unmeasured.sort_by(|a, b| a.0.cmp(&b.0));
     report.model_data = model_data_notes(&report.unmeasured, &snapshots, &kinds);
     for (group, members) in groups(relationships, &kinds, &is_a) {
@@ -931,15 +950,19 @@ pub fn attach(
             Err(reason) => geometry.with_undecided_group(group, reason),
         };
     }
-    let envelope = envelope_service(&session, &geometry, &source, &kinds)?;
+    clock.lap("geometry: groups");
+    let envelope = envelope_service(&session, &geometry, &source, &kinds, options.timings)?;
     let space = (
         space_service(&parsed, &geometry, &source, &kinds, &is_a),
         linear_service(&geometry, &voids),
         boundary_service(&backend, &parsed, &geometry, &kinds, &is_a),
         plan_area_service(&geometry, &source, &voids),
     );
+    clock.lap("geometry: space services");
     let routes = route_services(&geometry, &source, &kinds, &is_a, &voids);
+    clock.lap("geometry: route services");
     let derived = derived_service(&geometry, &parsed, &kinds, &is_a, voids);
+    clock.lap("geometry: derived relationships");
     // Sections cut, and envelopes are swept past, the same bodies every
     // other service measures.
     let alignments = alignment::alignment_service(
@@ -948,6 +971,7 @@ pub fn attach(
         geometry.clone(),
     );
     let facade = facade_service(&geometry, &kinds, &is_a);
+    clock.lap("geometry: alignments and facades");
     let session = register(session, &snapshots, geometry, space, envelope, routes)?
         .with_host_service(FacadeAreaServiceHandle::new(Arc::new(facade)), &snapshots)?
         .with_derived_relationships(
@@ -960,6 +984,7 @@ pub fn attach(
             AlignmentServiceHandle::new(Arc::new(alignments)),
             &snapshots,
         )?;
+    clock.lap("geometry: register services");
     Ok((session, report))
 }
 
@@ -1206,7 +1231,7 @@ fn register(
         AxiolidBoundaryCoverageService,
         AxiolidPlanAreaService,
     ),
-    envelope: AxiolidEnvelopeMembershipService,
+    envelope: LazyEnvelope,
     (walkability, routing): (AxiolidWalkabilityService, AxiolidMetricRoutingService),
 ) -> Result<EvidenceSession, Box<dyn Error>> {
     let source = snapshots
@@ -1347,39 +1372,85 @@ fn groups(
 /// `true` external, `false` internal. An object without exactly one such
 /// boolean stays undeclared and its rule reports not evaluated; absent is not
 /// internal. A bounding space's own declaration is ignored by the adapter.
+///
+/// The declarations are read on the first request ([`LazyEnvelope`]): a run
+/// whose rules never ask for envelope membership resolves no `IsExternal`.
 fn envelope_service(
     session: &EvidenceSession,
     geometry: &AxiolidGeometry,
     source: &SourceId,
     kinds: &BTreeMap<ObjectId, String>,
-) -> Result<AxiolidEnvelopeMembershipService, Box<dyn Error>> {
+    timings: bool,
+) -> Result<LazyEnvelope, Box<dyn Error>> {
     let properties = session
         .service::<PropertyResolutionServiceHandle>()
-        .ok_or("the session has no property service to read declarations with")?;
-    let value = |object: &ObjectId, name: &str| -> Option<PropertyValue> {
-        let request = PropertyRequest::try_new(object.clone(), None, name).ok()?;
-        match properties.resolve(&request).ok()? {
-            PropertyResolution::Present(resolved) => Some(resolved.property().value.clone()),
-            PropertyResolution::Absent(_) => None,
-        }
-    };
+        .ok_or("the session has no property service to read declarations with")?
+        .clone();
+    Ok(LazyEnvelope {
+        properties,
+        geometry: geometry.clone(),
+        source: source.clone(),
+        objects: kinds.keys().cloned().collect(),
+        timings,
+        declared: OnceLock::new(),
+    })
+}
 
-    let mut service = AxiolidEnvelopeMembershipService::new(geometry.clone(), source.clone());
-    for object in kinds.keys() {
-        if geometry.mesh(object).is_none() {
-            continue;
-        }
-        match value(object, "IsExternal") {
-            Some(PropertyValue::Boolean(true)) => {
-                service = service.with_declared_external(object.clone());
+/// The envelope membership service, its declarations read once, on the
+/// first request ([`envelope_service`]).
+struct LazyEnvelope {
+    properties: PropertyResolutionServiceHandle,
+    geometry: AxiolidGeometry,
+    source: SourceId,
+    objects: Vec<ObjectId>,
+    /// Whether reading the declarations prints its time (`--timings`).
+    timings: bool,
+    declared: OnceLock<AxiolidEnvelopeMembershipService>,
+}
+
+impl LazyEnvelope {
+    /// The service with every meshed object's declaration, in one pass over
+    /// the objects: the property service indexes the model's property
+    /// relationships once, so each object reads only its own sets.
+    fn declare(&self) -> AxiolidEnvelopeMembershipService {
+        let mut clock = timings::Stopwatch::new(self.timings);
+        let value = |object: &ObjectId, name: &str| -> Option<PropertyValue> {
+            let request = PropertyRequest::try_new(object.clone(), None, name).ok()?;
+            match self.properties.resolve(&request).ok()? {
+                PropertyResolution::Present(resolved) => Some(resolved.property().value.clone()),
+                PropertyResolution::Absent(_) => None,
             }
-            Some(PropertyValue::Boolean(false)) => {
-                service = service.with_declared_internal(object.clone());
+        };
+        let mut service =
+            AxiolidEnvelopeMembershipService::new(self.geometry.clone(), self.source.clone());
+        for object in &self.objects {
+            if self.geometry.mesh(object).is_none() {
+                continue;
             }
-            _ => {}
+            match value(object, "IsExternal") {
+                Some(PropertyValue::Boolean(true)) => {
+                    service = service.with_declared_external(object.clone());
+                }
+                Some(PropertyValue::Boolean(false)) => {
+                    service = service.with_declared_internal(object.clone());
+                }
+                _ => {}
+            }
         }
+        clock.lap("geometry: envelope declarations (first request)");
+        service
     }
-    Ok(service)
+}
+
+impl EnvelopeMembershipService for LazyEnvelope {
+    fn measure_envelope_membership(
+        &self,
+        request: &EnvelopeMembershipRequest,
+    ) -> Result<EnvelopeMembershipEvidence, EnvelopeMembershipError> {
+        self.declared
+            .get_or_init(|| self.declare())
+            .measure_envelope_membership(request)
+    }
 }
 
 /// An opening's meshed void and how it stands for the void, or why it has

@@ -1251,6 +1251,20 @@ fn summarize(rule: &RuleId, checked: usize, evaluation: &CapabilityEvaluation) -
     )
 }
 
+/// Where a run is with one rule, told to a host's [`RuleObserver`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RuleProgress {
+    /// The rule is about to run (its gate read, its capability evaluated).
+    Started,
+    /// The rule has run and its outcomes are refined.
+    Finished,
+}
+
+/// A host's observer of each rule's progress ([`Runtime::with_rule_observer`]),
+/// such as a timer. It sees rule ids only, never outcomes, and cannot change
+/// a report.
+pub type RuleObserver = Arc<dyn Fn(&RuleId, RuleProgress) + Send + Sync>;
+
 /// Deterministic runtime that invokes only registered trusted capabilities.
 pub struct Runtime {
     registry: CapabilityRegistry,
@@ -1258,6 +1272,7 @@ pub struct Runtime {
     locations: Option<LocationPolicy>,
     summaries: bool,
     evaluation_budget: u64,
+    observer: Option<RuleObserver>,
 }
 impl Runtime {
     /// Creates a runtime from a host-controlled registry.
@@ -1268,6 +1283,7 @@ impl Runtime {
             locations: None,
             summaries: false,
             evaluation_budget: expression::DEFAULT_EVALUATION_BUDGET,
+            observer: None,
         }
     }
     /// Installs what a run's expressions need: the plan's derived values
@@ -1309,6 +1325,14 @@ impl Runtime {
     #[must_use]
     pub fn with_locations(mut self, policy: LocationPolicy) -> Self {
         self.locations = Some(policy);
+        self
+    }
+    /// Tells `observer` when each rule of the plan starts and finishes, in
+    /// plan order, so a host can time rules. The engine reads no clock; the
+    /// observer never changes the report.
+    #[must_use]
+    pub fn with_rule_observer(mut self, observer: RuleObserver) -> Self {
+        self.observer = Some(observer);
         self
     }
     /// Adds adapter-provided host services to subsequent evaluations.
@@ -1572,6 +1596,10 @@ impl Runtime {
                 .get(&rule.capability)
                 .ok_or_else(|| EngineError::UnknownCapability(rule.capability.clone()))?;
             let rule_id = rule.id.clone();
+            let _progress = self
+                .observer
+                .as_ref()
+                .map(|observer| Observed::start(observer, &rule_id));
             // An auxiliary rule's outcome is recorded for the rules that
             // read it, and reported only through them.
             let reported = !plan.auxiliary.contains(&rule_id);
@@ -1633,6 +1661,29 @@ impl Runtime {
             assemble(findings, not_evaluated, tables, summaries, &services)?,
             outcomes,
         ))
+    }
+}
+
+/// A rule a [`RuleObserver`] was told started; it is told the rule
+/// finished when this is dropped, on every path out of the rule.
+struct Observed<'a> {
+    observer: &'a RuleObserver,
+    rule: RuleId,
+}
+
+impl<'a> Observed<'a> {
+    fn start(observer: &'a RuleObserver, rule: &RuleId) -> Self {
+        observer(rule, RuleProgress::Started);
+        Self {
+            observer,
+            rule: rule.clone(),
+        }
+    }
+}
+
+impl Drop for Observed<'_> {
+    fn drop(&mut self) {
+        (self.observer)(&self.rule, RuleProgress::Finished);
     }
 }
 

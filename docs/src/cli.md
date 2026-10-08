@@ -64,7 +64,7 @@ axioval check --model building.ifc[:DISCIPLINE] [--model other.ifc[:DISCIPLINE] 
    | --ids rules.ids [--ids-filter selector.json]) \
   [--relations RELATION=FILE[#SHEET] ...] \
   [--geometry [--no-exact-boundaries]] [--locate storeys|containers|geometry] \
-  [--rule-status] [--report result.json] \
+  [--rule-status] [--timings] [--report result.json] \
   [--decisions decisions.json | --decisions-from reviewed.bcfzip] \
   [--summary [--top N]] [--bcf issues.bcfzip] [--xlsx report.xlsx] \
   [--html report.html [--html-template template.html] [--html-title TEXT]] \
@@ -446,6 +446,23 @@ rules: 1 failed · 1 nothing selected
 
 Without it the result is unchanged. A rule that selected nothing does not
 change the exit status.
+
+`--timings` prints how long each phase took on stderr, one line per phase as
+it ends, so a run stopped by a time limit still says where its time went:
+compiling the packages, reading the models, each phase of `--geometry`
+(parsing, meshing, exact boundaries, composing wholes from their parts,
+groups, the space, route and derived-relationship services, alignments and
+facades, registering the services), each rule by its id, the run as a whole
+and writing the outputs, then the total. Envelope declarations (`IsExternal`
+of every meshed object) are read only when a rule first asks for envelope
+membership, and timed then. The lines are for people and may change; the
+result and the exit status are those of a run without it.
+
+```text
+timing:      2.077 s read models
+timing:      1.872 s geometry: mesh
+timing:     41.310 s rule element-clash
+```
 
 Every finding has an `id`, its stable identity over GlobalIds (see
 [Review decisions](./decisions.md#finding-identity)), equal to its BCF topic

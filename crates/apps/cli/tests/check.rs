@@ -3771,6 +3771,85 @@ fn with_geometry_an_envelope_rule_without_bounding_spaces_is_not_evaluated() {
     );
 }
 
+/// `--timings` prints each phase on stderr and never changes the result.
+/// Envelope declarations (`IsExternal` of every meshed object) are read
+/// only when a rule asks for envelope membership, once however many
+/// derivations ask; a ruleset without an envelope rule resolves none.
+#[test]
+fn with_geometry_timings_show_envelope_declarations_read_only_for_an_envelope_rule() {
+    let declarations = |output: &Output| {
+        stderr(output)
+            .lines()
+            .filter(|line| line.contains("envelope declarations"))
+            .count()
+    };
+    let case = Case::new("geometry-timings");
+    let parameters = json!({
+        "derivations": {"type": "stringList", "value": ["all-spaces", "gross-area-groups"]},
+        "bounding_selector": {"type": "selector", "value": entity("space")},
+        "gross_area_group_selector": {"type": "selector", "value": entity("zone")},
+        "gross_area_group_path": {"type": "stringList",
+                                  "value": ["IfcRelAssignsToGroup:forward"]},
+    });
+    let envelope = |args: &[&str]| {
+        case.write("model.ifc", &envelope_model());
+        case.geometry_rule_with(
+            &["model.ifc"],
+            &[("space", "IfcSpace"), ("zone", "IfcZone")],
+            (
+                "axioval:capability.external-wall-validation",
+                &registry_signature("axioval:capability.external-wall-validation"),
+            ),
+            entity("wall"),
+            parameters.clone(),
+            &json!({}),
+            args,
+        )
+    };
+    let (timed, timed_result) = envelope(&["--timings"]);
+    let (plain, plain_result) = envelope(&[]);
+    assert_eq!(timed.status.code(), Some(3), "{}", stderr(&timed));
+    assert_eq!(timed.status.code(), plain.status.code());
+    assert_eq!(timed_result, plain_result);
+    assert_eq!(declarations(&timed), 1, "{}", stderr(&timed));
+    for phase in [
+        "read models",
+        "geometry: mesh",
+        "rule under-test",
+        "outputs",
+        "total",
+    ] {
+        assert!(
+            stderr(&timed)
+                .lines()
+                .any(|line| line.starts_with("timing:") && line.ends_with(phase)),
+            "{phase}: {}",
+            stderr(&timed)
+        );
+    }
+    assert!(!stderr(&plain).contains("timing:"), "{}", stderr(&plain));
+
+    let (output, _) = case.geometry_rule_with(
+        &["model.ifc"],
+        &[("wall", "IfcWall")],
+        (
+            "axioval:capability.triangle-count",
+            &registry_signature("axioval:capability.triangle-count"),
+        ),
+        entity("wall"),
+        json!({"maximum": {"type": "integer", "value": 12}}),
+        &json!({}),
+        &["--timings"],
+    );
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert!(
+        stderr(&output).contains("rule under-test"),
+        "{}",
+        stderr(&output)
+    );
+    assert_eq!(declarations(&output), 0, "{}", stderr(&output));
+}
+
 /// The zone flag is gone: the rule states its bounding spaces.
 #[test]
 fn the_envelope_zone_flag_is_rejected() {

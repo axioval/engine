@@ -137,6 +137,7 @@ enum Command {
 }
 
 #[derive(Args)]
+#[allow(clippy::struct_excessive_bools)] // Each is one independent flag.
 struct CheckArgs {
     /// A model to check: an IFC2X3, IFC4 or IFC4X3 STEP file, or an ifcZIP
     /// archive holding exactly one `.ifc` member, optionally followed by
@@ -211,6 +212,11 @@ struct CheckArgs {
     /// then lists them. Off by default, and then the result is unchanged.
     #[arg(long)]
     rule_status: bool,
+    /// Print how long each phase took on stderr, each as it ends: compiling,
+    /// reading the models, each geometry phase, each rule, and writing the
+    /// outputs. Never changes the result or the exit status.
+    #[arg(long)]
+    timings: bool,
     /// Carry the decisions in this file (written by `axioval decide`) over
     /// to the findings with the same identity; decisions whose finding is
     /// gone are listed as stale. Never changes the exit status.
@@ -889,6 +895,7 @@ fn geometry_record(report: geometry::GeometryReport) -> digest::GeometryRecord {
 }
 
 fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
+    let mut clock = geometry::timings::Stopwatch::new(args.timings);
     args.output.prepare()?;
     let translated = args
         .ids
@@ -915,7 +922,9 @@ fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
         .as_deref()
         .map(|path| fs::read(path).map_err(|error| format!("{}: {error}", path.display())))
         .transpose()?;
+    clock.lap("compile");
     let (session, bytes) = sources(&args.models)?;
+    clock.lap("read models");
     let session = session.with_discipline_map(
         &args
             .discipline_map
@@ -925,23 +934,21 @@ fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     );
     let (session, mut meshed) = if args.geometry {
         let options = geometry::Options::meshes(args.output.bcf_view.snapshots)
-            .with_exact_boundaries(!args.no_exact_boundaries);
+            .with_exact_boundaries(!args.no_exact_boundaries)
+            .with_timings(args.timings);
         let (session, report) = geometry::attach(session, &bytes, options)
             .map_err(|error| format!("geometry: {error}"))?;
+        // Each geometry phase is timed by `attach`.
+        clock.skip();
         (session, Some(report))
     } else {
         (session, None)
     };
-    let mut runtime = Runtime::new(registry);
-    if let Some(policy) = args.locate.policy() {
-        runtime = runtime.with_locations(policy);
-    }
-    if args.rule_status {
-        runtime = runtime.with_rule_summaries();
-    }
+    let runtime = check_runtime(registry, &args, &clock);
     let unknown_pairs = axioval::engine::unknown_relation_objects(&plan, session.project());
     let unsupplied = unsupplied_relations(&plan);
     let mut result = runtime.run_session(&session, plan)?;
+    clock.lap("run (all rules)");
     // Keyed as the BCF sink keys its topics, so a decision recorded against
     // either is the same.
     result.identify_findings(session.project(), bcf::IFC_GLOBAL_ID_SCHEME)?;
@@ -986,11 +993,32 @@ fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
         labels,
         args.output,
     )?;
+    clock.finish("outputs");
     Ok(match Outcome::of(&output.report) {
         // A specification that did not run was not checked: never a pass.
         Outcome::Passed if !complete => Outcome::Incomplete,
         outcome => outcome,
     })
+}
+
+/// The runtime `check` runs its plan with: located, summarizing and timing
+/// rules as its arguments ask.
+fn check_runtime(
+    registry: axioval::engine::CapabilityRegistry,
+    args: &CheckArgs,
+    clock: &geometry::timings::Stopwatch,
+) -> Runtime {
+    let mut runtime = Runtime::new(registry);
+    if let Some(policy) = args.locate.policy() {
+        runtime = runtime.with_locations(policy);
+    }
+    if args.rule_status {
+        runtime = runtime.with_rule_summaries();
+    }
+    if let Some(observer) = clock.rules() {
+        runtime = runtime.with_rule_observer(observer);
+    }
+    runtime
 }
 
 /// Reads each `--relations` file by its relation's declared columns and

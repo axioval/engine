@@ -30,6 +30,13 @@ pub enum SpaceError {
     /// The adapter cannot measure this aspect for this space.
     #[error("space measurement is unavailable for the requested aspect")]
     Unavailable,
+    /// The bodies are held, but the geometry kernel refused the
+    /// measurement on them, for the reason given (the plan overlay
+    /// refusing a footprint, say). Distinct from [`Self::Unavailable`] so
+    /// a report tells a kernel refusal from a body that could not be read;
+    /// never a measured zero.
+    #[error("the geometry kernel refused the space measurement: {0}")]
+    Refused(&'static str),
     /// Objects whose bodies could not be measured could change the
     /// measurement, so it is refused rather than taken without them.
     #[error("{0}")]

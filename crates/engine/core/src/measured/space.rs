@@ -73,7 +73,7 @@ fn share(part: Interval, whole: f64) -> Result<(f64, f64), PropertyResolutionErr
 
 impl Measures {
     /// Why the space service refused `name` of `object`, as
-    /// `space-validation` reads the refusal: an unavailable or unmeasured
+    /// `space-validation` reads the refusal: an unavailable, refused or unmeasured
     /// aspect is incomplete evidence, an inexact or incoherent answer
     /// conflicting evidence.
     pub(super) fn space_refused(
@@ -83,7 +83,7 @@ impl Measures {
     ) -> PropertyResolutionError {
         let message = format!("`{MEASURED_SET}` value `{name}` of {object}: {error}");
         match error {
-            SpaceError::Unavailable | SpaceError::Unmeasured(_) => {
+            SpaceError::Unavailable | SpaceError::Refused(_) | SpaceError::Unmeasured(_) => {
                 PropertyResolutionError::Incomplete(message)
             }
             SpaceError::InexactEvidence | SpaceError::InvalidQuantity => {

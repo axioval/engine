@@ -36,7 +36,7 @@ use axioval_engine::{
 use axioval_ir::{Evidence, ObjectId};
 
 use crate::geometry::{AxiolidGeometry, Triangle, triangles};
-use crate::planar::{collinear, ring_perimeter};
+use crate::planar::{OVERLAY_SNAP, collinear, ring_perimeter};
 
 /// Body triangles whose normals differ by less than this (as `1 − cos`) and
 /// whose corners lie within [`FACE_PLANE_METRES`] of one plane form one face
@@ -44,10 +44,6 @@ use crate::planar::{collinear, ring_perimeter};
 /// placement leaves in an exact mesh.
 const FACE_NORMAL_TOLERANCE: f64 = 1e-9;
 const FACE_PLANE_METRES: f64 = 1e-6;
-
-/// How far, relative to the extent, the overlay's grid may move a point it
-/// snaps (axiolid/kernel#173 measures ~1.5e-8), with room to spare.
-const OVERLAY_SNAP: f64 = 1e-7;
 
 /// Areas below this are numerical dust (as in free space), not overlap.
 const AREA_EPSILON_M2: f64 = 1e-9;

@@ -595,6 +595,26 @@ unmeasured object without a box, or with one that is not finite or is
 inverted, may be anywhere and refuses every space as before. The support
 counts read no body, so they count an unmeasured slab and never refuse.
 
+Duplicates, overlaps and cap coverage rest on plan areas from the plan
+overlay, which refuses a whole input over one sliver: the shadow of a
+near-vertical face whose corners lie within its tolerance
+(`RepeatedVertex`, `ZeroArea`). As for clash pairs, those slivers are
+left out (`planar::bounded_plan_overlap`, `bounded_footprint`) and their
+area, rounding included, bounds what they could add, counting only the
+slivers whose box meets the other footprint's. Each decision holds for
+every area the bound allows or is refused: a duplicate needs mutual
+containment at both ends, an overlap's inclusion, containment class and
+`intersects` reading must agree at both ends (one that is dust either way
+and never an intersection is left out), and a cap element is cited only
+where it surely covers more than dust. A reported area must not move by
+more than the overlay's own grid snapping of the space's footprint
+(`planar::snapping_area`, axiolid/kernel#173), and a cap measured
+covered a hair past its own area within that snapping is fully covered.
+A refused plan area is never read as zero. Every such refusal, and every
+overlay refusal left after the slivers are out, is
+`SpaceError::Refused` with its reason (the overlay's error by name), not
+the bare `Unavailable` of a body that could not be read.
+
 `AxiolidPlanAreaService` measures plan footprints and footprint overlaps
 through the same plan overlay. A planar mesh measures exactly. A tessellated
 mesh with chord deviation `d` and footprint perimeter `P` measures within

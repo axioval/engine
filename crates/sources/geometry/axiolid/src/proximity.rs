@@ -134,8 +134,9 @@ use axioval_ir::{Evidence, ObjectId};
 
 use crate::exact_boundary::ExactBody;
 use crate::geometry::{AxiolidGeometry, Triangle, triangles};
-use crate::planar::{BoundedOverlap, bounded_plan_overlap, plan_overlap_area, polygon_area};
-use axiolid_overlay::OverlayError;
+use crate::planar::{
+    BoundedOverlap, bounded_plan_overlap, overlay_refusal, plan_overlap_area, polygon_area,
+};
 
 mod zero_area;
 
@@ -1158,29 +1159,6 @@ fn footprints_overlap(
 ) -> Result<BoundedOverlap, ProximityError> {
     bounded_plan_overlap(&subject.soup.items, &counterpart.soup.items, tolerance()?)
         .map_err(|error| ProximityError::Refused(overlay_refusal(&error)))
-}
-
-/// Why the plan overlay refused a pair's footprints, in a report's words.
-fn overlay_refusal(error: &OverlayError) -> &'static str {
-    match error {
-        OverlayError::RepeatedVertex => {
-            "the plan overlay refused a footprint ring with two corners within its tolerance \
-             (RepeatedVertex)"
-        }
-        OverlayError::ZeroArea => {
-            "the plan overlay refused a footprint ring without area (ZeroArea)"
-        }
-        OverlayError::SelfIntersection => {
-            "the plan overlay refused a footprint whose edges cross (SelfIntersection)"
-        }
-        OverlayError::NonFinitePoint => {
-            "the plan overlay refused a footprint with a non-finite point (NonFinitePoint)"
-        }
-        OverlayError::RingTooShort => {
-            "the plan overlay refused a footprint ring of fewer than three points (RingTooShort)"
-        }
-        _ => "the plan overlay refused the footprints",
-    }
 }
 
 /// Whether `polygon` holds a point farther than `depth` from its boundary.
@@ -2278,6 +2256,7 @@ impl ProximityService for AxiolidProximityService {
 #[cfg(test)]
 mod tests {
 
+    use axiolid_overlay::OverlayError;
     use axioval_ir::SourceId;
 
     use super::*;

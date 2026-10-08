@@ -893,3 +893,102 @@ fn unallocated_floor_pinched_at_a_corner_is_measured() {
         "{areas:?}"
     );
 }
+
+/// A closed room whose front face (`y = 0`) leans by `lean` metres over its
+/// height: both its triangles cast slivers in plan, two corners `lean`
+/// apart, as the near-vertical faces of a modelled room do after rounding.
+/// The plan overlay refuses a ring with two corners within its tolerance
+/// (`RepeatedVertex`).
+fn leaning_room(lean: f64) -> TriMesh {
+    let mut mesh = closed_box(0.0, 4.0, 0.0, 4.0, 0.0, 3.0);
+    for top_front in [4, 5] {
+        mesh.positions[top_front].y = lean;
+    }
+    mesh
+}
+
+/// The slivers of a leaning face are left out of the overlay and their
+/// area bounds what they could add: every aspect resting on plan area is
+/// measured, far from any decision they could tip (#217).
+#[test]
+fn a_space_casting_slivers_in_plan_is_measured() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("space"), leaning_room(1e-10))
+        .with_mesh(id("copy"), closed_box(0.0, 4.0, 0.0, 4.0, 0.0, 3.0))
+        .with_mesh(id("wall"), closed_box(3.0, 6.0, 0.0, 4.0, 1.0, 3.0))
+        .with_mesh(id("slab"), closed_box(0.0, 2.0, 0.0, 4.0, 3.0, 3.2));
+    let service = AxiolidSpaceService::new(geometry, source())
+        .with_space(id("space"))
+        .with_space(id("copy"))
+        .with_slab(id("slab"));
+    assert_eq!(
+        service.measure_duplicates(&id("space")).expect("measured"),
+        vec![id("copy")]
+    );
+    let overlaps = service
+        .measure_overlaps(
+            &id("space"),
+            &OverlapRequest::new().with_elements(vec![id("wall")]),
+        )
+        .expect("measured");
+    assert_eq!(overlaps.len(), 1);
+    assert_eq!(overlaps[0].containment(), Containment::Partial);
+    assert!((overlaps[0].area_square_metres() - 4.0).abs() < 1e-6);
+    let coverage = service
+        .measure_cap_coverage(&id("space"), &CapRequest::new(Cap::Top))
+        .expect("measured");
+    assert!((coverage.covered_ratio() - 0.5).abs() < 1e-6);
+    assert!((coverage.whole_area_square_metres() - 16.0).abs() < 1e-6);
+    assert_eq!(coverage.elements(), &[id("slab")]);
+}
+
+/// Two coincident spaces whose plan the overlay refuses unfiltered are
+/// duplicates: a refused plan area is never read as zero, which would
+/// pass the pair as "not mutually contained" (#217).
+#[test]
+fn coincident_spaces_casting_slivers_are_duplicates() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("space"), leaning_room(1e-10))
+        .with_mesh(id("copy"), leaning_room(1e-10));
+    let service = AxiolidSpaceService::new(geometry, source())
+        .with_space(id("space"))
+        .with_space(id("copy"));
+    assert_eq!(
+        service.measure_duplicates(&id("space")).expect("measured"),
+        vec![id("copy")]
+    );
+    assert_eq!(
+        service.measure_duplicates(&id("copy")).expect("measured"),
+        vec![id("space")]
+    );
+}
+
+/// A body abutting the leaning face shares at most the slivers' area,
+/// dust that can never be an intersection: it is left out, not refused,
+/// and a slab abutting the space there neither covers its cap nor is cited.
+#[test]
+fn a_body_abutting_a_sliver_face_shares_nothing() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("space"), leaning_room(9e-10))
+        .with_mesh(id("wall"), closed_box(0.0, 4.0, -1.0, 0.0, 0.0, 3.0))
+        .with_mesh(id("slab"), closed_box(0.0, 4.0, -2.0, 0.0, 3.0, 3.2));
+    let service = AxiolidSpaceService::new(geometry, source())
+        .with_space(id("space"))
+        .with_slab(id("slab"));
+    let overlaps = service
+        .measure_overlaps(
+            &id("space"),
+            &OverlapRequest::new().with_elements(vec![id("wall")]),
+        )
+        .expect("measured");
+    assert!(overlaps.is_empty(), "{overlaps:?}");
+    let coverage = service
+        .measure_cap_coverage(&id("space"), &CapRequest::new(Cap::Top))
+        .expect("measured");
+    assert!(
+        coverage.covered_ratio() < 1e-6,
+        "{}",
+        coverage.covered_ratio()
+    );
+    assert!(coverage.elements().is_empty());
+}

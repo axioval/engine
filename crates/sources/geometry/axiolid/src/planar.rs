@@ -336,50 +336,165 @@ fn overlap_of(
 /// within rounding are already gone (`projected_polygons`); a sliver
 /// that still has area is left out of the overlay and its area kept in
 /// [`BoundedOverlap::slivers`], so the true overlap lies between
-/// `polygons` and `polygons` plus `slivers`.
+/// `polygons` and `polygons` plus `slivers`. Only slivers whose box meets
+/// the other set's box are counted: one apart from it cannot overlap it.
 pub(crate) fn bounded_plan_overlap(
     first: &[Triangle],
     second: &[Triangle],
     tolerance: axiolid_core::Tolerance,
 ) -> Result<BoundedOverlap, OverlayError> {
-    let (first, first_slivers) = without_slivers(projected_polygons(first), tolerance);
-    let (second, second_slivers) = without_slivers(projected_polygons(second), tolerance);
+    let first = Shadows::of(first, tolerance);
+    let second = Shadows::of(second, tolerance);
+    let slivers = first.slivers_meeting(second.bounds()) + second.slivers_meeting(first.bounds());
     Ok(BoundedOverlap {
-        polygons: overlap_of(first, second, tolerance)?,
-        slivers: first_slivers + second_slivers,
+        polygons: overlap_of(first.kept, second.kept, tolerance)?,
+        slivers,
     })
 }
 
-/// A plan overlap measured without the slivers the overlay refuses.
+/// A plan measurement taken without the slivers the overlay refuses.
 #[derive(Debug)]
 pub(crate) struct BoundedOverlap {
-    /// The overlap of the shadows the overlay accepts. Leaving shadows out
-    /// only shrinks a union, so it lies inside the true overlap.
+    /// The measured region over the shadows the overlay accepts. Leaving
+    /// shadows out only shrinks a union, so it lies inside the true one.
     pub(crate) polygons: Vec<Polygon>,
-    /// An upper bound on the area of the shadows left out, both sets
-    /// together, in square metres: the true overlap exceeds `polygons` by
-    /// at most this much. Zero when nothing was left out.
+    /// An upper bound on the area of the shadows left out that could add
+    /// to it, in square metres: the true region exceeds `polygons` by at
+    /// most this much. Zero when nothing was left out.
     pub(crate) slivers: f64,
 }
 
-/// The shadows the overlay accepts at `tolerance`, and an upper bound on
-/// the area of the ones it would refuse.
-fn without_slivers(
-    polygons: Vec<Polygon>,
+/// A triangle set's footprint, measured without the shadows the overlay
+/// refuses as degenerate at `tolerance` (see [`bounded_plan_overlap`]):
+/// the true footprint's area lies between the `polygons`' and theirs plus
+/// `slivers`.
+pub(crate) fn bounded_footprint(
+    triangles: &[Triangle],
     tolerance: axiolid_core::Tolerance,
-) -> (Vec<Polygon>, f64) {
-    let mut slivers = 0.0;
-    let kept = polygons
-        .into_iter()
-        .filter(|polygon| {
-            let refused = refused_ring(&polygon.outer, tolerance);
-            if refused {
-                slivers += area_bound(&polygon.outer.points);
-            }
-            !refused
-        })
-        .collect();
-    (kept, slivers)
+) -> Result<BoundedOverlap, OverlayError> {
+    let shadows = Shadows::of(triangles, tolerance);
+    let slivers = shadows.slivers_meeting(shadows.bounds());
+    if shadows.kept.is_empty() {
+        return Ok(BoundedOverlap {
+            polygons: Vec::new(),
+            slivers,
+        });
+    }
+    let input = OverlayInput {
+        frame: plan_frame(),
+        polygons: shadows.kept,
+    };
+    Ok(BoundedOverlap {
+        polygons: overlay(
+            &input,
+            &input,
+            OverlayOperation::Union,
+            FillRule::NonZero,
+            tolerance,
+        )?
+        .polygons,
+        slivers,
+    })
+}
+
+/// How far, relative to the extent, the overlay's grid may move a point it
+/// snaps (axiolid/kernel#173 measures ~1.5e-8), with room to spare.
+pub(crate) const OVERLAY_SNAP: f64 = 1e-7;
+
+/// The area by which the overlay's grid snapping may already move a
+/// measurement over `polygons` (axiolid/kernel#173): every boundary point
+/// moved by [`OVERLAY_SNAP`] of the largest coordinate (at least a metre),
+/// swept along the boundary. An area the overlay reports carries this much
+/// whatever else is left out of it.
+pub(crate) fn snapping_area(polygons: &[Polygon]) -> f64 {
+    let rings = || {
+        polygons
+            .iter()
+            .flat_map(|polygon| std::iter::once(&polygon.outer).chain(&polygon.holes))
+    };
+    let magnitude = rings()
+        .flat_map(|ring| &ring.points)
+        .flat_map(|point| [point.x.abs(), point.y.abs()])
+        .fold(1.0, f64::max);
+    let perimeter: f64 = rings().map(ring_perimeter).sum();
+    OVERLAY_SNAP * magnitude * perimeter
+}
+
+/// Why the plan overlay refused a measurement, in a report's words.
+pub(crate) fn overlay_refusal(error: &OverlayError) -> &'static str {
+    match error {
+        OverlayError::RepeatedVertex => {
+            "the plan overlay refused a footprint ring with two corners within its tolerance \
+             (RepeatedVertex)"
+        }
+        OverlayError::ZeroArea => {
+            "the plan overlay refused a footprint ring without area (ZeroArea)"
+        }
+        OverlayError::SelfIntersection => {
+            "the plan overlay refused a footprint whose edges cross (SelfIntersection)"
+        }
+        OverlayError::NonFinitePoint => {
+            "the plan overlay refused a footprint with a non-finite point (NonFinitePoint)"
+        }
+        OverlayError::RingTooShort => {
+            "the plan overlay refused a footprint ring of fewer than three points (RingTooShort)"
+        }
+        _ => "the plan overlay refused the footprints",
+    }
+}
+
+/// A triangle set's plan shadows, split into those the overlay accepts at
+/// a tolerance and the slivers it would refuse.
+struct Shadows {
+    kept: Vec<Polygon>,
+    slivers: Vec<Polygon>,
+}
+
+impl Shadows {
+    fn of(triangles: &[Triangle], tolerance: axiolid_core::Tolerance) -> Self {
+        let (slivers, kept) = projected_polygons(triangles)
+            .into_iter()
+            .partition(|polygon| refused_ring(&polygon.outer, tolerance));
+        Self { kept, slivers }
+    }
+
+    /// The closed box of every shadow, kept or not; `None` when there is
+    /// none.
+    fn bounds(&self) -> Option<(Point2, Point2)> {
+        self.kept
+            .iter()
+            .chain(&self.slivers)
+            .flat_map(|polygon| &polygon.outer.points)
+            .fold(None, |bounds, point| {
+                Some(match bounds {
+                    None => (*point, *point),
+                    Some((low, high)) => (
+                        Point2::new(low.x.min(point.x), low.y.min(point.y)),
+                        Point2::new(high.x.max(point.x), high.y.max(point.y)),
+                    ),
+                })
+            })
+    }
+
+    /// An upper bound on the area of the slivers whose closed box meets
+    /// `bounds`, their rounding included: a sliver apart from that box
+    /// shares no point with anything inside it.
+    fn slivers_meeting(&self, bounds: Option<(Point2, Point2)>) -> f64 {
+        let Some((low, high)) = bounds else {
+            return 0.0;
+        };
+        self.slivers
+            .iter()
+            .filter(|polygon| {
+                let points = &polygon.outer.points;
+                points.iter().any(|point| point.x >= low.x)
+                    && points.iter().any(|point| point.x <= high.x)
+                    && points.iter().any(|point| point.y >= low.y)
+                    && points.iter().any(|point| point.y <= high.y)
+            })
+            .map(|polygon| area_bound(&polygon.outer.points))
+            .sum()
+    }
 }
 
 /// Whether the overlay refuses a triangle's ring as degenerate: two corners
@@ -564,8 +679,9 @@ pub(crate) fn polygons_overlap_area(
 #[cfg(test)]
 mod polygon_area_tests {
     use super::{
-        Disc, bounded_plan_overlap, collinear, footprint_polygons, grown_polygons,
-        plan_overlap_area, polygon_area, polygon_moments, projected_polygons, ring_area,
+        Disc, bounded_footprint, bounded_plan_overlap, collinear, footprint_polygons,
+        grown_polygons, plan_overlap_area, polygon_area, polygon_moments, projected_polygons,
+        ring_area,
     };
     use axiolid_core::{Point2, Point3, Tolerance};
     use axiolid_overlay::{Polygon, Ring};
@@ -641,6 +757,16 @@ mod polygon_area_tests {
         let measured: f64 = bounded.polygons.iter().map(polygon_area).sum();
         assert!((measured - 6.0).abs() < 1e-6, "{measured}");
         assert!(bounded.slivers <= area + 1e-13);
+        // A sliver apart from the other set's box cannot add to the overlap.
+        let away = floor.map(|triangle| triangle.map(|p| Point3::new(p.x + 10.0, p.y, p.z)));
+        let bounded = bounded_plan_overlap(&[sliver], &away, tolerance).unwrap();
+        assert!(bounded.polygons.is_empty());
+        assert!(bounded.slivers.abs() < f64::MIN_POSITIVE);
+        // Its own footprint is bounded by it.
+        let footprint = bounded_footprint(&[sliver, floor[0]], tolerance).unwrap();
+        let measured: f64 = footprint.polygons.iter().map(polygon_area).sum();
+        assert!((measured - 6.0).abs() < 1e-6, "{measured}");
+        assert!(footprint.slivers >= area && footprint.slivers <= area + 1e-13);
     }
 
     #[test]

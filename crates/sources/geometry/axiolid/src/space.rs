@@ -21,10 +21,11 @@ use axioval_ir::{Evidence, ObjectId, SourceId};
 
 use crate::geometry::{AxiolidGeometry, Triangle, extent_gap, triangles};
 use crate::planar::{
-    boundary_rings, footprint_polygons, plan_frame, polygon_area, projected_polygons, ring_segments,
+    BoundedOverlap, boundary_rings, bounded_footprint, bounded_plan_overlap, footprint_polygons,
+    overlay_refusal, plan_frame, polygon_area, ring_segments, snapping_area,
 };
 use axiolid_core::Point2;
-use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, Polygon, overlay};
+use axiolid_overlay::{FillRule, OverlayError, OverlayInput, OverlayOperation, Polygon, overlay};
 
 /// Areas below this are numerical dust, not a measured overlap.
 ///
@@ -272,26 +273,56 @@ impl AxiolidSpaceService {
     }
 }
 
-/// Plan area of a triangle set.
-fn plan_area(triangles: &[Triangle], tolerance: axiolid_core::Tolerance) -> f64 {
-    let polygons = projected_polygons(triangles);
-    if polygons.is_empty() {
-        return 0.0;
+/// A plan area measured without the slivers the overlay refuses: the true
+/// area lies in `[lower, upper]`, and `polygons` hold the measured part.
+struct PlanArea {
+    lower: f64,
+    upper: f64,
+    polygons: Vec<Polygon>,
+}
+
+impl PlanArea {
+    fn of(bounded: BoundedOverlap) -> Self {
+        let lower: f64 = bounded.polygons.iter().map(polygon_area).sum();
+        Self {
+            lower,
+            upper: lower + bounded.slivers,
+            polygons: bounded.polygons,
+        }
     }
-    // Union first: overlapping triangles of one body must not be counted twice.
-    let input = OverlayInput {
-        frame: plan_frame(),
-        polygons,
-    };
-    overlay(
-        &input,
-        &input,
-        OverlayOperation::Union,
-        FillRule::NonZero,
-        tolerance,
-    )
-    .map(|r| r.polygons.iter().map(polygon_area).sum())
-    .unwrap_or(0.0)
+
+    /// Whether the slivers left out could add anything.
+    fn uncertain(&self) -> bool {
+        self.upper > self.lower
+    }
+}
+
+/// Why a decision is refused when the slivers left out of the plan
+/// overlay could change it.
+const SLIVERS_COULD_DECIDE: &str = "the slivers of near-vertical faces the plan overlay refuses \
+     (RepeatedVertex, ZeroArea) could change the plan area this decision rests on";
+
+/// Why a reported area is refused when the slivers left out of the plan
+/// overlay could move it by more than the overlay's own rounding.
+const SLIVERS_EXCEED_ROUNDING: &str = "the slivers of near-vertical faces the plan overlay \
+     refuses (RepeatedVertex, ZeroArea) could change the area by more than the overlay's \
+     rounding";
+
+/// A plan-overlay refusal that leaving the slivers out did not remove,
+/// with the overlay's reason; never a zero area.
+fn refused(error: &OverlayError) -> SpaceError {
+    SpaceError::Refused(overlay_refusal(error))
+}
+
+/// Plan area of a triangle set: the union of its shadows, so overlapping
+/// triangles of one body are not counted twice.
+fn plan_area(
+    triangles: &[Triangle],
+    tolerance: axiolid_core::Tolerance,
+) -> Result<PlanArea, SpaceError> {
+    bounded_footprint(triangles, tolerance)
+        .map(PlanArea::of)
+        .map_err(|error| refused(&error))
 }
 
 /// Plan area shared by two triangle sets.
@@ -299,21 +330,39 @@ fn shared_area(
     first: &[Triangle],
     second: &[Triangle],
     tolerance: axiolid_core::Tolerance,
-) -> Result<f64, SpaceError> {
-    let (a, b) = (projected_polygons(first), projected_polygons(second));
-    if a.is_empty() || b.is_empty() {
-        return Ok(0.0);
+) -> Result<PlanArea, SpaceError> {
+    bounded_plan_overlap(first, second, tolerance)
+        .map(PlanArea::of)
+        .map_err(|error| refused(&error))
+}
+
+/// Whether `shared` holds at least [`CONTAINMENT_RATIO`] of a positive
+/// `area`, for every value the slivers allow; `None` when they could tip
+/// it.
+fn contains(area: &PlanArea, shared: &PlanArea) -> Option<bool> {
+    if area.lower > 0.0 && shared.lower >= area.upper * CONTAINMENT_RATIO {
+        Some(true)
+    } else if area.upper <= 0.0 || shared.upper < area.lower * CONTAINMENT_RATIO {
+        Some(false)
+    } else {
+        None
     }
-    let frame = plan_frame();
-    let result = overlay(
-        &OverlayInput { frame, polygons: a },
-        &OverlayInput { frame, polygons: b },
-        OverlayOperation::Intersection,
-        FillRule::NonZero,
-        tolerance,
-    )
-    .map_err(|_| SpaceError::Unavailable)?;
-    Ok(result.polygons.iter().map(polygon_area).sum())
+}
+
+/// The covered part of a cap whose whole area is `whole`.
+///
+/// `covered` is the intersection with the subject footprint, so it cannot
+/// exceed `whole` but by the overlay's snapping of the two separate
+/// arrangements (axiolid/kernel#173): a cap covered over all its area can
+/// measure a hair more than the area itself. Within that `rounding` the two
+/// are one area; beyond it `CapCoverage::try_new` rejects the incoherent
+/// pair, which is where the invariant belongs.
+fn within_rounding(whole: f64, covered: f64, rounding: f64) -> f64 {
+    if covered > whole && covered - whole <= rounding {
+        whole
+    } else {
+        covered
+    }
 }
 
 /// Vertical span of a triangle set as `(min_z, max_z)`.
@@ -337,13 +386,14 @@ fn overlapping_height(first: (f64, f64), second: (f64, f64)) -> f64 {
 ///
 /// Containment is decided on the plan footprint each body actually has: a
 /// body almost entirely inside another is contained, not merely overlapping.
-fn containment(subject_area: f64, other_area: f64, shared: f64) -> Containment {
-    if subject_area > 0.0 && shared >= subject_area * CONTAINMENT_RATIO {
-        Containment::SubjectInsideOther
-    } else if other_area > 0.0 && shared >= other_area * CONTAINMENT_RATIO {
-        Containment::OtherInsideSubject
+/// `None` when the slivers left out of the overlay could change the class.
+fn containment(subject: &PlanArea, other: &PlanArea, shared: &PlanArea) -> Option<Containment> {
+    if contains(subject, shared)? {
+        Some(Containment::SubjectInsideOther)
+    } else if contains(other, shared)? {
+        Some(Containment::OtherInsideSubject)
     } else {
-        Containment::Partial
+        Some(Containment::Partial)
     }
 }
 
@@ -357,8 +407,8 @@ impl SpaceService for AxiolidSpaceService {
         })?;
         self.require_exact(space, 0.0, false, |candidate| self.is_space(candidate))?;
         let tolerance = tolerance()?;
-        let subject_area = plan_area(&subject, tolerance);
         let subject_span = vertical_span(&subject).ok_or(SpaceError::Unavailable)?;
+        let mut subject_area = None;
 
         let mut duplicates = Vec::new();
         for (candidate, mesh) in self.geometry.objects() {
@@ -366,21 +416,34 @@ impl SpaceService for AxiolidSpaceService {
                 continue;
             }
             let other = triangles(mesh);
-            let other_area = plan_area(&other, tolerance);
-            let shared = shared_area(&subject, &other, tolerance)?;
             // Coincident means each body is essentially the other: mutual
             // containment in plan AND the same vertical extent. Plan alone
             // would call a stacked space on the storey above a duplicate.
-            let mutual = subject_area > 0.0
-                && other_area > 0.0
-                && shared >= subject_area * CONTAINMENT_RATIO
-                && shared >= other_area * CONTAINMENT_RATIO;
             let Some(other_span) = vertical_span(&other) else {
                 continue;
             };
             let spans_match = (subject_span.0 - other_span.0).abs() < 1.0e-6
                 && (subject_span.1 - other_span.1).abs() < 1.0e-6;
-            if mutual && spans_match {
+            if !spans_match {
+                continue;
+            }
+            let subject_area = match &subject_area {
+                Some(area) => area,
+                None => subject_area.insert(plan_area(&subject, tolerance)?),
+            };
+            let other_area = plan_area(&other, tolerance)?;
+            let shared = shared_area(&subject, &other, tolerance)?;
+            // A pair the slivers left out could make or unmake is refused,
+            // never passed.
+            let mutual = match (
+                contains(subject_area, &shared),
+                contains(&other_area, &shared),
+            ) {
+                (Some(false), _) | (_, Some(false)) => false,
+                (Some(true), Some(true)) => true,
+                _ => return Err(SpaceError::Refused(SLIVERS_COULD_DECIDE)),
+            };
+            if mutual {
                 duplicates.push(candidate.clone());
             }
         }
@@ -491,8 +554,8 @@ impl SpaceService for AxiolidSpaceService {
         )?;
         self.require_exact(space, 0.0, false, chosen)?;
         let tolerance = tolerance()?;
-        let subject_area = plan_area(&subject, tolerance);
         let subject_span = vertical_span(&subject).ok_or(SpaceError::Unavailable)?;
+        let mut subject_area = None;
 
         let mut overlaps = Vec::new();
         for (candidate, mesh) in self.geometry.objects() {
@@ -500,10 +563,6 @@ impl SpaceService for AxiolidSpaceService {
                 continue;
             }
             let other = triangles(mesh);
-            let shared = shared_area(&subject, &other, tolerance)?;
-            if shared <= AREA_EPSILON_M2 {
-                continue;
-            }
             let Some(other_span) = vertical_span(&other) else {
                 continue;
             };
@@ -513,13 +572,44 @@ impl SpaceService for AxiolidSpaceService {
             if height <= 0.0 {
                 continue;
             }
-            overlaps.push(SpaceOverlap::try_new(
-                candidate.clone(),
-                self.is_space(candidate),
-                shared,
-                height,
-                containment(subject_area, plan_area(&other, tolerance), shared),
-            )?);
+            let shared = shared_area(&subject, &other, tolerance)?;
+            if shared.upper <= AREA_EPSILON_M2 {
+                continue;
+            }
+            let subject_area = match &subject_area {
+                Some(area) => area,
+                None => subject_area.insert(plan_area(&subject, tolerance)?),
+            };
+            let class = containment(subject_area, &plan_area(&other, tolerance)?, &shared)
+                .ok_or(SpaceError::Refused(SLIVERS_COULD_DECIDE))?;
+            let overlap = |area| {
+                SpaceOverlap::try_new(
+                    candidate.clone(),
+                    self.is_space(candidate),
+                    area,
+                    height,
+                    class,
+                )
+            };
+            // Every reading of the overlap (`intersects` at any height
+            // tolerance) must hold at both ends of what the slivers allow.
+            let (lower, upper) = (overlap(shared.lower)?, overlap(shared.upper)?);
+            let intersects = |overlap: &SpaceOverlap| overlap.intersects(f64::NEG_INFINITY);
+            if intersects(&lower) != intersects(&upper) {
+                return Err(SpaceError::Refused(SLIVERS_COULD_DECIDE));
+            }
+            if shared.lower <= AREA_EPSILON_M2 {
+                // Dust either way, and never an intersection: nothing
+                // reads it.
+                if intersects(&upper) {
+                    return Err(SpaceError::Refused(SLIVERS_COULD_DECIDE));
+                }
+                continue;
+            }
+            if shared.upper - shared.lower > snapping_area(&subject_area.polygons) {
+                return Err(SpaceError::Refused(SLIVERS_EXCEED_ROUNDING));
+            }
+            overlaps.push(lower);
         }
         Ok(overlaps)
     }
@@ -546,14 +636,16 @@ impl SpaceService for AxiolidSpaceService {
             self.caps(request, candidate)
         })?;
         let tolerance = tolerance()?;
-        let whole = plan_area(&subject, tolerance);
-        if whole <= 0.0 {
-            return Err(SpaceError::InvalidQuantity);
+        let whole = plan_area(&subject, tolerance)?;
+        // A footprint measured empty is an incoherent quantity; one only the
+        // slivers left out could give area is not measured at all.
+        if whole.lower <= 0.0 && whole.uncertain() {
+            return Err(SpaceError::Refused(SLIVERS_COULD_DECIDE));
         }
         let (floor, ceiling) = vertical_span(&subject).ok_or(SpaceError::Unavailable)?;
 
         let mut covering = Vec::new();
-        let mut covered_polygons = Vec::new();
+        let mut cover = Vec::new();
         for (candidate, mesh) in self.geometry.objects() {
             // Only cap elements cap a space; a wall crossing the ceiling
             // plane is not a cap. The space never caps itself.
@@ -572,57 +664,28 @@ impl SpaceService for AxiolidSpaceService {
             if plane < low - CAP_PLANE_TOLERANCE_M || plane > high + CAP_PLANE_TOLERANCE_M {
                 continue;
             }
-            if shared_area(&subject, &other, tolerance)? <= AREA_EPSILON_M2 {
+            let shared = shared_area(&subject, &other, tolerance)?;
+            if shared.upper <= AREA_EPSILON_M2 {
                 continue;
             }
-            covering.push(candidate.clone());
-            covered_polygons.extend(projected_polygons(&other));
+            // An element the slivers alone could make cover counts towards
+            // the covered area, which bounds it either way; it is cited only
+            // where it surely covers more than dust.
+            if shared.lower > AREA_EPSILON_M2 {
+                covering.push(candidate.clone());
+            }
+            cover.extend(other);
         }
 
-        // Union the covering elements before intersecting: two slabs meeting
-        // over the space would otherwise double-count their shared edge and
-        // report more coverage than the cap has area.
-        let frame = plan_frame();
-        let covered = if covered_polygons.is_empty() {
-            0.0
-        } else {
-            let union = OverlayInput {
-                frame,
-                polygons: covered_polygons,
-            };
-            let merged = overlay(
-                &union,
-                &union,
-                OverlayOperation::Union,
-                FillRule::NonZero,
-                tolerance,
-            )
-            .map_err(|_| SpaceError::Unavailable)?;
-            let subject_input = OverlayInput {
-                frame,
-                polygons: projected_polygons(&subject),
-            };
-            overlay(
-                &subject_input,
-                &OverlayInput {
-                    frame,
-                    polygons: merged.polygons,
-                },
-                OverlayOperation::Intersection,
-                FillRule::NonZero,
-                tolerance,
-            )
-            .map_err(|_| SpaceError::Unavailable)?
-            .polygons
-            .iter()
-            .map(polygon_area)
-            .sum()
-        };
-        // No clamp: `covered` is already the intersection with the subject
-        // footprint, so it cannot exceed `whole`. CapCoverage::try_new rejects
-        // an incoherent pair if that ever stops holding, which is where the
-        // invariant belongs -- clamping here would silently repair a real bug.
-        CapCoverage::try_new(whole, covered, covering)
+        // The cover is one footprint under the non-zero rule: two slabs
+        // meeting over the space count their shared edge once, never twice.
+        let covered = shared_area(&subject, &cover, tolerance)?;
+        let rounding = snapping_area(&whole.polygons);
+        if whole.upper - whole.lower > rounding || covered.upper - covered.lower > rounding {
+            return Err(SpaceError::Refused(SLIVERS_EXCEED_ROUNDING));
+        }
+        let covered = within_rounding(whole.lower, covered.lower, rounding);
+        CapCoverage::try_new(whole.lower, covered, covering)
     }
 
     fn measure_unallocated_regions(&self) -> Result<Vec<UnallocatedRegion>, SpaceError> {
@@ -680,7 +743,7 @@ impl SpaceService for AxiolidSpaceService {
                     FillRule::NonZero,
                     tolerance,
                 )
-                .map_err(|_| SpaceError::Unavailable)?
+                .map_err(|error| refused(&error))?
                 .polygons
             };
             for region in left {
@@ -802,4 +865,72 @@ fn point_in_footprint(triangles: &[Triangle], point: Point2) -> bool {
 /// The audit tolerance every measurement here shares.
 fn tolerance() -> Result<axiolid_core::Tolerance, SpaceError> {
     axiolid_core::Tolerance::new(1.0e-9, 1.0e-9).map_err(|_| SpaceError::Unavailable)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn area(lower: f64, upper: f64) -> PlanArea {
+        PlanArea {
+            lower,
+            upper,
+            polygons: Vec::new(),
+        }
+    }
+
+    /// Containment is decided only where every area the slivers allow
+    /// agrees; between, it is undecided, so a duplicate is refused rather
+    /// than passed.
+    #[test]
+    fn slivers_that_could_tip_containment_leave_it_undecided() {
+        let whole = area(16.0, 16.0);
+        assert_eq!(contains(&whole, &area(16.0, 16.0)), Some(true));
+        assert_eq!(contains(&whole, &area(8.0, 8.0)), Some(false));
+        // The slivers could lift the shared area over the ratio.
+        assert_eq!(contains(&whole, &area(15.9, 16.0)), None);
+        // Or the whole beyond it.
+        assert_eq!(contains(&area(15.99, 16.1), &area(15.99, 15.99)), None);
+        // An area only the slivers give is no footprint to contain.
+        assert_eq!(contains(&area(0.0, 1e-9), &area(0.0, 1e-9)), None);
+        assert_eq!(contains(&area(0.0, 0.0), &area(0.0, 0.0)), Some(false));
+        assert_eq!(
+            containment(&whole, &area(32.0, 32.0), &area(15.9, 16.0)),
+            None
+        );
+        assert_eq!(
+            containment(&whole, &area(32.0, 32.0), &area(4.0, 4.0)),
+            Some(Containment::Partial)
+        );
+    }
+
+    /// A cap covered over all its area may measure a hair above it from the
+    /// overlay's snapping; within that rounding it is the whole area, and
+    /// beyond it the incoherence is left for the evidence to reject.
+    #[test]
+    fn a_covered_area_past_the_whole_by_rounding_is_the_whole() {
+        // As measured on a real space, the cover's arrangement snapped apart.
+        let (whole, covered) = (0.499_999_999_759_893_4, 0.499_999_999_885_403_67);
+        assert!(CapCoverage::try_new(whole, covered, Vec::new()).is_err());
+        let kept = within_rounding(whole, covered, 1e-7);
+        assert!((kept - whole).abs() < f64::MIN_POSITIVE);
+        assert!(CapCoverage::try_new(whole, kept, Vec::new()).is_ok());
+        assert!((within_rounding(whole, 0.25, 1e-7) - 0.25).abs() < f64::MIN_POSITIVE);
+        assert!((within_rounding(whole, 0.6, 1e-7) - 0.6).abs() < f64::MIN_POSITIVE);
+    }
+
+    /// A refusal names the overlay and its error, never the bare
+    /// "unavailable" a missing body gives.
+    #[test]
+    fn an_overlay_refusal_names_the_overlays_error() {
+        let message = refused(&OverlayError::SelfIntersection).to_string();
+        assert!(message.contains("plan overlay"), "{message}");
+        assert!(message.contains("SelfIntersection"), "{message}");
+        assert_ne!(
+            refused(&OverlayError::RepeatedVertex),
+            SpaceError::Unavailable
+        );
+        let message = SpaceError::Refused(SLIVERS_COULD_DECIDE).to_string();
+        assert!(message.contains("RepeatedVertex"), "{message}");
+    }
 }

@@ -105,11 +105,11 @@ impl RuleCapability for SpaceValidation {
 }
 
 /// Why the space service's refusal leaves an aspect not evaluated: an
-/// unavailable or unmeasured aspect is incomplete evidence, an inexact or
+/// unavailable, refused or unmeasured aspect is incomplete evidence, an inexact or
 /// incoherent answer invalid evidence.
 pub(crate) fn reason(error: &SpaceError) -> NotEvaluatedReason {
     match error {
-        SpaceError::Unavailable | SpaceError::Unmeasured(_) => {
+        SpaceError::Unavailable | SpaceError::Refused(_) | SpaceError::Unmeasured(_) => {
             NotEvaluatedReason::IncompleteEvidence
         }
         SpaceError::InexactEvidence | SpaceError::InvalidQuantity => {

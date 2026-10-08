@@ -828,8 +828,8 @@ or an intersection is an error, a low or uncovered boundary a warning, a
 cap shortfall an error below 1 %, a warning up to 15 % and informational
 below 98 %), so its rewrite is one expression rule per severity, each the
 conjunction of the aspects graded at it. Its values read a refusal of the
-space service as the capability does: unavailable or unmeasured is
-incomplete evidence.
+space service as the capability does: unavailable, refused or
+unmeasured is incomplete evidence.
 
 `opening_area` and `empty-host`'s values reach those capabilities'
 verdicts on every fixture through the parity harness, but one: a wall

@@ -38,6 +38,22 @@ All notable changes are documented here. This project follows Semantic Versionin
   asked for its volume, a mesh of zero-area triangles only, a triangle
   whose corner lies off its longest edge beyond the tolerance.
 
+- **Geometry**: space duplicates, overlaps and cap coverage are no longer
+  refused, or passed, when the plan overlay refuses a sliver of a space's
+  footprint ([#217](https://github.com/axioval/engine/issues/217)). The
+  space adapter read the refusal as "unavailable" for the shared area and as
+  a zero plan area for the space itself, which cap coverage rejected as an
+  invalid quantity and the duplicate check read as "not mutually contained",
+  reporting no duplicate. It now measures plan areas as clash pairs do since
+  [#210](https://github.com/axioval/engine/issues/210): the slivers are left
+  out and their area bounds what they could add, a duplicate, an overlap or
+  a covering element is decided only where that bound cannot change it, and
+  a refused plan area is never read as zero. A cap covered over its whole
+  area that the overlay's snapping measures a hair larger is fully covered.
+  A refusal is `SpaceError::Refused` with its reason, the overlay's error by
+  name, and is incomplete evidence like `Unavailable`. **Breaking:**
+  `SpaceError` gains the variant `Refused(&'static str)`.
+
 ## [0.4.0] - 2026-10-07
 
 Composable rules ([#225](https://github.com/axioval/engine/issues/225)).

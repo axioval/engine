@@ -166,6 +166,21 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   support counts read no body and never refuse. Unallocated regions are the
   polygons of each storey's floor footprint less its spaces' footprint, one
   per connected region, each relating the bodies its rings touch.
+  Duplicates, overlaps and cap coverage measure plan areas as clash pairs
+  do (#210, #217): `plan_area` and `shared_area` are
+  `planar::bounded_footprint` and `bounded_plan_overlap`, `[lower, upper]`
+  with the refused slivers' area (only slivers whose box meets the other
+  footprint's). A decision is taken only where both ends agree (`contains`
+  for duplicates and the containment class, `intersects` and the dust
+  floor for overlaps), else `SpaceError::Refused`; a reported area may not
+  move by more than `planar::snapping_area` of the space's footprint; a
+  cap covered past its area within that snapping is the whole area
+  (`within_rounding`). Never default a refused plan area to zero (a zero
+  area read "not mutually contained" and passed duplicates), and map every
+  overlay refusal to `SpaceError::Refused(overlay_refusal(..))`, never
+  `Unavailable`. Spans and heights are checked before any overlay runs, so
+  a pair they rule out never refuses. `tests/space.rs` pins a room with a
+  leaning face (`leaning_room`) in all three aspects.
 - `src/envelope_membership.rs` derives envelope membership: an object bounds
   the envelope when its plan footprint meets a bounding space. The bounding
   spaces are the request's (the rule's selection), never host-declared; a

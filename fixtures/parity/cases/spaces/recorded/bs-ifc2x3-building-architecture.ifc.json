@@ -142,7 +142,7 @@
       "evidence": [
         {
           "exact": true,
-          "locator": "axiolid:space",
+          "locator": "axioval:measured/space_height: axiolid:space",
           "source": {
             "document": "bs-ifc2x3-building-architecture.ifc",
             "system": "ifc-step"
@@ -165,7 +165,7 @@
       "evidence": [
         {
           "exact": true,
-          "locator": "axiolid:space",
+          "locator": "axioval:measured/space_height: axiolid:space",
           "source": {
             "document": "bs-ifc2x3-building-architecture.ifc",
             "system": "ifc-step"
@@ -188,7 +188,7 @@
       "evidence": [
         {
           "exact": true,
-          "locator": "axiolid:space",
+          "locator": "axioval:measured/space_height: axiolid:space",
           "source": {
             "document": "bs-ifc2x3-building-architecture.ifc",
             "system": "ifc-step"
@@ -211,7 +211,47 @@
       "evidence": [
         {
           "exact": true,
-          "locator": "axiolid:space",
+          "locator": "axioval:measured/space_intersections;elements=@intersection_elements;tolerance=@tolerance_metres: axiolid:space",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "space_overlaps;elements=@intersection_elements;tolerance=@tolerance_metres#1",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "69c6a9f5-2a8a-5dab-86c7-136f05c621ec",
+      "message": "intersecting_component: space intersects a component over 11.2750 m2",
+      "object_id": {
+        "local_id": "#183",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#606",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "valid-spaces-selected",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axioval:measured/space_height: axiolid:space",
           "source": {
             "document": "bs-ifc2x3-building-architecture.ifc",
             "system": "ifc-step"
@@ -229,6 +269,46 @@
       },
       "rule_id": "valid-spaces-selected",
       "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axioval:measured/space_intersections;elements=@intersection_elements;tolerance=@tolerance_metres: axiolid:space",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "space_overlaps;elements=@intersection_elements;tolerance=@tolerance_metres#1",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "87a6c508-578a-5186-abdd-4724f8ab5915",
+      "message": "intersecting_component: space intersects a component over 3.0400 m2",
+      "object_id": {
+        "local_id": "#296",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#606",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "valid-spaces-selected",
+      "severity": "error"
     }
   ],
   "not_evaluated": [
@@ -287,18 +367,6 @@
       "rule_id": "valid-spaces"
     },
     {
-      "message": "space measurement is unavailable for the requested aspect",
-      "object_id": {
-        "local_id": "#183",
-        "source": {
-          "document": "bs-ifc2x3-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "valid-spaces"
-    },
-    {
       "message": "space overlaps is unavailable: 1 unmeasured object(s) could change it (ifc-step:bs-ifc2x3-building-architecture.ifc/#460)",
       "object_id": {
         "local_id": "#183",
@@ -308,30 +376,6 @@
         }
       },
       "reason": "incomplete_evidence",
-      "rule_id": "valid-spaces"
-    },
-    {
-      "message": "space quantities must be finite and non-negative",
-      "object_id": {
-        "local_id": "#183",
-        "source": {
-          "document": "bs-ifc2x3-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "invalid_evidence",
-      "rule_id": "valid-spaces"
-    },
-    {
-      "message": "space quantities must be finite and non-negative",
-      "object_id": {
-        "local_id": "#183",
-        "source": {
-          "document": "bs-ifc2x3-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "invalid_evidence",
       "rule_id": "valid-spaces"
     },
     {
@@ -347,18 +391,6 @@
       "rule_id": "valid-spaces"
     },
     {
-      "message": "space measurement is unavailable for the requested aspect",
-      "object_id": {
-        "local_id": "#296",
-        "source": {
-          "document": "bs-ifc2x3-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "valid-spaces"
-    },
-    {
       "message": "space overlaps is unavailable: 1 unmeasured object(s) could change it (ifc-step:bs-ifc2x3-building-architecture.ifc/#460)",
       "object_id": {
         "local_id": "#296",
@@ -371,30 +403,6 @@
       "rule_id": "valid-spaces"
     },
     {
-      "message": "space quantities must be finite and non-negative",
-      "object_id": {
-        "local_id": "#296",
-        "source": {
-          "document": "bs-ifc2x3-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "invalid_evidence",
-      "rule_id": "valid-spaces"
-    },
-    {
-      "message": "space quantities must be finite and non-negative",
-      "object_id": {
-        "local_id": "#296",
-        "source": {
-          "document": "bs-ifc2x3-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "invalid_evidence",
-      "rule_id": "valid-spaces"
-    },
-    {
       "message": "space measurement is unavailable for the requested aspect",
       "object_id": {
         "local_id": "#183",
@@ -409,54 +417,6 @@
     {
       "message": "space measurement is unavailable for the requested aspect",
       "object_id": {
-        "local_id": "#183",
-        "source": {
-          "document": "bs-ifc2x3-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "valid-spaces-selected"
-    },
-    {
-      "message": "space measurement is unavailable for the requested aspect",
-      "object_id": {
-        "local_id": "#183",
-        "source": {
-          "document": "bs-ifc2x3-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "valid-spaces-selected"
-    },
-    {
-      "message": "space quantities must be finite and non-negative",
-      "object_id": {
-        "local_id": "#183",
-        "source": {
-          "document": "bs-ifc2x3-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "invalid_evidence",
-      "rule_id": "valid-spaces-selected"
-    },
-    {
-      "message": "space quantities must be finite and non-negative",
-      "object_id": {
-        "local_id": "#183",
-        "source": {
-          "document": "bs-ifc2x3-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "invalid_evidence",
-      "rule_id": "valid-spaces-selected"
-    },
-    {
-      "message": "space measurement is unavailable for the requested aspect",
-      "object_id": {
         "local_id": "#296",
         "source": {
           "document": "bs-ifc2x3-building-architecture.ifc",
@@ -464,54 +424,6 @@
         }
       },
       "reason": "incomplete_evidence",
-      "rule_id": "valid-spaces-selected"
-    },
-    {
-      "message": "space measurement is unavailable for the requested aspect",
-      "object_id": {
-        "local_id": "#296",
-        "source": {
-          "document": "bs-ifc2x3-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "valid-spaces-selected"
-    },
-    {
-      "message": "space measurement is unavailable for the requested aspect",
-      "object_id": {
-        "local_id": "#296",
-        "source": {
-          "document": "bs-ifc2x3-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "valid-spaces-selected"
-    },
-    {
-      "message": "space quantities must be finite and non-negative",
-      "object_id": {
-        "local_id": "#296",
-        "source": {
-          "document": "bs-ifc2x3-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "invalid_evidence",
-      "rule_id": "valid-spaces-selected"
-    },
-    {
-      "message": "space quantities must be finite and non-negative",
-      "object_id": {
-        "local_id": "#296",
-        "source": {
-          "document": "bs-ifc2x3-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "invalid_evidence",
       "rule_id": "valid-spaces-selected"
     }
   ],

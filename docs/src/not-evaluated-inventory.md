@@ -138,6 +138,19 @@ its host is measured from its `Body` as authored. The rankings above
 predate it; the next run shows whether the cause is gone from the three
 models.
 
+Cases 3 and 14 of the second ranking are fixed by #217: the space
+adapter leaves the slivers the overlay refuses out of its plan areas, as
+clash pairs do since #210, bounds what they could add, and refuses by
+name (`SpaceError::Refused`) only a decision they could tip; no refused
+plan area is read as zero any more. Run with `space-validation` alone on
+one office model of 255 spaces, its 380 "unavailable for the requested
+aspect" and 6 "finite and non-negative" outcomes went to none, and 79
+more findings were reported, 6 of them duplicate spaces not reported
+before. The same run showed a fully covered cap measured a hair over its
+own area by the overlay's snapping, which the adapter now reads as fully
+covered within that snapping. The corpus re-run that moves both cases
+in the ranking is still to come.
+
 Cases 3 and 5 are resolved upstream (`axiolid-mesh-compile` 0.3.13). A
 warped authored face is now meshed, and the body is tessellated within
 the width of the slab the face's corners span about its fit plane, which

@@ -1878,8 +1878,9 @@ names no elements of its own (`space_supports`); a refusal leaves each
 selected space open, and nothing else, the storeys included, is judged.
 Each aspect of a space is its own check, so one the service refuses
 leaves only that check open, for the reason the space service's refusal
-gives (`SpaceError`: unavailable or unmeasured is incomplete evidence,
-inexact or incoherent invalid evidence). Elements a rule selects are
+gives (`SpaceError`: unavailable, refused by the geometry kernel or
+unmeasured is incomplete evidence, inexact or incoherent invalid
+evidence). Elements a rule selects are
 bound into the values: a selection of nothing states the value absent and
 the check passes, one leaving objects undecided refuses it (`boundary
 elements could not be selected: …`). Findings read `duplicate_space:

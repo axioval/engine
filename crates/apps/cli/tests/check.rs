@@ -17273,6 +17273,94 @@ fn with_geometry_a_roof_clipped_wall_with_a_round_window_is_certified() {
     assert!(finding_ids(&result).is_empty(), "{result:#}");
 }
 
+/// A wall #31 (`x` -2 to 2, 0.3 m thick, 3 m high) whose right half is cut
+/// down to 2 m by an `IfcPolygonalBoundedHalfSpace` (the material above
+/// `z = 2` inside the square `x` 0 to 3, `y` -1 to 1) whose boundary is
+/// `boundary` (entity #20, drawn from #15 on), and a member #69 (0.4 m
+/// square, 0.2 m deep) standing 0.5 m above the clipped top at `x` 1.
+fn wall_clipped_within_a_boundary(boundary: &str) -> String {
+    model_with(&format!(
+        "#10=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #11=IFCAXIS2PLACEMENT3D(#10,$,$);\n\
+         #12=IFCLOCALPLACEMENT($,#11);\n\
+         #13=IFCRECTANGLEPROFILEDEF(.AREA.,$,$,4.,0.3);\n\
+         #14=IFCEXTRUDEDAREASOLID(#13,#2,#4,3.);\n\
+         {boundary}\
+         #21=IFCCARTESIANPOINT((0.,0.,2.));\n\
+         #22=IFCAXIS2PLACEMENT3D(#21,$,$);\n\
+         #23=IFCPLANE(#22);\n\
+         #24=IFCPOLYGONALBOUNDEDHALFSPACE(#23,.F.,#2,#20);\n\
+         #27=IFCBOOLEANCLIPPINGRESULT(.DIFFERENCE.,#14,#24);\n\
+         #29=IFCSHAPEREPRESENTATION(#5,'Body','Clipping',(#27));\n\
+         #30=IFCPRODUCTDEFINITIONSHAPE($,$,(#29));\n\
+         #31=IFCWALL('0000000000000000000031',$,$,$,$,#12,#30,$,$);\n\
+         {}",
+        placed_box(
+            60,
+            [1.0, 0.0, 2.5],
+            [0.4, 0.4, 0.2],
+            "IFCMEMBER('GID',$,$,$,$,PL,REP,$,$)"
+        ),
+    ))
+}
+
+/// A wall clipped by a polygonal half-space bounded by a composite curve
+/// of polyline segments, or by an indexed poly curve of line segments, is
+/// measured like its `IfcPolyline` twin (openbimrs/ifc#393, engine#307):
+/// the member above its clipped top is 0.5 m from it, where the unclipped
+/// wall would reach through it.
+#[test]
+fn with_geometry_a_wall_clipped_within_a_composite_boundary_is_measured() {
+    let composite = "#15=IFCCARTESIANPOINT((0.,-1.));\n\
+         #16=IFCCARTESIANPOINT((3.,-1.));\n\
+         #17=IFCCARTESIANPOINT((3.,1.));\n\
+         #18=IFCCARTESIANPOINT((0.,1.));\n\
+         #19=IFCPOLYLINE((#15,#16,#17));\n\
+         #25=IFCPOLYLINE((#17,#18,#15));\n\
+         #26=IFCCOMPOSITECURVESEGMENT(.CONTINUOUS.,.T.,#19);\n\
+         #28=IFCCOMPOSITECURVESEGMENT(.CONTINUOUS.,.T.,#25);\n\
+         #20=IFCCOMPOSITECURVE((#26,#28),.F.);\n";
+    let indexed = "#15=IFCCARTESIANPOINTLIST2D(((0.,-1.),(3.,-1.),(3.,1.),(0.,1.)));\n\
+         #20=IFCINDEXEDPOLYCURVE(#15,(IFCLINEINDEX((1,2,3)),IFCLINEINDEX((3,4,1))),$);\n";
+    for (name, boundary) in [("composite", composite), ("indexed", indexed)] {
+        let case = Case::new(&format!("geometry-clipped-within-{name}"));
+        case.write("model.ifc", &wall_clipped_within_a_boundary(boundary));
+        let distance = |minimum: f64| {
+            case.geometry_rule_with(
+                &["model.ifc"],
+                &[("member", "IfcMember"), ("wall", "IfcWall")],
+                (
+                    "axioval:capability.distance",
+                    &registry_signature("axioval:capability.distance"),
+                ),
+                entity("member"),
+                json!({
+                    "counterparts": {"type": "selector", "value": entity("wall")},
+                    "mode": {"type": "string", "value": "none_closer_than"},
+                    "minimum_metres": {"type": "number", "value": minimum},
+                }),
+                &json!({}),
+                &[],
+            )
+        };
+
+        let (output, result) = distance(0.49);
+        assert_eq!(output.status.code(), Some(0), "{name}: {}", stderr(&output));
+        assert!(
+            result["geometry"]["unmeasured"]
+                .as_array()
+                .is_none_or(Vec::is_empty),
+            "{name}: {result:#}"
+        );
+        assert!(finding_ids(&result).is_empty(), "{name}: {result:#}");
+
+        // The clip leaves 0.5 m, not more.
+        let (output, result) = distance(0.51);
+        assert_eq!(output.status.code(), Some(3), "{name}: {}", stderr(&output));
+        assert_eq!(finding_ids(&result), ["#69"], "{name}: {result:#}");
+    }
+}
+
 /// A disk swept along a polyline with a sharp corner and no fillet radius
 /// is mitred at half angle, as `IfcSweptDiskSolid` defines it, and the
 /// kernel proves its mesh within the chord budget again

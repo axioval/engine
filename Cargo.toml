@@ -129,8 +129,8 @@ openbim-ids = { version = "0.2.2", features = ["audit-schema"] }
 # Door and window operation geometry (openbimrs/ifc#148, #170) is published
 # only in the IFC facade, which joins `ifc-geometry` and `ifc-properties`; `geometry-select`
 # compiles no geometry kernel.
-# 0.19 re-exports `ifc-geometry` 0.13; its `authoring` feature stays off.
-openbim_ifc = { package = "openbim-ifc", version = "0.19.0", default-features = false, features = ["geometry-select", "properties", "ifc2x3", "ifc4", "ifc4x3"] }
+# 0.20 re-exports `ifc-geometry` 0.14; its `authoring` feature stays off.
+openbim_ifc = { package = "openbim-ifc", version = "0.20.0", default-features = false, features = ["geometry-select", "properties", "ifc2x3", "ifc4", "ifc4x3"] }
 ifc-classification = "0.4.0"
 # The CLI reads each `IfcAlignment`'s centreline, stationing and cant to
 # locate products along it (engine#252). 0.7 evaluates Viennese bends for
@@ -146,8 +146,10 @@ ifc-alignment = "0.7.0"
 # placements relative to grid or linear ones (#362, #363); 0.12 reads
 # `IfcIndexedPolyCurve` profile boundaries and refuses open ones (#335);
 # 0.13 subtracts openings in their host's frame under one world `Instance`
-# (#388), so flush openings in georeferenced hosts mesh.
-ifc-geometry = { version = "0.13.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
+# (#388), so flush openings in georeferenced hosts mesh; 0.14 lowers
+# polygonal half-space boundaries given as straight-edged `IfcCompositeCurve`
+# or `IfcIndexedPolyCurve` like their `IfcPolyline` twin (#393).
+ifc-geometry = { version = "0.14.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
 # Map conversions only: without the default `transform` feature it links no
 # geometry crate (never Axiolid).
 ifc-georef = { version = "0.6.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }

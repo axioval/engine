@@ -18142,8 +18142,9 @@ fn wall_clipped_within_a_boundary(boundary: &str) -> String {
 }
 
 /// A wall clipped by a polygonal half-space bounded by a composite curve
-/// of polyline segments, or by an indexed poly curve of line segments, is
-/// measured like its `IfcPolyline` twin (openbimrs/ifc#393, engine#307):
+/// of polyline segments, or by an indexed poly curve of line segments or
+/// with a circular arc, is measured like its `IfcPolyline` twin
+/// (openbimrs/ifc#393, #398, engine#307):
 /// the member above its clipped top is 0.5 m from it, where the unclipped
 /// wall would reach through it.
 #[test]
@@ -18159,7 +18160,11 @@ fn with_geometry_a_wall_clipped_within_a_composite_boundary_is_measured() {
          #20=IFCCOMPOSITECURVE((#26,#28),.F.);\n";
     let indexed = "#15=IFCCARTESIANPOINTLIST2D(((0.,-1.),(3.,-1.),(3.,1.),(0.,1.)));\n\
          #20=IFCINDEXEDPOLYCURVE(#15,(IFCLINEINDEX((1,2,3)),IFCLINEINDEX((3,4,1))),$);\n";
-    for (name, boundary) in [("composite", composite), ("indexed", indexed)] {
+    // The right side bulges out in a circular arc through (3.5, 0)
+    // (openbimrs/ifc#398, axiolid/kernel#277, ifc-geometry 0.17).
+    let arc = "#15=IFCCARTESIANPOINTLIST2D(((0.,-1.),(3.,-1.),(3.5,0.),(3.,1.),(0.,1.)));\n\
+         #20=IFCINDEXEDPOLYCURVE(#15,(IFCLINEINDEX((1,2)),IFCARCINDEX((2,3,4)),IFCLINEINDEX((4,5,1))),$);\n";
+    for (name, boundary) in [("composite", composite), ("indexed", indexed), ("arc", arc)] {
         let case = Case::new(&format!("geometry-clipped-within-{name}"));
         case.write("model.ifc", &wall_clipped_within_a_boundary(boundary));
         let distance = |minimum: f64| {

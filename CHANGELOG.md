@@ -67,6 +67,13 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **Geometry**: moves to openbim-ifc 0.23 and ifc-geometry 0.17, which
+  lower a polygonal half-space boundary with circular-arc segments (an
+  `IfcCompositeCurve` of trimmed circles, an `IfcIndexedPolyCurve` with an
+  `IfcArcIndex`) exactly as a contour of lines and arcs (openbimrs/ifc#398,
+  axiolid/kernel#277): a wall clipped within such a boundary is measured
+  ([#307](https://github.com/axioval/engine/issues/307)). A self-crossing
+  arc boundary and a boundary circle placed in 3D are still refused by name.
 - **Free floor**: an obstacle whose plan box is apart from the searched
   space's is left out of the space's placement search before its band
   footprint and chord-deviation bracketing are built. It cannot meet a

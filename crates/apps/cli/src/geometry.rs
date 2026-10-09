@@ -150,6 +150,7 @@ use ifc_spatial::{SpatialAnomaly, SpatialKind, SpatialTree};
 use std::sync::{Arc, OnceLock};
 
 mod alignment;
+mod authored_faces;
 pub mod timings;
 
 /// Linear tolerance handed to the mesh compiler: with no explicit chord
@@ -198,9 +199,11 @@ pub struct GeometryReport {
     /// every physical product with no shape representation and no parts
     /// ([`NO_SHAPE_REPRESENTATION`]), every product unmeasured for a
     /// face whose boundary crosses or runs back along itself
-    /// ([`SELF_INTERSECTING_FACE`]), and every product whose openings remove
-    /// its whole body ([`VOIDED_BODY`]). Their measurements stay not
-    /// evaluated.
+    /// ([`SELF_INTERSECTING_FACE`]); every product whose openings remove its
+    /// whole body ([`VOIDED_BODY`]); and every measured product whose body
+    /// is open because its faces, as authored, leave edges bounding one
+    /// face only ([`OPEN_SURFACE`]). Their measurements that need what is
+    /// missing stay not evaluated.
     pub model_data: Vec<ModelData>,
     /// Openings taken as already applied to a measured host's `Body`:
     /// host, opening and the reason, in identity order.
@@ -251,6 +254,13 @@ fn voided_body(reason: &str) -> bool {
         .and_then(|rest| rest.strip_suffix(" opening(s) voiding it are subtracted"))
         .is_some_and(|count| count.parse::<usize>().is_ok())
 }
+/// The integrity code of a measured product whose mesh is no closed solid
+/// because its `Body` items' faces, as authored, leave edges that bound one
+/// face only (an `IfcOpenShell`, a face set stated not closed, or a shell
+/// whose faces do not meet): its body is an open surface, which bounds no
+/// inside. Measurements that need one (a clash between two such bodies, the
+/// room a body takes up above a floor) stay not evaluated (#311).
+pub const OPEN_SURFACE: &str = "shape.open-surface";
 
 /// A fact about the model data the bridge found, for the host to report as
 /// an integrity warning.
@@ -832,6 +842,9 @@ pub fn attach(
     // Bodies meshed, registered once every whole's openings are subtracted
     // from the parts they cut.
     let mut bodies: BTreeMap<ObjectId, Body> = BTreeMap::new();
+    // Measured products whose authored faces leave edges open, with how
+    // many.
+    let mut open_surfaces: Vec<(ObjectId, usize)> = Vec::new();
 
     for object in session.project().objects() {
         let id = object.id.clone();
@@ -900,6 +913,12 @@ pub fn attach(
         .and_then(|body| applied(&id, body));
         match meshed {
             Ok(Some(body)) => {
+                if !axiolid_mesh::audit_mesh(&body.mesh, TOLERANCE).is_closed_two_manifold()
+                    && let Some(open) = authored_faces::open_edges(model, entity)
+                    && open > 0
+                {
+                    open_surfaces.push((id.clone(), open));
+                }
                 bodies.insert(id, body);
             }
             // A space without a body is still no material; it cannot be
@@ -1025,7 +1044,8 @@ pub fn attach(
     report.applied_openings.sort();
     clock.lap("geometry: compose wholes");
     report.unmeasured.sort_by(|a, b| a.0.cmp(&b.0));
-    report.model_data = model_data_notes(&report.unmeasured, &snapshots, &kinds);
+    open_surfaces.sort();
+    report.model_data = model_data_notes(&report.unmeasured, &open_surfaces, &snapshots, &kinds);
     for (group, members) in groups(relationships, &kinds, &is_a) {
         geometry = match members {
             Ok(members) => geometry.with_group(group, members),
@@ -2092,21 +2112,44 @@ fn reference_only(model: &Model, opening: EntityId) -> bool {
 /// Every product left unmeasured for a fact about the model data, once
 /// each, as an integrity warning: no shape representation (and no parts),
 /// a face whose boundary crosses or runs back along itself, or openings
-/// that remove the whole body.
+/// that remove the whole body; then every measured product in
+/// `open_surfaces`, whose authored faces leave edges bounding one face only.
 fn model_data_notes(
     unmeasured: &[(ObjectId, String)],
+    open_surfaces: &[(ObjectId, usize)],
     snapshots: &[SourceSnapshot],
     kinds: &BTreeMap<ObjectId, String>,
 ) -> Vec<ModelData> {
     let shapeless = Bodiless::Shapeless.reason();
+    let fingerprint = |id: &ObjectId| {
+        snapshots
+            .iter()
+            .find(|snapshot| *snapshot.source() == id.source)
+            .map_or("", SourceSnapshot::fingerprint)
+            .to_owned()
+    };
+    let kind = |id: &ObjectId| kinds.get(id).map_or("", String::as_str).to_owned();
+    let open = open_surfaces.iter().map(|(id, edges)| {
+        let (fingerprint, kind, local) = (fingerprint(id), kind(id), &id.local_id);
+        let edges = if *edges == 1 {
+            "an edge that bounds".to_owned()
+        } else {
+            format!("{edges} edges that bound")
+        };
+        ModelData {
+            code: OPEN_SURFACE,
+            message: format!(
+                "{local} {kind} has faces that, as authored, leave {edges} one face only, so \
+                 its body is an open surface with no inside; measurements that need one are \
+                 not evaluated"
+            ),
+            locator: format!("ifc:{fingerprint}:open-surface:{local}"),
+        }
+    });
     unmeasured
         .iter()
         .filter_map(|(id, reason)| {
-            let fingerprint = snapshots
-                .iter()
-                .find(|snapshot| *snapshot.source() == id.source)
-                .map_or("", SourceSnapshot::fingerprint);
-            let kind = kinds.get(id).map_or("", String::as_str);
+            let (fingerprint, kind) = (fingerprint(id), kind(id));
             let local = &id.local_id;
             if *reason == shapeless {
                 return Some(ModelData {
@@ -2138,6 +2181,7 @@ fn model_data_notes(
                 locator: format!("ifc:{fingerprint}:self-intersecting-face:{local}"),
             })
         })
+        .chain(open)
         .collect()
 }
 

@@ -29,7 +29,12 @@ representation`: a product with no representation at all; a face whose
 boundary crosses or runs back along itself, which the mesh compiler refuses
 as `... profile outer ring intersects itself` or `... folds back on itself
 at vertex <n>`; a host whose openings remove its whole body) is labelled
-`unmeasured (model data): ...`. Causes are ranked by the number of not-evaluated
+`unmeasured (model data): ...`. An outcome
+refused because a body is not a closed solid (`... is not a closed solid`,
+`... neither body is a closed solid`) is model data when every body it
+rests on carries the CLI's `shape.open-surface` integrity warning (faces
+that, as authored, leave edges bounding one face only): its reason code is
+then labelled `<reason> (model data)`. Causes are ranked by the number of not-evaluated
 outcomes they account for, then unmeasured objects, then models affected,
 then the pattern, so the table is deterministic for the same inputs.
 
@@ -68,6 +73,16 @@ MODEL_DATA = frozenset({"no shape representation"})
 # compiler does not accept yet (axiolid/kernel#270).
 # So is a host whose openings remove its whole body (#310, the CLI's
 # `shape.voided-body`).
+# Outcomes refused because a body is no closed solid, and whether the
+# subject is one of the bodies (a clash pair) or only the objects named (an
+# obstacle in a space's band). Model data when each of those bodies is
+# authored open (the CLI's `shape.open-surface`, #311).
+OPEN_BODY_OUTCOMES = (
+    (re.compile(r"neither body is a closed solid"), True),
+    (re.compile(r"(?:reaches below the headroom band|reaches into the band) but is not a "
+                r"closed solid"), False),
+)
+OPEN_SURFACE = "shape.open-surface"
 MODEL_DATA_PATTERNS = re.compile(
     r"mesh compilation refused: invalid geometry input: "
     r"(?:planar face|authored polygon face <n>) cannot be triangulated: "
@@ -135,14 +150,16 @@ class Cause:
         return (-self.outcomes, -self.objects, -len(self.models), self.kind, self.text)
 
     def model_data(self) -> bool:
-        return self.kind == "unmeasured" and (
-            self.text in MODEL_DATA or MODEL_DATA_PATTERNS.fullmatch(self.text) is not None
-        )
+        if self.kind != "unmeasured":
+            return self.text.startswith(f"{self.kind} (model data) · ")
+        return self.text in MODEL_DATA or MODEL_DATA_PATTERNS.fullmatch(self.text) is not None
 
     def label(self) -> str:
+        if self.kind != "unmeasured":
+            return self.text
         if self.model_data():
             return f"unmeasured (model data): {self.text}"
-        return f"unmeasured: {self.text}" if self.kind == "unmeasured" else self.text
+        return f"unmeasured: {self.text}"
 
 
 def inventory(results: list[tuple[str, dict]], rules: dict[str, str]) -> list[Cause]:
@@ -159,6 +176,12 @@ def inventory(results: list[tuple[str, dict]], rules: dict[str, str]) -> list[Ca
                 return "(no object)"
             return (objects.get(key) or {}).get("kind", "(unknown)")
 
+        # Local ids of bodies authored open (one source per result).
+        open_bodies = {
+            record.get("locator", "").rpartition(":")[2]
+            for record in result.get("integrity") or []
+            if record.get("code") == OPEN_SURFACE
+        }
         unmeasured: dict[str, str] = {}
         for record in (result.get("geometry") or {}).get("unmeasured", []):
             key = object_key(record["object"])
@@ -177,7 +200,10 @@ def inventory(results: list[tuple[str, dict]], rules: dict[str, str]) -> list[Ca
                 found = cause("unmeasured", unmeasured[blamed[0]])
                 blamed_entity = entity(blamed[0])
             else:
-                text = f"{outcome['reason']} · {capability} · {pattern(outcome.get('message', ''))}"
+                reason = outcome["reason"]
+                if authored_open(outcome, named, open_bodies):
+                    reason = f"{reason} (model data)"
+                text = f"{reason} · {capability} · {pattern(outcome.get('message', ''))}"
                 found = cause(outcome["reason"], text)
                 blamed_entity = entity(subject)
             found.outcomes += 1
@@ -186,6 +212,20 @@ def inventory(results: list[tuple[str, dict]], rules: dict[str, str]) -> list[Ca
             if not blamed:
                 found.entities[blamed_entity] += 1
     return sorted(causes.values(), key=Cause.key)
+
+
+def authored_open(outcome: dict, named: list[str], open_bodies: set[str]) -> bool:
+    """Whether `outcome` is refused only because bodies authored open are no
+    closed solids: every body it rests on carries `shape.open-surface`."""
+    message = outcome.get("message", "")
+    for expression, subject_too in OPEN_BODY_OUTCOMES:
+        if expression.search(message) is None:
+            continue
+        bodies = [key.rpartition("/")[2] for key in named]
+        if subject_too and outcome.get("object_id"):
+            bodies.append(outcome["object_id"].get("local_id", ""))
+        return bool(bodies) and all(body in open_bodies for body in bodies)
+    return False
 
 
 def top(counter: Counter, limit: int = 3) -> str:

@@ -359,7 +359,10 @@ rounding error is a different point and keeps the edge open. Items closed
 by their own indices are never merged, and a merge that would join shells
 along an edge (four triangles on it) or at a corner (two fans of
 triangles round it) is not kept, so bodies of touching closed items stay
-shells that are measured one by one (#312).
+shells that are measured one by one (#312). Bodies
+whose faces, as authored, leave edges bounding one face only (an
+`IfcOpenShell`, a face set left open) remain open surfaces; the CLI names
+them as model data (`shape.open-surface`, #311).
 
 **Zero-area triangles.** A mesh may hold triangles whose corners lie on one
 line: a warped face's triangulation leaves them, and so does a T-junction

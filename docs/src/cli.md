@@ -336,8 +336,10 @@ following them are not evaluated, and the exit status follows from them.
 With `--geometry` it lists, as `shape.no-representation` warnings, every
 physical product with no shape representation and no parts, and as
 `shape.self-intersecting-face` warnings every product unmeasured for a face
-whose boundary crosses or runs back along itself, and as `shape.voided-body`
-warnings every product whose openings remove its whole body, once each (see
+whose boundary crosses or runs back along itself, as `shape.voided-body`
+warnings every product whose openings remove its whole body, and as
+`shape.open-surface` warnings every measured product whose faces, as
+authored, leave edges bounding one face only, once each (see
 [Geometry](#geometry)).
 `objects` maps every object the report names to its kind and, when it has one,
 its GlobalId, so a reader can tell what `#4711` is without the model. A
@@ -1004,6 +1006,28 @@ never measured as empty, and that is model data, reported once per object
 as the integrity warning `shape.voided-body` (located
 `ifc:<fingerprint>:voided-body:#<id>`, #310). A body empty before any
 opening keeps `mesh compilation produced no triangles`.
+
+A body whose faces, as authored, do not close is an open surface: it has
+no inside, so a clash between two such bodies cannot tell touching from
+crossing, and the room it takes up above a floor is undecided where it
+reaches the floor. Whether faces close is a fact about the file: each
+`Body` item that lists its faces (a polygonal or triangulated face set, a
+faceted B-rep, a shell- or face-based surface model, through mapped
+items) is read item by item, its corners by their exact coordinates, and
+an edge that bounds one face only is open as written. A measured product
+whose mesh is no closed solid and that has such edges is reported once as
+the integrity warning `shape.open-surface` (#311, located
+`ifc:<fingerprint>:open-surface:#<id>`), with the number of open edges:
+model data, like an `IfcOpenShell` of glazing quads, a tube authored as a
+face set stated not closed, or a face set whose faces leave a hole.
+A shell whose authored faces close but whose mesh does not is no model
+data and gets no warning: the mesh compiler can drop a corner lying a
+fraction of a micrometre off its neighbours' line from one face only
+(axiolid/kernel#278, #314). Its measurements that need an inside stay not evaluated; the
+not-evaluated inventory labels them `(model data)` when every body they
+rest on carries the warning. A face set that repeats each corner once per
+face is not open: equal coordinates are one corner, and the geometry
+store measures it as the closed solid it is (#308).
 
 **Openings are subtracted in their host's frame.** Since `ifc-geometry`
 0.13 (openbimrs/ifc#388) a host's body is lowered without its world

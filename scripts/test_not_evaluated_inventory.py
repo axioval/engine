@@ -172,6 +172,34 @@ class InventoryTests(unittest.TestCase):
             [(1, 2)],
         )
 
+    def test_bodies_authored_open_are_model_data_only_when_all_are(self) -> None:
+        meet = ("surfaces meet ifc-step:m.ifc/{}, but neither body is a closed solid, so "
+                "touching cannot be told from crossing")
+        below = ("free-space query unavailable: ifc-step:m.ifc/{} reaches below the headroom "
+                 "band but is not a closed solid, so what it occupies in the band is undecided")
+        faces = result(
+            [],
+            [outcome("clash", "#1", "incomplete_evidence", meet.format("#2")),
+             outcome("clash", "#1", "incomplete_evidence", meet.format("#3")),
+             outcome("area", "#9", "backend_unavailable", below.format("#2")),
+             outcome("area", "#9", "backend_unavailable", below.format("#3"))],
+        )
+        faces["integrity"] = [
+            {"code": "shape.open-surface", "severity": "warning", "message": "",
+             "locator": f"ifc:sha256:0:open-surface:{local}"}
+            for local in ("#1", "#2")
+        ] + [{"code": "shape.no-representation", "locator": "ifc:sha256:0:no-shape:#3"}]
+        causes = inventory.inventory([("a", faces)], RULES)
+        rows = {cause.label(): (cause.outcomes, cause.model_data()) for cause in causes}
+        clash = "incomplete_evidence{} · clash · " + inventory.pattern(meet.format("#2"))
+        free = "backend_unavailable{} · plan-area · " + inventory.pattern(below.format("#2"))
+        self.assertEqual(
+            rows,
+            {clash.format(" (model data)"): (1, True), clash.format(""): (1, False),
+             free.format(" (model data)"): (1, True), free.format(""): (1, False)},
+        )
+
+
     def test_rule_ids_map_to_capabilities_through_the_packages(self) -> None:
         rules = inventory.capabilities([inventory.DEFAULT_RULESET],
                                        [inventory.DEFAULT_DEFINITIONS])

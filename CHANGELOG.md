@@ -43,6 +43,15 @@ All notable changes are documented here. This project follows Semantic Versionin
   still measured without a shared volume names each body whose own volume
   the service refuses and why
   ([#312](https://github.com/axioval/engine/issues/312)).
+- **Geometry**: a measured product whose mesh is no closed solid because
+  its `Body` items' faces, as authored, leave edges bounding one face only
+  (an `IfcOpenShell`, a face set left open or with a hole) is listed once
+  per object as the integrity warning `shape.open-surface`, as model data,
+  with the number of open edges; its outcomes are unchanged. The
+  not-evaluated inventory labels an outcome refused for bodies that are
+  not closed solids `<reason> (model data)` when every body it rests on
+  carries the warning
+  ([#311](https://github.com/axioval/engine/issues/311)).
 - **Geometry**: free-floor placements and space measurements near a
   tessellated body are bracketed by its certified chord deviation instead of
   refused as not exact: a verdict is given where every body within that

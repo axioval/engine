@@ -1287,8 +1287,10 @@ tolerance of the other operand's faces onto them before it cuts
 host's face leaves no skin that thin, which self-intersected once placed
 at georeferenced coordinates and left the host's volume unmeasured. The
 report states the largest move (`operands snapped onto each other within
-tolerance`); a body with one is declared tessellated within it, never
-exact, and one without stays exact. On a 76 MB georeferenced model 32 of
+tolerance`); a body with a move larger than 1e-9 m is declared
+tessellated within it, never exact, and one with a smaller move, which is
+rounding (an opening exported a few 1e-15 m short of the face), or none
+stays exact. On a 76 MB georeferenced model 32 of
 40 such hosts had their volume refused before (#306). Measuring a curved boolean costs about
 half a second per opening at 1 mm (release build), so a model with many
 round openings takes correspondingly longer to mesh. On a 29 MB model

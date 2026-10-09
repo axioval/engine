@@ -13752,13 +13752,11 @@ fn beam_supports_are_found_by_contact_with_geometry() {
     // a tessellation. Its mesh is certified against the exact compiler's
     // result (axiolid/kernel#235), which builds the hole tangent to the
     // flange's face since axiolid/kernel#243 (axiolid-mesh-compile 0.3.13),
-    // so both openings are decided. One wall's flush window ends a rounding
-    // error (9e-16 m) off its face: the compiler snaps it onto the face
-    // (axiolid/kernel#276), so that wall is declared within the snap too.
+    // so both openings are decided.
     assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
     let geometry = &result["geometry"];
     assert_eq!(geometry["unmeasured"], json!([]), "{geometry:#}");
-    assert_eq!(geometry["tessellated"], 2, "{geometry:#}");
+    assert_eq!(geometry["tessellated"], 1, "{geometry:#}");
     assert_eq!(
         finding_messages(&result),
         [
@@ -14395,8 +14393,8 @@ fn with_geometry_flush_openings_in_a_georeferenced_wall_are_subtracted() {
     // As exported, the openings stop 5e-15 m short of one face (engine#306).
     // The mesh compiler snaps the openings onto that face, so no skin that
     // thin is left to self-intersect once placed 5600 km out
-    // (axiolid/kernel#276): the volume is the net volume, and the wall is
-    // declared within the snap the compiler reports.
+    // (axiolid/kernel#276): the volume is the net volume. A snap that
+    // small is rounding, so the wall stays exact.
     let model = georeferenced_wall_with_flush_openings(site, turn, 0.124_999_999_999_995);
     let (output, result) = rule(
         &model,
@@ -14407,19 +14405,7 @@ fn with_geometry_flush_openings_in_a_georeferenced_wall_are_subtracted() {
     assert_eq!(result["report"]["findings"], json!([]), "{result:#}");
     assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
     assert!(!unmeasured(&result), "{:#}", result["geometry"]);
-    // Snapped, the mesh is the boolean of operands moved by up to 5e-15 m:
-    // declared tessellated within that, beside its exact boundary.
-    assert_eq!(result["geometry"]["exact"], 0, "{:#}", result["geometry"]);
-    assert_eq!(
-        result["geometry"]["tessellated"], 1,
-        "{:#}",
-        result["geometry"]
-    );
-    assert_eq!(
-        result["geometry"]["exact_boundaries"], 1,
-        "{:#}",
-        result["geometry"]
-    );
+    assert_eq!(result["geometry"]["exact"], 1, "{:#}", result["geometry"]);
     let (output, result) = rule(
         &model,
         json!({"kind": "compare", "operator": "lessThan", "label": "value",
@@ -14427,6 +14413,25 @@ fn with_geometry_flush_openings_in_a_georeferenced_wall_are_subtracted() {
     );
     assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
     assert_eq!(finding_messages(&result).len(), 1, "{result:#}");
+
+    // Openings 5 um short of the face are snapped onto it too, but by more
+    // than rounding: the wall is declared tessellated within the reported
+    // move, beside its exact boundary, and its volume is still measured.
+    let model = georeferenced_wall_with_flush_openings(site, turn, 0.124_995);
+    let (output, result) = rule(
+        &model,
+        json!({"kind": "between", "operand": volume,
+               "low": cubic(net - 1e-3), "high": cubic(net + 1e-3)}),
+    );
+    assert_eq!(output.status.code(), Some(0), "{result:#}");
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+    assert!(!unmeasured(&result), "{:#}", result["geometry"]);
+    assert_eq!(result["geometry"]["exact"], 0, "{:#}", result["geometry"]);
+    assert_eq!(
+        result["geometry"]["tessellated"], 1,
+        "{:#}",
+        result["geometry"]
+    );
 }
 
 /// Room #19 (x 0..2.4, y 0..1.6, 3 m high) with door #50 in its north

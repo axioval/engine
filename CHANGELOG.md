@@ -87,9 +87,9 @@ All notable changes are documented here. This project follows Semantic Versionin
   instead of leaving a skin that thin, which self-intersected once placed
   and left the host's volume refused (axiolid/kernel#276). A planar body
   with a boolean is now meshed with a deviation report: where the compiler
-  snapped its operands (`operands snapped onto each other within
-  tolerance`) it is declared tessellated within the largest move, never
-  exact; otherwise it stays exact
+  snapped its operands by more than 1e-9 m (`operands snapped onto each
+  other within tolerance`) it is declared tessellated within the largest
+  move, never exact; a smaller move is rounding and it stays exact
   ([#306](https://github.com/axioval/engine/issues/306)).
 - **Geometry**: moves to axiolid-construct 0.3.16, axiolid-mesh-compile
   0.3.15 and their contracts. Faces the mesh compiler refused are measured:

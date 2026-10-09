@@ -3305,14 +3305,17 @@ fn warped_width(report: &DeviationReport) -> Option<f64> {
 /// that thin since axiolid-mesh-compile 0.3.16: the compiler moves the
 /// operands' vertices within the tolerance onto each other's faces first,
 /// and reports the largest move, so the mesh is the boolean of operands
-/// moved by at most that much, not exact. `None` when it reports neither.
+/// moved by at most that much, not exact. A move no larger than
+/// [`ON_SURFACE`] (an opening exported a few 1e-15 m short of the face)
+/// is rounding, the distance at which every service reads two points as
+/// one, and keeps the body exact. `None` when it reports neither.
 fn planar_width(report: &DeviationReport) -> Option<f64> {
     let snapped = report
         .contributions
         .iter()
         .filter(|contribution| contribution.detail == SNAPPED_OPERANDS)
         .filter_map(|contribution| contribution.bound.value())
-        .filter(|moved| *moved > 0.0)
+        .filter(|moved| *moved > ON_SURFACE)
         .reduce(f64::max);
     match (warped_width(report), snapped) {
         (Some(warped), Some(snapped)) => Some(warped.max(snapped)),

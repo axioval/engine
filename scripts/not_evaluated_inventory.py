@@ -28,7 +28,8 @@ unmeasured reason that is a fact about the model data (`no shape
 representation`: a product with no representation at all; a face whose
 boundary crosses or runs back along itself, which the mesh compiler refuses
 as `... profile outer ring intersects itself` or `... folds back on itself
-at vertex <n>`) is labelled `unmeasured (model data): ...`. Causes are ranked by the number of not-evaluated
+at vertex <n>`; a host whose openings remove its whole body) is labelled
+`unmeasured (model data): ...`. Causes are ranked by the number of not-evaluated
 outcomes they account for, then unmeasured objects, then models affected,
 then the pattern, so the table is deterministic for the same inputs.
 
@@ -65,12 +66,16 @@ MODEL_DATA = frozenset({"no shape representation"})
 # `shape.self-intersecting-face`). A ring that overlaps itself is not: the
 # corpus's are holes joined to the outer boundary by a seam, which the
 # compiler does not accept yet (axiolid/kernel#270).
+# So is a host whose openings remove its whole body (#310, the CLI's
+# `shape.voided-body`).
 MODEL_DATA_PATTERNS = re.compile(
     r"mesh compilation refused: invalid geometry input: "
     r"(?:planar face|authored polygon face <n>) cannot be triangulated: "
     r"(?:its rings do not bound a region: )?"
     r"profile (?:outer ring|hole <n>) "
     r"(?:intersects itself|folds back on itself at vertex <n>)"
+    r"|its openings remove its whole body: nothing is left once the <n> opening\(s\) "
+    r"voiding it are subtracted"
 )
 
 

@@ -195,9 +195,11 @@ pub struct GeometryReport {
     pub unmeasured: Vec<(ObjectId, String)>,
     /// Facts about the model data found while meshing, once per object:
     /// every physical product with no shape representation and no parts
-    /// ([`NO_SHAPE_REPRESENTATION`]), and every product unmeasured for a
+    /// ([`NO_SHAPE_REPRESENTATION`]), every product unmeasured for a
     /// face whose boundary crosses or runs back along itself
-    /// ([`SELF_INTERSECTING_FACE`]). Their measurements stay not evaluated.
+    /// ([`SELF_INTERSECTING_FACE`]), and every product whose openings remove
+    /// its whole body ([`VOIDED_BODY`]). Their measurements stay not
+    /// evaluated.
     pub model_data: Vec<ModelData>,
     /// Openings taken as already applied to a measured host's `Body`:
     /// host, opening and the reason, in identity order.
@@ -217,6 +219,32 @@ pub const NO_SHAPE_REPRESENTATION: &str = "shape.no-representation";
 /// back along itself: that boundary bounds no region, so no surface fills
 /// it (#298).
 pub const SELF_INTERSECTING_FACE: &str = "shape.self-intersecting-face";
+
+/// The integrity code of a product whose openings remove its whole body:
+/// its `Body` meshes to a solid, and nothing is left once the openings
+/// voiding it are subtracted, as when a frame is voided by the opening
+/// meant for the wall around it.
+pub const VOIDED_BODY: &str = "shape.voided-body";
+
+/// Why a mesh is refused when compilation leaves no triangle.
+const NO_TRIANGLES: &str = "mesh compilation produced no triangles";
+
+/// The reason a product is unmeasured when its openings remove its whole
+/// body, `count` of them subtracted.
+fn voided_body_reason(count: usize) -> String {
+    format!(
+        "its openings remove its whole body: nothing is left once the {count} opening(s) \
+         voiding it are subtracted"
+    )
+}
+
+/// Whether `reason` is [`voided_body_reason`]'s.
+fn voided_body(reason: &str) -> bool {
+    reason
+        .strip_prefix("its openings remove its whole body: nothing is left once the ")
+        .and_then(|rest| rest.strip_suffix(" opening(s) voiding it are subtracted"))
+        .is_some_and(|count| count.parse::<usize>().is_ok())
+}
 
 /// A fact about the model data the bridge found, for the host to report as
 /// an integrity warning.
@@ -1128,7 +1156,8 @@ impl Composer<'_> {
 
 /// Every product left unmeasured for a fact about the model data, once
 /// each, as an integrity warning: no shape representation (and no parts),
-/// or a face whose boundary crosses or runs back along itself.
+/// a face whose boundary crosses or runs back along itself, or openings
+/// that remove the whole body.
 fn model_data_notes(
     unmeasured: &[(ObjectId, String)],
     snapshots: &[SourceSnapshot],
@@ -1152,6 +1181,16 @@ fn model_data_notes(
                          measurement of it is not evaluated"
                     ),
                     locator: format!("ifc:{fingerprint}:no-shape:{local}"),
+                });
+            }
+            if voided_body(reason) {
+                return Some(ModelData {
+                    code: VOIDED_BODY,
+                    message: format!(
+                        "{local} {kind} has openings that remove its whole body; every \
+                         measurement of it is not evaluated"
+                    ),
+                    locator: format!("ifc:{fingerprint}:voided-body:{local}"),
                 });
             }
             let defect = self_intersecting_face(reason)?;
@@ -1867,7 +1906,7 @@ fn compile(
                 .compile_mesh(graph, root, &options)
                 .map_err(|error| compilation_refused(&error))?;
             if mesh.triangle_count() == 0 {
-                return Err("mesh compilation produced no triangles".into());
+                return Err(NO_TRIANGLES.into());
             }
             return Ok((mesh, Fit::Exact));
         }
@@ -1878,7 +1917,7 @@ fn compile(
             .compile_mesh_with_deviation(graph, root, &options)
             .map_err(|error| compilation_refused(&error))?;
         if outcome.mesh.triangle_count() == 0 {
-            return Err("mesh compilation produced no triangles".into());
+            return Err(NO_TRIANGLES.into());
         }
         return Ok((
             outcome.mesh,
@@ -1890,7 +1929,7 @@ fn compile(
         .map_err(|error| compilation_refused(&error))?;
     let mesh = outcome.mesh;
     if mesh.triangle_count() == 0 {
-        return Err("mesh compilation produced no triangles".into());
+        return Err(NO_TRIANGLES.into());
     }
     match report.bound {
         Some(bound) if bound.is_finite() && bound >= 0.0 => Ok((mesh, Fit::Within(bound))),
@@ -2215,6 +2254,7 @@ fn mesh(
     if let Some(reason) = linear.refusal(model, product) {
         return Err(reason);
     }
+    let net_options = net;
     let mut session = session(model, units);
     let Some(net) =
         lower_product_net_with(&mut session, product, net).map_err(|e| e.to_string())?
@@ -2222,7 +2262,18 @@ fn mesh(
         return Ok(None);
     };
     let lowered = session.finish(net.root).map_err(|e| e.to_string())?;
-    let (mesh, fit) = compile(backend, &lowered.graph, lowered.root)?;
+    let (mesh, fit) = match compile(backend, &lowered.graph, lowered.root) {
+        Err(reason) if reason == NO_TRIANGLES && !net.subtractions.is_empty() => {
+            return Err(
+                if gross_has_triangles(backend, model, units, product, net_options) {
+                    voided_body_reason(net.subtractions.len())
+                } else {
+                    reason
+                },
+            );
+        }
+        compiled => compiled?,
+    };
     // Built from the graph the mesh was compiled from, so it carries the
     // same placement; anything without an exact construction keeps its
     // mesh alone.
@@ -2236,6 +2287,28 @@ fn mesh(
         applied: Vec::new(),
         taken: net.taken_as_applied,
     }))
+}
+
+/// Whether `product`'s gross `Body`, before its openings are subtracted,
+/// compiles to a mesh with triangles: then a net body that compiles to none
+/// was removed whole by the openings (model data, [`VOIDED_BODY`]). The
+/// exact compiler that found the net body empty is the one every other
+/// measurement trusts; anything refused here keeps the plain reason.
+fn gross_has_triangles(
+    backend: &Compiler,
+    model: &Model,
+    units: &ifc_geometry::units::UnitScale,
+    product: EntityId,
+    net: NetOptions,
+) -> bool {
+    let mut session = session(model, units);
+    let Ok(Some(net)) = lower_product_net_with(&mut session, product, net) else {
+        return false;
+    };
+    let Ok(lowered) = session.finish(net.gross) else {
+        return false;
+    };
+    compile(backend, &lowered.graph, lowered.root).is_ok_and(|(mesh, _)| mesh.triangle_count() > 0)
 }
 
 /// The void of an opening taken as already applied: its `Reference`
@@ -2596,6 +2669,27 @@ mod tests {
     };
     use axioval::ifc::import_ifc_session;
     use axioval::ir::ObjectId;
+
+    /// The reason a host's openings remove its whole body is told apart
+    /// from an empty compilation and from anything else (#310).
+    #[test]
+    fn only_openings_removing_the_whole_body_read_as_a_voided_body() {
+        assert!(super::voided_body(&super::voided_body_reason(1)));
+        assert!(super::voided_body(&super::voided_body_reason(12)));
+        assert_eq!(
+            super::voided_body_reason(2),
+            "its openings remove its whole body: nothing is left once the 2 opening(s) \
+             voiding it are subtracted"
+        );
+        for other in [
+            super::NO_TRIANGLES,
+            "its openings remove its whole body: nothing is left once the x opening(s) \
+             voiding it are subtracted",
+            "its openings remove its whole body",
+        ] {
+            assert!(!super::voided_body(other), "{other}");
+        }
+    }
 
     /// Only the compiler's refusals of a face ring that crosses or runs
     /// back along itself are model data (#298); a ring overlapping itself

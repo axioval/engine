@@ -26,6 +26,14 @@ All notable changes are documented here. This project follows Semantic Versionin
   (axiolid/kernel#269) and a hole joined to its outer boundary by a seam
   (axiolid/kernel#270)
   ([#298](https://github.com/axioval/engine/issues/298)).
+- **Geometry**: a host whose openings remove its whole body, where its
+  body before the openings meshes, is unmeasured as `its openings remove
+  its whole body: nothing is left once the <n> opening(s) voiding it are
+  subtracted` instead of `mesh compilation produced no triangles`, and
+  listed once per object as the integrity warning `shape.voided-body`, as
+  model data; its outcomes stay not evaluated. The not-evaluated inventory
+  labels the reason `unmeasured (model data)`
+  ([#310](https://github.com/axioval/engine/issues/310)).
 - **Geometry**: free-floor placements and space measurements near a
   tessellated body are bracketed by its certified chord deviation instead of
   refused as not exact: a verdict is given where every body within that

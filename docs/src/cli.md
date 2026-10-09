@@ -336,7 +336,8 @@ following them are not evaluated, and the exit status follows from them.
 With `--geometry` it lists, as `shape.no-representation` warnings, every
 physical product with no shape representation and no parts, and as
 `shape.self-intersecting-face` warnings every product unmeasured for a face
-whose boundary crosses or runs back along itself, once each (see
+whose boundary crosses or runs back along itself, and as `shape.voided-body`
+warnings every product whose openings remove its whole body, once each (see
 [Geometry](#geometry)).
 `objects` maps every object the report names to its kind and, when it has one,
 its GlobalId, so a reader can tell what `#4711` is without the model. A
@@ -993,6 +994,16 @@ overlaps itself is not: the ones seen are a hole joined to the outer
 boundary by a seam traversed both ways, a valid face the compiler does not
 accept yet (axiolid/kernel#270). Neither is a face the clipper finds no
 ear in (axiolid/kernel#269).
+
+A host whose openings remove its whole body, such as a frame modelled as a
+wall and voided by the opening meant for the wall around it, compiles to
+no triangles. When its gross body, before the openings are subtracted,
+compiles to some, the host is unmeasured as `its openings remove its whole
+body: nothing is left once the <n> opening(s) voiding it are subtracted`,
+never measured as empty, and that is model data, reported once per object
+as the integrity warning `shape.voided-body` (located
+`ifc:<fingerprint>:voided-body:#<id>`, #310). A body empty before any
+opening keeps `mesh compilation produced no triangles`.
 
 **Openings are subtracted in their host's frame.** Since `ifc-geometry`
 0.13 (openbimrs/ifc#388) a host's body is lowered without its world

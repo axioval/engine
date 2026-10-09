@@ -1785,6 +1785,74 @@ fn with_geometry_a_face_crossing_itself_is_model_data() {
     }
 }
 
+/// The crossing walls with an opening (#208) that removes the whole wall
+/// along x (#16), after the corpus behind #310: a frame modelled as a wall
+/// is voided by the opening meant for the wall around it, as long and as
+/// high as the frame, flush with its ends, top and bottom, and thicker.
+fn crossing_walls_voided_whole() -> String {
+    crossing_walls_with(
+        "#200=IFCRECTANGLEPROFILEDEF(.AREA.,$,#201,4.,0.6);\n\
+         #201=IFCAXIS2PLACEMENT2D(#202,$);\n\
+         #202=IFCCARTESIANPOINT((2.,0.));\n\
+         #205=IFCEXTRUDEDAREASOLID(#200,#2,#4,3.);\n\
+         #206=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#205));\n\
+         #207=IFCPRODUCTDEFINITIONSHAPE($,$,(#206));\n\
+         #208=IFCOPENINGELEMENT('0000000000000000000208',$,$,$,$,#3,#207,$,.OPENING.);\n\
+         #209=IFCRELVOIDSELEMENT('0000000000000000000209',$,$,$,#16,#208);\n",
+    )
+}
+
+/// A host whose openings remove its whole body compiles to no triangles.
+/// That is model data (#310): the wall is unmeasured with a reason naming
+/// its openings, never measured as empty, and reported once as the
+/// integrity warning `shape.voided-body`. The other wall is measured.
+#[test]
+fn with_geometry_a_host_its_openings_remove_whole_is_model_data() {
+    let case = Case::new("geometry-voided-body");
+    let (output, result) = case.wall_clash(&crossing_walls_voided_whole(), &json!({}));
+    let geometry = &result["geometry"];
+    assert_eq!(geometry["exact"], 1, "{}\n{geometry:#}", stderr(&output));
+    let voided = geometry["unmeasured"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["object"]["local_id"] == "#16")
+        .unwrap_or_else(|| panic!("#16 is measured: {geometry:#}"));
+    assert_eq!(
+        voided["reason"],
+        "its openings remove its whole body: nothing is left once the 1 opening(s) \
+         voiding it are subtracted"
+    );
+    let notes: Vec<&Value> = result["integrity"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|record| record["code"] == "shape.voided-body")
+        .collect();
+    assert_eq!(notes.len(), 1, "{:#}", result["integrity"]);
+    assert_eq!(notes[0]["severity"], "warning");
+    assert!(
+        notes[0]["locator"]
+            .as_str()
+            .unwrap()
+            .ends_with(":voided-body:#16"),
+        "{:#}",
+        notes[0]
+    );
+    assert_eq!(
+        notes[0]["message"],
+        "#16 IFCWALL has openings that remove its whole body; every measurement of it is \
+         not evaluated"
+    );
+    // Never measured as empty: its clash is not evaluated.
+    assert!(
+        result["report"]["not_evaluated"]
+            .to_string()
+            .contains("\"#16\""),
+        "{result:#}"
+    );
+}
+
 /// A box `lx` by `ly` centred on `(cx, cy)`, 3 m high, as instances
 /// `first..first + 5`; `product` is the product line with `REP` for its
 /// shape.

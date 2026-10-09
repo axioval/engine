@@ -76,7 +76,9 @@ representation; it has <identifiers>`, a product whose representations
 is a gap in the engine or its adapters. A face whose boundary crosses or
 runs back along itself (`… profile outer ring intersects itself`, `… folds
 back on itself at vertex <n>`) is model data too (#298; the result lists it
-once as `shape.self-intersecting-face`), and is labelled the same way.
+once as `shape.self-intersecting-face`), and is labelled the same way, as
+is a host whose openings remove its whole body (`its openings remove its
+whole body: …`, #310; listed once as `shape.voided-body`).
 `--format json` marks model-data causes with `"model_data": true`. Causes are ranked by the outcomes they account for, then by unmeasured
 objects, then by models affected.
 

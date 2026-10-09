@@ -150,6 +150,28 @@ class InventoryTests(unittest.TestCase):
         self.assertTrue(others[0].endswith("overlaps itself"), others)
         self.assertTrue(others[1].endswith("found no ear among <n> remaining vertices"), others)
 
+    def test_openings_removing_the_whole_body_are_model_data(self) -> None:
+        voided = result(
+            [("#1", "IFCWALLSTANDARDCASE", "its openings remove its whole body: nothing is "
+              "left once the 1 opening(s) voiding it are subtracted"),
+             ("#2", "IFCBUILDINGELEMENTPROXY", "its openings remove its whole body: nothing "
+              "is left once the 2 opening(s) voiding it are subtracted"),
+             ("#3", "IFCWALL", "mesh compilation produced no triangles")],
+            [outcome("clash", "#1", "incomplete_evidence", "proximity unavailable")],
+        )
+        causes = inventory.inventory([("a", voided)], RULES)
+        rows = {cause.label(): cause for cause in causes}
+        self.assertEqual(
+            sorted(rows),
+            ["unmeasured (model data): its openings remove its whole body: nothing is left "
+             "once the <n> opening(s) voiding it are subtracted",
+             "unmeasured: mesh compilation produced no triangles"],
+        )
+        self.assertEqual(
+            [(cause.outcomes, cause.objects) for cause in causes if cause.model_data()],
+            [(1, 2)],
+        )
+
     def test_rule_ids_map_to_capabilities_through_the_packages(self) -> None:
         rules = inventory.capabilities([inventory.DEFAULT_RULESET],
                                        [inventory.DEFAULT_DEFINITIONS])

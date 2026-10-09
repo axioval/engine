@@ -82,16 +82,21 @@ All notable changes are documented here. This project follows Semantic Versionin
   inside a shared edge are welded, so such a B-rep closes; a declared solid
   whose mesh does not close is measured as an open surface and refused as
   a boolean operand by name (axiolid/kernel#265).
-- **Geometry**: two kernel defects are refused by name instead of
-  measured wrong (#317). An extrusion oblique to its profile's normal, of a
-  profile with arcs or curves, gets no exact boundary and, as a boolean
-  operand, leaves its object unmeasured as `an extrusion oblique to its
-  profile's normal, of a profile with arcs or curves, has no trusted exact
-  construction, ...`: the kernel builds its arc walls as right cylinders
-  without an error (axiolid/kernel#280). An extrusion whose direction lies
-  in its profile's plane leaves its object unmeasured as `extrusion
-  direction in the profile plane: it sweeps no volume`, where the mesh
-  compiler built a sliver (axiolid/kernel#281).
+- **Geometry**: moves to axiolid-construct 0.3.17 and axiolid-mesh-compile
+  0.3.16, which build an extrusion oblique to its profile's normal, of a
+  profile with arcs or a circle, with exact elliptical-cylinder walls
+  (axiolid/kernel#280) and refuse a direction within tolerance of the
+  profile plane by name in the mesh compiler too (#281). The engine asks
+  the kernel first and no longer refuses either itself
+  ([#317](https://github.com/axioval/engine/issues/317)): an oblique round
+  column or rounded member is measured and has an exact boundary; an
+  oblique ellipse gets none (`oblique ellipse extrusion`); a body with an
+  extrusion in its profile plane is unmeasured as `mesh compilation
+  refused: ... extrusion direction in the profile plane`. A clip of, or a
+  difference with, an oblique extrusion with arcs (a slab less an oblique
+  round opening) is still unmeasured, now with the kernel's own reason
+  (`exact boolean over a curve or surface it cannot evaluate`,
+  axiolid/kernel#287).
 - **Geometry**: a product without a `Box` representation whose openings
   leave it unmeasured is bounded, for the space service, by its gross body
   before the openings are subtracted, when that is measured: one such slab

@@ -1220,16 +1220,17 @@ extrusion, a sectioned spine. An extrusion against its profile normal
 is built exactly as the mirror of the forward one since
 axiolid-construct 0.3.16 (axiolid/kernel#275), so a boolean with one is
 certified like any other. An extrusion oblique to its profile's normal,
-of a profile with arcs or curves, is built by the kernel with a wrong
-wall and no error (axiolid/kernel#280): as an operand of a boolean it
-leaves the body unmeasured by name (`an extrusion oblique to its
-profile's normal, of a profile with arcs or curves, has no trusted exact
-construction, …`), and no exact boundary is built from it; alone, its
-deviation is bounded from its profile and it is measured. An extrusion
-whose direction lies in its profile's plane sweeps no volume and is
-refused by name (`extrusion direction in the profile plane: it sweeps no
-volume`) before the mesh compiler, which would build a sliver
-(axiolid/kernel#281). A round hole touching a planar face (a web
+of a profile with arcs (a rounded rectangle, a contour with arcs, a
+circle), is built exactly since axiolid-construct 0.3.17, each arc's wall
+the elliptical cylinder it sweeps (axiolid/kernel#280), so an oblique round
+column is measured and has an exact boundary; an oblique ellipse is
+refused by the kernel by name (`oblique ellipse extrusion`). The kernel's
+exact boolean cannot yet cut an oblique round operand
+(axiolid/kernel#287): a slab less an oblique round opening is unmeasured
+by the kernel's named refusal. An extrusion whose direction lies within
+the tolerance of its profile's plane sweeps no volume and is refused by
+the kernel by name (`extrusion direction in the profile plane`,
+axiolid/kernel#281). A round hole touching a planar face (a web
 hole touching an I-beam's flange, with or without root fillets) is built
 and certified since axiolid-mesh-compile 0.3.13 (axiolid/kernel#243,
 #249). A space boundary whose curve-bounded plane is bounded by a

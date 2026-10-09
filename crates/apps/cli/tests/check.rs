@@ -18018,77 +18018,84 @@ fn with_geometry_bodies_cut_down_against_their_profile_normal_are_certified() {
     assert_eq!(result["geometry"]["tessellated"], 3, "{result:#}");
 }
 
-/// The kernel builds an oblique exact extrusion of a profile with arcs
-/// with a wrong wall and no error (axiolid/kernel#280), and its mesh
-/// extrusion builds a sliver for a direction in the profile plane
-/// (axiolid/kernel#281). The engine refuses both by name before the kernel
-/// is asked: the sheared, clipped member (#356) is unmeasured, since the
-/// clip's certified deviation is measured against that exact construction,
-/// while the same sheared extrusion alone (#359), whose deviation comes
-/// from its profile, is measured; an extrusion in the profile plane is
-/// unmeasured either way. A sheared extrusion of a profile of straight
-/// edges is built correctly, so the guard leaves it alone.
+/// The kernel builds oblique extrusions of profiles with arcs exactly
+/// (axiolid/kernel#280) and refuses by name what it cannot build; no
+/// engine guard asks first (#317). A sheared rounded member, round column
+/// or elliptic column alone (#359) is measured. Under the half-space clip
+/// (#356), and as a slab's sheared round opening (#306), the exact boolean
+/// the clip's deviation is certified against cannot cut the oblique wall
+/// yet (axiolid/kernel#287), so the host is unmeasured with the kernel's
+/// reason; an oblique ellipse under it is refused as a basis the kernel
+/// does not lower. A direction in the profile plane is refused by the
+/// mesh compiler by name (#281), alone and clipped. A sheared profile of
+/// straight edges is certified, clipped too.
 #[test]
-fn with_geometry_extrusions_the_kernel_builds_wrong_are_refused_by_name() {
+fn with_geometry_oblique_extrusions_are_built_or_refused_by_the_kernel() {
+    const UNCUT: &str = "the mesh compiler certifies no bound on how far the curved surface \
+                         lies from its mesh (exact boolean over a curve or surface it cannot \
+                         evaluate), so it is not declared within the 0.001 m chord tolerance";
     let case = Case::new("geometry-sheared-extrusion");
-    let (output, result) = case.wall_clash(&cut_down_bodies("(0.3,-0.2,-1.)"), &json!({}));
-    assert!(output.status.code().is_some(), "{}", stderr(&output));
-    let unmeasured = unmeasured_reasons(&result);
-    assert_eq!(
-        unmeasured.keys().map(String::as_str).collect::<Vec<_>>(),
-        ["#356"],
-        "{result:#}"
-    );
-    assert_eq!(
-        unmeasured["#356"],
-        "an extrusion oblique to its profile's normal, of a profile with arcs or curves, has \
-         no trusted exact construction, so nothing bounds how far the boolean it is an \
-         operand of lies from its mesh"
-    );
-
-    // An opening of the slab sheared the same way: the exact difference the
-    // slab's deviation is certified against would carry the wrong wall.
-    let sheared_opening = cut_down_bodies("(0.,0.,-1.)")
-        .replace(
-            "#317=IFCRECTANGLEPROFILEDEF(.AREA.,$,#319,2.,1.)",
-            "#317=IFCROUNDEDRECTANGLEPROFILEDEF(.AREA.,$,#319,2.,1.,0.2)",
+    let unmeasured = |model: &str| {
+        let (output, result) = case.wall_clash(model, &json!({}));
+        assert!(output.status.code().is_some(), "{}", stderr(&output));
+        unmeasured_reasons(&result)
+    };
+    let member = |profile: &str| {
+        cut_down_bodies("(0.3,-0.2,-1.)").replace(
+            "IFCROUNDEDRECTANGLEPROFILEDEF(.AREA.,$,#342,1.,0.6,0.1)",
+            profile,
         )
-        .replace(
-            "#322=IFCDIRECTION((0.,0.,-1.))",
-            "#322=IFCDIRECTION((0.3,-0.2,-1.))",
-        );
-    let (output, result) = case.wall_clash(&sheared_opening, &json!({}));
-    assert!(output.status.code().is_some(), "{}", stderr(&output));
-    let unmeasured = unmeasured_reasons(&result);
-    assert_eq!(
-        unmeasured.keys().map(String::as_str).collect::<Vec<_>>(),
-        ["#306"],
-        "{result:#}"
-    );
-    assert!(
-        unmeasured["#306"].starts_with("an extrusion oblique to its profile's normal"),
-        "{result:#}"
-    );
+    };
 
-    let (output, result) = case.wall_clash(&cut_down_bodies("(1.,0.,0.)"), &json!({}));
-    assert!(output.status.code().is_some(), "{}", stderr(&output));
-    let unmeasured = unmeasured_reasons(&result);
-    for member in ["#356", "#359"] {
-        assert!(
-            unmeasured
-                .get(member)
-                .is_some_and(|reason| reason.contains("extrusion direction in the profile plane")),
-            "{member}: {result:#}"
+    for profile in [
+        "IFCROUNDEDRECTANGLEPROFILEDEF(.AREA.,$,#342,1.,0.6,0.1)",
+        "IFCCIRCLEPROFILEDEF(.AREA.,$,#342,0.3)",
+    ] {
+        assert_eq!(
+            unmeasured(&member(profile)),
+            BTreeMap::from([("#356".to_owned(), UNCUT.to_owned())]),
+            "{profile}"
         );
     }
-
-    let straight = cut_down_bodies("(0.3,-0.2,-1.)").replace(
-        "IFCROUNDEDRECTANGLEPROFILEDEF(.AREA.,$,#342,1.,0.6,0.1)",
-        "IFCRECTANGLEPROFILEDEF(.AREA.,$,#342,1.,0.6)",
+    let ellipse = unmeasured(&member("IFCELLIPSEPROFILEDEF(.AREA.,$,#342,0.4,0.2)"));
+    assert_eq!(
+        ellipse.keys().map(String::as_str).collect::<Vec<_>>(),
+        ["#356"],
+        "{ellipse:#?}"
     );
-    let (output, result) = case.wall_clash(&straight, &json!({}));
-    assert!(output.status.code().is_some(), "{}", stderr(&output));
-    assert_eq!(unmeasured_reasons(&result), BTreeMap::new(), "{result:#}");
+    assert!(
+        ellipse["#356"].contains("derived profile over an unsupported basis"),
+        "{ellipse:#?}"
+    );
+    assert_eq!(
+        unmeasured(&member("IFCRECTANGLEPROFILEDEF(.AREA.,$,#342,1.,0.6)")),
+        BTreeMap::new()
+    );
+
+    let opening = cut_down_bodies("(0.,0.,-1.)")
+        .replace(
+            "#312=IFCEXTRUDEDAREASOLID(#307,#311,#4,0.45)",
+            "#312=IFCEXTRUDEDAREASOLID(#307,#311,#360,0.45)",
+        )
+        .replace(
+            "#359=IFCMEMBER",
+            "#360=IFCDIRECTION((0.3,-0.2,1.));\n#359=IFCMEMBER",
+        );
+    assert_eq!(
+        unmeasured(&opening),
+        BTreeMap::from([("#306".to_owned(), UNCUT.to_owned())])
+    );
+
+    let in_plane = unmeasured(&cut_down_bodies("(1.,0.,0.)"));
+    let refused = "mesh compilation refused: backend `scalar-generate` cannot apply Sweep to \
+                   `extrusion direction in the profile plane`";
+    assert_eq!(
+        in_plane,
+        BTreeMap::from([
+            ("#356".to_owned(), refused.to_owned()),
+            ("#359".to_owned(), refused.to_owned()),
+        ])
+    );
 }
 
 /// A wall #31 (`x` -2 to 2, 0.3 m thick, 3 m high) whose right half is cut

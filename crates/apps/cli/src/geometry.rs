@@ -3213,7 +3213,6 @@ fn compile(
     root: NodeId,
 ) -> Result<(axiolid_mesh::TriMesh, Fit), String> {
     let options = ExecutionOptions::new(TOLERANCE);
-    untrusted_extrusions(graph, root)?;
     let leaves = authored_leaves(graph, root)?;
     for &leaf in &leaves.under_boolean {
         let (_, report) = backend
@@ -3363,55 +3362,6 @@ fn authored_leaves(graph: &GeometryGraph, root: NodeId) -> Result<AuthoredLeaves
     let mut leaves = AuthoredLeaves::default();
     visit(graph, root, false, &mut NODE_BUDGET.clone(), &mut leaves)?;
     Ok(leaves)
-}
-
-/// Refuses, by name, an extrusion under `root` the kernel would build
-/// wrong without an error: one whose direction lies in its profile's plane
-/// anywhere (the mesh extrusion builds a sliver, axiolid/kernel#281), and
-/// one oblique to its profile's normal with arcs or curves as an operand
-/// of a boolean (axiolid/kernel#280), whose certified deviation the
-/// compiler measures against an exact construction with a wrong wall.
-/// Alone, such an extrusion's deviation is bounded from its profile and
-/// its mesh is not affected. Walked through instances, collections and
-/// boolean operands, as [`authored_leaves`] walks them.
-fn untrusted_extrusions(graph: &GeometryGraph, root: NodeId) -> Result<(), String> {
-    fn visit(
-        graph: &GeometryGraph,
-        id: NodeId,
-        boolean: bool,
-        budget: &mut usize,
-    ) -> Result<(), String> {
-        if *budget == 0 {
-            return Err(
-                "the geometry graph is too large to find the extrusions the kernel builds wrong"
-                    .into(),
-            );
-        }
-        *budget -= 1;
-        match graph.get(id) {
-            Some(GeometryNode::Instance(instance)) => {
-                visit(graph, instance.source, boolean, budget)
-            }
-            Some(GeometryNode::Collection(children)) => children
-                .iter()
-                .try_for_each(|child| visit(graph, *child, boolean, budget)),
-            Some(GeometryNode::SolidOperation(SolidOperation::Boolean { left, right, .. })) => {
-                visit(graph, *left, true, budget)?;
-                visit(graph, *right, true, budget)
-            }
-            _ => match axioval::axiolid::untrusted_extrusion(graph, id, TOLERANCE, boolean) {
-                Some(reason) if reason == axioval::axiolid::SHEARED_CURVED_EXTRUSION => {
-                    Err(format!(
-                        "{reason}, so nothing bounds how far the boolean it is an operand of \
-                         lies from its mesh"
-                    ))
-                }
-                Some(reason) => Err(reason.to_owned()),
-                None => Ok(()),
-            },
-        }
-    }
-    visit(graph, root, false, &mut NODE_BUDGET.clone())
 }
 
 /// Why a curved mesh has no certified deviation: the paths the compiler

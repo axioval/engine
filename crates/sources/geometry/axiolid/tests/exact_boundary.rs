@@ -25,10 +25,7 @@ use axiolid_model::{
     SolidOperation, TrimSelector, TrimmingPreference,
 };
 use axiolid_profile::{CircleProfile, ContourProfile, EllipseProfile, Profile, RectangleProfile};
-use axioval_axiolid::{
-    AxiolidGeometry, ExactBoundary, IN_PLANE_EXTRUSION, SHEARED_CURVED_EXTRUSION, exact_boundary,
-    untrusted_extrusion,
-};
+use axioval_axiolid::{AxiolidGeometry, ExactBoundary, exact_boundary};
 use axioval_ir::{ObjectId, SourceId};
 
 /// The chord deviation the mesh compiler keeps to, declared for its meshes.
@@ -553,14 +550,52 @@ fn a_hollow_circle_keeps_its_bore() {
     );
 }
 
-/// An extrusion oblique to its profile's normal is built only for a
-/// profile of straight edges: with arcs the kernel builds each arc's wall
-/// as a right cylinder and reports no error (axiolid/kernel#280), so the
-/// exact boundary is refused by name, alone and as a boolean's operand,
-/// upward and downward. The same shear of a sharp rectangle agrees with its
-/// mesh, and a rounded rectangle along the normal either way is built.
+/// A block 2 m square and 1 m high, less `profile` extruded `depth` along
+/// `direction` from 0.5 m up.
+fn block_less(profile: Profile, direction: Vec3, depth: f64) -> (GeometryGraph, NodeId) {
+    graph(|builder| {
+        let block = push(builder, GeometryNode::Profile(rectangle(2.0, 2.0)));
+        let block = push(
+            builder,
+            GeometryNode::SolidOperation(SolidOperation::Extrusion {
+                profile: block,
+                direction: Vec3::Z,
+                depth: 1.0,
+            }),
+        );
+        let profile = push(builder, GeometryNode::Profile(profile));
+        let cut = push(
+            builder,
+            GeometryNode::SolidOperation(SolidOperation::Extrusion {
+                profile,
+                direction,
+                depth,
+            }),
+        );
+        let cut = placed(
+            builder,
+            cut,
+            Transform3::from_translation(Vec3::new(0.0, 0.0, 0.5)),
+        );
+        push(
+            builder,
+            GeometryNode::SolidOperation(SolidOperation::Boolean {
+                left: block,
+                right: cut,
+                operator: BooleanOperator::Difference,
+            }),
+        )
+    })
+}
+
+/// An extrusion oblique to its profile's normal of a profile with arcs is
+/// built by the kernel with exact oblique walls (axiolid/kernel#280), so
+/// its exact boundary agrees with its mesh and has the volume of the
+/// profile's area times the height it rises, upward and downward: a
+/// rounded rectangle and a round column, placed and tilted. An oblique
+/// ellipse is refused by the kernel by name.
 #[test]
-fn an_oblique_extrusion_of_a_profile_with_arcs_is_refused_by_name() {
+fn an_oblique_extrusion_of_a_profile_with_arcs_is_built_exact() {
     let rounded = || {
         Profile::Rectangle(RectangleProfile {
             x: 0.6,
@@ -570,87 +605,71 @@ fn an_oblique_extrusion_of_a_profile_with_arcs_is_refused_by_name() {
             inner_radius: None,
         })
     };
-    let sheared = [Vec3::new(0.3, -0.2, 1.0), Vec3::new(0.3, -0.2, -1.0)];
-    for direction in sheared {
-        let (body, root) = extrusion(rounded(), direction, 0.75, Transform3::IDENTITY);
-        assert_eq!(
-            exact_boundary(&body, root).unwrap_err(),
-            SHEARED_CURVED_EXTRUSION,
-            "{direction:?}"
+    let rounded_area = 0.6 * 0.4 - (4.0 - PI) * 0.01;
+    let depth = 0.75;
+    for direction in [Vec3::new(0.3, -0.2, 1.0), Vec3::new(0.3, -0.2, -1.0)] {
+        let rise = depth / direction.length();
+        let (body, root) = extrusion(
+            rounded(),
+            direction,
+            depth,
+            tilted(Vec3::new(3.0, 1.0, 2.0)),
         );
-        let (body, root) = graph(|builder| {
-            let block = push(builder, GeometryNode::Profile(rectangle(2.0, 2.0)));
-            let block = push(
-                builder,
-                GeometryNode::SolidOperation(SolidOperation::Extrusion {
-                    profile: block,
-                    direction: Vec3::Z,
-                    depth: 1.0,
-                }),
-            );
-            let profile = push(builder, GeometryNode::Profile(rounded()));
-            let cut = push(
-                builder,
-                GeometryNode::SolidOperation(SolidOperation::Extrusion {
-                    profile,
-                    direction,
-                    depth: 0.75,
-                }),
-            );
-            let cut = placed(
-                builder,
-                cut,
-                Transform3::from_translation(Vec3::new(0.0, 0.0, 0.5)),
-            );
-            push(
-                builder,
-                GeometryNode::SolidOperation(SolidOperation::Boolean {
-                    left: block,
-                    right: cut,
-                    operator: BooleanOperator::Difference,
-                }),
-            )
-        });
-        assert_eq!(
-            exact_boundary(&body, root).unwrap_err(),
-            SHEARED_CURVED_EXTRUSION,
-            "{direction:?}"
-        );
-        let (body, root) = extrusion(rectangle(0.6, 0.4), direction, 0.75, Transform3::IDENTITY);
-        agreeing(&body, root);
+        let boundary = agreeing(&body, root);
+        assert_close(volume(boundary.brep().unwrap()), rounded_area * rise, 1e-9);
+
+        let (body, root) = extrusion(circle(0.2), direction, depth, Transform3::IDENTITY);
+        let boundary = agreeing(&body, root);
+        assert_close(volume(boundary.brep().unwrap()), PI * 0.04 * rise, 1e-9);
     }
-    for direction in [Vec3::Z, -Vec3::Z] {
-        let (body, root) = extrusion(rounded(), direction, 0.75, Transform3::IDENTITY);
-        agreeing(&body, root);
-    }
+
+    let ellipse = Profile::Ellipse(EllipseProfile {
+        semi_axis_x: 0.2,
+        semi_axis_y: 0.1,
+    });
+    let (body, root) = extrusion(
+        ellipse,
+        Vec3::new(0.3, -0.2, 1.0),
+        depth,
+        Transform3::IDENTITY,
+    );
+    let refused = exact_boundary(&body, root).unwrap_err();
+    assert!(refused.contains("oblique ellipse extrusion"), "{refused}");
 }
 
-/// An extrusion is in its profile's plane when it runs along the plane and
-/// leaves it by no more than the tolerance; a plate 1 mm thin extruded
-/// along the normal, as symbol plates are authored, is a solid, even at a
-/// 1 mm tolerance.
+/// A difference with an oblique round opening is refused by the kernel's
+/// exact boolean by name (axiolid/kernel#287), never built wrong; the same
+/// opening of straight edges is subtracted.
 #[test]
-fn only_an_extrusion_along_its_profile_plane_is_in_it() {
-    let check = |direction: Vec3, depth: f64| {
-        let (body, root) = graph(|builder| {
-            let profile = push(builder, GeometryNode::Profile(rectangle(1.0, 1.0)));
-            push(
-                builder,
-                GeometryNode::SolidOperation(SolidOperation::Extrusion {
-                    profile,
-                    direction,
-                    depth,
-                }),
-            )
-        });
-        untrusted_extrusion(&body, root, Tolerance::MILLIMETRE, false)
-    };
-    assert_eq!(check(Vec3::Z, 0.001), None);
-    assert_eq!(check(-Vec3::Z, 0.0005), None);
-    assert_eq!(check(Vec3::X, 1.0), Some(IN_PLANE_EXTRUSION));
-    assert_eq!(
-        check(Vec3::new(1.0, 0.0, 0.0005), 1.0),
-        Some(IN_PLANE_EXTRUSION)
+fn a_difference_with_an_oblique_round_opening_is_refused_by_the_kernel() {
+    let direction = Vec3::new(0.3, -0.2, 1.0);
+    let (body, root) = block_less(circle(0.2), direction, 0.75);
+    let refused = exact_boundary(&body, root).unwrap_err();
+    assert!(!refused.is_empty());
+
+    let (body, root) = block_less(rectangle(0.6, 0.4), direction, 0.75);
+    agreeing(&body, root);
+}
+
+/// An extrusion along its profile's plane sweeps no volume, and the kernel
+/// refuses it by name, as it does one leaving the plane by no more than
+/// the exact construction's tolerance (1 um); one that leaves the plane by
+/// more is built.
+#[test]
+fn an_extrusion_along_its_profile_plane_is_refused_by_the_kernel() {
+    for direction in [Vec3::X, Vec3::new(1.0, 0.0, 5e-7)] {
+        let (body, root) = extrusion(rectangle(1.0, 1.0), direction, 1.0, Transform3::IDENTITY);
+        let refused = exact_boundary(&body, root).unwrap_err();
+        assert!(
+            refused.contains("extrusion direction in the profile plane"),
+            "{direction:?}: {refused}"
+        );
+    }
+    let (body, root) = extrusion(
+        rectangle(1.0, 1.0),
+        Vec3::new(1.0, 0.0, 0.01),
+        1.0,
+        Transform3::IDENTITY,
     );
-    assert_eq!(check(Vec3::new(1.0, 0.0, 0.01), 1.0), None);
+    agreeing(&body, root);
 }

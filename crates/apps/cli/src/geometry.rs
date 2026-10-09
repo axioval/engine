@@ -80,7 +80,12 @@
 //! opening occupies no material, so its void is meshed separately and handed
 //! to the derivation alone.
 //!
-//! A host is meshed net of its openings (`lower_product_net_with`). In an
+//! A host is meshed net of its openings (`lower_product_net_with`). Since
+//! `ifc-geometry` 0.13 (openbimrs/ifc#388) the openings are subtracted in
+//! the host's own frame and one `Instance` with the host's world transform
+//! sits above the result, so a flush opening keeps the coincidence its file
+//! states however far out a georeferenced site lies; the mesh and the exact
+//! boundary walk through that `Instance` like any placement. In an
 //! IFC4 or IFC4X3 file, an `IfcOpeningElement` whose every representation is
 //! `Reference` is taken as already applied (`ReferenceOnlyOpenings::
 //! TakeAsApplied`, openbimrs/ifc#351): IFC4 states that such a

@@ -718,7 +718,8 @@ registry source, not the kernel checkout, before relying on an API.
   point) pin it. Should a later overlay refuse touching rings too, check
   each site above against that release.
 - Bodies of several items (axiolid/kernel#229): items under openings are
-  cut part by part in world coordinates by the host's lowering, so a turned
+  cut part by part by the host's lowering (in the host's frame since
+  `ifc-geometry` 0.13, openbimrs/ifc#388), so a turned
   wall of several parts touches on planes no axis is normal to and keeps
   the mesh for the surface distance.
 - Certified tessellation (axiolid/kernel#231, #232, #235, mesh-compile

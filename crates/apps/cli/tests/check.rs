@@ -13606,6 +13606,158 @@ fn openings_near_a_mitred_wall_end_are_checked_against_its_plan_outline() {
     assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
 }
 
+/// Metres. Wall #10, 3.65 m long, 0.25 m thick and 3.67 m high, placed
+/// turned a quarter under a storey (#62) under a site placed at `site`
+/// and turned by `turn` radians, as georeferenced models place it. Door
+/// openings #100 and #200, 1.01 m wide and 2.26 m high, are placed
+/// relative to the wall `face` m off its axis and extruded 0.25 m through
+/// it: flush with both of its faces when `face` is 0.125.
+fn georeferenced_wall_with_flush_openings(site: [f64; 2], turn: f64, face: f64) -> String {
+    let opening = |id: u32, x: f64| {
+        format!(
+            "#{a}=IFCCARTESIANPOINT(({x},{face},0.2));\n\
+             #{b}=IFCAXIS2PLACEMENT3D(#{a},$,$);\n\
+             #{c}=IFCLOCALPLACEMENT(#73,#{b});\n\
+             #{d}=IFCRECTANGLEPROFILEDEF(.AREA.,$,#82,1.01,2.26);\n\
+             #{e}=IFCEXTRUDEDAREASOLID(#{d},#85,#4,0.25);\n\
+             #{f}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{e}));\n\
+             #{g}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{f}));\n\
+             #{id}=IFCOPENINGELEMENT('{id:022}',$,$,$,$,#{c},#{g},$,.OPENING.);\n\
+             #{h}=IFCRELVOIDSELEMENT('{h:022}',$,$,$,#10,#{id});\n",
+            a = id + 1,
+            b = id + 2,
+            c = id + 3,
+            d = id + 4,
+            e = id + 5,
+            f = id + 6,
+            g = id + 7,
+            h = id + 8,
+        )
+    };
+    let (sin, cos) = turn.sin_cos();
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #20=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #21=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);\n\
+         #22=IFCUNITASSIGNMENT((#20,#21));\n\
+         #23=IFCPROJECT('0000000000000000000023',$,'P',$,$,$,$,(#5),#22);\n\
+         #50=IFCCARTESIANPOINT(({x:?},{y:?},200.));\n\
+         #51=IFCDIRECTION(({cos:?},{sin:?},0.));\n\
+         #52=IFCAXIS2PLACEMENT3D(#50,#4,#51);\n\
+         #53=IFCLOCALPLACEMENT($,#52);\n\
+         #54=IFCSITE('0000000000000000000054',$,$,$,$,#53,$,$,.ELEMENT.,$,$,$,$,$);\n\
+         #62=IFCLOCALPLACEMENT(#53,#2);\n\
+         #63=IFCBUILDINGSTOREY('0000000000000000000063',$,$,$,$,#62,$,$,.ELEMENT.,0.);\n\
+         #70=IFCCARTESIANPOINT((13.475,-15.95,4.3));\n\
+         #71=IFCDIRECTION((0.,1.,0.));\n\
+         #72=IFCAXIS2PLACEMENT3D(#70,#4,#71);\n\
+         #73=IFCLOCALPLACEMENT(#62,#72);\n\
+         #74=IFCCARTESIANPOINT((1.825,0.));\n\
+         #75=IFCDIRECTION((-1.,0.));\n\
+         #76=IFCAXIS2PLACEMENT2D(#74,#75);\n\
+         #77=IFCRECTANGLEPROFILEDEF(.AREA.,$,#76,3.65,0.25);\n\
+         #78=IFCEXTRUDEDAREASOLID(#77,#2,#4,3.67);\n\
+         #79=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#78));\n\
+         #80=IFCPRODUCTDEFINITIONSHAPE($,$,(#79));\n\
+         #10=IFCWALLSTANDARDCASE('0000000000000000000010',$,$,$,$,#73,#80,$,.STANDARD.);\n\
+         #81=IFCCARTESIANPOINT((1.13,0.505));\n\
+         #82=IFCAXIS2PLACEMENT2D(#81,#83);\n\
+         #83=IFCDIRECTION((0.,1.));\n\
+         #84=IFCDIRECTION((0.,-1.,0.));\n\
+         #85=IFCAXIS2PLACEMENT3D(#1,#84,#86);\n\
+         #86=IFCDIRECTION((0.,0.,1.));\n\
+         {}{}\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        opening(100, 3.325),
+        opening(200, 1.35),
+        x = site[0],
+        y = site[1],
+    )
+}
+
+/// engine#303: a wall whose door openings are exactly as deep as it is
+/// thick, under a site 600 km east and 5600 km north of the origin and
+/// turned to grid north, is measured with both openings subtracted. Its
+/// net volume is the gross volume (3.65 x 0.25 x 3.67 m) less both
+/// openings (1.01 x 2.26 x 0.25 m each), wherever the site lies. Subtracted
+/// in world coordinates, the openings' faces were rounded off the wall's
+/// there and the kernel refused the result as touching itself along the
+/// openings' edges.
+#[test]
+fn with_geometry_flush_openings_in_a_georeferenced_wall_are_subtracted() {
+    let case = Case::new("geometry-georeferenced-flush-openings");
+    let net = 3.65 * 0.25 * 3.67 - 2.0 * 1.01 * 2.26 * 0.25;
+    let volume = json!({"kind": "property", "propertySet": "axioval:measured",
+                        "property": "volume"});
+    let cubic = |value: f64| json!({"kind": "literal", "value": {"type": "quantity", "value": value, "unit": "m3"}});
+    let rule = |model: &str, requirement: Value| {
+        case.geometry_rule(
+            model,
+            &[("wall", "IfcWall")],
+            "axioval:capability.expression",
+            &registry_signature("axioval:capability.expression"),
+            entity("wall"),
+            json!({"requirement": {"type": "expression", "value": requirement}}),
+        )
+    };
+    let unmeasured = |result: &Value| {
+        result["geometry"]["unmeasured"]
+            .as_array()
+            .is_some_and(|unmeasured| !unmeasured.is_empty())
+    };
+    let site = [600_000.0, 5_600_000.0];
+    let turn = 0.039_608_610_093_419_1_f64.atan2(0.999_215_271_103_513);
+    for (site, turn) in [
+        ([0.0, 0.0], 0.0),
+        ([0.0, 0.0], turn),
+        (site, 0.0),
+        (site, turn),
+    ] {
+        let model = georeferenced_wall_with_flush_openings(site, turn, 0.125);
+        let label = format!("site {site:?} turned {turn} rad");
+        // Within a micro-cubic-metre of the net volume: measured and passed.
+        let (output, result) = rule(
+            &model,
+            json!({"kind": "between", "operand": volume,
+                   "low": cubic(net - 1e-6), "high": cubic(net + 1e-6)}),
+        );
+        assert_eq!(output.status.code(), Some(0), "{label}: {result:#}");
+        assert_eq!(result["report"]["findings"], json!([]), "{label}");
+        assert_eq!(result["report"]["not_evaluated"], json!([]), "{label}");
+        assert!(!unmeasured(&result), "{label}: {:#}", result["geometry"]);
+        // And so above anything less: the wall was judged, not skipped.
+        let (output, result) = rule(
+            &model,
+            json!({"kind": "compare", "operator": "lessThan", "label": "value",
+                   "left": volume, "right": cubic(net - 1e-6)}),
+        );
+        assert_eq!(
+            output.status.code(),
+            Some(3),
+            "{label}: {}",
+            stderr(&output)
+        );
+        let findings = finding_messages(&result);
+        assert_eq!(findings.len(), 1, "{label}: {result:#}");
+        assert_eq!(findings[0].0, "#10", "{label}: {result:#}");
+    }
+    // As exported, the openings stop 5e-15 m short of one face; the wall is
+    // meshed all the same. Its volume is not asserted here: the skin that
+    // thin a difference leaves self-intersects once placed 5600 km out.
+    let model = georeferenced_wall_with_flush_openings(site, turn, 0.124_999_999_999_995);
+    let (_, result) = rule(
+        &model,
+        json!({"kind": "compare", "operator": "greaterThan", "label": "value",
+               "left": volume, "right": cubic(0.0)}),
+    );
+    assert!(!unmeasured(&result), "{:#}", result["geometry"]);
+    assert_eq!(result["geometry"]["exact"], 1, "{:#}", result["geometry"]);
+}
+
 /// Room #19 (x 0..2.4, y 0..1.6, 3 m high) with door #50 in its north
 /// wall: hinged at (1.2, 1.7), its 0.9 m leaf closed westward and opening
 /// south over the quarter disc south-west of its hinge.

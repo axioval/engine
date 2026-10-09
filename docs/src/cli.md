@@ -994,6 +994,22 @@ boundary by a seam traversed both ways, a valid face the compiler does not
 accept yet (axiolid/kernel#270). Neither is a face the clipper finds no
 ear in (axiolid/kernel#269).
 
+**Openings are subtracted in their host's frame.** Since `ifc-geometry`
+0.13 (openbimrs/ifc#388) a host's body is lowered without its world
+placement, each opening by its placement relative to the host's (along the
+placement chain the two share), the differences run in that frame, and one
+placement with the host's world transform is put above the result. An
+opening authored exactly as deep as its wall and flush with its faces
+therefore keeps that coincidence under a georeferenced site hundreds of
+kilometres out and turned to grid north, where in world coordinates the
+rounding of the placements moved the faces apart and the kernel refused the
+result as touching itself along the opening's edges (engine#303). An
+opening that shares no placement chain with its host is subtracted in world
+coordinates as before. The measured shape is the same up to rounding; an
+opening that stops a few 1e-15 m short of a face as exported still leaves a
+skin that thin, which the volume kernel refuses as self-intersecting once
+the body is placed that far out.
+
 The planarity check is conservative. Anything it does not recognise counts as
 tessellated, which only loses exactness, never presents an approximation as
 exact.
@@ -1005,7 +1021,7 @@ schema states that such a representation "is not subtracted, it is
 provided in addition to the hole in the Body shape representation of the
 voided element". In an IFC4 or IFC4X3 file, an opening whose every
 representation is `Reference` is therefore taken as already applied
-(`ifc-geometry` 0.10, `ReferenceOnlyOpenings::TakeAsApplied`,
+(`ifc-geometry` ≥ 0.10, `ReferenceOnlyOpenings::TakeAsApplied`,
 openbimrs/ifc#351): its host is measured from its `Body` as authored and
 nothing is subtracted for it. The decision is the representation
 identifiers' alone, never a guess: an opening with no representation, or

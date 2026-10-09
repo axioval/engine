@@ -41,6 +41,23 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **Geometry**: walls whose openings are exactly as deep as the wall is
+  thick, flush with both faces, are measured in georeferenced models. The
+  IFC crates move to `openbim-ifc` 0.19, `ifc-geometry` 0.13 and
+  `ifc-alignment` 0.7; `ifc-geometry` now subtracts openings in their
+  host's frame and places the result once (openbimrs/ifc#388), where it
+  subtracted them in world coordinates, 5600 km out on such a site, and
+  the mesh compiler refused the result as touching itself along the
+  openings' edges. Net bodies are otherwise the same up to rounding, and
+  their evidence is unchanged. An opening that stops a few 1e-15 m short of
+  a face, as exported, leaves a skin that thin: the host is meshed, but its
+  volume is refused as self-intersecting once placed that far out. With the
+  same upgrade, products placed by an `IfcGridPlacement`, or relative to
+  one, are meshed (#362, #363 there); object frames still refuse a chain
+  through a grid or linear placement as unsupported. Profile boundaries given as an
+  `IfcIndexedPolyCurve` are meshed (#335 there), and an open one is refused
+  as degenerate instead of closed implicitly
+  ([#303](https://github.com/axioval/engine/issues/303)).
 - **IDS**: an IFC2X3 specification requiring a class of the occurrence/type
   mapping table of the applicable occurrence class (applying to
   `IFCFLOWTERMINAL`, requiring `IFCAIRTERMINAL`) is translated instead of

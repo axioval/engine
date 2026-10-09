@@ -558,6 +558,26 @@ impl AxiolidFreeSpaceService {
             .iter()
             .flat_map(|(part, _)| part.iter().flatten())
             .fold([f64::INFINITY; 2], |[x, y], p| [x.min(p.x), y.min(p.y)]);
+        // The plan box every placement lies in: the scope's, grown by its
+        // largest deviation (the room proofs of absence search). An
+        // obstacle whose box, grown by its own deviation, is apart from it
+        // occupies nothing a shape inside the scope can meet: the shape's
+        // centrally symmetric dilation of it misses every centre the eroded
+        // room keeps. Such obstacles are left out before their band
+        // footprints and bracketing morphology are built, which cost the
+        // overlay most of a floor's search when every object of a large
+        // model is an obstacle of every space.
+        let reach = parts.iter().map(|(_, d)| *d).fold(0.0, f64::max) + ON_SURFACE;
+        let room_box: Extent = {
+            let far_corner = parts
+                .iter()
+                .flat_map(|(part, _)| part.iter().flatten())
+                .fold([f64::NEG_INFINITY; 2], |[x, y], p| [x.max(p.x), y.max(p.y)]);
+            (
+                [corner[0] - reach, corner[1] - reach, f64::NEG_INFINITY],
+                [far_corner[0] + reach, far_corner[1] + reach, f64::INFINITY],
+            )
+        };
         let origin = Vec2::new(corner[0].floor(), corner[1].floor());
         let local = |region: Region| region.translate(-origin).map_err(region_error);
         let world = |region: Region| region.translate(origin).map_err(region_error);
@@ -633,6 +653,15 @@ impl AxiolidFreeSpaceService {
                 .mesh(obstacle)
                 .ok_or_else(|| missing(obstacle))?;
             let d = deviation(obstacle)?;
+            if let Some((low_corner, high_corner)) = mesh_extent(mesh) {
+                let grown: Extent = (
+                    [low_corner[0] - d, low_corner[1] - d, low_corner[2]],
+                    [high_corner[0] + d, high_corner[1] + d, high_corner[2]],
+                );
+                if extent_gap(&grown, &room_box, true) > 0.0 {
+                    continue;
+                }
+            }
             if d == 0.0 {
                 let witness = self
                     .band_footprint(obstacle, mesh, low - u, high + u)

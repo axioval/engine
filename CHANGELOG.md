@@ -67,6 +67,11 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **Free floor**: an obstacle whose plan box is apart from the searched
+  space's is left out of the space's placement search before its band
+  footprint and chord-deviation bracketing are built. It cannot meet a
+  shape inside the space, and building them for every tessellated body on
+  the floor made one space search of a 76 MB model take minutes.
 - **Clash**: a tessellated pair whose exact boundaries touch or cross is
   certified in microseconds instead of refining round the contact
   (axiolid-measure 0.3.10, axiolid/kernel#273), and the proximity

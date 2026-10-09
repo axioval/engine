@@ -420,3 +420,28 @@ fn a_room_far_from_the_origin_is_decided() {
         &obstacles,
     ));
 }
+
+/// A tessellated body elsewhere on the floor, its plan box apart from the
+/// room's, is left out of the room's search: the fit is found as without
+/// it, and the evidence names no body it was bracketed by.
+#[test]
+fn a_tessellated_body_elsewhere_is_left_out() {
+    let geometry = || {
+        AxiolidGeometry::new()
+            .with_mesh(id("room"), prisms(&[rect(0.0, 4.0, 0.0, 1.2)], 0.0, 3.0))
+            .with_tessellated_mesh(
+                id("far"),
+                prisms(&[rect(10.0, 12.0, 0.0, 1.2)], 0.0, 3.0),
+                0.01,
+            )
+    };
+    let shape = || rectangle(1.0, 1.0, Some((1.0, 0.0)));
+    let locator = found(place(geometry(), "room", shape(), &["far"]));
+    assert!(!locator.contains("within-chord-deviation"), "{locator}");
+    nowhere(place(
+        geometry(),
+        "room",
+        rectangle(6.0, 6.0, Some((1.0, 0.0))),
+        &["far"],
+    ));
+}

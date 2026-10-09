@@ -13552,7 +13552,7 @@ fn mitred_wall_with_openings() -> String {
          #15=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#14));\n\
          #16=IFCPRODUCTDEFINITIONSHAPE($,$,(#15));\n\
          #10=IFCWALL('0000000000000000000010',$,$,$,$,#3,#16,$,.STANDARD.);\n\
-         #40=IFCCARTESIANPOINTLIST2D(((0.,0.),(1.,0.),(1.,0.5),(0.5,0.5),(0.5,1.5),(0.,1.5)));\n\
+         #40=IFCCARTESIANPOINTLIST2D(((0.,0.),(1.,0.),(1.,0.5),(0.5,0.5),(0.5,1.5),(0.,1.5),(0.,0.)));\n\
          #41=IFCINDEXEDPOLYCURVE(#40,$,$);\n\
          {}{}{}{}\
          ENDSEC;\nEND-ISO-10303-21;\n",

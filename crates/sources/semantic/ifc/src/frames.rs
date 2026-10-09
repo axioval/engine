@@ -116,6 +116,26 @@ impl IfcObjectFrames {
         }
     }
 
+    /// The first placement above the local placement `placement` that is
+    /// no `IfcLocalPlacement`, with its entity type. A missing parent and a
+    /// cycle are left to the resolver, which refuses them.
+    fn non_local_ancestor(&self, placement: EntityId) -> Option<(EntityId, String)> {
+        let mut seen = vec![placement];
+        let mut current = placement;
+        loop {
+            let parent = LocalPlacement::new(current, self.model.get(current)?).parent()?;
+            if seen.contains(&parent) {
+                return None;
+            }
+            let kind = self.model.get(parent)?.type_name.to_ascii_uppercase();
+            if kind != "IFCLOCALPLACEMENT" {
+                return Some((parent, kind));
+            }
+            seen.push(parent);
+            current = parent;
+        }
+    }
+
     /// The placement chain from `placement` up to its root, as STEP ids.
     ///
     /// Called after the resolver accepted the chain, so it is acyclic and
@@ -164,6 +184,15 @@ impl ObjectFrameService for IfcObjectFrames {
             // resolves it exactly, so it is refused rather than approximated.
             return Err(ObjectFrameError::Unsupported(format!(
                 "{id} is placed by {kind} {placement}; only IfcLocalPlacement chains are resolved"
+            )));
+        }
+        // `ifc-geometry` 0.11 resolves a local placement relative to a grid
+        // or linear one too; this service still refuses such a chain, as it
+        // refuses the grid placement itself.
+        if let Some((parent, kind)) = self.non_local_ancestor(placement) {
+            return Err(ObjectFrameError::Unsupported(format!(
+                "{id} is placed relative to {kind} {parent}; only IfcLocalPlacement chains are \
+                 resolved"
             )));
         }
         let metres = self

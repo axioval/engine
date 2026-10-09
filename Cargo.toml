@@ -129,19 +129,25 @@ openbim-ids = { version = "0.2.2", features = ["audit-schema"] }
 # Door and window operation geometry (openbimrs/ifc#148, #170) is published
 # only in the IFC facade, which joins `ifc-geometry` and `ifc-properties`; `geometry-select`
 # compiles no geometry kernel.
-# 0.16 re-exports `ifc-geometry` 0.10; its `authoring` feature stays off.
-openbim_ifc = { package = "openbim-ifc", version = "0.16.0", default-features = false, features = ["geometry-select", "properties", "ifc2x3", "ifc4", "ifc4x3"] }
+# 0.19 re-exports `ifc-geometry` 0.13; its `authoring` feature stays off.
+openbim_ifc = { package = "openbim-ifc", version = "0.19.0", default-features = false, features = ["geometry-select", "properties", "ifc2x3", "ifc4", "ifc4x3"] }
 ifc-classification = "0.4.0"
 # The CLI reads each `IfcAlignment`'s centreline, stationing and cant to
-# locate products along it (engine#252).
-ifc-alignment = "0.6.0"
+# locate products along it (engine#252). 0.7 evaluates Viennese bends for
+# the section's cant and refuses those it does not determine (#312, #364);
+# `ifc-geometry` 0.13 requires it.
+ifc-alignment = "0.7.0"
 # 0.9 lowers IFC4X3 stations, offset curves by distances and sectioned
 # solids and surfaces (openbimrs/ifc#307) and, since 0.8.2, refuses an
 # `IfcParameterValue` along an alignment by name (openbimrs/ifc#347). 0.10
 # can take Reference View openings as applied (#351) and derive a linear
 # placement through a caller's curve evaluator (#353, #354), in the IFC4.3
-# (tangent, left, up) frame (#355).
-ifc-geometry = { version = "0.10.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
+# (tangent, left, up) frame (#355). 0.11 resolves grid placements and
+# placements relative to grid or linear ones (#362, #363); 0.12 reads
+# `IfcIndexedPolyCurve` profile boundaries and refuses open ones (#335);
+# 0.13 subtracts openings in their host's frame under one world `Instance`
+# (#388), so flush openings in georeferenced hosts mesh.
+ifc-geometry = { version = "0.13.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
 # Map conversions only: without the default `transform` feature it links no
 # geometry crate (never Axiolid).
 ifc-georef = { version = "0.6.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }

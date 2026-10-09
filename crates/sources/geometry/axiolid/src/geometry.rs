@@ -34,6 +34,9 @@ pub struct AxiolidGeometry {
     bodiless: BTreeSet<ObjectId>,
     unmeasured: BTreeMap<ObjectId, String>,
     unmeasured_bounds: BTreeMap<ObjectId, Extent>,
+    /// Host-certified bounds on a tessellated body's true extent
+    /// ([`Self::with_extent_bounds`]): `(outer, inner)`.
+    extent_bounds: BTreeMap<ObjectId, (Extent, Option<Extent>)>,
     groups: BTreeMap<ObjectId, Result<Vec<ObjectId>, String>>,
     boundaries: BTreeMap<ObjectId, Arc<ExactBody>>,
     /// Wholes measured through their parts ([`Self::with_composed_body`]).
@@ -164,6 +167,87 @@ impl AxiolidGeometry {
             return None;
         }
         self.unmeasured_bounds.get(object)
+    }
+
+    /// Certifies bounds on the extent of a tessellated object's true body,
+    /// in world metres, beside its chord deviation: the body lies within
+    /// `outer`, and, where `inner` is given, reaches out to it along every
+    /// axis (its lowest point lies at or below `inner`'s minimum, its
+    /// highest at or above its maximum). An exact boundary's
+    /// [`ExactBoundary::extent_bounds`](crate::ExactBoundary::extent_bounds)
+    /// gives both, from the construction rather than the mesh.
+    ///
+    /// The deviation alone leaves every face of the body free to move by
+    /// it, so a slab whose top meets a floor could rise into the room
+    /// above. These bounds pin the extent closer where they are tighter:
+    /// services read them through the body's vertical bounds only, and only
+    /// for a tessellated body (an exact mesh is its own extent). Bounds
+    /// that are not finite, are reversed or whose `inner` leaves `outer`
+    /// are ignored.
+    #[must_use]
+    pub fn with_extent_bounds(
+        mut self,
+        object: ObjectId,
+        outer: ([f64; 3], [f64; 3]),
+        inner: Option<([f64; 3], [f64; 3])>,
+    ) -> Self {
+        let finite = |(min, max): &Extent| {
+            min.iter()
+                .zip(max)
+                .all(|(low, high)| low.is_finite() && high.is_finite() && low <= high)
+        };
+        let within = |(min, max): &Extent| {
+            (0..3).all(|k| {
+                min[k].is_finite()
+                    && max[k].is_finite()
+                    && outer.0[k] <= min[k]
+                    && max[k] <= outer.1[k]
+            })
+        };
+        if finite(&outer) && inner.as_ref().is_none_or(within) {
+            self.extent_bounds.insert(object, (outer, inner));
+        } else {
+            self.extent_bounds.remove(&object);
+        }
+        self
+    }
+
+    /// The chord deviation of an object's mesh: zero for an exact one,
+    /// `None` for a declared deviation that bounds nothing (negative or not
+    /// finite).
+    pub(crate) fn deviation(&self, object: &ObjectId) -> Option<f64> {
+        self.fidelity(object)
+            .ok()
+            .map(|fidelity| fidelity.deviation_metres())
+    }
+
+    /// Where an object's true body may begin and end vertically: its mesh's
+    /// lowest and highest points, each widened by its chord deviation and
+    /// narrowed by the bounds the host certified
+    /// ([`Self::with_extent_bounds`]). Points for an exact mesh. `None`
+    /// without a mesh, with a deviation that bounds nothing, or where the
+    /// certified bounds contradict the mesh.
+    pub(crate) fn vertical_bounds(&self, object: &ObjectId) -> Option<VerticalBounds> {
+        let (min, max) = mesh_extent(self.meshes.get(object)?)?;
+        let deviation = self.deviation(object)?;
+        let mut bounds = VerticalBounds {
+            bottom: (min[2] - deviation, min[2] + deviation),
+            top: (max[2] - deviation, max[2] + deviation),
+        };
+        if deviation > 0.0
+            && let Some((outer, inner)) = self.extent_bounds.get(object)
+        {
+            bounds.bottom.0 = bounds.bottom.0.max(outer.0[2]);
+            bounds.top.1 = bounds.top.1.min(outer.1[2]);
+            if let Some(inner) = inner {
+                bounds.bottom.1 = bounds.bottom.1.min(inner.0[2]);
+                bounds.top.0 = bounds.top.0.max(inner.1[2]);
+            }
+            if bounds.bottom.0 > bounds.bottom.1 || bounds.top.0 > bounds.top.1 {
+                return None;
+            }
+        }
+        Some(bounds)
     }
 
     /// Declares a bodiless group (a zone, say) and the objects it groups.
@@ -613,6 +697,23 @@ impl AxiolidGeometry {
 
 /// An axis-aligned `(min, max)` extent in metres.
 pub(crate) type Extent = ([f64; 3], [f64; 3]);
+
+/// Where a body's true lowest (`bottom`) and highest (`top`) points lie,
+/// each as `(low, high)` elevations in metres.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct VerticalBounds {
+    pub(crate) bottom: (f64, f64),
+    pub(crate) top: (f64, f64),
+}
+
+impl VerticalBounds {
+    /// Whether the body surely stays out of the open band `low < z < high`,
+    /// up to `slack` at either limit: it ends at or below `low`, or begins
+    /// at or above `high`, whichever reading of its bounds is true.
+    pub(crate) fn clear_of(&self, low: f64, high: f64, slack: f64) -> bool {
+        self.top.1 <= low + slack || self.bottom.0 >= high - slack
+    }
+}
 
 /// The extent of a mesh's positions; `None` for an empty mesh.
 pub(crate) fn mesh_extent(mesh: &TriMesh) -> Option<Extent> {

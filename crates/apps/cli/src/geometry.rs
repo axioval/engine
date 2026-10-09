@@ -1213,7 +1213,13 @@ fn with_boundaries(
     if !agreeing.iter().any(|(_, _, tessellated)| *tessellated) {
         return geometry;
     }
-    for (id, boundary, _) in agreeing {
+    for (id, boundary, tessellated) in agreeing {
+        // The construction bounds a tessellated body's extent closer than
+        // its chord deviation does (a slab's top stays at the floor).
+        if tessellated {
+            let (outer, inner) = boundary.extent_bounds();
+            geometry = geometry.with_extent_bounds(id.clone(), outer, Some(inner));
+        }
         geometry = geometry.with_exact_body(id, boundary.into_body());
         report.exact_boundaries += 1;
     }

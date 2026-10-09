@@ -13,7 +13,7 @@ use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::sync::{Mutex, PoisonError};
 
-use axiolid_core::{Point2, Point3};
+use axiolid_core::{Point2, Point3, Vec2};
 use axiolid_measure::WindingMesh;
 use axiolid_mesh::{TriMesh, audit_mesh};
 use axioval_engine::{
@@ -30,8 +30,8 @@ use axioval_ir::{Evidence, ObjectId, SourceId};
 use crate::geometry::{AxiolidGeometry, Extent, Triangle, extent_gap, mesh_extent, triangles};
 use crate::placement::{self, Axis, Scene, Search, Window};
 use crate::planar::{plan_frame, polygon_area, projected_polygons};
-use crate::walkable::{Plan, band_footprint, trapezoids};
-use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, Polygon, Ring, overlay};
+use crate::walkable::{ON_SURFACE, Plan, band_footprint, solid_column, trapezoids};
+use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, Polygon, Region, Ring, overlay};
 
 /// The audit tolerance every measurement here shares.
 pub(crate) fn tolerance() -> Result<axiolid_core::Tolerance, FreeSpaceError> {
@@ -50,7 +50,13 @@ pub struct AxiolidFreeSpaceService {
     /// one floor share their band and many of their obstacles, and a large
     /// obstacle's footprint can take the overlay seconds.
     footprints: Mutex<BTreeMap<FootprintKey, Result<Plan, String>>>,
+    /// Each tessellated obstacle's [`solid_column`], by the column's centre
+    /// and half height.
+    columns: Mutex<BTreeMap<FootprintKey, Column>>,
 }
+
+/// A [`solid_column`]'s section and boundary shadow, or why it failed.
+type Column = Result<(Plan, Plan), String>;
 
 /// An obstacle and the bit patterns of its band's open limits.
 type FootprintKey = (ObjectId, u64, u64);
@@ -63,7 +69,28 @@ impl AxiolidFreeSpaceService {
             geometry,
             source,
             footprints: Mutex::new(BTreeMap::new()),
+            columns: Mutex::new(BTreeMap::new()),
         }
+    }
+
+    /// [`solid_column`] of `obstacle` about `level`, built once per service.
+    fn solid_column(&self, obstacle: &ObjectId, mesh: &TriMesh, level: f64, half: f64) -> Column {
+        let key = (obstacle.clone(), level.to_bits(), half.to_bits());
+        let cached = self
+            .columns
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(&key)
+            .cloned();
+        if let Some(column) = cached {
+            return column;
+        }
+        let column = solid_column(obstacle, mesh, level, half);
+        self.columns
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(key, column.clone());
+        column
     }
 
     /// [`band_footprint`] of `obstacle` in the open band `low < z < high`,
@@ -447,28 +474,33 @@ impl AxiolidFreeSpaceService {
         request: &PlacementRequest,
         tolerance: axiolid_core::Tolerance,
     ) -> Result<(Scene, f64), FreeSpaceError> {
-        let reach = match request.shape() {
-            PlacementShape::Box { shape, .. } => {
-                shape.width_metres().hypot(shape.depth_metres()) / 2.0
-            }
-            PlacementShape::Cylinder(c) => c.radius_metres(),
-        };
         self.floor_scene(
             request.scope(),
             request.merged_scopes(),
             request.obstacles(),
             request.swept_doors(),
             request.effective_band(),
-            reach,
             tolerance,
         )
     }
 
     /// The footprint of `scope` and `merged` (which must share its floor),
     /// what `obstacles` and the sectors of `swept` doors occupy in `band`
-    /// above that floor, and the floor's elevation. A tessellation within
-    /// `reach` of a scope refuses.
-    #[allow(clippy::too_many_arguments)]
+    /// above that floor, and the floor's elevation.
+    ///
+    /// A tessellated body joins the scene bracketed by its chord deviation
+    /// `d` (#302): witnesses avoid what it may occupy (its band footprint
+    /// in the band widened by `d`, grown by `d`, `Region::dilate_outer`)
+    /// and absence is proven against what it surely occupies (the plan
+    /// points whose vertical column of height `2d`, a deviation above the
+    /// band's bottom, lies inside it, eroded by `d`, `Region::erode_inner`). A
+    /// tessellated scope is eroded by its deviation for witnesses and grown
+    /// by it for absence, and an uncertain floor widens the band for
+    /// witnesses and narrows it for absence. A body whose vertical bounds
+    /// keep it out of the band (a slab under the floor whose certified
+    /// extent ends there) occupies nothing either way. A deviation that
+    /// bounds nothing refuses.
+    #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
     pub(crate) fn floor_scene(
         &self,
         scope: &ObjectId,
@@ -476,12 +508,20 @@ impl AxiolidFreeSpaceService {
         obstacles: &[ObjectId],
         swept: &[SweptDoor],
         band: ElevationBand,
-        reach: f64,
         tolerance: axiolid_core::Tolerance,
     ) -> Result<(Scene, f64), FreeSpaceError> {
         let missing = |id: &ObjectId| FreeSpaceError::MissingGeometry(Box::new(id.clone()));
+        let deviation = |id: &ObjectId| {
+            self.geometry
+                .deviation(id)
+                .ok_or(FreeSpaceError::InexactPlacementEvidence)
+        };
+        let region_error = |e| FreeSpaceError::Unavailable(format!("bracketed footprint: {e:?}"));
+        let mut bracketed: Vec<(ObjectId, f64)> = Vec::new();
         let mut floor = None;
-        let mut scope_triangles = Vec::new();
+        // How far the true floor may lie from the mesh's.
+        let mut uncertainty: f64 = 0.0;
+        let mut parts = Vec::new();
         for part in std::iter::once(scope).chain(merged) {
             let mesh = self.geometry.mesh(part).ok_or_else(|| missing(part))?;
             let (low, _) = mesh_extent(mesh).ok_or_else(|| missing(part))?;
@@ -494,31 +534,94 @@ impl AxiolidFreeSpaceService {
                     )));
                 }
             }
-            // Exact evidence: a tessellated scope, or a tessellated obstacle
-            // whose true body could reach a placement, makes the verdict an
-            // estimate.
-            let extent = self
-                .geometry
-                .enclosing_extent(part)
-                .ok_or_else(|| missing(part))?;
-            if self.geometry.is_tessellated(part)
-                || self
+            let d = deviation(part)?;
+            if d > 0.0 {
+                let bounds = self
                     .geometry
-                    .tessellated_near(&extent, reach, true, |object| !obstacles.contains(object))
-                    .is_some()
-            {
-                return Err(FreeSpaceError::InexactPlacementEvidence);
+                    .vertical_bounds(part)
+                    .ok_or(FreeSpaceError::InexactPlacementEvidence)?;
+                uncertainty = uncertainty
+                    .max(low[2] - bounds.bottom.0)
+                    .max(bounds.bottom.1 - low[2]);
+                bracketed.push((part.clone(), d));
             }
-            scope_triangles.extend(triangles(mesh));
+            parts.push((triangles(mesh), d));
         }
         let floor = floor.ok_or_else(|| missing(scope))?;
+        // Bracketing morphology runs in a plan frame at the scope's corner:
+        // at georeferenced coordinates (6e6 m) the overlay refuses the
+        // slivers its own rounding makes about a grown or eroded outline
+        // (`ZeroArea`). Moving there is exact for every point within a
+        // factor two of the corner (Sterbenz), and back rounds within a
+        // unit in the last place of the coordinates.
+        let corner = parts
+            .iter()
+            .flat_map(|(part, _)| part.iter().flatten())
+            .fold([f64::INFINITY; 2], |[x, y], p| [x.min(p.x), y.min(p.y)]);
+        let origin = Vec2::new(corner[0].floor(), corner[1].floor());
+        let local = |region: Region| region.translate(-origin).map_err(region_error);
+        let world = |region: Region| region.translate(origin).map_err(region_error);
+        // A footprint at georeferenced coordinates is united in that frame
+        // too (#304), and moved back; elsewhere where it lies, as before.
+        let far = corner[0].abs().max(corner[1].abs()) >= 1.0e5;
+        let footprint_of = |part: &[Triangle]| -> Result<Region, FreeSpaceError> {
+            if !far {
+                return placement::footprint(part, tolerance);
+            }
+            let moved: Vec<Triangle> = part
+                .iter()
+                .map(|face| face.map(|p| Point3::new(p.x - origin.x, p.y - origin.y, p.z)))
+                .collect();
+            world(placement::footprint(&moved, tolerance)?)
+        };
 
-        let footprint = placement::footprint(&scope_triangles, tolerance)?;
-        if footprint.is_empty() {
+        // The scope: one footprint when exact, else each part eroded
+        // (witnesses) and grown (absence) by its own deviation.
+        let (footprint, room) = if parts.iter().all(|(_, d)| *d == 0.0) {
+            let all: Vec<Triangle> = parts.into_iter().flat_map(|(part, _)| part).collect();
+            let footprint = footprint_of(&all)?;
+            (footprint.clone(), footprint)
+        } else {
+            let (mut inner, mut outer) = (Region::empty(), Region::empty());
+            for (part, d) in &parts {
+                let own = local(footprint_of(part)?)?;
+                let (sure, possible) = if *d > 0.0 {
+                    (
+                        own.erode_inner(*d, tolerance).map_err(region_error)?,
+                        own.dilate_outer(*d, tolerance).map_err(region_error)?,
+                    )
+                } else {
+                    (own.clone(), own)
+                };
+                inner = inner.union(&sure, tolerance).map_err(region_error)?;
+                outer = outer.union(&possible, tolerance).map_err(region_error)?;
+            }
+            (world(inner)?, world(outer)?)
+        };
+        if room.is_empty() {
             return Err(missing(scope));
         }
         let (low, high) = (floor + band.from_metres(), floor + band.to_metres());
-        let mut obstacle_rings = Vec::new();
+        let u = uncertainty;
+        let mut exact_rings = Vec::new();
+        let mut sure_rings = Vec::new();
+        let mut possible = Region::empty();
+        let mut certain = Region::empty();
+        // A band footprint as a region in the local frame.
+        let to_local = |plan: &Plan| {
+            let rings: Vec<Ring> = trapezoids(plan)
+                .into_iter()
+                .map(|piece| Ring {
+                    points: piece
+                        .outer
+                        .points
+                        .iter()
+                        .map(|p| Point2::new(p.x - origin.x, p.y - origin.y))
+                        .collect(),
+                })
+                .collect();
+            placement::union(&rings, tolerance)
+        };
         for obstacle in obstacles {
             if self.geometry.has_no_body(obstacle) {
                 continue;
@@ -529,36 +632,78 @@ impl AxiolidFreeSpaceService {
                 .geometry
                 .mesh(obstacle)
                 .ok_or_else(|| missing(obstacle))?;
-            let occupied = self
-                .band_footprint(obstacle, mesh, low, high)
+            let d = deviation(obstacle)?;
+            if d == 0.0 {
+                let witness = self
+                    .band_footprint(obstacle, mesh, low - u, high + u)
+                    .map_err(FreeSpaceError::Unavailable)?;
+                exact_rings.extend(trapezoids(&witness).into_iter().map(|piece| piece.outer));
+                if u == 0.0 {
+                    sure_rings.extend(trapezoids(&witness).into_iter().map(|piece| piece.outer));
+                } else if high - u > low + u {
+                    let sure = self
+                        .band_footprint(obstacle, mesh, low + u, high - u)
+                        .map_err(FreeSpaceError::Unavailable)?;
+                    sure_rings.extend(trapezoids(&sure).into_iter().map(|piece| piece.outer));
+                }
+                continue;
+            }
+            let bounds = self
+                .geometry
+                .vertical_bounds(obstacle)
+                .ok_or(FreeSpaceError::InexactPlacementEvidence)?;
+            // Wherever the true body lies, it stays out of the band: it
+            // occupies nothing there, as an exact body touching the band's
+            // limits does not.
+            if bounds.clear_of(low - u, high + u, ON_SURFACE) {
+                continue;
+            }
+            bracketed.push((obstacle.clone(), d));
+            let widened = self
+                .band_footprint(obstacle, mesh, low - u - d, high + u + d)
                 .map_err(FreeSpaceError::Unavailable)?;
-            obstacle_rings.extend(trapezoids(&occupied).into_iter().map(|piece| piece.outer));
+            let grown = to_local(&widened)?
+                .dilate_outer(d, tolerance)
+                .map_err(region_error)?;
+            possible = possible.union(&grown, tolerance).map_err(region_error)?;
+            // A column of height 2d a deviation above the band's surest
+            // bottom, so a body standing on the floor is entered from its
+            // side only; its centre lies in the band however the floor lies.
+            let level = low + u + 2.0 * d;
+            if level < high - u {
+                let (section, shadow) = self
+                    .solid_column(obstacle, mesh, level, d)
+                    .map_err(FreeSpaceError::Unavailable)?;
+                let core = to_local(&section)?
+                    .difference(&to_local(&shadow)?, tolerance)
+                    .map_err(region_error)?;
+                if !core.is_empty() {
+                    let shrunk = core.erode_inner(d, tolerance).map_err(region_error)?;
+                    certain = certain.union(&shrunk, tolerance).map_err(region_error)?;
+                }
+            }
         }
         let (inner, outer) = swept_rings(swept, floor, high);
-        let scene = if inner.is_empty() {
-            let obstacles = placement::union(&obstacle_rings, tolerance)?;
-            Scene {
-                scope: footprint,
-                sure: obstacles.clone(),
-                obstacles,
-                tolerance,
-                window: None,
-                reach: None,
+        let with = |mut rings: Vec<Ring>, sectors: Vec<Ring>, bracket: Region| {
+            rings.extend(sectors);
+            let region = placement::union(&rings, tolerance)?;
+            if bracket.is_empty() {
+                Ok(region)
+            } else {
+                region
+                    .union(&world(bracket)?, tolerance)
+                    .map_err(region_error)
             }
-        } else {
-            let with = |sectors: Vec<Ring>| {
-                let mut rings = obstacle_rings.clone();
-                rings.extend(sectors);
-                placement::union(&rings, tolerance)
-            };
-            Scene {
-                scope: footprint,
-                obstacles: with(outer)?,
-                sure: with(inner)?,
-                tolerance,
-                window: None,
-                reach: None,
-            }
+        };
+        let scene = Scene {
+            scope: footprint,
+            room,
+            obstacles: with(exact_rings, outer, possible)?,
+            sure: with(sure_rings, inner, certain)?,
+            tolerance,
+            window: None,
+            reach: None,
+            bracketed,
         };
         Ok((scene, floor))
     }
@@ -588,6 +733,21 @@ pub(crate) fn swept_rings(swept: &[SweptDoor], floor: f64, top: f64) -> (Vec<Rin
         }
     }
     (inner, outer)
+}
+
+/// The locator suffix naming the tessellated bodies a placement or map was
+/// bracketed by, each with its chord deviation: the verdict holds for every
+/// body within it, so the evidence is exact, and a reviewer sees which
+/// curved bodies it was decided around. Empty when every body was exact.
+pub(crate) fn within_deviation(bracketed: &[(ObjectId, f64)]) -> String {
+    if bracketed.is_empty() {
+        return String::new();
+    }
+    let named: Vec<String> = bracketed
+        .iter()
+        .map(|(object, deviation)| format!("{object}={deviation:e}m"))
+        .collect();
+    format!(":within-chord-deviation={}", named.join(","))
 }
 
 /// Merged scopes whose floors differ by more than this are not one floor.
@@ -809,6 +969,7 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
                 reach.width_metres()
             );
         }
+        locator.push_str(&within_deviation(&scene.bracketed));
         let evidence = Evidence::exact(request.scope().source.clone(), locator);
         let (centre, right) = match search {
             Search::Nowhere => {
@@ -817,6 +978,12 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
                 ));
             }
             Search::Found { centre, right } => (centre, right),
+            // What a chord deviation leaves open is not exact evidence
+            // either way.
+            Search::Undecided(_) if !scene.bracketed.is_empty() => {
+                return Err(FreeSpaceError::InexactPlacementEvidence);
+            }
+            Search::Undecided(why) => return Err(FreeSpaceError::Unavailable(why.into())),
         };
         let origin = MetricPoint::try_new(request.scope().clone(), [centre.x, centre.y, floor])
             .map_err(|e| FreeSpaceError::Unavailable(format!("witness: {e}")))?;

@@ -120,6 +120,30 @@ impl Plan {
         self.polygons.iter().map(polygon_area).sum()
     }
 
+    /// The plan moved by `offset`, back from a local frame.
+    fn moved(self, offset: [f64; 2]) -> Self {
+        if offset == [0.0, 0.0] {
+            return self;
+        }
+        let shift = |ring: &Ring| Ring {
+            points: ring
+                .points
+                .iter()
+                .map(|p| Point2::new(p.x + offset[0], p.y + offset[1]))
+                .collect(),
+        };
+        Self {
+            polygons: self
+                .polygons
+                .iter()
+                .map(|polygon| Polygon {
+                    outer: shift(&polygon.outer),
+                    holes: polygon.holes.iter().map(shift).collect(),
+                })
+                .collect(),
+        }
+    }
+
     /// One polygon of this plan as a plan of its own.
     pub(crate) fn piece(polygon: Polygon) -> Self {
         Self {
@@ -367,10 +391,19 @@ const SNAP_ULPS: f64 = 8.0;
 /// How much coarser each retry of a refused band footprint snaps.
 const SNAP_STEP: f64 = 4.0;
 
+/// The coarsest tolerance [`band_footprint`] ever snaps with: a hundredth
+/// of [`MARGIN`], so a snapped footprint stays far inside every witness's
+/// margin.
+const SNAP_CEILING: f64 = MARGIN / 100.0;
+
 /// The tolerances [`band_footprint`] hands the overlay for `polygons`, in
 /// the order they are tried: from a few units in the last place of their
 /// largest coordinate (at least a metre), never below [`overlay_tolerance`]'s,
-/// coarser by [`SNAP_STEP`] up to [`ON_SURFACE`].
+/// coarser by [`SNAP_STEP`] up to [`ON_SURFACE`], or, at coordinates so
+/// large that a few units in their last place already exceed it
+/// (georeferenced ones, about 6e6 m, where eight units are 1e-8 m), up to
+/// [`SNAP_STEP`] squared times the first, never past [`SNAP_CEILING`]. So
+/// every coordinate size up to about 5e8 m has a tolerance to try (#304).
 ///
 /// The overlay takes features closer than its tolerance as touching and
 /// decides everything else exactly. Clipped corners of faces that meet in
@@ -378,9 +411,10 @@ const SNAP_STEP: f64 = 4.0;
 /// fails to link the boundary of an arrangement holding such
 /// near-coincident points (`SelfIntersection`), so they must snap; a
 /// coarser snap merges more of them. Snapping moves a point by no more than
-/// the tolerance, at most [`ON_SURFACE`], far below [`MARGIN`], which
+/// the tolerance, at most [`SNAP_CEILING`], far below [`MARGIN`], which
 /// every witness keeps from the obstacles, and below the overlay's own grid
-/// snapping of its output (axiolid/kernel#173).
+/// snapping of its output (axiolid/kernel#173, about `1e-7` of the
+/// coordinates).
 fn snapping_tolerances<'p>(
     polygons: impl IntoIterator<Item = &'p Polygon>,
 ) -> Result<Vec<Tolerance>, String> {
@@ -390,8 +424,11 @@ fn snapping_tolerances<'p>(
         .flat_map(|point| [point.x.abs(), point.y.abs()])
         .fold(1.0, f64::max);
     let mut linear = (SNAP_ULPS * f64::EPSILON * magnitude).max(overlay_tolerance()?.linear());
+    let coarsest = ON_SURFACE
+        .max(linear * SNAP_STEP * SNAP_STEP)
+        .min(SNAP_CEILING);
     let mut tolerances = Vec::new();
-    while linear <= ON_SURFACE {
+    while linear <= coarsest {
         tolerances
             .push(Tolerance::new(linear, linear).map_err(|_| "invalid tolerance".to_owned())?);
         linear *= SNAP_STEP;
@@ -485,7 +522,8 @@ pub(crate) fn band_footprint(
     if max[2] <= lo + ON_SURFACE || min[2] >= hi - ON_SURFACE {
         return Ok(Plan::empty());
     }
-    let faces = triangles(mesh);
+    let origin = local_origin(&min);
+    let faces = local_faces(mesh, origin);
     let mut crossings = Vec::new();
     for [a, b, c] in &faces {
         let clipped = clip_z(&clip_z(&[*a, *b, *c], lo, true), hi, false);
@@ -521,7 +559,112 @@ pub(crate) fn band_footprint(
     }
     let tolerances = snapping_tolerances(crossings.iter().chain(&above))?;
     snapped_union(&crossings, &above, &tolerances)
+        .map(|plan| plan.moved(origin))
         .map_err(|error| format!("the band footprint of {object} failed: {error}"))
+}
+
+/// Coordinates from which a footprint is taken in a plan frame of its own
+/// (#304): about 6e6 m, where eight units in the last place are 1e-8 m and
+/// the overlay fails to link arrangements of corners a few of them apart.
+/// Below it every footprint is taken where it lies, bit for bit as before.
+const LOCAL_FRAME_FROM: f64 = 1.0e5;
+
+/// The plan origin of a footprint's own frame: its body's lowest corner in
+/// whole metres where its coordinates reach [`LOCAL_FRAME_FROM`], else the
+/// world origin. Moving there is exact for every point within a factor two
+/// of it (Sterbenz), and moving back rounds by half a unit in the last
+/// place of the coordinates at most, far below [`MARGIN`].
+fn local_origin(min: &[f64; 3]) -> [f64; 2] {
+    if min[0].abs().max(min[1].abs()) >= LOCAL_FRAME_FROM {
+        [min[0].floor(), min[1].floor()]
+    } else {
+        [0.0, 0.0]
+    }
+}
+
+/// A mesh's triangles moved by `-origin` in plan.
+fn local_faces(mesh: &TriMesh, origin: [f64; 2]) -> Vec<Triangle> {
+    let faces = triangles(mesh);
+    if origin == [0.0, 0.0] {
+        return faces;
+    }
+    faces
+        .into_iter()
+        .map(|face| face.map(|p| Point3::new(p.x - origin[0], p.y - origin[1], p.z)))
+        .collect()
+}
+
+/// Where a closed body surely occupies a vertical column of height
+/// `2 * half` centred on `level`: its section just above `level` (`.0`,
+/// the non-zero winding of its boundary above it, as in
+/// [`band_footprint`]) and the shadow of its boundary between
+/// `level - half` and `level + half` (`.1`), faces only touching those
+/// limits left out. A plan point in the section but outside the shadow has
+/// the whole column inside the (closed) body, since the column's centre is
+/// inside and it never crosses the boundary.
+///
+/// A tessellated obstacle's sure footprint is the first less the second,
+/// eroded by its chord deviation `d` with `half = d`: a point deeper than
+/// `d` inside the mesh in every direction lies inside the true body.
+///
+/// # Errors
+///
+/// When the body reaches `level` but is not a closed solid, or the overlay
+/// fails; both name `object`.
+pub(crate) fn solid_column(
+    object: &ObjectId,
+    mesh: &TriMesh,
+    level: f64,
+    half: f64,
+) -> Result<(Plan, Plan), String> {
+    let Some((min, max)) = mesh_extent(mesh) else {
+        return Ok((Plan::empty(), Plan::empty()));
+    };
+    if max[2] <= level || min[2] >= level {
+        return Ok((Plan::empty(), Plan::empty()));
+    }
+    let health = audit_mesh(mesh, tolerance()?);
+    if !health.is_closed_two_manifold() {
+        return Err(format!(
+            "{object} reaches into the band but is not a closed solid, so what it surely \
+             occupies there is undecided"
+        ));
+    }
+    let origin = local_origin(&min);
+    let faces = local_faces(mesh, origin);
+    let mut above = Vec::new();
+    let mut shadow = Vec::new();
+    for [a, b, c] in &faces {
+        let clipped = clip_z(&[*a, *b, *c], level, true);
+        if clipped.len() >= 3 && !clipped.iter().all(|p| p.z <= level) {
+            above.extend(projected_fan(&clipped));
+        }
+        // A face on edge casts no area; its neighbours within the column,
+        // or the section's own boundary, cover its shadow.
+        let within = clip_z(
+            &clip_z(&[*a, *b, *c], level - half, true),
+            level + half,
+            false,
+        );
+        if within.len() >= 3
+            && !within.iter().all(|p| p.z <= level - half)
+            && !within.iter().all(|p| p.z >= level + half)
+        {
+            for mut face in projected_fan(&within) {
+                if ring_area(&face.outer) < 0.0 {
+                    face.outer.points.reverse();
+                }
+                shadow.push(face);
+            }
+        }
+    }
+    let section_tolerances = snapping_tolerances(&above)?;
+    let section = snapped_union(&[], &above, &section_tolerances)
+        .map_err(|error| format!("the section of {object} failed: {error}"))?;
+    let shadow_tolerances = snapping_tolerances(&shadow)?;
+    let shadow = snapped_union(&shadow, &[], &shadow_tolerances)
+        .map_err(|error| format!("the boundary shadow of {object} failed: {error}"))?;
+    Ok((section.moved(origin), shadow.moved(origin)))
 }
 
 /// A walkable surface: a closed exact body standing on one horizontal floor.

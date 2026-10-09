@@ -189,24 +189,23 @@ impl AxiolidFreeSpaceService {
             request.obstacles(),
             request.swept_doors(),
             request.band(),
-            request.width_metres() + request.tolerance_metres(),
             t,
         )?;
-        // The free area bracketed: less every possible obstacle (`free`),
-        // and less the sure ones only (`roomy`). They differ by the swept
-        // sectors' polygonisation.
-        let less = |obstacles: &Region| {
+        // The free area bracketed: the sure scope less every possible
+        // obstacle (`free`), and the possible scope less the sure ones only
+        // (`roomy`). They differ by the swept sectors' polygonisation and
+        // by tessellations grown and shrunk by their chord deviation.
+        let less = |scope: &Region, obstacles: &Region| {
             if obstacles.is_empty() {
-                Ok(scene.scope.clone())
+                Ok(scope.clone())
             } else {
-                scene
-                    .scope
+                scope
                     .difference(obstacles, t)
                     .map_err(|e| unavailable("free area", e))
             }
         };
-        let free = less(&scene.obstacles)?;
-        let roomy = less(&scene.sure)?;
+        let free = less(&scene.scope, &scene.obstacles)?;
+        let roomy = less(&scene.room, &scene.sure)?;
         let mut inner = scene.scope.erode_inner(radius, t).map_err(err)?;
         if !scene.obstacles.is_empty() && !inner.is_empty() {
             inner = inner
@@ -216,7 +215,7 @@ impl AxiolidFreeSpaceService {
         // For a radius a knife edge smaller, so that a gap exactly as wide
         // as the path keeps a sliver rather than being snapped shut.
         let shrunk = radius - KNIFE_EDGE_METRES;
-        let mut outer = scene.scope.erode_outer(shrunk, t).map_err(err)?;
+        let mut outer = scene.room.erode_outer(shrunk, t).map_err(err)?;
         if !scene.sure.is_empty() && !outer.is_empty() {
             outer = outer
                 .difference(&scene.sure.dilate_inner(shrunk, t).map_err(err)?, t)
@@ -342,6 +341,7 @@ impl AxiolidFreeSpaceService {
             locator.push('+');
             locator.push_str(&merged.to_string());
         }
+        locator.push_str(&crate::free_space::within_deviation(&scene.bracketed));
         let evidence = Evidence::exact(request.scope().source.clone(), locator);
         CirculationMap::try_new(
             request.clone(),
@@ -377,7 +377,7 @@ impl AxiolidFreeSpaceService {
                 .map_err(err)?;
         }
         let shrunk = radius - KNIFE_EDGE_METRES;
-        let mut outer = scene.scope.erode_outer(shrunk, t).map_err(err)?;
+        let mut outer = scene.room.erode_outer(shrunk, t).map_err(err)?;
         if !scene.sure.is_empty() && !outer.is_empty() {
             outer = outer
                 .difference(&scene.sure.dilate_inner(shrunk, t).map_err(err)?, t)

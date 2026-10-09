@@ -1029,3 +1029,45 @@ fn an_ipe_beam_less_a_web_hole_is_exact() {
     let expected = area * len - std::f64::consts::PI * r * r * tw;
     assert_close(volume(boundary.brep().unwrap()), expected, 1e-12);
 }
+
+/// A slab's extent bounds come from its construction (#302, #305): the
+/// subject's closed form bounds it from outside without the boolean's
+/// rounding, so a 12 x 8 slab less a round hole keeps its top exactly at
+/// the floor above it, here and at georeferenced coordinates, where the
+/// boolean's rounding alone is micrometres. Its vertices, moved in by that
+/// rounding, bound it from inside.
+#[test]
+fn a_slab_with_a_round_hole_is_bounded_by_its_construction() {
+    for (x, y) in [(6.0, 4.0), (600_006.0, 5_600_004.0)] {
+        let mut builder = GeometryGraphBuilder::new();
+        let slab = extrusion(
+            &mut builder,
+            rectangle(12.0, 8.0),
+            0.25,
+            Transform3::from_translation(Vec3::new(x, y, -0.25)),
+        );
+        let hole = extrusion(
+            &mut builder,
+            circle(0.3),
+            0.45,
+            Transform3::from_translation(Vec3::new(x - 5.0, y - 3.0, -0.35)),
+        );
+        let root = difference(&mut builder, slab, hole);
+        let graph = builder.finish(vec![root]).unwrap();
+        let boundary = exact_boundary(&graph, root).unwrap();
+        let (outer, inner) = boundary.extent_bounds();
+        assert_eq!((outer.0[2], outer.1[2]), (-0.25, 0.0), "at {x}");
+        let rounding = boundary.body().widening_metres();
+        assert!(
+            inner.1[2] <= 0.0 && inner.1[2] >= -rounding,
+            "{inner:?} at {x}"
+        );
+        assert!(
+            inner.0[2] >= -0.25 && inner.0[2] <= -0.25 + rounding,
+            "{inner:?}"
+        );
+        for k in 0..2 {
+            assert!(outer.0[k] <= inner.0[k] && inner.1[k] <= outer.1[k]);
+        }
+    }
+}

@@ -84,12 +84,16 @@ pub(crate) fn union(rings: &[Ring], tolerance: Tolerance) -> Result<Region, Free
 
 /// A search scene: where a centre may lie, and what it must avoid.
 ///
-/// What the obstacles occupy is bracketed: `obstacles` contains it and
-/// `sure` lies inside it. They differ only by swept door sectors, whose
-/// footprints are polygonised from both sides. A witness must avoid
-/// `obstacles`; an absence is proven against `sure`.
+/// Both are bracketed. `scope` lies inside the scope's true footprint and
+/// `room` contains it; `obstacles` contains what the obstacles occupy and
+/// `sure` lies inside it. They differ by swept door sectors, whose
+/// footprints are polygonised from both sides, and by tessellated bodies,
+/// grown and shrunk by their chord deviation. A witness must lie in
+/// `scope` and avoid `obstacles`; an absence is proven in `room` against
+/// `sure`.
 pub(crate) struct Scene {
     pub(crate) scope: Region,
+    pub(crate) room: Region,
     pub(crate) obstacles: Region,
     pub(crate) sure: Region,
     pub(crate) tolerance: Tolerance,
@@ -97,6 +101,8 @@ pub(crate) struct Scene {
     pub(crate) window: Option<Window>,
     /// Where a path from the entrances runs, if the shape must be reached.
     pub(crate) reach: Option<Reached>,
+    /// The tessellated bodies bracketed by their chord deviation, with it.
+    pub(crate) bracketed: Vec<(axioval_ir::ObjectId, f64)>,
 }
 
 /// The pieces of the free area eroded by half a path's width that come
@@ -245,9 +251,12 @@ impl Scene {
     /// obstacle; an absence (`absence`) is proven among those clear of the
     /// sure ones.
     fn free_for(&self, shape: &Ring, absence: bool) -> Result<Region, FreeSpaceError> {
-        let obstacles = if absence { &self.sure } else { &self.obstacles };
-        let room = self
-            .scope
+        let (scope, obstacles) = if absence {
+            (&self.room, &self.sure)
+        } else {
+            (&self.scope, &self.obstacles)
+        };
+        let room = scope
             .minkowski_erosion(shape, self.tolerance)
             .map_err(|e| unavailable("erosion", e))?;
         if room.is_empty() || obstacles.is_empty() {
@@ -494,6 +503,9 @@ pub(crate) enum Search {
     Found { centre: Point2, right: Axis },
     /// No placement exists.
     Nowhere,
+    /// Neither: no witness verifies and no absence is proven, for the
+    /// reason given. Within a margin or a bracket, never a guess.
+    Undecided(&'static str),
 }
 
 /// A rectangle whose width follows `right`.
@@ -532,10 +544,10 @@ pub(crate) fn fixed_rectangle(
     if scene.nowhere_in_domain(&scene.reaching(shrunk, &grown, true)?)? {
         return Ok(Search::Nowhere);
     }
-    Err(FreeSpaceError::Unavailable(if free.is_empty() {
-        "the rectangle fits only within the knife-edge margin".into()
+    Ok(Search::Undecided(if free.is_empty() {
+        "the rectangle fits only within the knife-edge margin"
     } else {
-        "no candidate in the free region verifies".into()
+        "no candidate in the free region verifies"
     }))
 }
 
@@ -564,8 +576,8 @@ pub(crate) fn any_rectangle(
     let mut spent = 0usize;
     while let Some((low, high)) = open.pop() {
         if spent >= ANGLE_BUDGET {
-            return Err(FreeSpaceError::Unavailable(
-                "orientation search budget exhausted before a verdict".into(),
+            return Ok(Search::Undecided(
+                "orientation search budget exhausted before a verdict",
             ));
         }
         spent += 1;
@@ -641,7 +653,7 @@ pub(crate) fn circle(scene: &Scene, radius: f64) -> Result<Search, FreeSpaceErro
             "the circle is too small to prove absent".into(),
         ));
     }
-    let outer = scene.scope.erode_outer(shrunk, t).map_err(err)?;
+    let outer = scene.room.erode_outer(shrunk, t).map_err(err)?;
     let outer = if scene.sure.is_empty() || outer.is_empty() {
         outer
     } else {
@@ -652,7 +664,7 @@ pub(crate) fn circle(scene: &Scene, radius: f64) -> Result<Search, FreeSpaceErro
     if scene.nowhere_in_domain(&scene.reaching_disc(outer, radius, true)?)? {
         return Ok(Search::Nowhere);
     }
-    Err(FreeSpaceError::Unavailable(
-        "the circle's fit lies within the disc approximation band".into(),
+    Ok(Search::Undecided(
+        "the circle's fit lies within the disc approximation band",
     ))
 }

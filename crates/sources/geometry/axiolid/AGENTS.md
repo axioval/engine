@@ -3,7 +3,11 @@
 Geometry evidence for any source, measured with the Axiolid kernel.
 
 - `src/geometry.rs` holds `AxiolidGeometry`, the host-supplied mesh store shared
-  by every service here. It also builds a whole's body from its registered
+  by every service here. `with_extent_bounds` takes host-certified bounds
+  on a tessellated body's extent (the CLI passes
+  `ExactBoundary::extent_bounds`: each item's subject in closed form
+  outside, the built vertices less the body's widening inside);
+  `vertical_bounds` reads them, never for an exact mesh. It also builds a whole's body from its registered
   parts (`compose`, `ComposedBody`, `with_composed_body`): the parts' meshes
   side by side (unwelded, so each stays a closed solid), exact only when every
   part is, else declared within the largest part deviation, with
@@ -126,6 +130,19 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   polygon; absence misses the possibly reached ones for the shape grown by
   `KNIFE_EDGE_METRES` (`dilate_outer` of the radius plus it). Never verify
   a reach with the circumscribed polygon.
+  Tessellated scopes and obstacles are bracketed by their chord deviation
+  `d` (#302): witnesses avoid the band footprint over the band widened by
+  `d`, grown by `d` (`dilate_outer`); absence is proven against the sure
+  core (`walkable::solid_column`, a column of height `2d` a deviation above
+  the band's bottom, less the boundary's shadow within it, eroded by `d`);
+  the scope is `Scene::scope` eroded and `Scene::room` grown. Never prove
+  absence against the grown footprint or witness against the core. A body
+  `VerticalBounds::clear_of` the band (certified by `with_extent_bounds`)
+  occupies nothing. The morphology runs in a frame at the scope's corner
+  (`Region::translate`): at georeferenced coordinates the overlay refuses
+  its own slivers (`ZeroArea`). `Search::Undecided` with anything bracketed
+  is `InexactPlacementEvidence`, never a verdict; the locator names the
+  bracketed bodies (`within_deviation`).
   Placement evidence cites the scope's source. Clearance tests each obstacle's solid
   against the volume's prism shrunk by `CONTACT_TOLERANCE_M`: a triangle
   meeting it (band-clipped, then plan separating axes) or the centre inside
@@ -271,7 +288,9 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   the subject, the section the clip) at `snapping_tolerances` (a few ulps
   of the coordinates, coarser up to `ON_SURFACE`), else in two steps,
   because the overlay fails to link arrangements with corners a few ulps
-  apart; a refusal names the obstacle. `trapezoids` remains for convex pieces (an inner point,
+  apart; a refusal names the obstacle. At coordinates where eight ulps
+  exceed `ON_SURFACE` (georeferenced, #304) the ladder runs from there
+  up `SNAP_STEP²`, never past `SNAP_CEILING` (`MARGIN / 100`). `trapezoids` remains for convex pieces (an inner point,
   placement obstacles as rings). Test against the published crates, not a
   local kernel checkout.
 - `src/walkability.rs` implements `WalkabilityService`: a region per surface
@@ -534,8 +553,9 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   and decides a vertex's side only beyond its deviation.
 - **Every service honours fidelity.** Proximity reports approximate evidence.
   The services whose contracts only accept exact evidence -- contact,
-  envelope, free space, guard, space -- refuse with their inexact-evidence
-  error when a tessellation could change the answer: the subject itself, or a
+  envelope, clearance and free area, guard, space -- refuse with their inexact-evidence
+  error when a tessellation could change the answer (placement and
+  circulation bracket it instead, above): the subject itself, or a
   part whose enclosing extent (mesh box grown by its chord deviation) comes
   within the measurement's reach (`AxiolidGeometry::tessellated_near`). A
   curved part elsewhere in the model blocks nothing. Shelf length is an

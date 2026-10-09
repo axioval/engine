@@ -264,6 +264,11 @@ impl ExactBody {
 pub struct ExactBoundary {
     body: ExactBody,
     extent: Extent,
+    /// Encloses the model's solid: each item's subject in closed form.
+    outer: Extent,
+    /// Spanned by the model's solid: the built vertices, moved in by the
+    /// body's widening.
+    inner: Extent,
 }
 
 impl ExactBoundary {
@@ -292,6 +297,24 @@ impl ExactBoundary {
     pub fn extent(&self) -> ([f64; 3], [f64; 3]) {
         self.extent
     }
+
+    /// Bounds on the extent of the model's solid, `(outer, inner)`, for
+    /// [`crate::AxiolidGeometry::with_extent_bounds`].
+    ///
+    /// `outer` encloses the solid: each item's subject (an extrusion,
+    /// revolution or swept disk, or a boolean's innermost subject, which
+    /// the difference or clip lies inside) in closed form from the model's
+    /// numbers, so without the boolean's rounding. `inner` is spanned by
+    /// it: the extent of the built body's vertices, each a point of the
+    /// solid up to the body's widening ([`ExactBody::widening_metres`]),
+    /// moved in by that widening and kept within `outer` (the two are
+    /// computed along different paths and may differ in the last place).
+    /// The solid's lowest and highest points therefore lie between the two
+    /// along every axis.
+    #[must_use]
+    pub fn extent_bounds(&self) -> (Extent, Extent) {
+        (self.outer, self.inner)
+    }
 }
 
 /// The exact body of `root` in world coordinates, or why it has none.
@@ -308,8 +331,17 @@ pub fn exact_boundary(graph: &GeometryGraph, root: NodeId) -> Result<ExactBounda
     let (mut moved, mut turned, mut rounding) = (0.0_f64, 0.0_f64, 0.0_f64);
     let mut perturbed = false;
     let mut extent: Option<Extent> = None;
+    let mut outer: Option<Extent> = None;
+    let mut vertices: Option<Extent> = None;
     for (transform, leaf) in members {
         let item = item(graph, leaf, transform)?;
+        let subject = item.shape.extent(&(placement * item.transform));
+        outer = Some(hull(outer, subject));
+        // The item is built in the body's frame already.
+        for vertex in item.brep.topology().vertices() {
+            let p = placement.transform_point3(vertex.position).to_array();
+            vertices = Some(hull(vertices, (p, p)));
+        }
         // Each item's extent in the world, through the outer placement: a
         // boolean's from its edges where they bound it (a clip lowers the
         // top), its subject's otherwise, which encloses it.
@@ -363,10 +395,31 @@ pub fn exact_boundary(graph: &GeometryGraph, root: NodeId) -> Result<ExactBounda
         Some(perturbation) => body.with_perturbation(perturbation),
         None => body,
     };
+    let body = body.with_rounding(rounding);
+    let outer = outer.ok_or("the body has no solid")?;
+    let vertices = vertices.ok_or("the body has no vertex")?;
+    let widening = body.widening_metres();
+    let inner = (
+        std::array::from_fn(|k| (vertices.0[k] + widening).clamp(outer.0[k], outer.1[k])),
+        std::array::from_fn(|k| (vertices.1[k] - widening).clamp(outer.0[k], outer.1[k])),
+    );
     Ok(ExactBoundary {
-        body: body.with_rounding(rounding),
+        body,
         extent,
+        outer,
+        inner,
     })
+}
+
+/// The extent spanning `so_far` and `next`.
+fn hull(so_far: Option<Extent>, next: Extent) -> Extent {
+    match so_far {
+        None => next,
+        Some((min, max)) => (
+            std::array::from_fn(|k| min[k].min(next.0[k])),
+            std::array::from_fn(|k| max[k].max(next.1[k])),
+        ),
+    }
 }
 
 /// The placement above `root`'s solids, composed, and each solid below it

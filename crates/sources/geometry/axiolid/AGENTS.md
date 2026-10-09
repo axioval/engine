@@ -417,6 +417,17 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   undecided. Lifts are never measured here. It reads flights, runs and
   headroom through `walking_surface`'s `tread_flight`, `sloped_runs` and
   `headroom`, the same measurements the walking-surface service answers.
+- `src/shell.rs` (internal) reads closure from positions, not indices
+  (#309): corners with equal coordinates (`-0.0` as `0.0`) are one vertex,
+  never corners within a tolerance. `pieces` splits a mesh into the pieces
+  its surface connects; a piece is closed when its triangles, zero-area
+  ones counted and those repeating a corner left out, use every edge as
+  often one way as the other, so its winding number is whole off the
+  surface. `walkable::band_footprint` needs that only of the pieces
+  reaching from below the band into it, `solid_column` of those standing
+  across its level; other pieces count by their surface. Never claim a
+  piece closed from a weld within a tolerance, and never take the section
+  of an open piece.
 - `src/planar.rs` (internal) holds the plan-projection helpers shared by the
   services; `src/geometry.rs` holds the mesh store and triangle vocabulary.
 - `src/linear_quantity.rs` implements `LinearQuantityService`: parallel shelf

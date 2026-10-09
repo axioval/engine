@@ -234,6 +234,50 @@ fn a_room_over_a_slab_with_a_round_hole_is_decided() {
     }
 }
 
+/// A tessellated column standing in space `a` of [`holed_room`] with an
+/// open quad beside it at `z`, its bottom at `bottom` and its top 1 m above:
+/// one body of a closed piece and an open one.
+fn column_with_sheet(bottom: f64) -> TriMesh {
+    let mut column = prisms(&[rect(2.9, 3.2, 3.8, 4.2)], 0.0, 2.8);
+    let first = u32::try_from(column.positions.len()).unwrap();
+    column.positions.extend(
+        [
+            (1.0, 1.0, bottom),
+            (1.2, 1.0, bottom),
+            (1.2, 1.0, bottom + 1.0),
+            (1.0, 1.0, bottom + 1.0),
+        ]
+        .map(|(x, y, z)| Point3::new(x, y, z)),
+    );
+    column
+        .indices
+        .extend([0, 1, 2, 0, 2, 3].map(|corner| first + corner));
+    column
+}
+
+/// The sure core of a tessellated obstacle (`solid_column`) needs only the
+/// pieces standing across its column to be closed: the column proves that a
+/// 5 m square fits nowhere in space `a`, beside an open quad hanging in the
+/// band. A quad standing on the floor leaves its piece's inside undecided,
+/// and the request refuses rather than prove an absence on it.
+#[test]
+fn a_tessellated_column_beside_an_open_piece_is_measured() {
+    let square = || rectangle(5.0, 5.0, Some((1.0, 0.0)));
+    let obstacles = ["slab", "walls", "ceiling", "column"];
+    found(place(holed_room(true), "a", square(), &ELEMENTS));
+    let hanging =
+        holed_room(true).with_tessellated_mesh(id("column"), column_with_sheet(1.0), 0.001);
+    nowhere(place(hanging, "a", square(), &obstacles));
+    let standing =
+        holed_room(true).with_tessellated_mesh(id("column"), column_with_sheet(0.0), 0.001);
+    let refused =
+        place(standing, "a", square(), &obstacles).expect_err("an open piece on the floor");
+    assert!(
+        refused.to_string().contains("is not a closed solid"),
+        "{refused}"
+    );
+}
+
 /// Without a certified extent the slab's top may lie its chord deviation
 /// above the floor, inside the band, wherever it is: no witness holds for
 /// every such slab, so a fit is refused rather than passed.

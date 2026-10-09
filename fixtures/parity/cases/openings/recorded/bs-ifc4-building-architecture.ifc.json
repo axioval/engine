@@ -308,7 +308,7 @@
   ],
   "not_evaluated": [
     {
-      "message": "axioval:derived.adjacent-across;tolerance=0.05;overlap=0.3: ifc-step:bs-ifc4-building-architecture.ifc/#158 reaches below the headroom band but is not a closed solid, so what it occupies in the band is undecided",
+      "message": "axioval:derived.adjacent-across;tolerance=0.05;overlap=0.3: wall ifc-step:bs-ifc4-building-architecture.ifc/#228 is not a straight wall of one thickness: its plan is not one rectangle",
       "object_id": {
         "local_id": "#135",
         "source": {
@@ -320,7 +320,7 @@
       "rule_id": "ce-defaults"
     },
     {
-      "message": "axioval:derived.adjacent-across;tolerance=0.05;overlap=0.3: ifc-step:bs-ifc4-building-architecture.ifc/#158 reaches below the headroom band but is not a closed solid, so what it occupies in the band is undecided",
+      "message": "axioval:derived.adjacent-across;tolerance=0.05;overlap=0.3: wall ifc-step:bs-ifc4-building-architecture.ifc/#228 is not a straight wall of one thickness: its plan is not one rectangle",
       "object_id": {
         "local_id": "#85",
         "source": {
@@ -332,7 +332,7 @@
       "rule_id": "ce-defaults"
     },
     {
-      "message": "axioval:derived.adjacent-across;tolerance=0.05;overlap=0.3: ifc-step:bs-ifc4-building-architecture.ifc/#158 reaches below the headroom band but is not a closed solid, so what it occupies in the band is undecided",
+      "message": "axioval:derived.adjacent-across;tolerance=0.05;overlap=0.3: wall ifc-step:bs-ifc4-building-architecture.ifc/#228 is not a straight wall of one thickness: its plan is not one rectangle",
       "object_id": {
         "local_id": "#135",
         "source": {
@@ -344,7 +344,7 @@
       "rule_id": "ce-walls"
     },
     {
-      "message": "axioval:derived.adjacent-across;tolerance=0.05;overlap=0.3: ifc-step:bs-ifc4-building-architecture.ifc/#158 reaches below the headroom band but is not a closed solid, so what it occupies in the band is undecided",
+      "message": "axioval:derived.adjacent-across;tolerance=0.05;overlap=0.3: wall ifc-step:bs-ifc4-building-architecture.ifc/#228 is not a straight wall of one thickness: its plan is not one rectangle",
       "object_id": {
         "local_id": "#85",
         "source": {

@@ -172,6 +172,89 @@ fn an_obstacle_closes_the_last_gap() {
     nowhere(place(with_column, square(), &["column"]));
 }
 
+/// `mesh` and `extra` as one mesh, side by side.
+fn joined(mesh: TriMesh, extra: &TriMesh) -> TriMesh {
+    let offset = u32::try_from(mesh.positions.len()).unwrap();
+    let mut positions = mesh.positions;
+    positions.extend(extra.positions.iter().copied());
+    let mut indices = mesh.indices;
+    indices.extend(extra.indices.iter().map(|index| index + offset));
+    TriMesh::new(positions, indices)
+}
+
+/// An open quad, a surface: corners in order.
+fn sheet(corners: [[f64; 3]; 4]) -> TriMesh {
+    TriMesh::new(
+        corners.map(|[x, y, z]| Point3::new(x, y, z)).to_vec(),
+        vec![0, 1, 2, 0, 2, 3],
+    )
+}
+
+/// A body of several items need not be closed as a whole: only the pieces
+/// reaching below the band must bound a solid. The column of
+/// `an_obstacle_closes_the_last_gap` with an open sheet hanging in the band
+/// still closes the gap; the sheet counts by its surface, as a body that
+/// stays off the floor does. A sheet reaching down to the floor leaves what
+/// its piece occupies in the band undecided, and the request refuses.
+#[test]
+fn an_open_piece_off_the_floor_leaves_a_closed_piece_measured() {
+    let geometry = || room(&[rect(0.0, 3.0, 0.0, 3.0)]);
+    let square = || rectangle(1.5, 1.5, along(1.0, 0.0));
+    let column = || prisms(&[rect(1.4, 1.6, 1.4, 1.6)], 0.0, 3.0);
+    let hanging = sheet([
+        [0.1, 0.1, 1.0],
+        [0.3, 0.1, 1.0],
+        [0.3, 0.3, 1.0],
+        [0.1, 0.3, 1.0],
+    ]);
+    let body = geometry().with_mesh(id("column"), joined(column(), &hanging));
+    nowhere(place(body, square(), &["column"]));
+
+    let standing = sheet([
+        [0.1, 0.1, 0.0],
+        [0.3, 0.1, 0.0],
+        [0.3, 0.1, 1.0],
+        [0.1, 0.1, 1.0],
+    ]);
+    let body = geometry().with_mesh(id("column"), joined(column(), &standing));
+    let refused = place(body, square(), &["column"]).expect_err("an open piece on the floor");
+    assert!(
+        refused.to_string().contains(
+            "reaches below the headroom band but is not a closed solid, so what it occupies \
+             in the band is undecided"
+        ),
+        "{refused}"
+    );
+}
+
+/// A column whose side splits a bottom edge the floor face keeps whole (a
+/// T-junction), closed by a zero-area triangle along that edge, bounds a
+/// solid: every edge is used once each way. It closes the gap.
+#[test]
+fn a_column_closed_through_a_zero_area_triangle_obstructs() {
+    let mut column = prisms(&[rect(1.4, 1.6, 1.4, 1.6)], 0.0, 3.0);
+    let middle = u32::try_from(column.positions.len()).unwrap();
+    column.positions.push(Point3::new(1.5, 1.4, 0.0));
+    // The first side's lower triangle (b0, b1, t1) becomes two, through the
+    // edge's midpoint, and the sliver (b0, b1, m) closes the edge.
+    let (b0, b1, t1) = (0, 1, 5);
+    let side = column
+        .indices
+        .chunks_exact(3)
+        .position(|triangle| triangle == [b0, b1, t1])
+        .unwrap();
+    column.indices.splice(
+        3 * side..3 * side + 3,
+        [b0, middle, t1, middle, b1, t1, b0, b1, middle],
+    );
+    let geometry = room(&[rect(0.0, 3.0, 0.0, 3.0)]).with_mesh(id("column"), column);
+    nowhere(place(
+        geometry,
+        rectangle(1.5, 1.5, along(1.0, 0.0)),
+        &["column"],
+    ));
+}
+
 /// An obstacle above the height band leaves the floor free.
 #[test]
 fn an_obstacle_above_the_band_does_not_block() {

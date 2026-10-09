@@ -74,6 +74,15 @@ All notable changes are documented here. This project follows Semantic Versionin
   (`;whole-openings:<body>=<opening>+...`, `AxiolidGeometry::
   with_whole_openings`)
   ([#223](https://github.com/axioval/engine/issues/223)).
+- **Geometry**: a free-floor obstacle needs to be closed only in the pieces
+  that reach from below the headroom band into it (and the sure core of a
+  tessellated one in the pieces standing across its column): a body of a
+  closed item on the floor and an open item higher up is measured, the
+  open item by its surface. A piece is closed when its triangles use every
+  edge as often one way as the other, corners with equal coordinates taken
+  as one and zero-area triangles counted, as clash has done since #221. An
+  open piece reaching the floor still refuses with the same message
+  ([#309](https://github.com/axioval/engine/issues/309)).
 - **Geometry**: products clipped by an `IfcPolygonalBoundedHalfSpace`
   whose boundary is an `IfcCompositeCurve` or `IfcIndexedPolyCurve` of
   straight edges are measured like those bounded by an `IfcPolyline`. The

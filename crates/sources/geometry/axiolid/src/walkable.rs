@@ -492,6 +492,29 @@ fn snapped_union(
     ))
 }
 
+/// The triangles of the pieces of `mesh` ([`crate::shell::pieces`]) whose
+/// lowest and highest elevations `needed` selects, in triangle order: the
+/// pieces whose inside a measurement needs. Each must bound a solid; the
+/// other pieces count by their surface alone, as a body that does not
+/// reach the plane does.
+///
+/// `None` when a selected piece is open (or the mesh cannot be read), so
+/// the solid it would bound is undecided.
+fn solid_pieces(mesh: &TriMesh, needed: impl Fn((f64, f64)) -> bool) -> Option<Vec<usize>> {
+    let mut triangles = Vec::new();
+    for piece in crate::shell::pieces(mesh)? {
+        if !needed(piece.z) {
+            continue;
+        }
+        if !piece.closed {
+            return None;
+        }
+        triangles.extend(piece.triangles);
+    }
+    triangles.sort_unstable();
+    Some(triangles)
+}
+
 /// Plan projection of the part of `mesh` inside the open band `lo < z < hi`.
 ///
 /// A vertical line meets the body within the band exactly when its foot just
@@ -501,6 +524,11 @@ fn snapped_union(
 /// below, which needs a closed, consistently wound body. A body touching the
 /// band only at `lo` or `hi` does not obstruct it.
 ///
+/// Only the pieces of the body ([`solid_pieces`]) that reach from below
+/// `lo` into the band need to be closed (#309): the section is theirs.
+/// Any other piece, open or not, counts by its boundary in the band, as a
+/// whole body off the floor does.
+///
 /// Faces go to the overlay as triangle fans ([`projected_fan`]), united
 /// ([`snapped_union`]) at a tolerance scaled to their coordinates
 /// ([`snapping_tolerances`]). The overlay's output is settled, so it goes
@@ -508,7 +536,7 @@ fn snapped_union(
 ///
 /// # Errors
 ///
-/// When a body reaching down to the band is not a closed solid, or the
+/// When a piece reaching down to the band is not a closed solid, or the
 /// overlay fails; both name `object`.
 pub(crate) fn band_footprint(
     object: &ObjectId,
@@ -542,15 +570,16 @@ pub(crate) fn band_footprint(
     }
     let mut above = Vec::new();
     if min[2] <= lo + ON_SURFACE {
-        let health = audit_mesh(mesh, tolerance()?);
-        if !health.is_closed_two_manifold() {
-            return Err(format!(
-                "{object} reaches below the headroom band but is not a closed solid, so what \
-                 it occupies in the band is undecided"
-            ));
-        }
-        for [a, b, c] in &faces {
-            let clipped = clip_z(&[*a, *b, *c], lo, true);
+        let reaching =
+            |(bottom, top): (f64, f64)| bottom <= lo + ON_SURFACE && top > lo + ON_SURFACE;
+        for piece in solid_pieces(mesh, reaching).ok_or_else(|| {
+            format!(
+                "{object} reaches below the headroom band but is not a closed solid, so \
+                     what it occupies in the band is undecided"
+            )
+        })? {
+            let [a, b, c] = faces[piece];
+            let clipped = clip_z(&[a, b, c], lo, true);
             if clipped.len() < 3 || clipped.iter().all(|p| p.z <= lo + ON_SURFACE) {
                 continue;
             }
@@ -607,10 +636,15 @@ fn local_faces(mesh: &TriMesh, origin: [f64; 2]) -> Vec<Triangle> {
 /// eroded by its chord deviation `d` with `half = d`: a point deeper than
 /// `d` inside the mesh in every direction lies inside the true body.
 ///
+/// The section is taken from the pieces of the body standing across
+/// `level` ([`solid_pieces`]), each of which must be closed; the shadow from
+/// every piece. A point in a closed piece's section and outside every
+/// shadow has its column inside that piece.
+///
 /// # Errors
 ///
-/// When the body reaches `level` but is not a closed solid, or the overlay
-/// fails; both name `object`.
+/// When a piece standing across `level` is not a closed solid, or the
+/// overlay fails; both name `object`.
 pub(crate) fn solid_column(
     object: &ObjectId,
     mesh: &TriMesh,
@@ -623,22 +657,25 @@ pub(crate) fn solid_column(
     if max[2] <= level || min[2] >= level {
         return Ok((Plan::empty(), Plan::empty()));
     }
-    let health = audit_mesh(mesh, tolerance()?);
-    if !health.is_closed_two_manifold() {
-        return Err(format!(
-            "{object} reaches into the band but is not a closed solid, so what it surely \
-             occupies there is undecided"
-        ));
-    }
+    let straddling =
+        solid_pieces(mesh, |(bottom, top)| bottom < level && level < top).ok_or_else(|| {
+            format!(
+                "{object} reaches into the band but is not a closed solid, so what it surely \
+                 occupies there is undecided"
+            )
+        })?;
     let origin = local_origin(&min);
     let faces = local_faces(mesh, origin);
     let mut above = Vec::new();
-    let mut shadow = Vec::new();
-    for [a, b, c] in &faces {
-        let clipped = clip_z(&[*a, *b, *c], level, true);
+    for triangle in straddling {
+        let [a, b, c] = faces[triangle];
+        let clipped = clip_z(&[a, b, c], level, true);
         if clipped.len() >= 3 && !clipped.iter().all(|p| p.z <= level) {
             above.extend(projected_fan(&clipped));
         }
+    }
+    let mut shadow = Vec::new();
+    for [a, b, c] in &faces {
         // A face on edge casts no area; its neighbours within the column,
         // or the section's own boundary, cover its shadow.
         let within = clip_z(

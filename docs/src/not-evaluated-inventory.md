@@ -248,6 +248,50 @@ refusals, now reported as `ZeroArea` until the overlay is fixed. Row 17
 ("Difference result touches itself at the point", 48 outcomes) is
 probably row 4's case.
 
+### Fifth ranking
+
+The fifth ranking ran on 2026-10-09 on all 15 models after #302, #303,
+#304 (engine part) and #305, with `ifc-geometry` 0.13 and `openbim-ifc`
+0.19. It recorded **11,105 outcomes and 704 unmeasured objects** under
+32 causes, down from 12,514 and 753.
+
+**Resolved:**
+
+- Free-floor placement evidence near tessellated bodies (#302): 1,264 outcomes resolved.
+- Space evidence near tessellated bodies (#305): 328 outcomes resolved.
+- The space overlay refusal (#304): 905 outcomes resolved.
+- Openings that touched themselves on the georeferenced model (#303): 981 and 48 outcomes resolved. All 40 hosts are measured.
+- `IfcIndexedPolyCurve` profile boundaries (`ifc-geometry` 0.12): 28 outcomes resolved.
+
+**Exposed:** spaces and placements decided now reach objects that were
+behind those causes.
+
+- The "no ear" wall (#299) goes from 3,845 to 4,576 outcomes.
+- Free-floor obstacles that are not closed solids go from 169 to 698.
+- One wall whose polygonal half-space is bounded by an `IfcCompositeCurve`
+  goes from 4 to 873 outcomes, 870 of them column distances.
+
+| # | Cause | Outcomes | Unmeasured | Models | Issue |
+|---|---|---:|---:|---:|---|
+| 1 | Whole made of parts, one part's planar face finds no ear | 4,576 | 16 | 3 | #299 (axiolid/kernel#269) |
+| 2 | Curved surface without a certified bound (non-forward planar extrusion) | 2,451 | 4 | 2 | #301 (axiolid/kernel#275) |
+| 3 | Polygonal half-space bounded by `IfcCompositeCurve` | 873 | 1 | 1 | — |
+| 4 | No shape representation (model data) | 771 | 467 | 5 | #219 |
+| 5 | Free floor: obstacle below the band is not a closed solid | 698 | 0 | 5 | — |
+| 6 | Planar face: outer ring overlaps itself (keyhole) | 523 | 35 | 1 | #299 (axiolid/kernel#270) |
+| 7 | Clash: neither body is a closed solid | 242 | 0 | 8 | — |
+| 8 | Mesh compilation produced no triangles | 227 | 58 | 1 | — |
+| 9 | Containment: shared volume not measured | 172 | 0 | 5 | — |
+| 10 | Planar face finds no ear | 126 | 61 | 4 | #299 (axiolid/kernel#269) |
+| 11–14 | Stair of separate treads; space boundary on curved faces; curve-bounded boundary with too few points; a face whose rings cross (model data) | 242 | 1 | ≤ 2 | — |
+| 15–32 | Smaller causes | 204 | 61 | — | — |
+
+The kernel gaps of #298 (rows 1, 6 and 10) account for 5,225 outcomes,
+almost half. The inventory ruleset does not measure volume, so it does
+not show #306: hosts whose openings stop a rounding error short of a
+face, which the volume kernel refuses far from the origin
+(axiolid/kernel#276).
+
 Cases 3 and 5 are resolved upstream (`axiolid-mesh-compile` 0.3.13). A
 warped authored face is now meshed, and the body is tessellated within
 the width of the slab the face's corners span about its fit plane, which

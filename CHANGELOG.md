@@ -26,6 +26,18 @@ All notable changes are documented here. This project follows Semantic Versionin
   (axiolid/kernel#269) and a hole joined to its outer boundary by a seam
   (axiolid/kernel#270)
   ([#298](https://github.com/axioval/engine/issues/298)).
+- **Geometry**: free-floor placements and space measurements near a
+  tessellated body are bracketed by its certified chord deviation instead of
+  refused as not exact: a verdict is given where every body within that
+  deviation agrees, and a case it could tip stays not evaluated. Bodies
+  without a certified bound still refuse. Clear height and cap coverage
+  evidence are intervals (`ClearHeightEvidence::try_bracketed`,
+  `CapCoverage::try_bracketed`; the point getters return the lower bound),
+  and `space-validation` reports a height or cap that straddles its limit
+  with its own message. Overlay inputs far from the origin are computed in
+  a local frame
+  ([#302](https://github.com/axioval/engine/issues/302),
+  [#305](https://github.com/axioval/engine/issues/305)).
 
 ### Fixed
 

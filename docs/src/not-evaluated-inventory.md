@@ -294,6 +294,20 @@ not show #306: hosts whose openings stop a rounding error short of a
 face, which the volume kernel refuses far from the origin
 (axiolid/kernel#276).
 
+#### Rows 8 and 9
+
+Every object behind rows 8 and 9 was traced through its IFC entity chain,
+and every containment pair was probed for the step that left its volume
+unmeasured.
+
+| Row | Reason | Objects | Classification | Issue | Resolved |
+|---|---|---|---|---|---|
+| 8 | A frame modelled as a wall or proxy (44 `IfcWallStandardCase`, 14 `IfcBuildingElementProxy`, all on m15), one extrusion voided by one opening as long and as high as the frame, flush with its ends, top and bottom, and thicker: nothing is left once it is subtracted | 58 | Model data | #310 | Labelled `unmeasured (model data)` with the warning `shape.voided-body`: 227 outcomes, 58 objects |
+| 9 | Furniture of several closed items that overlap or touch: one closed mesh whose triangles cross, which the volume kernel refuses as self-intersecting | m01, m07, m11, m14 | Engine gap: each item is a closed solid the kernel measures | #312 | Measured shell by shell. On the five models, 72 of the 172 outcomes are decided (71 contained, one furniture sticking out of every room it meets, reported as lying in none), and 32 straddle the ratio and say so |
+| 9 | Furniture with open surface items (`IfcPolygonalFaceSet` with `Closed` `.F.`), which enclose no volume | m07, m11 | Model data: the file states surfaces | #312 | The outcome names the open surface: 52 outcomes, 53 with m03 |
+| 9 | One `IfcTriangulatedFaceSet` listing each corner once per face, closed by its coordinates but not by its indices | m03 | Engine gap | #313 | Not yet: merging coincident corners closes it, but changes many public parity entries; the outcome names the open surface |
+| 9 | One item of a furniture whose own triangles cross; a space prism whose cap triangles cross once placed at georeferenced coordinates | m11, m14 | Not classified yet; the space reads as a kernel gap (the same prism measures near the origin) | — | The outcome names the refused bodies: 15 outcomes |
+
 Cases 3 and 5 are resolved upstream (`axiolid-mesh-compile` 0.3.13). A
 warped authored face is now meshed, and the body is tessellated within
 the width of the slab the face's corners span about its fit plane, which

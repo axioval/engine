@@ -34,6 +34,15 @@ All notable changes are documented here. This project follows Semantic Versionin
   model data; its outcomes stay not evaluated. The not-evaluated inventory
   labels the reason `unmeasured (model data)`
   ([#310](https://github.com/axioval/engine/issues/310)).
+- **Containment**: a body of several closed shells that overlap or touch,
+  which the volume kernel refuses as one self-intersecting mesh, is
+  measured shell by shell against a closed body: its volume between its
+  largest shell's and their sum, and what it has outside the other body
+  bounded too (`IntersectionVolume::with_subject_outside`,
+  `with_counterpart_outside`), which narrows `ratio_of_smaller`. A pair
+  still measured without a shared volume names each body whose own volume
+  the service refuses and why
+  ([#312](https://github.com/axioval/engine/issues/312)).
 - **Geometry**: free-floor placements and space measurements near a
   tessellated body are bracketed by its certified chord deviation instead of
   refused as not exact: a verdict is given where every body within that

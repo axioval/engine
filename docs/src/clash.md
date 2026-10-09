@@ -116,6 +116,18 @@ explicit in the contract:
   the other shares its whole volume with it. `ratio_of_smaller()` bounds
   the shared volume's share of the smaller body, rounded outward. A
   service that does not measure volumes leaves them `None`.
+  A volume may also carry bounds on what one body has outside the other
+  (`with_subject_outside`, `with_counterpart_outside`). They narrow the
+  share where the bodies' own volumes are known only roughly: the share is
+  at least one less the outside volume's upper bound over the smaller
+  body's lower bound, and, where that body is surely the smaller one, at
+  most one less the outside volume's lower bound over its own upper bound.
+  The Axiolid service attaches them for a body of several closed shells
+  that overlap or touch, such as a chair whose legs run into its seat,
+  which the volume kernel refuses as one self-intersecting mesh: each
+  shell is measured alone, the body's volume lies between its largest
+  shell's and their sum, and what lies outside the other body between the
+  largest shell's outside part and the sum of them (#312).
 
 ### Extents along the bodies' own axes
 
@@ -899,7 +911,11 @@ shared volume is at least `minimum_volume_ratio` of the smaller body's
 volume. The ratio is an interval: contained when its lower bound reaches
 the ratio, not contained when its upper bound falls short, undecided
 otherwise. Certified intervals rarely prove an exact ratio of one, so ask
-for slightly less (0.99) where "wholly inside" is meant. With
+for slightly less (0.99) where "wholly inside" is meant. A pair measured
+without a shared volume stays undecided, and when the service refuses the
+inner or the outer element's own volume by name (an open surface, a mesh
+the volume kernel refuses) the outcome names each such body and why
+(#312). With
 `combine_adjacent`, an inner element in no single outer element may lie in
 several whose surfaces meet, taken together: the column at a wall junction.
 The combined shared volume is bounded by the sum of the shares less what

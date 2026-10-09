@@ -531,7 +531,16 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   closed solids; a kernel refusal leaves the volume `None`, never zero, and
   a tessellation widens it by `tube_volume`, never by nothing.
   `measure_body_volume` is one closed body's `enclosed_volume` widened
-  the same way; an open surface refuses. A tessellated overlap is asserted
+  the same way; an open surface refuses. A pair the whole-mesh volume
+  refuses where one body is several closed shells (index-connected, each
+  closed and measured, `proximity/shells.rs`, split once per object and
+  cached) and the other one closed body the kernel measures, both exact,
+  is bounded shell by shell (#312): own volume from the largest shell to
+  the sum, shared from the largest share to the sum, and the volume
+  outside the other body from the largest shell's outside part to the sum
+  of them, attached with `with_subject_outside`/`with_counterpart_outside`.
+  Never sum shells into the shared volume's lower bound (they may overlap),
+  and never read a tessellated pair this way without widening every shell. A tessellated overlap is asserted
   only from a witness deeper than the deviations and denied only beyond the
   combined deviation; otherwise it stays open. Never decide it on the mesh.
   Zero-area triangles (#221) go through `src/proximity/zero_area.rs`:

@@ -39,8 +39,8 @@ use axioval_engine::template::Template;
 use axioval_engine::{
     CapabilityEvaluation, ColumnKind, CompiledRule, FaceClass, FaceDistanceError,
     FaceDistanceEvidence, FaceDistanceRequest, NotEvaluatedReason, ParameterDescriptor,
-    ParameterType, ProximityEvidence, ProximityServiceHandle, RuleCapability, RuleContext,
-    TableColumn, VolumeInterval,
+    ParameterType, ProximityError, ProximityEvidence, ProximityServiceHandle, RuleCapability,
+    RuleContext, TableColumn, VolumeInterval,
 };
 use axioval_ir::contract::ParameterValue;
 use axioval_ir::{Evidence, ObjectId};
@@ -215,6 +215,36 @@ struct Link {
     measured: Result<ProximityEvidence, Unavailable>,
     /// Whether the inner element was the measurement's subject.
     inner_is_subject: bool,
+    /// Why no shared volume was measured, where a body's own volume names
+    /// it: an open surface encloses none, the kernel refuses a mesh.
+    unmeasured_volume: Option<String>,
+}
+
+/// Why a pair measured without a shared volume has none, when the
+/// service refuses the inner or the outer element's own volume by name
+/// (an open surface, a mesh the volume kernel refuses): every such
+/// refusal, inner first. `None` when the pair has a volume, was not
+/// measured, or neither volume is refused by name.
+fn unmeasured_volume(
+    service: &ProximityServiceHandle,
+    measured: &Result<ProximityEvidence, Unavailable>,
+    inner: &ObjectId,
+    outer: &ObjectId,
+) -> Option<String> {
+    let measured = measured.as_ref().ok()?;
+    if measured.intersection_volume().is_some() {
+        return None;
+    }
+    let refused: Vec<String> = [inner, outer]
+        .into_iter()
+        .filter_map(|object| match service.measure_body_volume(object) {
+            Err(error @ ProximityError::Refused(_)) => {
+                Some(format!("the volume of {object} is unavailable: {error}"))
+            }
+            _ => None,
+        })
+        .collect();
+    (!refused.is_empty()).then(|| refused.join("; "))
 }
 
 /// The volumes of a link, oriented: shared, inner, outer.
@@ -244,10 +274,14 @@ impl Link {
             Err((reason, message)) => return Verdict::Unknown(reason.clone(), message.clone()),
         };
         let Some(volume) = measured.intersection_volume() else {
+            let why = self
+                .unmeasured_volume
+                .as_ref()
+                .map_or_else(String::new, |why| format!(": {why}"));
             return Verdict::Unknown(
                 NotEvaluatedReason::IncompleteEvidence,
                 format!(
-                    "the volume shared with {} is not measured, so whether it lies inside cannot be decided",
+                    "the volume shared with {} is not measured, so whether it lies inside cannot be decided{why}",
                     self.outer
                 ),
             );
@@ -681,12 +715,14 @@ pub(crate) fn assess(declared: &Declaration, prepared: Prepared<'_>) -> Assessed
         if reverse {
             links.entry(counterpart.clone()).or_default().push(Link {
                 outer: subject.clone(),
+                unmeasured_volume: unmeasured_volume(service, &measured, counterpart, subject),
                 measured: measured.clone(),
                 inner_is_subject: false,
             });
         }
         links.entry(subject.clone()).or_default().push(Link {
             outer: counterpart.clone(),
+            unmeasured_volume: unmeasured_volume(service, &measured, subject, counterpart),
             measured,
             inner_is_subject: true,
         });

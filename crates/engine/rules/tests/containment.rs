@@ -9,7 +9,7 @@
 use std::{collections::BTreeMap, sync::Arc};
 
 use axioval_engine::{
-    Bounds3, CapabilityEvaluation, CompiledRule, FaceClass, FaceDistanceError,
+    BodyVolume, Bounds3, CapabilityEvaluation, CompiledRule, FaceClass, FaceDistanceError,
     FaceDistanceEvidence, FaceDistanceRequest, GeometryFidelity, IntersectionVolume,
     NotEvaluatedReason, ObjectBounds, ProximityError, ProximityEvidence, ProximityRequest,
     ProximityService, ProximityServiceHandle, RuleCapability, RuleContext, ServiceRegistry,
@@ -56,6 +56,17 @@ struct Stub {
     faces: BTreeMap<FaceKey, FaceAnswer>,
     /// How face distances are measured: exactly unless stated.
     fidelity: Option<GeometryFidelity>,
+    /// Bodies whose own volume the service refuses, with the reason.
+    refused_volumes: BTreeMap<String, &'static str>,
+}
+
+/// A pair measured without a shared volume, as when a body is not a
+/// closed solid.
+fn volumeless() -> Pair {
+    Pair {
+        shared: (-1.0, -1.0),
+        ..sharing(0.0, 0.0)
+    }
 }
 
 impl Stub {
@@ -136,7 +147,7 @@ impl ProximityService for Stub {
             (pair.first, pair.second)
         };
         let interval = |(lower, upper): (f64, f64)| VolumeInterval::try_new(lower, upper).unwrap();
-        ProximityEvidence::try_new(
+        let measured = ProximityEvidence::try_new(
             request.clone(),
             pair.separation,
             Some(if pair.shared.0 > 0.0 { 0.1 } else { 0.0 }),
@@ -144,12 +155,22 @@ impl ProximityService for Stub {
             None,
             GeometryFidelity::Exact,
             evidence(format!("proximity:{a}:{b}")),
-        )?
-        .with_intersection_volume(IntersectionVolume::try_new(
+        )?;
+        if pair.shared.0 < 0.0 {
+            return Ok(measured);
+        }
+        measured.with_intersection_volume(IntersectionVolume::try_new(
             interval(pair.shared),
             interval(subject),
             interval(counterpart),
         )?)
+    }
+
+    fn measure_body_volume(&self, object: &ObjectId) -> Result<BodyVolume, ProximityError> {
+        match self.refused_volumes.get(&object.local_id) {
+            Some(reason) => Err(ProximityError::Refused(reason)),
+            None => Err(ProximityError::Unavailable),
+        }
     }
 
     fn measure_face_distance(
@@ -813,4 +834,54 @@ fn a_cover_measured_on_a_tessellation_is_inexact() {
             finding.evidence
         );
     }
+}
+
+/// A pair measured without a shared volume stays undecided, naming the
+/// body whose own volume the service refuses (#312); a service that
+/// refuses no volume by name leaves the plain reason.
+#[test]
+fn an_unmeasured_shared_volume_names_the_body_whose_volume_is_refused() {
+    let stub = || {
+        Stub::default()
+            .object("wall", WALL.0, WALL.1)
+            .object("column", COLUMN.0, COLUMN.1)
+            .pair("column", "wall", volumeless())
+    };
+    let orphans = ("report_orphans", ParameterValue::Boolean { value: true });
+    let project = project(&[("column", "column"), ("wall", "wall")]);
+    let plain = "the volume shared with cad:model/wall is not measured, so whether it lies \
+                 inside cannot be decided";
+    let outcome = run(&project, stub(), &rule(vec![orphans.clone()]));
+    assert_eq!(open(&outcome), [plain]);
+
+    let mut refused = stub();
+    refused.refused_volumes.insert(
+        "column".into(),
+        "the body's mesh is an open surface, which encloses no volume",
+    );
+    let outcome = run(&project, refused, &rule(vec![orphans.clone()]));
+    let open_column = "the volume of cad:model/column is unavailable: the geometry kernel \
+                       refused the measurement: the body's mesh is an open surface, which \
+                       encloses no volume";
+    assert_eq!(open(&outcome), [format!("{plain}: {open_column}")]);
+
+    // Both refused: both named, the inner element first.
+    let mut both = stub();
+    both.refused_volumes.insert(
+        "column".into(),
+        "the body's mesh is an open surface, which encloses no volume",
+    );
+    both.refused_volumes.insert(
+        "wall".into(),
+        "the volume kernel refused a self-intersecting mesh (SelfIntersecting)",
+    );
+    let outcome = run(&project, both, &rule(vec![orphans]));
+    assert_eq!(
+        open(&outcome),
+        [format!(
+            "{plain}: {open_column}; the volume of cad:model/wall is unavailable: the \
+             geometry kernel refused the measurement: the volume kernel refused a \
+             self-intersecting mesh (SelfIntersecting)"
+        )]
+    );
 }

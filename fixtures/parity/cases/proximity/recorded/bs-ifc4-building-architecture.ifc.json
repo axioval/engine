@@ -772,7 +772,7 @@
   ],
   "not_evaluated": [
     {
-      "message": "the volume shared with ifc-step:bs-ifc4-building-architecture.ifc/#228 is not measured, so whether it lies inside cannot be decided",
+      "message": "the volume shared with ifc-step:bs-ifc4-building-architecture.ifc/#228 is not measured, so whether it lies inside cannot be decided: the volume of ifc-step:bs-ifc4-building-architecture.ifc/#116 is unavailable: the geometry kernel refused the measurement: the body's mesh is an open surface, which encloses no volume; the volume of ifc-step:bs-ifc4-building-architecture.ifc/#228 is unavailable: the geometry kernel refused the measurement: the body's mesh is an open surface, which encloses no volume",
       "object_id": {
         "local_id": "#116",
         "source": {

@@ -483,7 +483,7 @@
   ],
   "not_evaluated": [
     {
-      "message": "its cover to ifc-step:bs-ifc2x3-building-structural.ifc/#153 is not checked: the volume shared with ifc-step:bs-ifc2x3-building-structural.ifc/#153 is not measured, so whether it lies inside cannot be decided",
+      "message": "its cover to ifc-step:bs-ifc2x3-building-structural.ifc/#153 is not checked: the volume shared with ifc-step:bs-ifc2x3-building-structural.ifc/#153 is not measured, so whether it lies inside cannot be decided: the volume of ifc-step:bs-ifc2x3-building-structural.ifc/#153 is unavailable: the geometry kernel refused the measurement: the volume kernel refused a self-intersecting mesh (SelfIntersecting)",
       "object_id": {
         "local_id": "#1012",
         "source": {
@@ -495,7 +495,7 @@
       "rule_id": "containment-cover"
     },
     {
-      "message": "its cover to ifc-step:bs-ifc2x3-building-structural.ifc/#309 is not checked: the volume shared with ifc-step:bs-ifc2x3-building-structural.ifc/#309 is not measured, so whether it lies inside cannot be decided",
+      "message": "its cover to ifc-step:bs-ifc2x3-building-structural.ifc/#309 is not checked: the volume shared with ifc-step:bs-ifc2x3-building-structural.ifc/#309 is not measured, so whether it lies inside cannot be decided: the volume of ifc-step:bs-ifc2x3-building-structural.ifc/#309 is unavailable: the geometry kernel refused the measurement: the volume kernel refused a self-intersecting mesh (SelfIntersecting)",
       "object_id": {
         "local_id": "#1012",
         "source": {
@@ -507,7 +507,7 @@
       "rule_id": "containment-cover"
     },
     {
-      "message": "its cover to ifc-step:bs-ifc2x3-building-structural.ifc/#153 is not checked: the volume shared with ifc-step:bs-ifc2x3-building-structural.ifc/#153 is not measured, so whether it lies inside cannot be decided",
+      "message": "its cover to ifc-step:bs-ifc2x3-building-structural.ifc/#153 is not checked: the volume shared with ifc-step:bs-ifc2x3-building-structural.ifc/#153 is not measured, so whether it lies inside cannot be decided: the volume of ifc-step:bs-ifc2x3-building-structural.ifc/#153 is unavailable: the geometry kernel refused the measurement: the volume kernel refused a self-intersecting mesh (SelfIntersecting)",
       "object_id": {
         "local_id": "#1054",
         "source": {
@@ -519,7 +519,7 @@
       "rule_id": "containment-cover"
     },
     {
-      "message": "its cover to ifc-step:bs-ifc2x3-building-structural.ifc/#309 is not checked: the volume shared with ifc-step:bs-ifc2x3-building-structural.ifc/#309 is not measured, so whether it lies inside cannot be decided",
+      "message": "its cover to ifc-step:bs-ifc2x3-building-structural.ifc/#309 is not checked: the volume shared with ifc-step:bs-ifc2x3-building-structural.ifc/#309 is not measured, so whether it lies inside cannot be decided: the volume of ifc-step:bs-ifc2x3-building-structural.ifc/#309 is unavailable: the geometry kernel refused the measurement: the volume kernel refused a self-intersecting mesh (SelfIntersecting)",
       "object_id": {
         "local_id": "#1054",
         "source": {
@@ -603,7 +603,7 @@
       "rule_id": "containment-cover"
     },
     {
-      "message": "its cover to ifc-step:bs-ifc2x3-building-structural.ifc/#153 is not checked: the volume shared with ifc-step:bs-ifc2x3-building-structural.ifc/#153 is not measured, so whether it lies inside cannot be decided",
+      "message": "its cover to ifc-step:bs-ifc2x3-building-structural.ifc/#153 is not checked: the volume shared with ifc-step:bs-ifc2x3-building-structural.ifc/#153 is not measured, so whether it lies inside cannot be decided: the volume of ifc-step:bs-ifc2x3-building-structural.ifc/#153 is unavailable: the geometry kernel refused the measurement: the volume kernel refused a self-intersecting mesh (SelfIntersecting)",
       "object_id": {
         "local_id": "#886",
         "source": {
@@ -615,7 +615,7 @@
       "rule_id": "containment-cover"
     },
     {
-      "message": "its cover to ifc-step:bs-ifc2x3-building-structural.ifc/#309 is not checked: the volume shared with ifc-step:bs-ifc2x3-building-structural.ifc/#309 is not measured, so whether it lies inside cannot be decided",
+      "message": "its cover to ifc-step:bs-ifc2x3-building-structural.ifc/#309 is not checked: the volume shared with ifc-step:bs-ifc2x3-building-structural.ifc/#309 is not measured, so whether it lies inside cannot be decided: the volume of ifc-step:bs-ifc2x3-building-structural.ifc/#309 is unavailable: the geometry kernel refused the measurement: the volume kernel refused a self-intersecting mesh (SelfIntersecting)",
       "object_id": {
         "local_id": "#886",
         "source": {
@@ -639,7 +639,7 @@
       "rule_id": "containment-cover"
     },
     {
-      "message": "its cover to ifc-step:bs-ifc2x3-building-structural.ifc/#153 is not checked: the volume shared with ifc-step:bs-ifc2x3-building-structural.ifc/#153 is not measured, so whether it lies inside cannot be decided",
+      "message": "its cover to ifc-step:bs-ifc2x3-building-structural.ifc/#153 is not checked: the volume shared with ifc-step:bs-ifc2x3-building-structural.ifc/#153 is not measured, so whether it lies inside cannot be decided: the volume of ifc-step:bs-ifc2x3-building-structural.ifc/#153 is unavailable: the geometry kernel refused the measurement: the volume kernel refused a self-intersecting mesh (SelfIntersecting)",
       "object_id": {
         "local_id": "#928",
         "source": {
@@ -651,7 +651,7 @@
       "rule_id": "containment-cover"
     },
     {
-      "message": "its cover to ifc-step:bs-ifc2x3-building-structural.ifc/#153 is not checked: the volume shared with ifc-step:bs-ifc2x3-building-structural.ifc/#153 is not measured, so whether it lies inside cannot be decided",
+      "message": "its cover to ifc-step:bs-ifc2x3-building-structural.ifc/#153 is not checked: the volume shared with ifc-step:bs-ifc2x3-building-structural.ifc/#153 is not measured, so whether it lies inside cannot be decided: the volume of ifc-step:bs-ifc2x3-building-structural.ifc/#153 is unavailable: the geometry kernel refused the measurement: the volume kernel refused a self-intersecting mesh (SelfIntersecting)",
       "object_id": {
         "local_id": "#970",
         "source": {

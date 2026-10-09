@@ -696,6 +696,8 @@ pub struct IntersectionVolume {
     shared: VolumeInterval,
     subject: VolumeInterval,
     counterpart: VolumeInterval,
+    subject_outside: Option<VolumeInterval>,
+    counterpart_outside: Option<VolumeInterval>,
 }
 
 impl IntersectionVolume {
@@ -716,7 +718,38 @@ impl IntersectionVolume {
             shared,
             subject,
             counterpart,
+            subject_outside: None,
+            counterpart_outside: None,
         })
+    }
+    /// Adds bounds on the volume of the subject that lies outside the
+    /// counterpart.
+    ///
+    /// A body measured as the union of overlapping closed shells has no
+    /// single enclosed volume, so its own volume is known only within wide
+    /// bounds (at least its largest shell, at most their sum), and its
+    /// shared volume as wide. What lies outside the other body is bounded
+    /// shell by shell, and it bounds the share of the smaller body however
+    /// wide the volumes are ([`Self::ratio_of_smaller`]).
+    #[must_use]
+    pub fn with_subject_outside(mut self, outside: VolumeInterval) -> Self {
+        self.subject_outside = Some(outside);
+        self
+    }
+    /// Adds bounds on the volume of the counterpart that lies outside the
+    /// subject, as [`Self::with_subject_outside`] does the other way.
+    #[must_use]
+    pub fn with_counterpart_outside(mut self, outside: VolumeInterval) -> Self {
+        self.counterpart_outside = Some(outside);
+        self
+    }
+    /// The bounds [`Self::with_subject_outside`] added, if any.
+    pub fn subject_outside(&self) -> Option<VolumeInterval> {
+        self.subject_outside
+    }
+    /// The bounds [`Self::with_counterpart_outside`] added, if any.
+    pub fn counterpart_outside(&self) -> Option<VolumeInterval> {
+        self.counterpart_outside
     }
     /// The volume both bodies occupy.
     pub fn shared(&self) -> VolumeInterval {
@@ -746,8 +779,36 @@ impl IntersectionVolume {
     /// `(lower, upper)` bounds on the shared volume's share of the smaller
     /// body, between zero and one: one when one body lies wholly in the
     /// other. Rounded outward, so the true ratio always lies inside.
+    ///
+    /// Bounds on the volume of one body outside the other
+    /// ([`Self::with_subject_outside`]) narrow it. The shared volume is that
+    /// body's volume less what lies outside, and the smaller body is no
+    /// larger than either, so the share is at least one less the outside
+    /// volume's upper bound over the smaller body's lower bound. Where that
+    /// body is surely the smaller one, the share is exactly one less the
+    /// outside volume over its own, so at most one less the outside
+    /// volume's lower bound over its own upper bound.
     pub fn ratio_of_smaller(&self) -> (f64, f64) {
-        self.shared.share_of(self.smaller())
+        let smaller = self.smaller();
+        let (mut lower, mut upper) = self.shared.share_of(smaller);
+        for (outside, own, other) in [
+            (self.subject_outside, self.subject, self.counterpart),
+            (self.counterpart_outside, self.counterpart, self.subject),
+        ] {
+            let Some(outside) = outside else {
+                continue;
+            };
+            if smaller.lower_cubic_metres > 0.0 {
+                let share = (outside.upper_cubic_metres / smaller.lower_cubic_metres).next_up();
+                lower = lower.max((1.0 - share).next_down());
+            }
+            if own.upper_cubic_metres <= other.lower_cubic_metres && own.upper_cubic_metres > 0.0 {
+                let share = (outside.lower_cubic_metres / own.upper_cubic_metres).next_down();
+                upper = upper.min((1.0 - share).next_up());
+            }
+        }
+        let upper = upper.clamp(0.0, 1.0);
+        (lower.clamp(0.0, upper), upper)
     }
 }
 
@@ -2588,6 +2649,53 @@ mod tests {
         assert!(lower < 1.0 / 3.0 && upper > 1.0 / 3.0);
         assert_eq!(volume(0.0, 0.0).share_of(volume(0.0, 0.0)), (0.0, 1.0));
         assert!((volume(1.0, 1.0).share_of(volume(1.0, 1.0)).1 - 1.0).abs() < f64::EPSILON);
+    }
+
+    /// A body of overlapping shells is known only within wide bounds; what
+    /// it has outside the other bounds its share all the same, from below
+    /// always and from above where it is surely the smaller body.
+    #[test]
+    fn what_lies_outside_bounds_the_share() {
+        // Shells of 1 and 0.5 m3 overlapping somewhere: 1 to 1.5 m3, all
+        // but 0.001 m3 of it inside a room of 50 m3.
+        let wide =
+            IntersectionVolume::try_new(volume(0.999, 1.5), volume(1.0, 1.5), volume(50.0, 50.0))
+                .unwrap();
+        let (lower, upper) = wide.ratio_of_smaller();
+        assert!(lower < 0.7, "{lower}");
+        assert!((upper - 1.0).abs() < f64::EPSILON, "{upper}");
+        let inside = wide.with_subject_outside(volume(0.0, 0.001));
+        let (lower, upper) = inside.ratio_of_smaller();
+        assert!(lower < 0.999 && lower > 0.998_999, "{lower}");
+        assert!((upper - 1.0).abs() < f64::EPSILON, "{upper}");
+        assert_eq!(inside.subject_outside(), Some(volume(0.0, 0.001)));
+        assert_eq!(inside.counterpart_outside(), None);
+        // At least 0.3 m3 outside: at most 0.8 of the body is shared.
+        let across =
+            IntersectionVolume::try_new(volume(0.2, 1.2), volume(1.0, 1.5), volume(50.0, 50.0))
+                .unwrap()
+                .with_subject_outside(volume(0.3, 1.3));
+        let (lower, upper) = across.ratio_of_smaller();
+        assert!(lower < 0.2, "{lower}");
+        assert!(upper > 0.8 && upper < 0.800_001, "{upper}");
+        // Read the same from the other end.
+        let reversed =
+            IntersectionVolume::try_new(volume(0.2, 1.2), volume(50.0, 50.0), volume(1.0, 1.5))
+                .unwrap()
+                .with_counterpart_outside(volume(0.3, 1.3));
+        assert_eq!(reversed.ratio_of_smaller(), across.ratio_of_smaller());
+        // Not surely the smaller body: nothing bounds the share from above.
+        let larger =
+            IntersectionVolume::try_new(volume(0.2, 1.2), volume(1.0, 1.5), volume(1.2, 1.2))
+                .unwrap()
+                .with_subject_outside(volume(0.3, 1.3));
+        assert!((larger.ratio_of_smaller().1 - 1.0).abs() < f64::EPSILON);
+        // A smaller body of no certified volume bounds nothing from below.
+        let empty =
+            IntersectionVolume::try_new(volume(0.0, 0.0), volume(0.0, 1.0), volume(50.0, 50.0))
+                .unwrap()
+                .with_subject_outside(volume(0.0, 0.0));
+        assert_eq!(empty.ratio_of_smaller(), (0.0, 1.0));
     }
 
     #[test]

@@ -954,3 +954,91 @@ fn a_closed_body_encloses_its_certified_volume() {
         Err(ProximityError::Unavailable)
     );
 }
+
+/// Closed boxes side by side in one mesh, each with its own corners, as a
+/// body of several items is meshed.
+fn shells(boxes: &[([f64; 3], [f64; 3])]) -> TriMesh {
+    let mut positions = Vec::new();
+    let mut indices = Vec::new();
+    for &(min, max) in boxes {
+        let part = cuboid(min, max);
+        let offset = u32::try_from(positions.len()).unwrap();
+        positions.extend(part.positions);
+        indices.extend(part.indices.into_iter().map(|index| index + offset));
+    }
+    TriMesh::new(positions, indices)
+}
+
+/// A table of a top and a leg that runs into it (#312): one closed mesh
+/// whose triangles cross where the two meet, which the volume kernel
+/// refuses as a whole. Measured shell by shell, a table inside a room lies
+/// wholly in it, one in the next room shares nothing with it, and one
+/// across the wall between them stays undecided in between.
+#[test]
+fn a_body_of_overlapping_shells_is_measured_shell_by_shell() {
+    let table = |x: f64| {
+        shells(&[
+            ([x, 1.0, 0.7], [x + 1.0, 2.0, 0.75]),
+            ([x + 0.4, 1.4, 0.0], [x + 0.5, 1.5, 0.72]),
+        ])
+    };
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("room"), cuboid([0.0, 0.0, 0.0], [4.0, 4.0, 3.0]))
+        .with_mesh(id("inside"), table(1.0))
+        .with_mesh(id("next door"), table(5.0))
+        .with_mesh(id("across"), table(3.5));
+    let service = AxiolidProximityService::new(geometry);
+    let volume = |table: &str| {
+        service
+            .measure_proximity(&ProximityRequest::try_new(id(table), id("room")).unwrap())
+            .unwrap()
+            .intersection_volume()
+            .unwrap_or_else(|| panic!("{table}: no volume"))
+    };
+    let top = 0.05;
+    let leg = 0.1 * 0.1 * 0.72;
+    let inside = volume("inside");
+    // The shells overlap, so the table's own volume lies between its top
+    // and the sum of both; the share is bounded by what lies outside.
+    assert!(
+        inside.subject_outside().is_some(),
+        "measured as a whole: {inside:?}"
+    );
+    let own = inside.subject();
+    assert!(own.lower_cubic_metres() <= top + leg - 0.1 * 0.1 * 0.02);
+    assert!(own.upper_cubic_metres() >= top + leg - 1e-12);
+    let (lower, upper) = inside.ratio_of_smaller();
+    assert!(lower > 0.999_999 && upper >= 1.0, "{lower} {upper}");
+    let (lower, upper) = volume("next door").ratio_of_smaller();
+    assert!(lower == 0.0 && upper < 1e-9, "{lower} {upper}");
+    // Half the top outside, the leg inside: a share between, undecided.
+    let (lower, upper) = volume("across").ratio_of_smaller();
+    assert!(
+        lower < 0.6 && upper > 0.4 && upper < 0.99,
+        "{lower} {upper}"
+    );
+    // The reversed request reads the same.
+    let reversed = service
+        .measure_proximity(&ProximityRequest::try_new(id("room"), id("inside")).unwrap())
+        .unwrap()
+        .intersection_volume()
+        .unwrap();
+    assert!(reversed.ratio_of_smaller().0 > 0.999_999);
+}
+
+/// Shells are read only where each is a closed solid: one open shell
+/// leaves the volume unmeasured.
+#[test]
+fn a_body_of_shells_one_of_them_open_has_no_volume() {
+    let mut body = shells(&[
+        ([1.0, 1.0, 0.7], [2.0, 2.0, 0.75]),
+        ([1.4, 1.4, 0.0], [1.5, 1.5, 0.72]),
+    ]);
+    // Drop the leg's bottom: its shell is open, the whole no longer closed.
+    body.indices.drain(36..42);
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("room"), cuboid([0.0, 0.0, 0.0], [4.0, 4.0, 3.0]))
+        .with_mesh(id("table"), body);
+    let measured = measure(geometry, "table", "room");
+    assert!(measured.intersection_volume().is_none());
+}

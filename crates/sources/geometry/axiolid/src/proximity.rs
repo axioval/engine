@@ -108,7 +108,7 @@
 //! nearer each other than the combined deviation leave the side open.
 
 use std::collections::BTreeMap;
-use std::sync::{Mutex, PoisonError};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use axiolid_core::{Aabb, Point3, Ray3, Tolerance};
 use axiolid_inspect::{enclosed_volume, intersection_volume};
@@ -141,6 +141,7 @@ use crate::planar::{
     BoundedOverlap, bounded_plan_overlap, overlay_refusal, plan_overlap_area, polygon_area,
 };
 
+mod shells;
 mod zero_area;
 
 pub(crate) use zero_area::Winding;
@@ -193,6 +194,10 @@ pub struct AxiolidProximityService {
     /// (`union_volume`), taken once: every pair the whole is in reads it,
     /// and it costs a mesh boolean per two of its pieces.
     volumes: Mutex<BTreeMap<ObjectId, Volume>>,
+    /// Each body's closed shells, where it has several (`shells::shells`),
+    /// split once: a body the volume kernel refuses as self-intersecting is
+    /// measured shell by shell against every closed body it meets.
+    shells: Mutex<BTreeMap<ObjectId, Option<Arc<Vec<shells::Shell>>>>>,
 }
 
 impl AxiolidProximityService {
@@ -202,6 +207,7 @@ impl AxiolidProximityService {
         Self {
             geometry,
             volumes: Mutex::new(BTreeMap::new()),
+            shells: Mutex::new(BTreeMap::new()),
         }
     }
 
@@ -330,6 +336,61 @@ impl AxiolidProximityService {
             interval(counterpart_volume)?,
         )
         .ok()
+    }
+
+    /// One body's closed shells where it has several, split once.
+    fn shells_of(&self, object: &ObjectId, body: &Body<'_>) -> Option<Arc<Vec<shells::Shell>>> {
+        let cached = self
+            .shells
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(object)
+            .cloned();
+        if let Some(shells) = cached {
+            return shells;
+        }
+        // Split outside the lock: two rules may ask for two bodies at once.
+        let split = shells::shells(body.mesh).map(Arc::new);
+        self.shells
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(object.clone(), split.clone());
+        split
+    }
+
+    /// The volume a pair shares when one body is several closed shells
+    /// the volume kernel refuses as a whole and the other a closed body it
+    /// measures, bounded shell by shell (`shells`), with what the shells
+    /// have outside the other. Only for two closed, exact bodies; `None`
+    /// otherwise, and where both or neither are such shells.
+    fn shells_intersection(
+        &self,
+        request: &ProximityRequest,
+        (subject, counterpart): (&Body<'_>, &Body<'_>),
+        disjoint: bool,
+        exact: bool,
+    ) -> Option<IntersectionVolume> {
+        if !exact || !subject.solid || !counterpart.solid {
+            return None;
+        }
+        let split = (
+            self.shells_of(request.subject(), subject),
+            self.shells_of(request.counterpart(), counterpart),
+        );
+        let (shells, other, shells_are_subject) = match split {
+            (Some(shells), None) => (shells, counterpart, true),
+            (None, Some(shells)) => (shells, subject, false),
+            _ => return None,
+        };
+        let volume = enclosed_volume(other.mesh).ok()?;
+        shells::intersection(
+            &shells,
+            other.mesh,
+            (volume.lower, volume.upper),
+            (other.soup.bounds.min(), other.soup.bounds.max()),
+            disjoint,
+            shells_are_subject,
+        )
     }
 
     pub(crate) fn body(&self, object: &ObjectId) -> Result<Body<'_>, ProximityError> {
@@ -2082,6 +2143,10 @@ impl ProximityService for AxiolidProximityService {
                 subject_fidelity.deviation_metres(),
                 counterpart_fidelity.deviation_metres(),
             )
+            .or_else(|| {
+                let exact = subject_fidelity.is_exact() && counterpart_fidelity.is_exact();
+                self.shells_intersection(request, (&subject, &counterpart), disjoint, exact)
+            })
         };
         let deviation = fidelity.deviation_metres();
         let (lower, upper) = hausdorff(&subject, &counterpart)?;

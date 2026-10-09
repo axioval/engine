@@ -106,6 +106,7 @@ use axiolid_core::{BooleanOperator, Tolerance};
 use axiolid_curve::{Curve2, Curve3};
 use axiolid_evaluate::ReferenceCurveEvaluator;
 use axiolid_mesh_boolean_boolmesh::BoolmeshBoolean;
+use axiolid_mesh_compile::deviation::SNAPPED_OPERANDS;
 use axiolid_mesh_compile::{DeviationBound, DeviationReport, ReferenceMeshCompiler};
 use axiolid_mesh_compile_contract::MeshCompiler;
 use axiolid_model::{GeometryGraph, GeometryNode, NodeId, SolidOperation, SurfaceRelation};
@@ -3227,7 +3228,7 @@ fn compile(
         }
     }
     if planar(graph, root, &mut NODE_BUDGET.clone()) {
-        if !leaves.outside_boolean {
+        if !leaves.outside_boolean && !leaves.booleans {
             let mesh = backend
                 .compile_mesh(graph, root, &options)
                 .map_err(|error| compilation_refused(&error))?;
@@ -3236,9 +3237,11 @@ fn compile(
             }
             return Ok((mesh, Fit::Exact));
         }
-        // Planar but for warped faces, which only the report finds. Its
-        // booleans have planar operands, none of them warped (above), so
-        // their meshes are exact whatever the report says of them.
+        // Planar but for warped faces, or operands the compiler snapped
+        // onto each other within the tolerance (#276), which only the
+        // report finds. Its booleans have planar operands, none of them
+        // warped (above), so their meshes are exact but for those snaps
+        // whatever else the report says of them.
         let (outcome, report) = backend
             .compile_mesh_with_deviation(graph, root, &options)
             .map_err(|error| compilation_refused(&error))?;
@@ -3247,7 +3250,7 @@ fn compile(
         }
         return Ok((
             outcome.mesh,
-            warped_width(&report).map_or(Fit::Exact, Fit::Within),
+            planar_width(&report).map_or(Fit::Exact, Fit::Within),
         ));
     }
     let (outcome, report) = backend
@@ -3294,14 +3297,41 @@ fn warped_width(report: &DeviationReport) -> Option<f64> {
         .reduce(f64::max)
 }
 
+/// The bound a planar body's mesh is declared within: the largest of the
+/// widths of its warped faces ([`warped_width`]) and of the moves by which
+/// the compiler snapped a boolean's operands onto each other
+/// (`deviation::SNAPPED_OPERANDS`, axiolid/kernel#276). A difference whose
+/// opening stops a rounding error short of its host's face leaves no skin
+/// that thin since axiolid-mesh-compile 0.3.16: the compiler moves the
+/// operands' vertices within the tolerance onto each other's faces first,
+/// and reports the largest move, so the mesh is the boolean of operands
+/// moved by at most that much, not exact. `None` when it reports neither.
+fn planar_width(report: &DeviationReport) -> Option<f64> {
+    let snapped = report
+        .contributions
+        .iter()
+        .filter(|contribution| contribution.detail == SNAPPED_OPERANDS)
+        .filter_map(|contribution| contribution.bound.value())
+        .filter(|moved| *moved > 0.0)
+        .reduce(f64::max);
+    match (warped_width(report), snapped) {
+        (Some(warped), Some(snapped)) => Some(warped.max(snapped)),
+        (warped, snapped) => warped.or(snapped),
+    }
+}
+
 /// Where the faces that can be warped (polygon meshes, and B-reps with a
-/// face given only by its loops) enter a body.
+/// face given only by its loops) enter a body, and whether it has a
+/// boolean at all.
 #[derive(Debug, Default)]
 struct AuthoredLeaves {
     /// Whether one enters other than as a boolean operand.
     outside_boolean: bool,
     /// The nodes entering a boolean as (part of) an operand.
     under_boolean: Vec<NodeId>,
+    /// Whether the body has a boolean, whose operands the compiler may
+    /// snap onto each other (#276).
+    booleans: bool,
 }
 
 /// The faces under `root` that can be warped, walked through instances,
@@ -3339,6 +3369,7 @@ fn authored_leaves(graph: &GeometryGraph, root: NodeId) -> Result<AuthoredLeaves
                 return Ok(());
             }
             Some(GeometryNode::SolidOperation(SolidOperation::Boolean { left, right, .. })) => {
+                leaves.booleans = true;
                 visit(graph, *left, true, budget, leaves)?;
                 return visit(graph, *right, true, budget, leaves);
             }

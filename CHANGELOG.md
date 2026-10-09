@@ -67,6 +67,17 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **Geometry**: a host whose openings stop a rounding error short of its
+  face (an opening exported `0.124999999999995` m deep in a wall
+  `0.125` m thick) is measured at georeferenced coordinates: since
+  axiolid-mesh-compile 0.3.16 the compiler snaps the opening onto the face
+  instead of leaving a skin that thin, which self-intersected once placed
+  and left the host's volume refused (axiolid/kernel#276). A planar body
+  with a boolean is now meshed with a deviation report: where the compiler
+  snapped its operands (`operands snapped onto each other within
+  tolerance`) it is declared tessellated within the largest move, never
+  exact; otherwise it stays exact
+  ([#306](https://github.com/axioval/engine/issues/306)).
 - **Geometry**: moves to axiolid-construct 0.3.16, axiolid-mesh-compile
   0.3.15 and their contracts. Faces the mesh compiler refused are measured:
   a ring whose lowest corner has a `-0.0` twin, which "found no ear"

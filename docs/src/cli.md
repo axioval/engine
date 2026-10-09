@@ -970,8 +970,8 @@ states:
 
 | State | Meaning | Effect on geometric rules |
 |---|---|---|
-| exact | every face is planar (polygonal extrusions, including steel sections without fillets or rounded edges, faceted B-reps and polygon meshes whose faces keep within 1 mm of their planes, booleans of these and clips by half-spaces, bounded by a polygon or not), so the mesh is the shape; a whole measured through its parts when every part is exact | measured as exact |
-| tessellated | some face is curved, or an authored polygon face is warped more than 1 mm off its plane; the mesh is within the deviation the mesh compiler certifies for it (the 1 mm chord budget, or the bound it computed), and within the reported slab width of a warped face; a whole measured through its parts when some part is tessellated, within the largest deviation of its parts | measured as approximate, never exact |
+| exact | every face is planar (polygonal extrusions, including steel sections without fillets or rounded edges, faceted B-reps and polygon meshes whose faces keep within 1 mm of their planes, booleans of these whose operands the mesh compiler did not snap together and clips by half-spaces, bounded by a polygon or not), so the mesh is the shape; a whole measured through its parts when every part is exact | measured as exact |
+| tessellated | some face is curved, or an authored polygon face is warped more than 1 mm off its plane; the mesh is within the deviation the mesh compiler certifies for it (the 1 mm chord budget, or the bound it computed), within the reported slab width of a warped face, and within the largest move of a planar boolean whose operands the compiler snapped together; a whole measured through its parts when some part is tessellated, within the largest deviation of its parts | measured as approximate, never exact |
 | no body | the object occupies no material: spatial structure, openings, annotations, grids, ports, structural analysis items, non-products | ignored as an obstacle |
 | unmeasured | a physical product that could not be meshed: one with no representation at all and without parts (`no shape representation`, model data; see below), one whose representations include no body and without parts (`no body representation; it has Axis, FootPrint`, naming their identifiers), a whole one of whose parts is unmeasured, or a curved one whose mesh the compiler certifies no deviation for | measurements it could affect are not evaluated; with a bound (below), space measurements it cannot reach are evaluated |
 
@@ -1278,10 +1278,18 @@ each corner becomes a tangent arc and is certified too. Still refused by
 name and unmeasured (axiolid/kernel#248): a disk swept along a closed
 polyline (`the mitre where it closes`), a fillet radius equal to the disk
 radius (a horn torus), a corner beside an arc and a mitre reaching past
-its leg. Planar bodies, booleans
-of planar operands and clips by polygonally bounded half-spaces included,
-stay exact and are meshed without a deviation report, which would only
-pay to measure their booleans. Measuring a curved boolean costs about
+its leg. Planar bodies without booleans stay exact and are meshed without
+a deviation report. A boolean of planar operands (a wall less its
+openings, a clip by a polygonally bounded half-space) is meshed with one,
+since axiolid-mesh-compile 0.3.16 moves operand vertices within the 1 mm
+tolerance of the other operand's faces onto them before it cuts
+(axiolid/kernel#276): an opening exported a rounding error short of its
+host's face leaves no skin that thin, which self-intersected once placed
+at georeferenced coordinates and left the host's volume unmeasured. The
+report states the largest move (`operands snapped onto each other within
+tolerance`); a body with one is declared tessellated within it, never
+exact, and one without stays exact. On a 76 MB georeferenced model 32 of
+40 such hosts had their volume refused before (#306). Measuring a curved boolean costs about
 half a second per opening at 1 mm (release build), so a model with many
 round openings takes correspondingly longer to mesh. On a 29 MB model
 every one of its 56 curved bodies is certified and meshing takes as long

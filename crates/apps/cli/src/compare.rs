@@ -25,7 +25,7 @@ use clap::Args;
 use crate::digest::{
     AmbiguousRecord, AppliedOpening, ChangeRecord, CheckOutput, ComparedRecord, ComparisonCounts,
     ComparisonRecord, GapRecord, GeometryRecord, SideObject, SourceRecord, ToleranceRecord,
-    Unmeasured, WitnessRecord,
+    Unmeasured, WholeOpening, WitnessRecord,
 };
 use crate::{Outcome, OutputArgs, emit, geometry, integrity};
 
@@ -115,6 +115,16 @@ fn combined(
         })
         .collect();
     applied.sort_by(|a, b| (&a.host, &a.opening).cmp(&(&b.host, &b.opening)));
+    let whole_openings = before
+        .whole_openings
+        .into_iter()
+        .chain(after.whole_openings)
+        .map(|(whole, opening, subtracted_from)| WholeOpening {
+            whole,
+            opening,
+            subtracted_from,
+        })
+        .collect();
     let mut bodies = before.meshes;
     bodies.extend(after.meshes);
     let record = GeometryRecord {
@@ -125,6 +135,7 @@ fn combined(
         composed: before.composed + after.composed,
         unmeasured,
         openings_taken_as_applied: applied,
+        whole_openings,
     };
     (record, bodies)
 }

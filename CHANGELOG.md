@@ -58,6 +58,22 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **Geometry**: an opening voiding a whole measured through its parts (a
+  door in a wall of `IfcBuildingElementPart` layers voided on the wall) is
+  subtracted from each part whose material it reaches into deeper than
+  10 µm (decided cell by convex cell of the opening for exact bodies, by
+  the certified shared volume otherwise), so the composed wall no longer
+  fills the door and a pipe through it no longer clashes. Parts already cut by it (a Reference View
+  export) only touch it and are unchanged; an opening stated only as
+  `Reference` in an IFC4 or IFC4X3 file is taken as applied to the whole.
+  A part whose cut cannot be decided or made, or that lies wholly within
+  the opening, is unmeasured naming the opening, and so is the whole; a
+  whole whose opening has no body to compare is unmeasured naming it. The
+  result's additive `geometry.whole_openings` lists each such opening with
+  the parts it was subtracted from, and evidence names them
+  (`;whole-openings:<body>=<opening>+...`, `AxiolidGeometry::
+  with_whole_openings`)
+  ([#223](https://github.com/axioval/engine/issues/223)).
 - **Geometry**: products clipped by an `IfcPolygonalBoundedHalfSpace`
   whose boundary is an `IfcCompositeCurve` or `IfcIndexedPolyCurve` of
   straight edges are measured like those bounded by an `IfcPolyline`. The

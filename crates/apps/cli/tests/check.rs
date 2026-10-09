@@ -2022,6 +2022,271 @@ fn with_geometry_a_whole_is_measured_through_its_parts_and_never_paired_with_the
     assert_eq!(pairs, expected, "{result:#}");
 }
 
+/// Wall #100 with no body of its own, of layers #19 (y -0.1..0) and #29
+/// (0..0.1), 4 m long and 3 m high, voided by door opening #39 (x 1.5..2.5,
+/// up to 2.1 m). Pipe #49 runs through the opening, pipe #59 through the
+/// wall's material at x 3.5. `cut_layers` cuts each layer by an opening of
+/// its own (#69, #79) as the whole's; `opening` is #39's product line.
+fn voided_layered_wall(cut_layers: bool, opening: &str) -> String {
+    let layer = "IFCBUILDINGELEMENTPART('GID',$,$,$,$,PL,REP,$,$)";
+    let pipe = "IFCPIPESEGMENT('GID',$,$,$,$,PL,REP,$,$)";
+    let hole = "IFCOPENINGELEMENT('GID',$,$,$,$,PL,REP,$,.OPENING.)";
+    let own = if cut_layers {
+        format!(
+            "{}{}\
+             #103=IFCRELVOIDSELEMENT('0000000000000000000103',$,$,$,#19,#69);\n\
+             #104=IFCRELVOIDSELEMENT('0000000000000000000104',$,$,$,#29,#79);\n",
+            placed_box(60, [2.0, 0.0, 0.0], [1.0, 0.4, 2.1], hole),
+            placed_box(70, [2.0, 0.0, 0.0], [1.0, 0.4, 2.1], hole),
+        )
+    } else {
+        String::new()
+    };
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         {}{}{}{}{}{own}\
+         #100=IFCWALL('0000000000000000000100',$,$,$,$,#3,$,$,$);\n\
+         #101=IFCRELAGGREGATES('0000000000000000000101',$,$,$,#100,(#19,#29));\n\
+         #102=IFCRELVOIDSELEMENT('0000000000000000000102',$,$,$,#100,#39);\n\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        placed_box(10, [2.0, -0.05, 0.0], [4.0, 0.1, 3.0], layer),
+        placed_box(20, [2.0, 0.05, 0.0], [4.0, 0.1, 3.0], layer),
+        placed_box(30, [2.0, 0.0, 0.0], [1.0, 0.4, 2.1], hole).replace(
+            &format!(
+                "IFCOPENINGELEMENT('{:022}',$,$,$,$,#32,#38,$,.OPENING.)",
+                39
+            ),
+            opening
+        ),
+        placed_box(40, [2.0, 0.0, 1.0], [0.2, 1.0, 0.2], pipe),
+        placed_box(50, [3.5, 0.0, 1.0], [0.2, 1.0, 0.2], pipe),
+    )
+}
+
+/// The opening #39 of [`voided_layered_wall`] as written there.
+const DOOR_OPENING: &str =
+    "IFCOPENINGELEMENT('0000000000000000000039',$,$,$,$,#32,#38,$,.OPENING.)";
+
+/// Clashes among the elements of `model`: each finding's pair, sorted, and
+/// the saved result.
+fn element_clashes(
+    case: &Case,
+    model: &str,
+) -> (Output, std::collections::BTreeSet<(String, String)>, Value) {
+    let (output, result) = case.geometry_rule(
+        model,
+        &[("element", "IfcElement")],
+        "axioval:capability.clash",
+        &registry_signature("axioval:capability.clash"),
+        entity("element"),
+        json!({
+            "counterparts": {"type": "selector", "value": entity("element")},
+            "penetration_tolerance_metres": {"type": "number", "value": 0.01},
+        }),
+    );
+    let pairs = result["report"]["findings"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|finding| {
+            let mut pair = [
+                finding["object_id"]["local_id"]
+                    .as_str()
+                    .unwrap()
+                    .to_owned(),
+                finding["related"][0]["local_id"]
+                    .as_str()
+                    .unwrap()
+                    .to_owned(),
+            ];
+            pair.sort();
+            (pair[0].clone(), pair[1].clone())
+        })
+        .collect();
+    (output, pairs, result)
+}
+
+fn pairs(expected: &[(&str, &str)]) -> std::collections::BTreeSet<(String, String)> {
+    expected
+        .iter()
+        .map(|(a, b)| ((*a).to_owned(), (*b).to_owned()))
+        .collect()
+}
+
+/// A layered wall whose layers are uncut and whose whole is voided by a
+/// door opening (a design transfer export) is measured with the opening
+/// open: the pipe through the door clashes with neither the wall nor its
+/// layers, the pipe through the wall with all three, and the evidence and
+/// the result name the opening subtracted from both layers (#223).
+#[test]
+fn with_geometry_a_wholes_opening_is_subtracted_from_the_parts_it_cuts() {
+    let case = Case::new("geometry-whole-opening");
+    let (output, found, result) = element_clashes(&case, &voided_layered_wall(false, DOOR_OPENING));
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(
+        found,
+        pairs(&[("#100", "#59"), ("#19", "#59"), ("#29", "#59")]),
+        "{result:#}"
+    );
+    let geometry = &result["geometry"];
+    assert_eq!(geometry["composed"], 1, "{geometry:#}");
+    assert_eq!(geometry["unmeasured"], json!([]), "{geometry:#}");
+    let openings = geometry["whole_openings"].as_array().unwrap();
+    assert_eq!(openings.len(), 1, "{geometry:#}");
+    assert_eq!(openings[0]["whole"]["local_id"], "#100");
+    assert_eq!(openings[0]["opening"]["local_id"], "#39");
+    let parts: Vec<&Value> = openings[0]["subtracted_from"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|part| &part["local_id"])
+        .collect();
+    assert_eq!(parts, [&json!("#19"), &json!("#29")], "{geometry:#}");
+    assert!(
+        stderr(&output).contains("1 opening(s) of wholes subtracted from their parts"),
+        "{}",
+        stderr(&output)
+    );
+    // Every measurement of the wall and of a layer states the opening.
+    let evidence = result["report"]["findings"].to_string();
+    for body in ["#100", "#19", "#29"] {
+        let note = format!(";whole-openings:ifc-step:model.ifc/{body}=ifc-step:model.ifc/#39");
+        assert!(evidence.contains(&note), "{note}: {evidence}");
+    }
+}
+
+/// A Reference View wall whose layers already carry the hole is unchanged:
+/// the whole's opening, `Body` or `Reference` only, cuts none of their
+/// material, so nothing is subtracted, and the pipe through the door
+/// clashes with nothing (#223).
+#[test]
+fn with_geometry_a_wholes_opening_already_cut_from_its_parts_changes_nothing() {
+    let case = Case::new("geometry-whole-opening-cut");
+    // The whole's opening has a body flush with the layers' holes.
+    let (output, found, result) = element_clashes(&case, &voided_layered_wall(true, DOOR_OPENING));
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(
+        found,
+        pairs(&[("#100", "#59"), ("#19", "#59"), ("#29", "#59")]),
+        "{result:#}"
+    );
+    let geometry = &result["geometry"];
+    assert_eq!(geometry["unmeasured"], json!([]), "{geometry:#}");
+    assert_eq!(
+        geometry["whole_openings"][0]["subtracted_from"],
+        json!([]),
+        "{geometry:#}"
+    );
+    assert!(
+        !result["report"].to_string().contains("whole-openings:"),
+        "{result:#}"
+    );
+
+    // Its opening only stated as `Reference`: taken as applied by the
+    // file's word, as for a host.
+    let reference = voided_layered_wall(true, DOOR_OPENING).replace(
+        "#37=IFCSHAPEREPRESENTATION(#5,'Body'",
+        "#37=IFCSHAPEREPRESENTATION(#5,'Reference'",
+    );
+    let (output, found, result) = element_clashes(&case, &reference);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(
+        found,
+        pairs(&[("#100", "#59"), ("#19", "#59"), ("#29", "#59")]),
+        "{result:#}"
+    );
+    let geometry = &result["geometry"];
+    assert_eq!(geometry["unmeasured"], json!([]), "{geometry:#}");
+    assert!(geometry.get("whole_openings").is_none(), "{geometry:#}");
+    let applied = geometry["openings_taken_as_applied"].as_array().unwrap();
+    assert!(
+        applied
+            .iter()
+            .any(|entry| entry["host"]["local_id"] == "#100"
+                && entry["opening"]["local_id"] == "#39"),
+        "{geometry:#}"
+    );
+}
+
+/// Where whether a whole's opening cuts its parts cannot be decided, the
+/// whole is unmeasured with the opening named, never measured filled: an
+/// opening with no representation leaves the wall unmeasured, and a layer
+/// lying wholly within the opening is unmeasured with the wall (#223).
+#[test]
+fn with_geometry_a_whole_whose_opening_cannot_be_decided_is_unmeasured_naming_it() {
+    let case = Case::new("geometry-whole-opening-undecided");
+    let shapeless = "IFCOPENINGELEMENT('0000000000000000000039',$,$,$,$,#32,$,$,.OPENING.)";
+    let (output, _, result) = element_clashes(&case, &voided_layered_wall(false, shapeless));
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let unmeasured = result["geometry"]["unmeasured"].as_array().unwrap();
+    assert_eq!(unmeasured.len(), 1, "{unmeasured:#?}");
+    assert_eq!(unmeasured[0]["object"]["local_id"], "#100");
+    let reason = unmeasured[0]["reason"].as_str().unwrap();
+    assert!(
+        reason.starts_with("no body representation of its own, and whether its opening ")
+            && reason.contains("/#39 cuts its parts cannot be decided"),
+        "{reason}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .to_string()
+            .contains("\"#100\""),
+        "{result:#}"
+    );
+
+    // A layer 0.2 m wide and 1 m high, standing in the doorway 0.5 m up,
+    // lies wholly within it.
+    let inside = voided_layered_wall(false, DOOR_OPENING).replace(
+        "#15=IFCRECTANGLEPROFILEDEF(.AREA.,$,#14,4.00,0.10)",
+        "#15=IFCRECTANGLEPROFILEDEF(.AREA.,$,#14,0.20,0.10)",
+    );
+    let inside = inside
+        .replace(
+            "#10=IFCCARTESIANPOINT((0.,0.,0.00))",
+            "#10=IFCCARTESIANPOINT((0.,0.,0.50))",
+        )
+        .replace(
+            "#16=IFCEXTRUDEDAREASOLID(#15,#2,#4,3.00)",
+            "#16=IFCEXTRUDEDAREASOLID(#15,#2,#4,1.00)",
+        );
+    let (output, _, result) = element_clashes(&case, &inside);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let unmeasured: Vec<(&str, &str)> = result["geometry"]["unmeasured"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| {
+            (
+                entry["object"]["local_id"].as_str().unwrap(),
+                entry["reason"].as_str().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(unmeasured.len(), 2, "{unmeasured:?}");
+    assert_eq!(unmeasured[0].0, "#100");
+    assert!(
+        unmeasured[0]
+            .1
+            .contains("/#19 is unmeasured: it lies wholly within the opening "),
+        "{}",
+        unmeasured[0].1
+    );
+    assert_eq!(unmeasured[1].0, "#19");
+    assert!(
+        unmeasured[1].1.contains("/#39 voiding "),
+        "{}",
+        unmeasured[1].1
+    );
+}
+
 /// Exporters often write a REAL without its decimal point (`1E-05`). The
 /// model is read, semantically and for geometry, with every such token
 /// reported as an integrity warning; nothing is skipped.

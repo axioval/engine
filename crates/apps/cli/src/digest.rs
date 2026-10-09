@@ -379,6 +379,22 @@ pub struct GeometryRecord {
     /// in results saved before it existed, and when there is none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub openings_taken_as_applied: Vec<AppliedOpening>,
+    /// Every opening voiding a whole measured through its parts that was
+    /// decided by geometry, with the parts it was subtracted from (none
+    /// where it cuts none of them: they are already cut by it, or it
+    /// misses them), in the order decided. Additive: absent in results
+    /// saved before it existed, and when there is none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub whole_openings: Vec<WholeOpening>,
+}
+
+/// An opening voiding a whole with no body of its own, and the parts its
+/// body was subtracted from.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WholeOpening {
+    pub whole: ObjectId,
+    pub opening: ObjectId,
+    pub subtracted_from: Vec<ObjectId>,
 }
 
 /// An opening whose void its host's measured body already carries.

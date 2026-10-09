@@ -891,6 +891,15 @@ fn geometry_record(report: geometry::GeometryReport) -> digest::GeometryRecord {
                 reason,
             })
             .collect(),
+        whole_openings: report
+            .whole_openings
+            .into_iter()
+            .map(|(whole, opening, subtracted_from)| digest::WholeOpening {
+                whole,
+                opening,
+                subtracted_from,
+            })
+            .collect(),
     }
 }
 
@@ -1410,7 +1419,7 @@ fn warn(output: &CheckOutput, summarized: bool, unanchored: &[&ObjectId], unfram
         if let Some(geometry) = &output.geometry {
             eprintln!(
                 "geometry: {} exact, {} tessellated, {} without body, {} unmeasured, \
-                 {} with an exact boundary{}{}",
+                 {} with an exact boundary{}{}{}",
                 geometry.exact,
                 geometry.tessellated,
                 geometry.no_body,
@@ -1428,6 +1437,15 @@ fn warn(output: &CheckOutput, summarized: bool, unanchored: &[&ObjectId], unfram
                         ", {} opening(s) taken as already applied",
                         geometry.openings_taken_as_applied.len()
                     )
+                },
+                match geometry
+                    .whole_openings
+                    .iter()
+                    .filter(|opening| !opening.subtracted_from.is_empty())
+                    .count()
+                {
+                    0 => String::new(),
+                    count => format!(", {count} opening(s) of wholes subtracted from their parts"),
                 }
             );
             for unmeasured in &geometry.unmeasured {

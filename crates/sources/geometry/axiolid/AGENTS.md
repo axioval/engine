@@ -19,7 +19,7 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   vertical-extent evidence carry: `;union:<whole>=<n>-parts` for a whole,
   and `;applied-openings:<host>=<opening>+...` for a host whose registered
   body already carries those openings' voids (`with_applied_openings`; the
-  host states which and why, nothing is subtracted here). Volumes of a
+  host states which and why, nothing is subtracted here), and `;whole-openings:<body>=<opening>+...` for a body the host subtracted wholes' openings from (`with_whole_openings`: a part cut by its whole's opening and each whole holding it; again nothing is subtracted here). Volumes of a
   whole are bounded piece by piece in `proximity.rs` (`union_volume`,
   `composed_intersection`), never on the concatenated mesh, which would
   count overlaps twice. A whole's `union_volume` (a boolean per two of its

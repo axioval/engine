@@ -102,7 +102,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 
 use axiolid_contracts::{ExecutionOptions, GeomError};
-use axiolid_core::Tolerance;
+use axiolid_core::{BooleanOperator, Tolerance};
 use axiolid_curve::{Curve2, Curve3};
 use axiolid_evaluate::ReferenceCurveEvaluator;
 use axiolid_mesh_boolean_boolmesh::BoolmeshBoolean;
@@ -122,17 +122,18 @@ use axioval::axiolid::{
     ExactBoundary,
 };
 use axioval::engine::{
-    AlignmentServiceHandle, BoundaryCoverageServiceHandle, ContactServiceHandle,
+    AlignmentServiceHandle, BodyContainment, BoundaryCoverageServiceHandle, ContactServiceHandle,
     CoordinateSystemServiceHandle, DerivedRelationshipServiceHandle, EnvelopeMembershipError,
     EnvelopeMembershipEvidence, EnvelopeMembershipRequest, EnvelopeMembershipService,
     EnvelopeMembershipServiceHandle, EvidenceSession, FacadeAreaServiceHandle,
     FreeSpaceServiceHandle, GuardServiceHandle, LinearQuantityServiceHandle,
     MetricRoutingServiceHandle, PlanAreaServiceHandle, PlanSpanServiceHandle, PropertyRequest,
-    PropertyResolution, PropertyResolutionServiceHandle, ProximityServiceHandle,
-    RelationshipEdgesRequest, RelationshipQuery, RelationshipSelectionRequest,
-    RelationshipSelectionServiceHandle, SemanticRelationship, SightServiceHandle, SourceSnapshot,
-    SpaceServiceHandle, TraversalDirection, TriangleCountServiceHandle, TypeHierarchyServiceHandle,
-    VerticalExtentServiceHandle, WalkabilityServiceHandle, WalkingSurfaceServiceHandle,
+    PropertyResolution, PropertyResolutionServiceHandle, ProximityRequest, ProximityService,
+    ProximityServiceHandle, RelationshipEdgesRequest, RelationshipQuery,
+    RelationshipSelectionRequest, RelationshipSelectionServiceHandle, SemanticRelationship,
+    SightServiceHandle, SourceSnapshot, SpaceServiceHandle, TraversalDirection,
+    TriangleCountServiceHandle, TypeHierarchyServiceHandle, VerticalExtentServiceHandle,
+    WalkabilityServiceHandle, WalkingSurfaceServiceHandle,
 };
 use axioval::ir::{ObjectId, PropertyValue, Report, SourceId};
 use axioval::rules::{CoordinateTolerance, compare_coordinate_systems};
@@ -140,7 +141,7 @@ use axioval::{bcf, bcf_snapshot};
 use ifc_geometry::constraint::local::PlacementResolver;
 use ifc_geometry::lower::{
     AppliedReason, LoweringSession, NetOptions, ReferenceOnlyOpenings, lower_connection_surface,
-    lower_product_net_with, lower_representation_item,
+    lower_product_net_with, lower_product_representation, lower_representation_item,
 };
 use ifc_geometry::{CachedPositionPolicy, GeometryError, RepresentationPurpose, Transform};
 use ifc_model::{EntityId, Model};
@@ -204,6 +205,11 @@ pub struct GeometryReport {
     /// Openings taken as already applied to a measured host's `Body`:
     /// host, opening and the reason, in identity order.
     pub applied_openings: Vec<(ObjectId, ObjectId, String)>,
+    /// Every opening voiding a whole measured through its parts that was
+    /// decided by geometry: whole, opening and the parts it was subtracted
+    /// from (none where they are already cut by it, or it misses them), in
+    /// the order decided.
+    pub whole_openings: Vec<(ObjectId, ObjectId, Vec<ObjectId>)>,
     /// Every meshed object's triangles, kept only when asked for, to draw
     /// BCF snapshots from.
     pub meshes: BTreeMap<ObjectId, bcf_snapshot::Mesh>,
@@ -823,6 +829,9 @@ pub fn attach(
     let mut stated: BTreeMap<ObjectId, ([f64; 3], [f64; 3])> = BTreeMap::new();
     // Openings some measured host's `Body` already carries.
     let mut applied_openings: BTreeSet<ObjectId> = BTreeSet::new();
+    // Bodies meshed, registered once every whole's openings are subtracted
+    // from the parts they cut.
+    let mut bodies: BTreeMap<ObjectId, Body> = BTreeMap::new();
 
     for object in session.project().objects() {
         let id = object.id.clone();
@@ -889,33 +898,9 @@ pub fn attach(
             *net,
         )
         .and_then(|body| applied(&id, body));
-        match keep(&mut report, options.keep_meshes.then_some(&id), meshed) {
+        match meshed {
             Ok(Some(body)) => {
-                if !body.applied.is_empty() {
-                    let openings = body.applied.iter().map(|(opening, _)| opening.clone());
-                    geometry = geometry.with_applied_openings(id.clone(), openings.collect());
-                    for (opening, reason) in &body.applied {
-                        applied_openings.insert(opening.clone());
-                        report.applied_openings.push((
-                            id.clone(),
-                            opening.clone(),
-                            (*reason).to_owned(),
-                        ));
-                    }
-                }
-                if let Some(boundary) = body.boundary {
-                    boundaries.push((id.clone(), boundary, body.fit != Fit::Exact));
-                }
-                match body.fit {
-                    Fit::Exact => {
-                        geometry = geometry.with_mesh(id, body.mesh);
-                        report.exact += 1;
-                    }
-                    Fit::Within(deviation) => {
-                        geometry = geometry.with_tessellated_mesh(id, body.mesh, deviation);
-                        report.tessellated += 1;
-                    }
-                }
+                bodies.insert(id, body);
             }
             // A space without a body is still no material; it cannot be
             // measured itself, but it obstructs nothing.
@@ -942,6 +927,69 @@ pub fn attach(
     }
 
     clock.lap("geometry: mesh");
+    let relationships = session.service::<RelationshipSelectionServiceHandle>();
+    let parts = decompositions(relationships, &kinds);
+    let mut cuts = WholeOpenings::decide(
+        &backend,
+        &parsed,
+        &wholes,
+        parts.as_ref().ok(),
+        &bodies,
+        &voids,
+    );
+    cuts.subtract(
+        &backend,
+        &parsed,
+        &mut bodies,
+        options.exact_boundaries,
+        &mut report,
+    );
+    for (part, (reason, bound)) in std::mem::take(&mut cuts.unmeasured_parts) {
+        bodies.remove(&part);
+        report.unmeasured.push((part.clone(), reason.clone()));
+        geometry = geometry.with_unmeasured(part.clone(), reason);
+        if let Some((min, max)) = bound {
+            geometry = geometry.with_unmeasured_bound(part, min, max);
+        }
+    }
+    for (id, body) in bodies {
+        if !body.applied.is_empty() {
+            let openings = body.applied.iter().map(|(opening, _)| opening.clone());
+            geometry = geometry.with_applied_openings(id.clone(), openings.collect());
+            for (opening, reason) in &body.applied {
+                applied_openings.insert(opening.clone());
+                report
+                    .applied_openings
+                    .push((id.clone(), opening.clone(), (*reason).to_owned()));
+            }
+        }
+        if let Some(openings) = cuts.subtracted.get(&id) {
+            geometry = geometry.with_whole_openings(id.clone(), openings.clone());
+        }
+        if options.keep_meshes
+            && let Some(kept) = snapshot_mesh(&body.mesh)
+        {
+            report.meshes.insert(id.clone(), kept);
+        }
+        if let Some(boundary) = body.boundary {
+            boundaries.push((id.clone(), boundary, body.fit != Fit::Exact));
+        }
+        match body.fit {
+            Fit::Exact => {
+                geometry = geometry.with_mesh(id, body.mesh);
+                report.exact += 1;
+            }
+            Fit::Within(deviation) => {
+                geometry = geometry.with_tessellated_mesh(id, body.mesh, deviation);
+                report.tessellated += 1;
+            }
+        }
+    }
+    // The openings a whole's parts are taken to carry, by the file's word.
+    for openings in cuts.applied.values() {
+        applied_openings.extend(openings.iter().map(|(opening, _)| opening.clone()));
+    }
+    clock.lap("geometry: whole openings");
     geometry = with_boundaries(geometry, boundaries, &mut report);
     clock.lap("geometry: exact boundaries");
     report.applied_openings.sort();
@@ -962,18 +1010,19 @@ pub fn attach(
         }
     }
 
-    let relationships = session.service::<RelationshipSelectionServiceHandle>();
     geometry = Composer {
         geometry,
-        parts: decompositions(relationships, &kinds),
+        parts,
         wholes: wholes.iter().cloned().collect(),
         bodiless: unbodied,
         stated,
         decided: BTreeSet::new(),
+        openings: cuts,
         report: &mut report,
         keep_meshes: options.keep_meshes,
     }
     .compose_all(&wholes);
+    report.applied_openings.sort();
     clock.lap("geometry: compose wholes");
     report.unmeasured.sort_by(|a, b| a.0.cmp(&b.0));
     report.model_data = model_data_notes(&report.unmeasured, &snapshots, &kinds);
@@ -1061,6 +1110,8 @@ struct Composer<'r> {
     stated: BTreeMap<ObjectId, ([f64; 3], [f64; 3])>,
     /// Wholes measured or left unmeasured, and those being decided.
     decided: BTreeSet<ObjectId>,
+    /// What the wholes' own openings did to their parts.
+    openings: WholeOpenings,
     report: &'r mut GeometryReport,
     keep_meshes: bool,
 }
@@ -1104,6 +1155,17 @@ impl Composer<'_> {
                 self.compose(part);
             }
         }
+        if let Some(reason) = self.openings.refused.get(whole).cloned() {
+            // Cutting only takes material away, so its parts' box still
+            // bounds it.
+            let bound = self.geometry.parts_bound(&parts);
+            self.unmeasured(
+                whole,
+                format!("no body representation of its own, and {reason}"),
+                bound,
+            );
+            return;
+        }
         match self.geometry.compose(&parts) {
             Ok(body) => {
                 if body.is_exact() {
@@ -1120,8 +1182,23 @@ impl Composer<'_> {
                     self.report.meshes.insert(whole.clone(), kept);
                 }
                 self.report.composed += 1;
-                let geometry = std::mem::take(&mut self.geometry);
-                self.geometry = geometry.with_composed_body(whole.clone(), body);
+                let mut geometry =
+                    std::mem::take(&mut self.geometry).with_composed_body(whole.clone(), body);
+                if let Some(applied) = self.openings.applied.get(whole) {
+                    let openings = applied.iter().map(|(opening, _)| opening.clone());
+                    geometry = geometry.with_applied_openings(whole.clone(), openings.collect());
+                    for (opening, reason) in applied {
+                        self.report.applied_openings.push((
+                            whole.clone(),
+                            opening.clone(),
+                            (*reason).to_owned(),
+                        ));
+                    }
+                }
+                if let Some(openings) = self.openings.subtracted.get(whole) {
+                    geometry = geometry.with_whole_openings(whole.clone(), openings.clone());
+                }
+                self.geometry = geometry;
             }
             Err(error) => {
                 // Its body is the union of its parts', so the box around
@@ -1152,6 +1229,864 @@ impl Composer<'_> {
         self.geometry = geometry;
         self.report.unmeasured.push((whole.clone(), reason));
     }
+}
+
+/// A shared volume no larger than this, in cubic metres, is the rounding of
+/// two bodies that only touch, as the derived `intersects` reads it.
+const TOUCHING_VOLUME: f64 = 1e-12;
+
+/// Surfaces closer than this, in metres, touch.
+const ON_SURFACE: f64 = 1e-9;
+
+/// A box `(min, max)` in world metres.
+type Extent = ([f64; 3], [f64; 3]);
+
+/// What the openings voiding a whole measured through its parts do to
+/// those parts (#223).
+///
+/// An `IfcRelVoidsElement` on a whole voids its material, which is its
+/// parts'. Where the parts are already cut (a Reference View export) the
+/// opening's body touches them at most; where they are uncut (a design
+/// transfer export) it reaches into their material. Each opening is
+/// subtracted from each part whose material it is shown to reach into
+/// deeper than [`TOUCHING_DEPTH`] ([`cuts`]), and from no other: a part it
+/// only touches or misses keeps its body. A part
+/// for which that cannot be decided, or which lies wholly within the
+/// opening, is unmeasured naming the opening, and so is every whole it is
+/// a part of; a whole one of whose openings has no body to decide with is
+/// unmeasured naming it. An opening the file states is already applied
+/// (`Reference` only, as for hosts) is taken as applied to the whole.
+#[derive(Debug, Default)]
+struct WholeOpenings {
+    /// The wholes' openings that cut each part, with the whole each voids.
+    cut: BTreeMap<ObjectId, Vec<(ObjectId, ObjectId)>>,
+    /// Parts left unmeasured by a whole's opening, with the reason and
+    /// the box their uncut body gives.
+    unmeasured_parts: BTreeMap<ObjectId, (String, Option<Extent>)>,
+    /// Wholes left unmeasured by an opening of their own, with the reason.
+    refused: BTreeMap<ObjectId, String>,
+    /// Openings of a whole taken as already applied to its parts, with the
+    /// reason.
+    applied: BTreeMap<ObjectId, Vec<(ObjectId, &'static str)>>,
+    /// The wholes' openings subtracted from each body: a part's, and each
+    /// whole's that part is a piece of, at any depth.
+    subtracted: BTreeMap<ObjectId, Vec<ObjectId>>,
+    /// The measured parts of each whole, at any depth.
+    leaves: BTreeMap<ObjectId, BTreeSet<ObjectId>>,
+    /// Each whole's opening decided by geometry, with the parts it cuts.
+    decided: Vec<(ObjectId, ObjectId, Vec<ObjectId>)>,
+}
+
+impl WholeOpenings {
+    /// Decides, for each whole's opening, which of its measured parts it
+    /// cuts. Nothing when decompositions cannot be read: every whole is
+    /// left unmeasured then.
+    fn decide(
+        backend: &Compiler,
+        parsed: &BTreeMap<SourceId, Parsed>,
+        wholes: &[ObjectId],
+        parts: Option<&BTreeMap<ObjectId, Vec<ObjectId>>>,
+        bodies: &BTreeMap<ObjectId, Body>,
+        voids: &[(ObjectId, Void)],
+    ) -> Self {
+        let mut decided = Self::default();
+        let Some(parts) = parts else {
+            return decided;
+        };
+        let voids: BTreeMap<&ObjectId, &Void> = voids.iter().map(|(id, void)| (id, void)).collect();
+        let wholes_set: BTreeSet<&ObjectId> = wholes.iter().collect();
+        for whole in wholes {
+            let mut leaves = BTreeSet::new();
+            collect_leaves(whole, parts, &wholes_set, &mut BTreeSet::new(), &mut leaves);
+            leaves.retain(|leaf| bodies.contains_key(leaf));
+            decided.leaves.insert(whole.clone(), leaves);
+        }
+        for whole in wholes {
+            let (Some(source), Some(entity)) = (parsed.get(&whole.source), entity_id(whole)) else {
+                continue;
+            };
+            for opening in ifc_geometry::openings_of(&source.model, entity) {
+                decided.decide_opening(backend, source, whole, opening, bodies, &voids);
+                if decided.refused.contains_key(whole) {
+                    break;
+                }
+            }
+        }
+        decided
+    }
+
+    fn decide_opening(
+        &mut self,
+        backend: &Compiler,
+        source: &Parsed,
+        whole: &ObjectId,
+        opening: EntityId,
+        bodies: &BTreeMap<ObjectId, Body>,
+        voids: &BTreeMap<&ObjectId, &Void>,
+    ) {
+        let id = match ObjectId::new(whole.source.clone(), format!("#{}", opening.0)) {
+            Ok(id) => id,
+            Err(error) => {
+                self.refused.insert(
+                    whole.clone(),
+                    format!("its opening #{} cannot be named: {error}", opening.0),
+                );
+                return;
+            }
+        };
+        if source.net.reference_only_openings == ReferenceOnlyOpenings::TakeAsApplied
+            && reference_only(&source.model, opening)
+            && let Some(reason) = applied_reason(AppliedReason::ReferenceRepresentationOnly)
+        {
+            self.applied
+                .entry(whole.clone())
+                .or_default()
+                .push((id, reason));
+            return;
+        }
+        let void = match voids.get(&id) {
+            Some(void) => (*void).clone(),
+            None => mesh(
+                backend,
+                &source.model,
+                &source.units,
+                &source.linear,
+                opening,
+                false,
+                NetOptions::default(),
+            )
+            .and_then(|meshed| {
+                meshed
+                    .map(|body| (body.mesh, body.fit))
+                    .ok_or_else(|| "no body representation".into())
+            }),
+        };
+        let (void, fit) = match void {
+            Ok(void) => void,
+            Err(reason) => {
+                self.refused.insert(
+                    whole.clone(),
+                    format!(
+                        "whether its opening {id} cuts its parts cannot be decided, so it \
+                         cannot be subtracted from them: {reason}"
+                    ),
+                );
+                return;
+            }
+        };
+        let mut cut = Vec::new();
+        let leaves = self.leaves.get(whole).cloned().unwrap_or_default();
+        for leaf in leaves {
+            if self.unmeasured_parts.contains_key(&leaf) {
+                continue;
+            }
+            let Some(body) = bodies.get(&leaf) else {
+                continue;
+            };
+            let refuse = |reason: String| (reason, body_box(body));
+            match cuts(&leaf, body, &id, &void, fit) {
+                Cut::Cuts => {
+                    self.cut
+                        .entry(leaf.clone())
+                        .or_default()
+                        .push((id.clone(), whole.clone()));
+                    cut.push(leaf);
+                }
+                Cut::Clear => {}
+                Cut::Inside => {
+                    let reason = format!(
+                        "it lies wholly within the opening {id} voiding {whole}, which it is a \
+                         part of"
+                    );
+                    self.unmeasured_parts.insert(leaf, refuse(reason));
+                }
+                Cut::Undecided(why) => {
+                    let reason = format!(
+                        "whether the opening {id} voiding {whole}, which it is a part of, cuts \
+                         it is undecided: {why}"
+                    );
+                    self.unmeasured_parts.insert(leaf, refuse(reason));
+                }
+            }
+        }
+        self.decided.push((whole.clone(), id, cut));
+    }
+
+    /// Re-meshes each part cut by a whole's opening with those openings
+    /// subtracted, or leaves it unmeasured naming them, and records which
+    /// openings each body had subtracted, the wholes' included.
+    fn subtract(
+        &mut self,
+        backend: &Compiler,
+        parsed: &BTreeMap<SourceId, Parsed>,
+        bodies: &mut BTreeMap<ObjectId, Body>,
+        boundary: bool,
+        report: &mut GeometryReport,
+    ) {
+        let mut done: BTreeMap<ObjectId, Vec<ObjectId>> = BTreeMap::new();
+        for (part, openings) in &self.cut {
+            if self.unmeasured_parts.contains_key(part) {
+                continue;
+            }
+            let Some(bound) = bodies.get(part).map(body_box) else {
+                continue;
+            };
+            let mut ids: Vec<ObjectId> = openings
+                .iter()
+                .map(|(opening, _)| opening.clone())
+                .collect();
+            ids.sort();
+            ids.dedup();
+            let names = ids
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ");
+            let entities: Vec<EntityId> = ids.iter().filter_map(entity_id).collect();
+            let cut = match (parsed.get(&part.source), entity_id(part)) {
+                (Some(source), Some(entity)) if entities.len() == ids.len() => mesh_less(
+                    backend,
+                    &source.model,
+                    &source.units,
+                    &source.linear,
+                    entity,
+                    boundary,
+                    source.net,
+                    &entities,
+                )
+                .and_then(|body| applied(part, body)),
+                _ => Err("not a STEP instance id".to_owned()),
+            };
+            match cut {
+                Ok(Some(body)) => {
+                    bodies.insert(part.clone(), body);
+                    done.insert(part.clone(), ids);
+                }
+                Ok(None) => {}
+                Err(error) => {
+                    let reason = format!(
+                        "the whole's opening(s) {names} cut it but cannot be subtracted from \
+                         it: {error}"
+                    );
+                    self.unmeasured_parts.insert(part.clone(), (reason, bound));
+                }
+            }
+        }
+        for (whole, leaves) in &self.leaves {
+            let openings: BTreeSet<&ObjectId> = leaves
+                .iter()
+                .filter_map(|leaf| done.get(leaf))
+                .flatten()
+                .collect();
+            if !openings.is_empty() {
+                self.subtracted
+                    .insert(whole.clone(), openings.into_iter().cloned().collect());
+            }
+        }
+        for (whole, opening, parts) in std::mem::take(&mut self.decided) {
+            let parts = parts
+                .into_iter()
+                .filter(|part| done.get(part).is_some_and(|ids| ids.contains(&opening)))
+                .collect();
+            report.whole_openings.push((whole, opening, parts));
+        }
+        self.subtracted.extend(done);
+    }
+}
+
+/// Every part of `whole` that is no whole itself, at any depth.
+fn collect_leaves(
+    whole: &ObjectId,
+    parts: &BTreeMap<ObjectId, Vec<ObjectId>>,
+    wholes: &BTreeSet<&ObjectId>,
+    visited: &mut BTreeSet<ObjectId>,
+    leaves: &mut BTreeSet<ObjectId>,
+) {
+    if !visited.insert(whole.clone()) {
+        return;
+    }
+    for part in parts.get(whole).into_iter().flatten() {
+        if wholes.contains(part) {
+            collect_leaves(part, parts, wholes, visited, leaves);
+        } else {
+            leaves.insert(part.clone());
+        }
+    }
+}
+
+/// Whether a whole's opening cuts a part's material.
+#[derive(Debug, PartialEq)]
+enum Cut {
+    /// Shown to reach into the part's material beyond the touching depth.
+    Cuts,
+    /// Shown to touch it at most.
+    Clear,
+    /// The part lies wholly within the opening.
+    Inside,
+    /// Neither, with why.
+    Undecided(String),
+}
+
+/// Whether `opening`'s void cuts `part`'s material deeper than
+/// [`TOUCHING_DEPTH`].
+///
+/// Apart beyond both deviations is [`Cut::Clear`]. Two exact bodies are
+/// decided cell by cell of the opening ([`OpeningCell`], [`cell_cut`]):
+/// each connected piece of its mesh is one convex cell when it is convex
+/// (an extruded rectangle, as exporters write most openings), one prism
+/// per cap triangle when it is an extrusion of any other profile, and
+/// otherwise only bounded by a convex cell holding it. What that leaves
+/// open, and every tessellated pair, is read from the certified volume the
+/// two share ([`shared_volume_cut`]). Anything still open is undecided,
+/// never a guess either way.
+fn cuts(
+    part: &ObjectId,
+    body: &Body,
+    opening: &ObjectId,
+    void: &axiolid_mesh::TriMesh,
+    fit: Fit,
+) -> Cut {
+    let deviation = |fit: Fit| match fit {
+        Fit::Exact => 0.0,
+        Fit::Within(deviation) => deviation,
+    };
+    let slack = deviation(body.fit) + deviation(fit);
+    if let (Some(first), Some(second)) = (mesh_box(&body.mesh), mesh_box(void))
+        && (0..3).any(|axis| {
+            first.0[axis] - second.1[axis] > slack + ON_SURFACE
+                || second.0[axis] - first.1[axis] > slack + ON_SURFACE
+        })
+    {
+        return Cut::Clear;
+    }
+    if slack == 0.0 {
+        let mut open = false;
+        for cell in OpeningCell::all(void) {
+            match cell_cut(&body.mesh, &cell) {
+                Some(Cut::Clear) => {}
+                Some(decided) => return decided,
+                None => open = true,
+            }
+        }
+        if !open {
+            return Cut::Clear;
+        }
+    }
+    shared_volume_cut(part, body, opening, void, fit)
+}
+
+/// A convex region of an opening, as the half-spaces bounding it.
+#[derive(Debug)]
+struct OpeningCell {
+    /// Outward unit normals and offsets: `n · x <= d` inside.
+    planes: Vec<([f64; 3], f64)>,
+    /// Whether the cell lies within the opening; otherwise it only holds
+    /// a piece of it.
+    within: bool,
+    /// A point inside: the mean of the corners it was built from.
+    centre: [f64; 3],
+    /// The corners it was built from, which span its width along each of
+    /// its planes.
+    corners: Vec<[f64; 3]>,
+}
+
+impl OpeningCell {
+    /// The cells of every connected piece of `mesh` (triangles joined by
+    /// shared indices).
+    fn all(mesh: &axiolid_mesh::TriMesh) -> Vec<Self> {
+        let count = mesh.positions.len();
+        let mut parent: Vec<usize> = (0..count).collect();
+        let triangles: Vec<[usize; 3]> = mesh
+            .indices
+            .chunks_exact(3)
+            .map(|corners| [corners[0], corners[1], corners[2]].map(|corner| corner as usize))
+            .filter(|corners| corners.iter().all(|corner| *corner < count))
+            .collect();
+        for corners in &triangles {
+            for other in &corners[1..] {
+                let (a, b) = (
+                    union_root(&mut parent, corners[0]),
+                    union_root(&mut parent, *other),
+                );
+                parent[a] = b;
+            }
+        }
+        let mut pieces: BTreeMap<usize, Vec<[usize; 3]>> = BTreeMap::new();
+        for corners in triangles {
+            let key = union_root(&mut parent, corners[0]);
+            pieces.entry(key).or_default().push(corners);
+        }
+        let points: Vec<[f64; 3]> = mesh.positions.iter().map(|p| [p.x, p.y, p.z]).collect();
+        pieces
+            .into_values()
+            .flat_map(|triangles| Self::piece(&points, &triangles))
+            .collect()
+    }
+
+    /// The cells of one closed piece.
+    fn piece(points: &[[f64; 3]], triangles: &[[usize; 3]]) -> Vec<Self> {
+        let corners: Vec<[f64; 3]> = triangles
+            .iter()
+            .flatten()
+            .copied()
+            .collect::<BTreeSet<usize>>()
+            .into_iter()
+            .map(|index| points[index])
+            .collect();
+        let volume: f64 = triangles
+            .iter()
+            .map(|[a, b, c]| dot(points[*a], cross(points[*b], points[*c])))
+            .sum();
+        let sign = volume.signum();
+        let planes: Vec<([f64; 3], f64)> = triangles
+            .iter()
+            .filter_map(|[a, b, c]| {
+                let normal = cross(sub(points[*b], points[*a]), sub(points[*c], points[*a]));
+                let length = dot(normal, normal).sqrt();
+                (length > MIN_FACE_AREA && volume != 0.0).then(|| {
+                    let unit = normal.map(|value| sign * value / length);
+                    (unit, dot(unit, points[*a]))
+                })
+            })
+            .collect();
+        let slack = CONVEX_SLACK + rounding(&corners);
+        let convex = !planes.is_empty()
+            && planes.iter().all(|(normal, offset)| {
+                corners
+                    .iter()
+                    .all(|corner| dot(*normal, *corner) - offset <= slack)
+            });
+        if convex {
+            return vec![Self {
+                centre: mean(&corners),
+                planes,
+                within: true,
+                corners,
+            }];
+        }
+        if let Some(prisms) = Self::prisms(points, triangles, &planes, &corners, slack) {
+            return prisms;
+        }
+        // Bounded by the slabs its own faces and the axes span.
+        let mut normals: Vec<[f64; 3]> = planes.iter().map(|(normal, _)| *normal).collect();
+        normals.extend([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]);
+        let mut bounds = Vec::with_capacity(2 * normals.len());
+        for normal in normals {
+            let (low, high) =
+                corners
+                    .iter()
+                    .fold((f64::INFINITY, f64::NEG_INFINITY), |(low, high), corner| {
+                        let value = dot(normal, *corner);
+                        (low.min(value), high.max(value))
+                    });
+            bounds.push((normal, high));
+            bounds.push((normal.map(|value| -value), -low));
+        }
+        vec![Self {
+            planes: bounds,
+            within: false,
+            centre: mean(&corners),
+            corners,
+        }]
+    }
+
+    /// The prisms of a piece extruded from a profile of any shape: its
+    /// corners lie on two parallel planes, each on the first one moved by
+    /// one extrusion vector onto the second, and each cap triangle on the
+    /// first plane sweeps one convex prism. `None` for anything else.
+    fn prisms(
+        points: &[[f64; 3]],
+        triangles: &[[usize; 3]],
+        planes: &[([f64; 3], f64)],
+        corners: &[[f64; 3]],
+        slack: f64,
+    ) -> Option<Vec<Self>> {
+        for (normal, _) in planes {
+            let values: Vec<f64> = corners.iter().map(|corner| dot(*normal, *corner)).collect();
+            let low = values.iter().copied().fold(f64::INFINITY, f64::min);
+            let high = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+            if high - low <= slack
+                || values
+                    .iter()
+                    .any(|value| value - low > slack && high - value > slack)
+            {
+                continue;
+            }
+            let on = |point: [f64; 3], level: f64| (dot(*normal, point) - level).abs() <= slack;
+            let bottom: Vec<[f64; 3]> = corners
+                .iter()
+                .copied()
+                .filter(|corner| on(*corner, low))
+                .collect();
+            let top: Vec<[f64; 3]> = corners
+                .iter()
+                .copied()
+                .filter(|corner| on(*corner, high))
+                .collect();
+            if bottom.len() != top.len() || bottom.len() < 3 {
+                continue;
+            }
+            let near =
+                |a: [f64; 3], b: [f64; 3]| (0..3).all(|axis| (a[axis] - b[axis]).abs() <= slack);
+            let Some(vector) = top.iter().map(|end| sub(*end, bottom[0])).find(|vector| {
+                bottom.iter().all(|start| {
+                    let moved = std::array::from_fn(|axis| start[axis] + vector[axis]);
+                    top.iter().any(|end| near(moved, *end))
+                })
+            }) else {
+                continue;
+            };
+            let mut prisms = Vec::new();
+            for [a, b, c] in triangles {
+                let cap = [points[*a], points[*b], points[*c]];
+                if !cap.iter().all(|corner| on(*corner, low)) {
+                    continue;
+                }
+                if let Some(prism) = Self::prism(cap, vector) {
+                    prisms.push(prism);
+                }
+            }
+            if !prisms.is_empty() {
+                return Some(prisms);
+            }
+        }
+        None
+    }
+
+    /// The triangle `cap` swept by `vector`; `None` when it bounds no
+    /// volume.
+    fn prism(cap: [[f64; 3]; 3], vector: [f64; 3]) -> Option<Self> {
+        let unit = |normal: [f64; 3]| {
+            let length = dot(normal, normal).sqrt();
+            (length > MIN_FACE_AREA).then(|| normal.map(|value| value / length))
+        };
+        let [a, b, c] = cap;
+        let mut base = unit(cross(sub(b, a), sub(c, a)))?;
+        if dot(base, vector) > 0.0 {
+            base = base.map(|value| -value);
+        }
+        if dot(base, vector).abs() <= MIN_FACE_AREA {
+            return None;
+        }
+        let top = std::array::from_fn(|axis| a[axis] + vector[axis]);
+        let mut planes = vec![
+            (base, dot(base, a)),
+            (base.map(|value| -value), -dot(base, top)),
+        ];
+        for (start, end, other) in [(a, b, c), (b, c, a), (c, a, b)] {
+            let mut side = unit(cross(sub(end, start), vector))?;
+            if dot(side, sub(other, start)) > 0.0 {
+                side = side.map(|value| -value);
+            }
+            planes.push((side, dot(side, start)));
+        }
+        let centre =
+            std::array::from_fn(|axis| (a[axis] + b[axis] + c[axis]) / 3.0 + 0.5 * vector[axis]);
+        let shifted = |point: [f64; 3]| std::array::from_fn(|axis| point[axis] + vector[axis]);
+        Some(Self {
+            planes,
+            within: true,
+            centre,
+            corners: vec![a, b, c, shifted(a), shifted(b), shifted(c)],
+        })
+    }
+
+    /// How deep `point` lies inside the cell's planes; negative outside.
+    fn depth(&self, point: [f64; 3]) -> f64 {
+        self.planes
+            .iter()
+            .map(|(normal, offset)| offset - dot(*normal, point))
+            .fold(f64::INFINITY, f64::min)
+    }
+
+    /// Whether the cell's core (its planes moved in by `depth`) holds no
+    /// ball: the cell is no wider than `2 depth` across one of its planes,
+    /// and a ball inside it is no wider than the cell.
+    fn thinner_than(&self, depth: f64) -> bool {
+        self.planes.iter().any(|(normal, offset)| {
+            self.corners
+                .iter()
+                .map(|corner| offset - dot(*normal, *corner))
+                .fold(0.0_f64, f64::max)
+                <= 2.0 * depth
+        })
+    }
+
+    /// Whether some point of the triangle lies at least `depth` inside
+    /// the planes: the triangle clipped by each plane moved in by it.
+    fn reached(&self, triangle: [[f64; 3]; 3], depth: f64) -> bool {
+        let mut polygon: Vec<[f64; 3]> = triangle.to_vec();
+        for (normal, offset) in &self.planes {
+            let limit = offset - depth;
+            let mut kept = Vec::with_capacity(polygon.len() + 1);
+            for (index, point) in polygon.iter().enumerate() {
+                let next = polygon[(index + 1) % polygon.len()];
+                let (here, there) = (dot(*normal, *point) - limit, dot(*normal, next) - limit);
+                if here <= 0.0 {
+                    kept.push(*point);
+                }
+                if (here < 0.0 && there > 0.0) || (here > 0.0 && there < 0.0) {
+                    let t = here / (here - there);
+                    kept.push(std::array::from_fn(|axis| {
+                        point[axis] + t * (next[axis] - point[axis])
+                    }));
+                }
+            }
+            if kept.is_empty() {
+                return false;
+            }
+            polygon = kept;
+        }
+        true
+    }
+}
+
+/// The mean of some points.
+fn mean(points: &[[f64; 3]]) -> [f64; 3] {
+    let count = points.iter().fold(0.0, |count, _| count + 1.0);
+    std::array::from_fn(|axis| points.iter().map(|point| point[axis]).sum::<f64>() / count)
+}
+
+/// The rounding of a plane's offset at the coordinates of `points`.
+fn rounding(points: &[[f64; 3]]) -> f64 {
+    64.0 * f64::EPSILON
+        * points
+            .iter()
+            .flatten()
+            .fold(1.0_f64, |largest, value| largest.max(value.abs()))
+}
+
+/// The representative of `at` in a union-find forest, halving the path.
+fn union_root(parent: &mut [usize], mut at: usize) -> usize {
+    while parent[at] != at {
+        parent[at] = parent[parent[at]];
+        at = parent[at];
+    }
+    at
+}
+
+/// Planes of an opening piece whose corners lie off them by less than this,
+/// in metres, still bound a convex piece.
+const CONVEX_SLACK: f64 = 1e-9;
+
+/// Twice the area, in square metres, below which a face of an opening
+/// piece states no plane: its normal is rounding.
+const MIN_FACE_AREA: f64 = 1e-12;
+
+/// How deep, in metres, an opening may reach into a part and still only
+/// touch it: the coordinate precision IFC exporters state for their
+/// models (`IfcGeometricRepresentationContext.Precision`, commonly 1e-5),
+/// within which a hole a part already carries and the opening that made it
+/// are written apart.
+const TOUCHING_DEPTH: f64 = 1e-5;
+
+/// Whether one cell of an opening cuts an exact part deeper than
+/// [`TOUCHING_DEPTH`]; `None` where this cannot tell.
+///
+/// The cell's core (its planes moved in by the depth) is convex. The part
+/// reaches into it with its surface, so material of the part lies in it
+/// ([`Cut::Cuts`]); or its surface stays out of the core, which then lies
+/// wholly inside the part ([`Cut::Cuts`]: a cavity) or wholly outside
+/// ([`Cut::Clear`]), as the winding number of the core's centre tells. A
+/// part all of whose corners lie in a cell's core lies within the opening
+/// ([`Cut::Inside`]). For a cell that only holds a piece of the opening,
+/// only a part clear of its core is decided. Material of the part left in
+/// the opening is then at most `2 TOUCHING_DEPTH` thick: within the depth
+/// of its faces, or of the faces between its cells.
+fn cell_cut(part: &axiolid_mesh::TriMesh, cell: &OpeningCell) -> Option<Cut> {
+    if cell.thinner_than(TOUCHING_DEPTH) {
+        return Some(Cut::Clear);
+    }
+    if cell.within
+        && !part.positions.is_empty()
+        && part
+            .positions
+            .iter()
+            .all(|p| cell.depth([p.x, p.y, p.z]) > TOUCHING_DEPTH)
+    {
+        return Some(Cut::Inside);
+    }
+    let point = |index: u32| {
+        let p = part.positions[index as usize];
+        [p.x, p.y, p.z]
+    };
+    let reached = part.indices.chunks_exact(3).any(|corners| {
+        cell.reached(
+            [point(corners[0]), point(corners[1]), point(corners[2])],
+            TOUCHING_DEPTH,
+        )
+    });
+    if reached {
+        return cell.within.then_some(Cut::Cuts);
+    }
+    if cell.depth(cell.centre) <= TOUCHING_DEPTH {
+        return None;
+    }
+    let winding = winding_number(part, cell.centre);
+    let whole = winding.round();
+    if (winding - whole).abs() > 0.1 {
+        return None;
+    }
+    if whole == 0.0 {
+        Some(Cut::Clear)
+    } else {
+        cell.within.then_some(Cut::Cuts)
+    }
+}
+
+/// The generalized winding number of a closed mesh about `point`, by the
+/// solid angle of each triangle (Van Oosterom and Strackee).
+fn winding_number(mesh: &axiolid_mesh::TriMesh, point: [f64; 3]) -> f64 {
+    let corner = |index: u32| {
+        let p = mesh.positions[index as usize];
+        sub([p.x, p.y, p.z], point)
+    };
+    let angle: f64 = mesh
+        .indices
+        .chunks_exact(3)
+        .map(|corners| {
+            let (a, b, c) = (corner(corners[0]), corner(corners[1]), corner(corners[2]));
+            let (la, lb, lc) = (dot(a, a).sqrt(), dot(b, b).sqrt(), dot(c, c).sqrt());
+            let numerator = dot(a, cross(b, c));
+            let denominator = la * lb * lc + dot(a, b) * lc + dot(b, c) * la + dot(c, a) * lb;
+            2.0 * numerator.atan2(denominator)
+        })
+        .sum();
+    angle / (4.0 * std::f64::consts::PI)
+}
+
+fn dot(a: [f64; 3], b: [f64; 3]) -> f64 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+
+fn cross(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
+}
+
+fn sub(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
+    [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+}
+
+/// Whether `opening`'s void cuts `part`'s body by the volume they share,
+/// as the proximity service certifies it: the part inside the opening is
+/// [`Cut::Inside`], the opening inside the part or a shared volume beyond
+/// `TOUCHING_VOLUME` is [`Cut::Cuts`], apart or a shared volume within it
+/// is [`Cut::Clear`]; anything else is undecided. A penetration witness is
+/// no proof here: a point on a face an opening shares with a hole already
+/// cut reads deep.
+fn shared_volume_cut(
+    part: &ObjectId,
+    body: &Body,
+    opening: &ObjectId,
+    void: &axiolid_mesh::TriMesh,
+    fit: Fit,
+) -> Cut {
+    let register =
+        |geometry: AxiolidGeometry, id: &ObjectId, mesh: &axiolid_mesh::TriMesh, fit| match fit {
+            Fit::Exact => geometry.with_mesh(id.clone(), mesh.clone()),
+            Fit::Within(deviation) => {
+                geometry.with_tessellated_mesh(id.clone(), mesh.clone(), deviation)
+            }
+        };
+    let probe = register(
+        register(AxiolidGeometry::new(), part, &body.mesh, body.fit),
+        opening,
+        void,
+        fit,
+    );
+    let measured = match ProximityRequest::try_new(part.clone(), opening.clone())
+        .and_then(|request| AxiolidProximityService::new(probe).measure_proximity(&request))
+    {
+        Ok(measured) => measured,
+        Err(error) => return Cut::Undecided(format!("they cannot be measured: {error:?}")),
+    };
+    match measured.containment() {
+        Some(BodyContainment::SubjectInsideCounterpart) => return Cut::Inside,
+        Some(BodyContainment::CounterpartInsideSubject) => return Cut::Cuts,
+        None => {}
+    }
+    if measured.separation_interval_metres().0 > ON_SURFACE {
+        return Cut::Clear;
+    }
+    match measured.intersection_volume() {
+        Some(volume) if volume.shared().lower_cubic_metres() > TOUCHING_VOLUME => Cut::Cuts,
+        Some(volume) if volume.shared().upper_cubic_metres() <= TOUCHING_VOLUME => Cut::Clear,
+        Some(volume) => Cut::Undecided(format!(
+            "they meet, and the volume they share, {:.3e} to {:.3e} m³, is not bounded away \
+             from the rounding of bodies that only touch",
+            volume.shared().lower_cubic_metres(),
+            volume.shared().upper_cubic_metres()
+        )),
+        None => Cut::Undecided("they meet, and the volume they share cannot be measured".into()),
+    }
+}
+
+/// A mesh's box; `None` for an empty one.
+fn mesh_box(mesh: &axiolid_mesh::TriMesh) -> Option<Extent> {
+    let mut points = mesh.positions.iter();
+    let first = points.next()?;
+    let start = ([first.x, first.y, first.z], [first.x, first.y, first.z]);
+    Some(points.fold(start, |(min, max), point| {
+        let point = [point.x, point.y, point.z];
+        (
+            std::array::from_fn(|axis| min[axis].min(point[axis])),
+            std::array::from_fn(|axis| max[axis].max(point[axis])),
+        )
+    }))
+}
+
+/// The box a body's true shape lies within: its mesh's, grown by its chord
+/// deviation. Cutting only takes material away, so it bounds the body cut
+/// too.
+fn body_box(body: &Body) -> Option<Extent> {
+    let (min, max) = mesh_box(&body.mesh)?;
+    let grow = match body.fit {
+        Fit::Exact => 0.0,
+        Fit::Within(deviation) => deviation,
+    };
+    Some((min.map(|value| value - grow), max.map(|value| value + grow)))
+}
+
+/// Whether `opening` is an `IfcOpeningElement` (or `IfcOpeningStandardCase`)
+/// whose representations are all, and only, `Reference`: the reading
+/// `ifc-geometry` takes an opening as applied by (openbimrs/ifc#351), read
+/// here for a whole, which lowering never sees as a host. Anything
+/// unreadable is no such statement.
+fn reference_only(model: &Model, opening: EntityId) -> bool {
+    let Some(entity) = model.get(opening) else {
+        return false;
+    };
+    if !(entity.type_name.eq_ignore_ascii_case("IFCOPENINGELEMENT")
+        || entity
+            .type_name
+            .eq_ignore_ascii_case("IFCOPENINGSTANDARDCASE"))
+    {
+        return false;
+    }
+    let Some(shape) = ifc_geometry::Slots::new(opening, entity).opt_ref(PRODUCT_REPRESENTATION)
+    else {
+        return false;
+    };
+    let Some(representations) = model.get(shape).and_then(|entity| {
+        ifc_geometry::ProductShape::new(shape, entity)
+            .representations()
+            .ok()
+    }) else {
+        return false;
+    };
+    !representations.is_empty()
+        && representations.into_iter().all(|id| {
+            model.get(id).is_some_and(|entity| {
+                ifc_geometry::Representation::new(id, entity)
+                    .identifier()
+                    .as_deref()
+                    == Some("Reference")
+            })
+        })
 }
 
 /// Every product left unmeasured for a fact about the model data, once
@@ -2108,16 +3043,6 @@ fn space_frame(
     }
 }
 
-/// `meshed`, its triangles kept in `report` under `id` when given.
-fn keep(report: &mut GeometryReport, id: Option<&ObjectId>, meshed: Meshed) -> Meshed {
-    if let (Some(id), Ok(Some(body))) = (id, &meshed)
-        && let Some(kept) = snapshot_mesh(&body.mesh)
-    {
-        report.meshes.insert(id.clone(), kept);
-    }
-    meshed
-}
-
 /// One product's meshed body.
 struct Body {
     mesh: axiolid_mesh::TriMesh,
@@ -2251,7 +3176,30 @@ fn mesh(
     boundary: bool,
     net: NetOptions,
 ) -> Meshed {
-    if let Some(reason) = linear.refusal(model, product) {
+    mesh_less(backend, model, units, linear, product, boundary, net, &[])
+}
+
+/// [`mesh`], with the `Body` of each of `openings` subtracted from the net
+/// body as well, in the order given: the openings voiding a whole the
+/// product is a part of, which cut it (#223). Each is lowered by its own
+/// placement and subtracted in world coordinates; a product whose net body
+/// is several solids, or an opening whose `Body` is, is refused by the
+/// graph by name, never cut in part.
+#[allow(clippy::too_many_arguments)] // `mesh`'s inputs and the openings
+fn mesh_less(
+    backend: &Compiler,
+    model: &Model,
+    units: &ifc_geometry::units::UnitScale,
+    linear: &Linear,
+    product: EntityId,
+    boundary: bool,
+    net: NetOptions,
+    openings: &[EntityId],
+) -> Meshed {
+    if let Some(reason) = std::iter::once(&product)
+        .chain(openings)
+        .find_map(|object| linear.refusal(model, *object))
+    {
         return Err(reason);
     }
     let net_options = net;
@@ -2259,10 +3207,36 @@ fn mesh(
     let Some(net) =
         lower_product_net_with(&mut session, product, net).map_err(|e| e.to_string())?
     else {
-        return Ok(None);
+        return if openings.is_empty() {
+            Ok(None)
+        } else {
+            Err("it has no body to subtract the openings from".into())
+        };
     };
-    let lowered = session.finish(net.root).map_err(|e| e.to_string())?;
+    let mut root = net.root;
+    for &opening in openings {
+        let tool = lower_product_representation(&mut session, opening, RepresentationPurpose::Body)
+            .map_err(|error| format!("the opening #{}: {error}", opening.0))?
+            .ok_or_else(|| format!("the opening #{} has no body representation", opening.0))?;
+        root = session
+            .node_for(
+                opening,
+                GeometryNode::SolidOperation(SolidOperation::Boolean {
+                    left: root,
+                    right: tool,
+                    operator: BooleanOperator::Difference,
+                }),
+            )
+            .map_err(|error| format!("the opening #{} cannot be subtracted: {error}", opening.0))?;
+    }
+    let lowered = session.finish(root).map_err(|e| e.to_string())?;
     let (mesh, fit) = match compile(backend, &lowered.graph, lowered.root) {
+        // Removed whole only by the openings of a whole it is part of (its
+        // own net body was measured before): not its own openings' voided
+        // body (#310); the caller names the whole's openings.
+        Err(reason) if reason == NO_TRIANGLES && !openings.is_empty() => {
+            return Err("nothing of it is left outside the openings".into());
+        }
         Err(reason) if reason == NO_TRIANGLES && !net.subtractions.is_empty() => {
             return Err(
                 if gross_has_triangles(backend, model, units, product, net_options) {
@@ -3429,5 +4403,177 @@ mod tests {
         )
         .unwrap_err();
         assert!(refusal.contains("not 'Reference'"), "{refusal}");
+    }
+
+    /// A closed, outward box from `min` to `max`.
+    fn cuboid([x0, y0, z0]: [f64; 3], [x1, y1, z1]: [f64; 3]) -> axiolid_mesh::TriMesh {
+        use axiolid_core::Point3;
+        axiolid_mesh::TriMesh::new(
+            vec![
+                Point3::new(x0, y0, z0),
+                Point3::new(x1, y0, z0),
+                Point3::new(x1, y1, z0),
+                Point3::new(x0, y1, z0),
+                Point3::new(x0, y0, z1),
+                Point3::new(x1, y0, z1),
+                Point3::new(x1, y1, z1),
+                Point3::new(x0, y1, z1),
+            ],
+            vec![
+                0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2, 0, 4, 7, 0,
+                7, 3, 1, 2, 6, 1, 6, 5,
+            ],
+        )
+    }
+
+    /// Two meshes as one, unjoined.
+    fn joined(
+        first: &axiolid_mesh::TriMesh,
+        second: &axiolid_mesh::TriMesh,
+    ) -> axiolid_mesh::TriMesh {
+        let offset = u32::try_from(first.positions.len()).unwrap();
+        let mut positions = first.positions.clone();
+        positions.extend(second.positions.iter().copied());
+        let mut indices = first.indices.clone();
+        indices.extend(second.indices.iter().map(|index| index + offset));
+        axiolid_mesh::TriMesh::new(positions, indices)
+    }
+
+    /// Whether `opening` cuts a part meshed as `part` within `fit`.
+    fn decide(
+        part: axiolid_mesh::TriMesh,
+        fit: super::Fit,
+        opening: &axiolid_mesh::TriMesh,
+    ) -> super::Cut {
+        use axioval::ir::SourceId;
+        let source = SourceId::new("ifc-step", "model.ifc").unwrap();
+        let body = super::Body {
+            mesh: part,
+            fit,
+            boundary: None,
+            applied: Vec::new(),
+            taken: Vec::new(),
+        };
+        super::cuts(
+            &ObjectId::new(source.clone(), "#1").unwrap(),
+            &body,
+            &ObjectId::new(source, "#2").unwrap(),
+            opening,
+            super::Fit::Exact,
+        )
+    }
+
+    /// A whole's opening cuts a part only where it reaches into its
+    /// material beyond the touching depth (#223): an opening through an
+    /// uncut part or inside it cuts; one flush with a hole already cut,
+    /// within the depth of it, or apart, does not; a part inside the
+    /// opening is told apart; and a tessellated part merely touching the
+    /// opening is undecided, never taken as cut or clear.
+    #[test]
+    fn a_wholes_opening_cuts_a_part_only_where_it_reaches_into_its_material() {
+        use super::{Cut, Fit};
+        let door = cuboid([1.5, -0.2, 0.0], [2.5, 0.2, 2.1]);
+
+        // An uncut layer through the door, exact or tessellated.
+        let layer = cuboid([0.0, -0.1, 0.0], [4.0, 0.0, 3.0]);
+        assert_eq!(decide(layer.clone(), Fit::Exact, &door), Cut::Cuts);
+        assert_eq!(decide(layer, Fit::Within(0.001), &door), Cut::Cuts);
+        // The layer's piece left of the hole already cut: flush.
+        let left = cuboid([0.0, -0.1, 0.0], [1.5, 0.0, 3.0]);
+        assert_eq!(decide(left.clone(), Fit::Exact, &door), Cut::Clear);
+        // Apart, and a block within the door.
+        let apart = cuboid([3.0, -0.1, 0.0], [4.0, 0.0, 3.0]);
+        assert_eq!(decide(apart, Fit::Exact, &door), Cut::Clear);
+        let block = cuboid([1.9, -0.1, 0.5], [2.1, 0.0, 1.5]);
+        assert_eq!(decide(block, Fit::Exact, &door), Cut::Inside);
+        // A tessellated piece flush with the hole: its true surface may
+        // reach into the door by its deviation.
+        assert!(
+            matches!(decide(left, Fit::Within(0.001), &door), Cut::Undecided(_)),
+            "a tessellated touch is undecided"
+        );
+        // Written 5 µm into the hole's jamb, the opening only touches the
+        // piece; 50 µm into it, it cuts.
+        for (reach, expected) in [(5e-6, Cut::Clear), (5e-5, Cut::Cuts)] {
+            let piece = cuboid([0.0, -0.1, 0.0], [1.5 + reach, 0.0, 3.0]);
+            assert_eq!(decide(piece, Fit::Exact, &door), expected, "{reach}");
+        }
+        // A sliver of an opening across the jamb, nowhere 20 µm thick,
+        // holds no core: it cuts nothing beyond the touching depth.
+        let sliver = axiolid_mesh::TriMesh::new(
+            vec![
+                axiolid_core::Point3::new(1.499_995, -0.1, 0.0),
+                axiolid_core::Point3::new(1.499_995, 0.0, 0.0),
+                axiolid_core::Point3::new(1.499_995, -0.05, 1.0),
+                axiolid_core::Point3::new(1.500_005, -0.05, 0.5),
+            ],
+            vec![0, 2, 1, 0, 1, 3, 1, 2, 3, 2, 0, 3],
+        );
+        let left = cuboid([0.0, -0.1, 0.0], [1.5, 0.0, 3.0]);
+        assert_eq!(decide(left, Fit::Exact, &sliver), Cut::Clear);
+        // An opening wholly inside a part's material (a cavity) cuts it.
+        let cavity = cuboid([1.0, -0.15, 0.5], [1.2, -0.05, 0.7]);
+        let solid = cuboid([0.0, -0.2, 0.0], [2.0, 0.0, 1.0]);
+        assert_eq!(decide(solid, Fit::Exact, &cavity), Cut::Cuts);
+    }
+
+    /// An opening of several pieces is read piece by piece, and one of a
+    /// profile that is not convex prism by prism (#223): a frame and leaf
+    /// written as two boxes, and an L-shaped opening whose notch a part
+    /// fills flush, are decided as their shapes are, not as their boxes.
+    #[test]
+    fn a_wholes_opening_of_several_pieces_or_any_profile_is_read_by_its_shape() {
+        use super::{Cut, Fit};
+        use axiolid_core::Point3;
+
+        let framed = joined(
+            &cuboid([1.5, -0.2, 0.0], [1.6, 0.2, 2.1]),
+            &cuboid([1.6, -0.2, 0.0], [2.5, 0.2, 2.1]),
+        );
+        let left = cuboid([0.0, -0.1, 0.0], [1.5, 0.0, 3.0]);
+        assert_eq!(decide(left, Fit::Exact, &framed), Cut::Clear);
+        let layer = cuboid([0.0, -0.1, 0.0], [4.0, 0.0, 3.0]);
+        assert_eq!(decide(layer.clone(), Fit::Exact, &framed), Cut::Cuts);
+
+        // The L of x 1.5..2.5, y -0.2..0.2 less x 1.5..2.0, y 0..0.2,
+        // extruded 2.1 m up; caps triangulated, sides as quads.
+        let profile = [
+            [1.5, -0.2],
+            [2.5, -0.2],
+            [2.5, 0.2],
+            [2.0, 0.2],
+            [2.0, 0.0],
+            [1.5, 0.0],
+        ];
+        let mut positions: Vec<Point3> = profile
+            .iter()
+            .map(|[x, y]| Point3::new(*x, *y, 0.0))
+            .collect();
+        positions.extend(profile.iter().map(|[x, y]| Point3::new(*x, *y, 2.1)));
+        let mut indices = Vec::new();
+        for [a, b, c] in [[0u32, 1, 4], [1, 2, 4], [2, 3, 4], [0, 4, 5]] {
+            indices.extend([a, c, b, a + 6, b + 6, c + 6]);
+        }
+        for i in 0..6u32 {
+            let j = (i + 1) % 6;
+            indices.extend([i, j, j + 6, i, j + 6, i + 6]);
+        }
+        let notched = axiolid_mesh::TriMesh::new(positions, indices);
+        // One prism per cap triangle, each within the opening.
+        let cells = super::OpeningCell::all(&notched);
+        assert_eq!(cells.len(), 4, "{cells:?}");
+        assert!(cells.iter().all(|cell| cell.within), "{cells:?}");
+        // A layer filling the notch, flush with the L's inner faces, is
+        // clear of every prism; its box would hold it.
+        let filling = cuboid([0.0, 0.0, 0.0], [2.0, 0.1, 3.0]);
+        for cell in &cells {
+            assert_eq!(
+                super::cell_cut(&filling, cell),
+                Some(Cut::Clear),
+                "{cell:?}"
+            );
+        }
+        assert_eq!(decide(filling, Fit::Exact, &notched), Cut::Clear);
+        assert_eq!(decide(layer, Fit::Exact, &notched), Cut::Cuts);
     }
 }

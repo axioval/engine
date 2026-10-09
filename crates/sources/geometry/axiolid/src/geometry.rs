@@ -44,6 +44,9 @@ pub struct AxiolidGeometry {
     /// Hosts whose registered body already carries some openings' voids
     /// ([`Self::with_applied_openings`]).
     applied_openings: BTreeMap<ObjectId, Vec<ObjectId>>,
+    /// Bodies the host subtracted some wholes' openings from
+    /// ([`Self::with_whole_openings`]).
+    whole_openings: BTreeMap<ObjectId, Vec<ObjectId>>,
 }
 
 /// How a whole's body is built from its parts.
@@ -651,12 +654,43 @@ impl AxiolidGeometry {
         self.applied_openings.get(host).map(Vec::as_slice)
     }
 
+    /// Declares that the host subtracted `openings`, each voiding a whole
+    /// measured through its parts, from `object`'s registered body: from a
+    /// part's own body where the opening cuts it, and so from the body of
+    /// every whole that part is a piece of.
+    ///
+    /// The body is measured as registered; this records only how it was
+    /// obtained, for the evidence of every measurement of it (the locator
+    /// suffix `;whole-openings:<object>=<opening>+...`). An empty list
+    /// records nothing.
+    #[must_use]
+    pub fn with_whole_openings(mut self, object: ObjectId, mut openings: Vec<ObjectId>) -> Self {
+        openings.sort();
+        openings.dedup();
+        if openings.is_empty() {
+            self.whole_openings.remove(&object);
+        } else {
+            self.whole_openings.insert(object, openings);
+        }
+        self
+    }
+
+    /// The wholes' openings subtracted from `object`'s body, in identity
+    /// order ([`Self::with_whole_openings`]); `None` when none was
+    /// declared.
+    #[must_use]
+    pub fn whole_openings(&self, object: &ObjectId) -> Option<&[ObjectId]> {
+        self.whole_openings.get(object).map(Vec::as_slice)
+    }
+
     /// The suffix an evidence locator carries about how the bodies of
     /// `objects` were obtained, empty when there is nothing to state: for
     /// each object measured through its parts `;union:<object>=<n>-parts`,
     /// so the evidence states that its body is the union of them, and for
     /// each host whose body already carries openings
-    /// `;applied-openings:<host>=<opening>+<opening>`.
+    /// `;applied-openings:<host>=<opening>+<opening>`, and for each body
+    /// some wholes' openings were subtracted from
+    /// `;whole-openings:<object>=<opening>+<opening>`.
     pub(crate) fn body_note(&self, objects: &[&ObjectId]) -> String {
         use std::fmt::Write as _;
         let mut note = String::new();
@@ -667,6 +701,10 @@ impl AxiolidGeometry {
             if let Some(openings) = self.applied_openings(object) {
                 let openings: Vec<String> = openings.iter().map(ToString::to_string).collect();
                 let _ = write!(note, ";applied-openings:{object}={}", openings.join("+"));
+            }
+            if let Some(openings) = self.whole_openings(object) {
+                let openings: Vec<String> = openings.iter().map(ToString::to_string).collect();
+                let _ = write!(note, ";whole-openings:{object}={}", openings.join("+"));
             }
         }
         note

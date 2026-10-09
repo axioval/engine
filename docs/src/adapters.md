@@ -574,6 +574,18 @@ measurements refuse while one exists that could affect them, and
 free-space checks refuse it as an obstacle. Treating an unmeasured slab as
 absent would make a wall above it look unsupported, exactly.
 
+A whole with no body of its own is measured as the union of its parts'
+registered bodies (`compose`, `with_composed_body`); evidence about it
+ends in `;union:<whole>=<n>-parts`. How a body was obtained is the host's
+to state, and the adapter carries it into the evidence of every
+measurement of it: `with_applied_openings` for a host whose body already
+carries some openings' voids (`;applied-openings:<host>=<opening>+...`),
+and `with_whole_openings` for a body the host subtracted some wholes'
+openings from, a part cut by an opening voiding its whole and each whole
+composed from it (`;whole-openings:<body>=<opening>+...`). Nothing is
+subtracted in the adapter: the IFC host decides which parts an opening
+cuts and meshes them cut (see [the CLI](./cli.md)).
+
 A host may also state a box an unmeasured body lies within
 (`with_unmeasured_bound`, in world metres), such as `parts_bound` of a whole
 whose parts could not be composed. The body stays unmeasured; the

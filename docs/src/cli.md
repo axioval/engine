@@ -1084,6 +1084,52 @@ that look at every body in a scene (facade areas, guards, space
 measurements) see the whole and its parts as separate bodies, as a rule
 selecting both asks.
 
+**A whole's openings.** An opening voiding such a whole
+(`IfcRelVoidsElement` on the wall, not on its layers) voids its material,
+which is its parts'. Where the parts are already cut (a Reference View
+export) the opening's body only touches them; where they are uncut (a
+design transfer export) it reaches into their material, and the union
+alone would fill a door in a layered wall. So each opening of a whole is
+compared with each of its measured parts, at any depth, and cuts a part
+only where it reaches into the part's material deeper than 10 µm (the
+coordinate precision exporters commonly state, within which a hole a part
+already carries and the opening that made it are written apart). For two
+exact bodies this is decided cell by cell of the opening's mesh: each
+connected piece is one convex cell (an extruded rectangle, as most
+openings are written), one prism per cap triangle when it is an extrusion
+of another profile, and otherwise only a convex cell holding it; the part
+cuts a cell when its surface reaches into the cell's core (the cell
+shrunk by those 10 µm) or the core lies inside the part (a cavity), by
+its winding number, and is clear of it otherwise. Material left in the
+opening is then at most 20 µm thick. What that leaves open, and any
+tessellated pair, is decided by the certified volume the two share: one
+beyond the rounding of touching bodies (about 1e-12 m³) cuts, one within
+it does not. The opening is subtracted from each part it cuts, and from
+no other: the part is meshed again, net of its own openings, less the
+opening's `Body` lowered by its own placement (in world coordinates), and
+the whole is composed from the parts so cut. A part whose cut cannot be
+decided (a tessellated part flush with the opening, whose shared volume
+straddles that rounding; a malformed opening piece the volume cannot be
+measured against), that lies wholly within the opening, or that the
+compiler cannot cut (a net body of several solids is refused by name) is
+unmeasured with a reason naming the opening and the whole, and the whole
+with it, naming the part. A whole one of whose
+openings has no body to compare (`no body representation`, say) is
+unmeasured as `no body representation of its own, and whether its opening
+… cuts its parts cannot be decided, so it cannot be subtracted from them:
+…`, never measured with the opening filled. In an IFC4 or IFC4X3 file an
+opening whose every representation is `Reference` is taken as already
+applied to the whole's parts, as it is for a host, and listed in
+`geometry.openings_taken_as_applied` under the whole. The result's
+additive `geometry.whole_openings` lists every opening of a whole decided
+by geometry with the parts it was `subtracted_from` (empty where it cuts
+none: they are already cut, or it misses them), the stderr line adds `N
+opening(s) of wholes subtracted from their parts`, and the evidence of every
+measurement of a cut part, and of each whole holding it, names the
+openings: its locator carries `;whole-openings:<body>=<opening>+...`. A
+cut part is measured cut on its own too: its material does not fill the
+opening either.
+
 **Bounds of unmeasured products.** The space service is told where an
 unmeasured product's body can be, so that it refuses only the space
 measurements the body could reach. A whole whose parts could not be

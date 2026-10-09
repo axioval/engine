@@ -48,6 +48,10 @@ All notable changes are documented here. This project follows Semantic Versionin
   (openbimrs/ifc#393). A boundary with a circular-arc segment is still
   refused by name and leaves its product unmeasured
   ([#307](https://github.com/axioval/engine/issues/307)).
+- **Geometry**: an `IfcIndexedPolyCurve` arc whose three points are
+  collinear is lowered as straight segments instead of refused. The IFC
+  crates move to `openbim-ifc` 0.21 and `ifc-geometry` 0.15
+  (openbimrs/ifc#396).
 - **Geometry**: walls whose openings are exactly as deep as the wall is
   thick, flush with both faces, are measured in georeferenced models. The
   IFC crates move to `openbim-ifc` 0.19, `ifc-geometry` 0.13 and

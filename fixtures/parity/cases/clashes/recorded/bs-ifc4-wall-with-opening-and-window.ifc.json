@@ -11,8 +11,8 @@
           }
         }
       ],
-      "id": "dd2d7f3e-f3d8-5067-a189-95462a6f2fcb",
-      "message": "hard clash with ifc-step:bs-ifc4-wall-with-opening-and-window.ifc/#45: penetration 0.1000 m exceeds tolerance 0.0000 m",
+      "id": "83eae699-2cab-5e21-a7f3-c6726759fe9e",
+      "message": "clearance clash with ifc-step:bs-ifc4-wall-with-opening-and-window.ifc/#45: separation 0.0000 m below required 0.0500 m",
       "object_id": {
         "local_id": "#102",
         "source": {
@@ -43,8 +43,8 @@
           }
         }
       ],
-      "id": "eb607f66-4d49-509d-9c8c-c6464ae79cfe",
-      "message": "hard clash with ifc-step:bs-ifc4-wall-with-opening-and-window.ifc/#45: penetration 0.1000 m exceeds tolerance 0.0000 m, graded error by its smallest extent of 0.2000 m (clash matrix cell 2 `furnishing`)",
+      "id": "ba0c3104-6c92-5c08-ae9f-d72b8fcc3c9c",
+      "message": "clearance clash with ifc-step:bs-ifc4-wall-with-opening-and-window.ifc/#45: separation 0.0000 m below required 0.0500 m (clash matrix cell 2 `furnishing`)",
       "object_id": {
         "local_id": "#102",
         "source": {
@@ -62,7 +62,7 @@
         }
       ],
       "rule_id": "matrix-selectors",
-      "severity": "error"
+      "severity": "info"
     }
   ],
   "not_evaluated": [

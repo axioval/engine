@@ -466,7 +466,12 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   sampling points (including midpoints between an edge's crossings of the
   other surface, via `axiolid-ray-mesh`) against winding numbers. Only closed
   two-manifold meshes have an inside; a pair with one is measured, two open
-  surfaces report no penetration.
+  surfaces report no penetration. A witness must be a point of the body it
+  reaches from: surface samples always are, but the interior candidates
+  (vertex centroid, chord midpoints through the largest triangle) are taken
+  only when the body's own winding number places them inside, clear of its
+  surface. Never add a non-surface sample without that check: a body with a
+  hole has its centroid in the hole (#315).
   Fidelity comes from `AxiolidGeometry::with_tessellated_mesh`. A
   host-declared bodiless object is refused with `ProximityError::NoBody`,
   never `Unavailable`, so a comparison can tell "no body" from "unmeasured".

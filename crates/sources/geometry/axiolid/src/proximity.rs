@@ -1355,24 +1355,89 @@ pub(crate) fn soup_distance_above(
 }
 
 /// Points of `body` at which to test whether it reaches into `other`.
-fn sample_points(body: &Body<'_>, other: &Body<'_>) -> Result<Vec<Point3>, ProximityError> {
+///
+/// `surface` points lie on the body's own mesh: its corners, its
+/// triangles' centroids and edge midpoints, and the midpoints between an
+/// edge's crossings of the other surface. Each is a point of the body
+/// whatever its shape. A body lying exactly on another's faces, a duplicate
+/// for instance, has every surface point on the other's surface, so a closed
+/// body also offers `interior` candidates: its vertex centroid, and the
+/// midpoints of the chords its largest triangle's normal cuts through it.
+/// Neither need lie in the body (a ring's centroid lies in its hole), so
+/// [`deepest_inside`] takes one only after the body's own winding number
+/// places it inside, clear of the body's surface.
+struct Samples {
+    surface: Vec<Point3>,
+    interior: Vec<Point3>,
+}
+
+fn sample_points(body: &Body<'_>, other: &Body<'_>) -> Result<Samples, ProximityError> {
     let tolerance = tolerance()?;
-    let mut points = Vec::new();
+    let mut surface = Vec::new();
     let mut centroid_sum = Point3::ZERO;
     let mut corners = 0.0;
     for [a, b, c] in &body.soup.items {
-        points.extend([*a, *b, *c, (*a + *b + *c) / 3.0]);
+        surface.extend([*a, *b, *c, (*a + *b + *c) / 3.0]);
         centroid_sum += *a + *b + *c;
         corners += 3.0;
         for (start, end) in [(*a, *b), (*b, *c), (*c, *a)] {
-            points.push((start + end) / 2.0);
-            points.extend(crossing_midpoints(start, end, other, tolerance)?);
+            surface.push((start + end) / 2.0);
+            surface.extend(crossing_midpoints(start, end, other, tolerance)?);
         }
     }
-    // A body lying exactly on another's faces, a duplicate for instance, has
-    // every surface point on the other's surface; its centre does not.
-    points.push(centroid_sum / corners);
-    Ok(points)
+    let mut interior = Vec::new();
+    if body.solid && corners > 0.0 {
+        interior.push(centroid_sum / corners);
+        interior.extend(chord_midpoints(body, tolerance)?);
+    }
+    Ok(Samples { surface, interior })
+}
+
+/// Midpoints of the chords through `body` along its largest triangle's
+/// normal, from the triangle's centroid to the nearest other face it meets,
+/// one each way: whichever way is inward runs through the body's thickness
+/// there. Candidates only, for the caller to place with a winding number.
+fn chord_midpoints(body: &Body<'_>, tolerance: Tolerance) -> Result<Vec<Point3>, ProximityError> {
+    let area = |[a, b, c]: &Triangle| (*b - *a).cross(*c - *a).length();
+    let Some((largest, triangle)) = body.soup.items.iter().enumerate().fold(
+        None,
+        |best: Option<(usize, &Triangle)>, (index, triangle)| match best {
+            Some((_, known)) if area(known) >= area(triangle) => best,
+            _ => Some((index, triangle)),
+        },
+    ) else {
+        return Ok(Vec::new());
+    };
+    let [a, b, c] = *triangle;
+    let normal = (b - a).cross(c - a);
+    let reach = Point3::from(body.soup.bounds.max()).distance(Point3::from(body.soup.bounds.min()));
+    if normal.length_squared() == 0.0 || reach == 0.0 || !reach.is_finite() {
+        return Ok(Vec::new());
+    }
+    let origin = (a + b + c) / 3.0;
+    let mut midpoints = Vec::new();
+    for sign in [1.0, -1.0] {
+        let direction = normal.normalize() * (sign * 2.0 * reach);
+        let end = origin + direction;
+        let segment = Bounds3::try_new(origin.min(end).to_array(), origin.max(end).to_array())?;
+        let ray = Ray3 { origin, direction };
+        let mut nearest: Option<f64> = None;
+        for index in body.soup.near(&segment) {
+            if index == largest {
+                continue;
+            }
+            let hit = segment_hit(&ray, body.soup.items[index], tolerance, index)?;
+            if let Some(t) =
+                hit.filter(|t| (0.0..=1.0).contains(t) && *t * 2.0 * reach > LINEAR_TOLERANCE)
+            {
+                nearest = Some(nearest.map_or(t, |known| known.min(t)));
+            }
+        }
+        if let Some(t) = nearest {
+            midpoints.push(origin + direction * (t / 2.0));
+        }
+    }
+    Ok(midpoints)
 }
 
 /// Midpoints between successive crossings of segment `start..end` with the
@@ -1413,6 +1478,13 @@ fn crossing_midpoints(
 }
 
 /// Deepest witnessed point of `body` inside `other`, zero when none is.
+///
+/// Every witness is a point of `body` (on its surface, or inside it by its
+/// own winding number, clear of its surface) lying inside `other` farther
+/// than rounding from `other`'s surface. Its depth, its distance to that
+/// surface, is therefore a lower bound on how far `body` reaches into
+/// `other`; a candidate that is not surely a point of `body` witnesses
+/// nothing, however deep it lies in `other`.
 fn deepest_inside(body: &Body<'_>, other: &Body<'_>) -> Result<f64, ProximityError> {
     // A point's depth is its distance to the other surface, which the index
     // answers cheaply; whether it is inside at all costs a winding number over
@@ -1420,8 +1492,14 @@ fn deepest_inside(body: &Body<'_>, other: &Body<'_>) -> Result<f64, ProximityErr
     // first: the first one inside is the deepest witness, and the rest need
     // no winding test. Points outside the other body's box cannot be inside,
     // and points within tolerance of its surface are contact, not depth.
+    let samples = sample_points(body, other)?;
     let mut candidates = Vec::new();
-    for point in sample_points(body, other)? {
+    let tagged = samples
+        .surface
+        .into_iter()
+        .map(|point| (point, false))
+        .chain(samples.interior.into_iter().map(|point| (point, true)));
+    for (point, interior) in tagged {
         let within = (0..3).all(|axis| {
             (other.soup.bounds.min()[axis]..=other.soup.bounds.max()[axis]).contains(&point[axis])
         });
@@ -1430,10 +1508,10 @@ fn deepest_inside(body: &Body<'_>, other: &Body<'_>) -> Result<f64, ProximityErr
         }
         let depth = surface_distance(point, other)?;
         if depth > LINEAR_TOLERANCE {
-            candidates.push((depth, point));
+            candidates.push((depth, point, interior));
         }
     }
-    candidates.sort_by(|(a_depth, a), (b_depth, b)| {
+    candidates.sort_by(|(a_depth, a, _), (b_depth, b, _)| {
         b_depth.total_cmp(a_depth).then_with(|| {
             a.to_array()
                 .partial_cmp(&b.to_array())
@@ -1441,7 +1519,24 @@ fn deepest_inside(body: &Body<'_>, other: &Body<'_>) -> Result<f64, ProximityErr
         })
     });
     let winding = other.winding()?;
-    for (depth, point) in candidates {
+    let mut own = None;
+    for (depth, point, interior) in candidates {
+        if interior {
+            // An interior candidate is a point of the body only where the
+            // body's own winding number says so, decided clear of its
+            // surface; an undecided one is dropped, never assumed inside.
+            let margin = surface_distance(point, body)?;
+            if margin <= LINEAR_TOLERANCE {
+                continue;
+            }
+            let own = match &mut own {
+                Some(own) => own,
+                None => own.insert(body.winding()?),
+            };
+            if own.inside(point, || Ok(margin))? != Some(true) {
+                continue;
+            }
+        }
         // A point too near a left-out zero-area triangle witnesses nothing.
         if winding.inside(point, || Ok(depth))? == Some(true) {
             return Ok(depth);

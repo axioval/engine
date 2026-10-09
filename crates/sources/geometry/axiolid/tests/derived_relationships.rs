@@ -730,3 +730,103 @@ fn an_unmeasured_or_nearly_touching_tessellated_body_refuses_intersects() {
         Err(RelationshipSelectionError::Unavailable(_))
     ));
 }
+
+/// A counter-clockwise profile in (x, z), its caps triangulated by `caps`,
+/// extruded over y from `y0` to `y1`: a closed, outward mesh.
+fn extruded(profile: &[[f64; 2]], caps: &[[u32; 3]], y0: f64, y1: f64) -> TriMesh {
+    let n = u32::try_from(profile.len()).unwrap();
+    let mut positions: Vec<Point3> = profile
+        .iter()
+        .map(|[x, z]| Point3::new(*x, y0, *z))
+        .collect();
+    positions.extend(profile.iter().map(|[x, z]| Point3::new(*x, y1, *z)));
+    let mut indices = Vec::new();
+    for [a, b, c] in caps {
+        indices.extend([*a, *b, *c, a + n, c + n, b + n]);
+    }
+    for i in 0..n {
+        let j = (i + 1) % n;
+        indices.extend([i, j + n, j, i, i + n, j + n]);
+    }
+    TriMesh::new(positions, indices)
+}
+
+/// A layer 4 m long, 3 m high and 0.1 m thick with a door hole 1 m wide and
+/// 2.1 m high already cut, and the opening box spanning x `x0..x1` through
+/// it. The layer's vertex centroid lies in the hole.
+fn layer_and_opening(x0: f64, x1: f64) -> (TriMesh, TriMesh) {
+    let layer = extruded(
+        &[
+            [0.0, 0.0],
+            [1.5, 0.0],
+            [1.5, 2.1],
+            [2.5, 2.1],
+            [2.5, 0.0],
+            [4.0, 0.0],
+            [4.0, 3.0],
+            [0.0, 3.0],
+        ],
+        &[
+            [0, 1, 2],
+            [0, 2, 7],
+            [2, 3, 7],
+            [3, 6, 7],
+            [3, 4, 6],
+            [4, 5, 6],
+        ],
+        -0.1,
+        0.0,
+    );
+    let opening = extruded(
+        &[[x0, 0.0], [x1, 0.0], [x1, 2.1], [x0, 2.1]],
+        &[[0, 1, 2], [0, 2, 3]],
+        -0.2,
+        0.1,
+    );
+    (layer, opening)
+}
+
+/// An opening filling the hole already cut in a layer touches it and does
+/// not intersect it, although the layer's centroid lies inside the opening;
+/// reaching past the hole's edge, it intersects (#315).
+#[test]
+fn an_opening_filling_its_layers_hole_does_not_intersect_it() {
+    let (layer, opening) = layer_and_opening(1.5, 2.5);
+    let filling = handle(AxiolidDerivedRelationshipService::new(
+        AxiolidGeometry::new()
+            .with_mesh(id("layer"), layer)
+            .with_mesh(id("opening"), opening),
+    ));
+    for (anchor, other) in [("layer", "opening"), ("opening", "layer")] {
+        let (reached, evidence) = select(
+            &filling,
+            anchor,
+            &[other],
+            INTERSECTS,
+            TraversalDirection::Forward,
+        )
+        .unwrap();
+        assert!(reached.is_empty(), "{anchor}: {evidence:?}");
+    }
+    let (layer, opening) = layer_and_opening(1.45, 2.5);
+    let overlapping = handle(AxiolidDerivedRelationshipService::new(
+        AxiolidGeometry::new()
+            .with_mesh(id("layer"), layer)
+            .with_mesh(id("opening"), opening),
+    ));
+    let (reached, evidence) = select(
+        &overlapping,
+        "layer",
+        &["opening"],
+        INTERSECTS,
+        TraversalDirection::Forward,
+    )
+    .unwrap();
+    assert_eq!(reached, ["opening"]);
+    assert!(
+        evidence
+            .iter()
+            .any(|locator| locator.contains("penetration=0.050000")),
+        "{evidence:?}"
+    );
+}

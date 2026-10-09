@@ -589,3 +589,88 @@ fn a_malformed_exclusion_path_is_an_invalid_declaration() {
     );
     assert!(!open(&outcome).is_empty());
 }
+
+/// A counter-clockwise profile in (x, z), its caps triangulated by `caps`,
+/// extruded over y from `y0` to `y1`: a closed, outward mesh.
+fn extruded(profile: &[[f64; 2]], caps: &[[u32; 3]], y0: f64, y1: f64) -> TriMesh {
+    let n = u32::try_from(profile.len()).unwrap();
+    let mut positions: Vec<Point3> = profile
+        .iter()
+        .map(|[x, z]| Point3::new(*x, y0, *z))
+        .collect();
+    positions.extend(profile.iter().map(|[x, z]| Point3::new(*x, y1, *z)));
+    let mut indices = Vec::new();
+    for [a, b, c] in caps {
+        indices.extend([*a, *b, *c, a + n, c + n, b + n]);
+    }
+    for i in 0..n {
+        let j = (i + 1) % n;
+        indices.extend([i, j + n, j, i, i + n, j + n]);
+    }
+    TriMesh::new(positions, indices)
+}
+
+/// A layer 4 m long, 3 m high and 0.1 m thick with a door hole 1 m wide and
+/// 2.1 m high already cut, and the opening box spanning x `x0..x1` through
+/// it. The layer's vertex centroid lies in the hole.
+fn layer_and_opening(x0: f64, x1: f64) -> (TriMesh, TriMesh) {
+    let layer = extruded(
+        &[
+            [0.0, 0.0],
+            [1.5, 0.0],
+            [1.5, 2.1],
+            [2.5, 2.1],
+            [2.5, 0.0],
+            [4.0, 0.0],
+            [4.0, 3.0],
+            [0.0, 3.0],
+        ],
+        &[
+            [0, 1, 2],
+            [0, 2, 7],
+            [2, 3, 7],
+            [3, 6, 7],
+            [3, 4, 6],
+            [4, 5, 6],
+        ],
+        -0.1,
+        0.0,
+    );
+    let opening = extruded(
+        &[[x0, 0.0], [x1, 0.0], [x1, 2.1], [x0, 2.1]],
+        &[[0, 1, 2], [0, 2, 3]],
+        -0.2,
+        0.1,
+    );
+    (layer, opening)
+}
+
+/// A door filling the hole already cut in its wall is no clash: the wall's
+/// centroid lies in the hole, inside the door, but is no point of the wall.
+/// A door reaching past the hole's edge is a hard clash as deep as it
+/// reaches (#315).
+#[test]
+fn a_door_filling_its_walls_hole_is_no_clash() {
+    let (wall, door) = layer_and_opening(1.5, 2.5);
+    let outcome = Scene::default()
+        .body("wall", "wall", wall)
+        .body("door", "pipe", door)
+        .check(&[("penetration_tolerance_metres", number(0.01))]);
+    assert!(
+        findings(&outcome).is_empty() && open(&outcome).is_empty(),
+        "{:?} {:?}",
+        findings(&outcome),
+        open(&outcome)
+    );
+    let (wall, door) = layer_and_opening(1.45, 2.5);
+    let (_, _, message) = only(
+        &Scene::default()
+            .body("wall", "wall", wall)
+            .body("door", "pipe", door)
+            .check(&[("penetration_tolerance_metres", number(0.01))]),
+    );
+    assert!(
+        message.starts_with("hard clash with") && message.contains("penetration 0.0500 m"),
+        "{message}"
+    );
+}

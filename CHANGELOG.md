@@ -67,6 +67,23 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **Clash**: a penetration is witnessed only at a point of the body it
+  reaches from. A closed body's vertex centroid and the midpoints of the
+  chords its largest triangle's normal cuts through it are taken only where
+  the body's own winding number places them inside it, clear of its
+  surface; before, the centroid was always taken, and a body with a hole
+  (a wall with a door hole already cut) reached into whatever filled the
+  hole. A door or window filling its wall's hole is no longer a hard clash,
+  the derived `intersects` relation reports the pair as touching, and
+  containment adjacency no longer reads such a pair as crossing. A
+  duplicate of a ring, whose centroid lies in both holes, is now witnessed
+  through its thickness, and a chord through a body may witness a
+  penetration its surface points miss, so some pairs are now hard clashes
+  or report a greater depth. Public parity: `clashes` on
+  `bs-ifc4-wall-with-opening-and-window.ifc`, rules `clash-clearance` and
+  `matrix-selectors`, window `#102` against wall `#45` is a clearance clash
+  (separation 0 below 0.05 m) instead of a hard clash of 0.1 m
+  ([#315](https://github.com/axioval/engine/issues/315)).
 - **Geometry**: an opening voiding a whole measured through its parts (a
   door in a wall of `IfcBuildingElementPart` layers voided on the wall) is
   subtracted from each part whose material it reaches into deeper than

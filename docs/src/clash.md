@@ -255,11 +255,21 @@ primitives:
   message carries, never as `Unavailable`, which means a body that could
   not be read.
 - **Penetration** samples points of each body and tests them against the
-  other's winding number. The samples are vertices, edge and face centres, the
-  body's centre, and the midpoints between the points where each edge crosses
-  the other surface (found with `axiolid-ray-mesh`). A pipe through a wall has
-  no vertex inside the wall, but the midpoint of each long edge's crossings
-  lies half a wall deep. An exact duplicate is found through its centre.
+  other's winding number. Every sample is a point of the body it reaches
+  from, so the depth reported (its distance to the other surface) is a lower
+  bound on how far that body reaches into the other. Surface samples are
+  vertices, edge and face centres, and the midpoints between the points where
+  each edge crosses the other surface (found with `axiolid-ray-mesh`). A pipe
+  through a wall has no vertex inside the wall, but the midpoint of each long
+  edge's crossings lies half a wall deep. An exact duplicate has every
+  surface point on the other's surface, so a closed body also offers two
+  interior candidates: its vertex centroid, and the midpoints of the chords
+  its largest triangle's normal cuts through it. Neither need lie in the
+  body (the centroid of a wall with a door hole lies in the hole, inside the
+  door), so each is taken only when the body's own winding number places it
+  inside, clear of its surface by more than rounding. A door filling a hole
+  already cut in its wall therefore only touches it, and a duplicate ring is
+  witnessed half its thickness deep.
 
 - **Overlap extents** span points witnessed in both bodies: every point
   where an edge of either body crosses the other's surface, and the

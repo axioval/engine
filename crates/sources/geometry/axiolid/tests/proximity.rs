@@ -1042,3 +1042,161 @@ fn a_body_of_shells_one_of_them_open_has_no_volume() {
     let measured = measure(geometry, "table", "room");
     assert!(measured.intersection_volume().is_none());
 }
+
+/// A counter-clockwise profile in (x, z), its caps triangulated by `caps`,
+/// extruded over y from `y0` to `y1`: a closed, outward mesh.
+fn extruded(profile: &[[f64; 2]], caps: &[[u32; 3]], y0: f64, y1: f64) -> TriMesh {
+    let n = u32::try_from(profile.len()).unwrap();
+    let mut positions: Vec<Point3> = profile
+        .iter()
+        .map(|[x, z]| Point3::new(*x, y0, *z))
+        .collect();
+    positions.extend(profile.iter().map(|[x, z]| Point3::new(*x, y1, *z)));
+    let mut indices = Vec::new();
+    for [a, b, c] in caps {
+        indices.extend([*a, *b, *c, a + n, c + n, b + n]);
+    }
+    for i in 0..n {
+        let j = (i + 1) % n;
+        indices.extend([i, j + n, j, i, i + n, j + n]);
+    }
+    TriMesh::new(positions, indices)
+}
+
+/// A layer 4 m long, 3 m high and 0.1 m thick with a door hole 1 m wide and
+/// 2.1 m high already cut. Its vertex centroid lies in the hole.
+fn layer_with_a_door_hole() -> TriMesh {
+    extruded(
+        &[
+            [0.0, 0.0],
+            [1.5, 0.0],
+            [1.5, 2.1],
+            [2.5, 2.1],
+            [2.5, 0.0],
+            [4.0, 0.0],
+            [4.0, 3.0],
+            [0.0, 3.0],
+        ],
+        &[
+            [0, 1, 2],
+            [0, 2, 7],
+            [2, 3, 7],
+            [3, 6, 7],
+            [3, 4, 6],
+            [4, 5, 6],
+        ],
+        -0.1,
+        0.0,
+    )
+}
+
+/// The opening box spanning x `x0..x1`, 2.1 m high, deeper than the layer.
+fn door_opening(x0: f64, x1: f64) -> TriMesh {
+    extruded(
+        &[[x0, 0.0], [x1, 0.0], [x1, 2.1], [x0, 2.1]],
+        &[[0, 1, 2], [0, 2, 3]],
+        -0.2,
+        0.1,
+    )
+}
+
+/// The opening filling a hole already cut in the layer only touches it: the
+/// layer's centroid lies in the hole, inside the opening, but it is no point
+/// of the layer and witnesses nothing (#315).
+#[test]
+fn an_opening_filling_a_hole_already_cut_touches_the_layer() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("layer"), layer_with_a_door_hole())
+        .with_mesh(id("opening"), door_opening(1.5, 2.5));
+    for (subject, counterpart) in [("layer", "opening"), ("opening", "layer")] {
+        let measured = measure(geometry.clone(), subject, counterpart);
+        assert!(measured.separation_metres().abs() < f64::EPSILON);
+        assert_eq!(measured.penetration_metres(), Some(0.0), "{subject}");
+        assert_eq!(measured.containment(), None);
+        let shared = measured.intersection_volume().expect("solids").shared();
+        assert!(shared.upper_cubic_metres() < 1e-12, "{shared:?}");
+    }
+}
+
+/// An opening reaching 0.05 m past the hole's edge into the layer is
+/// witnessed 0.05 m deep, both ways.
+#[test]
+fn an_opening_overlapping_the_layer_reports_its_depth() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("layer"), layer_with_a_door_hole())
+        .with_mesh(id("opening"), door_opening(1.45, 2.5));
+    for (subject, counterpart) in [("layer", "opening"), ("opening", "layer")] {
+        let measured = measure(geometry.clone(), subject, counterpart);
+        let depth = measured.penetration_metres().expect("solids");
+        assert!((depth - 0.05).abs() < 1e-9, "{subject}: {depth}");
+        let shared = measured.intersection_volume().expect("solids").shared();
+        // 0.05 m wide, 2.1 m high, the layer's 0.1 m thick.
+        assert!(
+            (shared.lower_cubic_metres() - 0.0105).abs() < 1e-9,
+            "{shared:?}"
+        );
+    }
+}
+
+/// A square frame 3 m across with a 1 m square hole, `z0..z1` high: a ring,
+/// whose vertex centroid lies in its hole.
+fn frame(z0: f64, z1: f64) -> TriMesh {
+    let outer = [[0.0, 0.0], [3.0, 0.0], [3.0, 3.0], [0.0, 3.0]];
+    let inner = [[1.0, 1.0], [2.0, 1.0], [2.0, 2.0], [1.0, 2.0]];
+    // 0..4 outer bottom, 4..8 outer top, 8..12 inner bottom, 12..16 inner top.
+    let mut positions = Vec::new();
+    for (ring, z) in [(outer, z0), (outer, z1), (inner, z0), (inner, z1)] {
+        positions.extend(ring.iter().map(|[x, y]| Point3::new(*x, *y, z)));
+    }
+    let (ob, ot, ib, it) = (0, 4, 8, 12);
+    let mut indices = Vec::new();
+    for i in 0..4u32 {
+        let j = (i + 1) % 4;
+        // The caps: the quad outer i, outer j, inner j, inner i, counter-
+        // clockwise from above.
+        indices.extend([ot + i, ot + j, it + j, ot + i, it + j, it + i]);
+        indices.extend([ob + i, ib + j, ob + j, ob + i, ib + i, ib + j]);
+        // The outer wall faces away from the hole, the inner one into it.
+        indices.extend([ob + i, ob + j, ot + j, ob + i, ot + j, ot + i]);
+        indices.extend([ib + i, it + j, ib + j, ib + i, it + i, it + j]);
+    }
+    TriMesh::new(positions, indices)
+}
+
+/// A ring is witnessed through its own thickness, never at its centroid.
+#[test]
+fn a_ring_is_witnessed_only_at_its_own_points() {
+    // A box filling the ring's hole touches it.
+    let filled = AxiolidGeometry::new()
+        .with_mesh(id("ring"), frame(0.0, 0.2))
+        .with_mesh(id("plug"), cuboid([1.0, 1.0, 0.0], [2.0, 2.0, 0.2]));
+    for (subject, counterpart) in [("ring", "plug"), ("plug", "ring")] {
+        let measured = measure(filled.clone(), subject, counterpart);
+        assert_eq!(measured.penetration_metres(), Some(0.0), "{subject}");
+        let shared = measured.intersection_volume().expect("solids").shared();
+        assert!(shared.upper_cubic_metres() < 1e-12, "{shared:?}");
+    }
+    // A duplicate ring has no surface point off the other's surface and its
+    // centroid in the hole of both; the chord through its 0.2 m thickness
+    // witnesses it half that deep.
+    let duplicate = AxiolidGeometry::new()
+        .with_mesh(id("ring"), frame(0.0, 0.2))
+        .with_mesh(id("copy"), frame(0.0, 0.2));
+    let measured = measure(duplicate, "ring", "copy");
+    let depth = measured.penetration_metres().expect("solids");
+    assert!((depth - 0.1).abs() < 1e-9, "{depth}");
+    // A box crossing one side of the ring, 0.3 m in from its outer face.
+    let crossing = AxiolidGeometry::new()
+        .with_mesh(id("ring"), frame(0.0, 0.2))
+        .with_mesh(id("box"), cuboid([1.0, -1.0, -0.5], [2.0, 0.3, 0.5]));
+    for (subject, counterpart) in [("ring", "box"), ("box", "ring")] {
+        let measured = measure(crossing.clone(), subject, counterpart);
+        let depth = measured.penetration_metres().expect("solids");
+        assert!((depth - 0.3).abs() < 1e-9, "{subject}: {depth}");
+        let shared = measured.intersection_volume().expect("solids").shared();
+        assert!(
+            (shared.lower_cubic_metres() - 0.06).abs() < 1e-9,
+            "{shared:?}"
+        );
+    }
+}

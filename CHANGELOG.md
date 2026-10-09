@@ -85,11 +85,12 @@ All notable changes are documented here. This project follows Semantic Versionin
   `0.125` m thick) is measured at georeferenced coordinates: since
   axiolid-mesh-compile 0.3.16 the compiler snaps the opening onto the face
   instead of leaving a skin that thin, which self-intersected once placed
-  and left the host's volume refused (axiolid/kernel#276). A planar body
-  with a boolean is now meshed with a deviation report: where the compiler
-  snapped its operands by more than 1e-9 m (`operands snapped onto each
-  other within tolerance`) it is declared tessellated within the largest
-  move, never exact; a smaller move is rounding and it stays exact
+  and left the host's volume refused (axiolid/kernel#276). Where a
+  deviation report is taken (curved bodies, planar ones with warped faces)
+  a snap above 1e-9 m (`operands snapped onto each other within
+  tolerance`) is declared with the body; planar booleans are meshed
+  without a report, as before, since it would measure every one against
+  the exact compiler's result
   ([#306](https://github.com/axioval/engine/issues/306)).
 - **Geometry**: moves to axiolid-construct 0.3.16, axiolid-mesh-compile
   0.3.15 and their contracts. Faces the mesh compiler refused are measured:

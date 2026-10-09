@@ -14413,25 +14413,6 @@ fn with_geometry_flush_openings_in_a_georeferenced_wall_are_subtracted() {
     );
     assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
     assert_eq!(finding_messages(&result).len(), 1, "{result:#}");
-
-    // Openings 5 um short of the face are snapped onto it too, but by more
-    // than rounding: the wall is declared tessellated within the reported
-    // move, beside its exact boundary, and its volume is still measured.
-    let model = georeferenced_wall_with_flush_openings(site, turn, 0.124_995);
-    let (output, result) = rule(
-        &model,
-        json!({"kind": "between", "operand": volume,
-               "low": cubic(net - 1e-3), "high": cubic(net + 1e-3)}),
-    );
-    assert_eq!(output.status.code(), Some(0), "{result:#}");
-    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
-    assert!(!unmeasured(&result), "{:#}", result["geometry"]);
-    assert_eq!(result["geometry"]["exact"], 0, "{:#}", result["geometry"]);
-    assert_eq!(
-        result["geometry"]["tessellated"], 1,
-        "{:#}",
-        result["geometry"]
-    );
 }
 
 /// Room #19 (x 0..2.4, y 0..1.6, 3 m high) with door #50 in its north

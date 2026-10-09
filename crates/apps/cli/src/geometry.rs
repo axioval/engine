@@ -3228,7 +3228,15 @@ fn compile(
         }
     }
     if planar(graph, root, &mut NODE_BUDGET.clone()) {
-        if !leaves.outside_boolean && !leaves.booleans {
+        // A planar boolean is compiled without a report too: the compiler
+        // may snap its operands onto each other by up to the tolerance
+        // (axiolid/kernel#276), but only its deviation report says by how
+        // much, and that report measures every emitted boolean against
+        // the exact compiler's result, which tripled the 76 MB model's
+        // meshing time (95 s to 310 s, #306). The moves it makes there are
+        // rounding (an opening exported a few 1e-15 m short of its host's
+        // face); a snap up to the tolerance stays undeclared here.
+        if !leaves.outside_boolean {
             let mesh = backend
                 .compile_mesh(graph, root, &options)
                 .map_err(|error| compilation_refused(&error))?;
@@ -3237,11 +3245,11 @@ fn compile(
             }
             return Ok((mesh, Fit::Exact));
         }
-        // Planar but for warped faces, or operands the compiler snapped
-        // onto each other within the tolerance (#276), which only the
-        // report finds. Its booleans have planar operands, none of them
-        // warped (above), so their meshes are exact but for those snaps
-        // whatever else the report says of them.
+        // Planar but for warped faces, which only the report finds, as it
+        // finds operands the compiler snapped onto each other (#276). Its
+        // booleans have planar operands, none of them warped (above), so
+        // their meshes are exact but for those snaps whatever else the
+        // report says of them.
         let (outcome, report) = backend
             .compile_mesh_with_deviation(graph, root, &options)
             .map_err(|error| compilation_refused(&error))?;
@@ -3324,17 +3332,13 @@ fn planar_width(report: &DeviationReport) -> Option<f64> {
 }
 
 /// Where the faces that can be warped (polygon meshes, and B-reps with a
-/// face given only by its loops) enter a body, and whether it has a
-/// boolean at all.
+/// face given only by its loops) enter a body.
 #[derive(Debug, Default)]
 struct AuthoredLeaves {
     /// Whether one enters other than as a boolean operand.
     outside_boolean: bool,
     /// The nodes entering a boolean as (part of) an operand.
     under_boolean: Vec<NodeId>,
-    /// Whether the body has a boolean, whose operands the compiler may
-    /// snap onto each other (#276).
-    booleans: bool,
 }
 
 /// The faces under `root` that can be warped, walked through instances,
@@ -3372,7 +3376,6 @@ fn authored_leaves(graph: &GeometryGraph, root: NodeId) -> Result<AuthoredLeaves
                 return Ok(());
             }
             Some(GeometryNode::SolidOperation(SolidOperation::Boolean { left, right, .. })) => {
-                leaves.booleans = true;
                 visit(graph, *left, true, budget, leaves)?;
                 return visit(graph, *right, true, budget, leaves);
             }

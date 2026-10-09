@@ -67,6 +67,12 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **Geometry**: moves to axiolid-mesh-compile 0.3.17 (with
+  axiolid-brep-boolean 0.1.7, axiolid-evaluate 0.3.9, axiolid-curve 0.3.5),
+  which sews booleans cut by the cylinder, sphere, cone or torus wall of a
+  mirrored (downward) construction instead of refusing them as `kept faces
+  do not sew into a solid` (axiolid/kernel#288). A slab with round or
+  round-cornered openings cut down from its top is measured.
 - **Geometry**: moves to openbim-ifc 0.23 and ifc-geometry 0.17, which
   lower a polygonal half-space boundary with circular-arc segments (an
   `IfcCompositeCurve` of trimmed circles, an `IfcIndexedPolyCurve` with an

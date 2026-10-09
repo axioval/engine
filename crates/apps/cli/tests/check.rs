@@ -18028,6 +18028,31 @@ fn with_geometry_bodies_cut_down_against_their_profile_normal_are_certified() {
     // The slab, the clipped member and the plain one; the crossing walls
     // are planar and exact.
     assert_eq!(result["geometry"]["tessellated"], 3, "{result:#}");
+
+    // The slab's round opening, and its rectangular one with rounded
+    // corners, cut down from its top too: their cylinder walls, built
+    // mirrored, sew into the slab (axiolid/kernel#288 fixed such cuts in
+    // axiolid-mesh-compile 0.3.17; this fixture is measured with 0.3.16
+    // as well, so it pins the case rather than reproducing the defect).
+    let round_down = cut_down_bodies("(0.,0.,-1.)")
+        .replace(
+            "#310=IFCCARTESIANPOINT((0.,0.,-0.1));",
+            "#310=IFCCARTESIANPOINT((0.,0.,0.35));",
+        )
+        .replace(
+            "#312=IFCEXTRUDEDAREASOLID(#307,#311,#4,0.45)",
+            "#312=IFCEXTRUDEDAREASOLID(#307,#311,#322,0.45)",
+        );
+    let rounded_down = cut_down_bodies("(0.,0.,-1.)").replace(
+        "#317=IFCRECTANGLEPROFILEDEF(.AREA.,$,#319,2.,1.)",
+        "#317=IFCROUNDEDRECTANGLEPROFILEDEF(.AREA.,$,#319,2.,1.,0.2)",
+    );
+    for model in [round_down, rounded_down] {
+        let (output, result) = case.wall_clash(&model, &json!({}));
+        assert!(output.status.code().is_some(), "{}", stderr(&output));
+        assert_eq!(unmeasured_reasons(&result), BTreeMap::new(), "{result:#}");
+        assert_eq!(result["geometry"]["tessellated"], 3, "{result:#}");
+    }
 }
 
 /// The kernel builds oblique extrusions of profiles with arcs exactly

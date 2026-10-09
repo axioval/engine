@@ -100,10 +100,10 @@ axiolid-spatial = "0.3.0"
 axiolid-contracts = "0.3.3"
 # 0.3.3 and model 0.3.4 carry the exact alignment relations (CUBIC
 # transitions, vertical arcs and clothoids, cant) `ifc-geometry` 0.8 lowers to.
-axiolid-curve = "0.3.4"
+axiolid-curve = "0.3.5"
 # The CLI derives IFC4X3 linear placements with its reference evaluator
 # (`ReferenceCurveEvaluator`, through `ifc-geometry` 0.10, engine#224).
-axiolid-evaluate = "0.3.8"
+axiolid-evaluate = "0.3.9"
 # 0.3.9 subtracts placed extrusions exactly (axiolid/kernel#228, through
 # axiolid-brep-boolean 0.1.2) and reports a certified deviation per mesh
 # (#232, with axiolid-reference 0.3.4); 0.3.10 clips by half-spaces (#234),
@@ -124,8 +124,10 @@ axiolid-evaluate = "0.3.8"
 # a difference's skin thinner than tolerance and reports it under
 # `deviation::SNAPPED_OPERANDS` (#276, through axiolid-brep-boolean 0.1.6),
 # keeps planar face corners through the sliver split (#278) and bounds
-# half-spaces by profile contours with arcs (#277).
-axiolid-mesh-compile = "0.3.16"
+# half-spaces by profile contours with arcs (#277); 0.3.17 sews booleans
+# cut by a cylinder, sphere, cone or torus wall of a mirrored (downward)
+# construction (#288, through axiolid-brep-boolean 0.1.7).
+axiolid-mesh-compile = "0.3.17"
 axiolid-exact-compile-contract = "0.3.1"
 # 0.3.3 adds `MeshClosure::OpenSolid` (#265).
 axiolid-mesh-compile-contract = "0.3.3"

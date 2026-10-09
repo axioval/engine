@@ -12,7 +12,11 @@ All notable changes are documented here. This project follows Semantic Versionin
   to the unsnapped operands. Hosts whose openings leave a skin of 1 µm to
   1 mm are measured with that skin again, and a downward-extruded slab with
   flush openings is no longer refused as touching itself
-  ([#356](https://github.com/axioval/engine/issues/356)).
+  ([#356](https://github.com/axioval/engine/issues/356)). An opening that
+  stops a rounding residue short of its host's face still leaves no skin,
+  so an element standing in it does not clash with the host: before
+  mesh-compile 0.3.16 such a skin witnessed a penetration of half the
+  element's thickness. A CLI test now holds this.
 
 - **IFC**: moved to `openbim-ifc` 0.25, `ifc-geometry` 0.19 and
   `ifc-alignment` 0.8. A linear placement on a seam between two basis

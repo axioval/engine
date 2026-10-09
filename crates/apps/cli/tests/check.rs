@@ -14456,6 +14456,89 @@ fn with_geometry_a_skin_a_fraction_of_a_millimetre_thin_is_kept() {
     }
 }
 
+/// Slab #16 (x 0..4, y 0..4, z 0..0.2) and wall #38 (0.25 x 1.5 m, z -1..2)
+/// standing at its centre. With `opening` the slab is voided by opening
+/// #27 (x 1..3, y 1..3), extruded up from the slab's underside by that
+/// depth, so the wall stands in it.
+fn wall_in_a_slab_opening(opening: Option<f64>) -> String {
+    let void = opening.map_or_else(String::new, |depth| {
+        format!(
+            "#20=IFCCARTESIANPOINT((2.,2.));\n\
+             #21=IFCAXIS2PLACEMENT2D(#20,$);\n\
+             #22=IFCRECTANGLEPROFILEDEF(.AREA.,$,#21,2.,2.);\n\
+             #23=IFCEXTRUDEDAREASOLID(#22,#2,#4,{depth:?});\n\
+             #24=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#23));\n\
+             #25=IFCPRODUCTDEFINITIONSHAPE($,$,(#24));\n\
+             #26=IFCLOCALPLACEMENT(#3,#2);\n\
+             #27=IFCOPENINGELEMENT('0000000000000000000027',$,$,$,$,#26,#25,$,.OPENING.);\n\
+             #28=IFCRELVOIDSELEMENT('0000000000000000000028',$,$,$,#16,#27);\n"
+        )
+    });
+    model_with(&format!(
+        "#10=IFCCARTESIANPOINT((2.,2.));\n\
+         #11=IFCAXIS2PLACEMENT2D(#10,$);\n\
+         #12=IFCRECTANGLEPROFILEDEF(.AREA.,$,#11,4.,4.);\n\
+         #13=IFCEXTRUDEDAREASOLID(#12,#2,#4,0.2);\n\
+         #14=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#13));\n\
+         #15=IFCPRODUCTDEFINITIONSHAPE($,$,(#14));\n\
+         #16=IFCSLAB('0000000000000000000016',$,$,$,$,#3,#15,$,.FLOOR.);\n\
+         {void}\
+         #30=IFCCARTESIANPOINT((2.,2.));\n\
+         #31=IFCAXIS2PLACEMENT2D(#30,$);\n\
+         #32=IFCRECTANGLEPROFILEDEF(.AREA.,$,#31,0.25,1.5);\n\
+         #33=IFCCARTESIANPOINT((0.,0.,-1.));\n\
+         #34=IFCAXIS2PLACEMENT3D(#33,$,$);\n\
+         #35=IFCEXTRUDEDAREASOLID(#32,#34,#4,3.);\n\
+         #36=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#35));\n\
+         #37=IFCPRODUCTDEFINITIONSHAPE($,$,(#36));\n\
+         #38=IFCWALL('0000000000000000000038',$,$,$,$,#3,#37,$,$);\n"
+    ))
+}
+
+/// engine#356, m14: a wall standing in a slab opening that stops a
+/// rounding residue (2e-15 m) short of the slab's top face shares no
+/// volume with the slab, so it does not clash. Mesh-compile 0.3.15 kept
+/// that skin, and the skin's corners inside the wall witnessed a
+/// penetration of half the wall's thickness (0.125 m); since 0.3.16 the
+/// compiler snaps the opening onto the face (axiolid/kernel#276), and since
+/// 0.3.18 it still does for residues that small (#291). A skin 0.5 mm thin
+/// is authored and stays, and the wall crosses it, as it crosses the slab
+/// without an opening.
+#[test]
+fn with_geometry_a_wall_in_a_slab_opening_short_by_rounding_does_not_clash() {
+    let case = Case::new("geometry-rounding-skin-clash");
+    let clash = |opening: Option<f64>| {
+        case.geometry_rule(
+            &wall_in_a_slab_opening(opening),
+            &[("element", "IfcBuildingElement")],
+            "axioval:capability.clash",
+            &registry_signature("axioval:capability.clash"),
+            entity("element"),
+            json!({
+                "counterparts": {"type": "selector", "value": entity("element")},
+                "penetration_tolerance_metres": {"type": "number", "value": 0.01},
+            }),
+        )
+    };
+    for opening in [Some(0.2), Some(0.199_999_999_999_998)] {
+        let (output, result) = clash(opening);
+        assert_eq!(output.status.code(), Some(0), "{opening:?}: {result:#}");
+        assert_eq!(result["report"]["findings"], json!([]), "{opening:?}");
+        assert_eq!(result["report"]["not_evaluated"], json!([]), "{opening:?}");
+        assert_eq!(result["geometry"]["exact"], 2, "{:#}", result["geometry"]);
+    }
+    for opening in [None, Some(0.1995)] {
+        let (output, result) = clash(opening);
+        assert_eq!(output.status.code(), Some(3), "{opening:?}: {result:#}");
+        let findings = finding_messages(&result);
+        assert_eq!(findings.len(), 1, "{opening:?}: {result:#}");
+        assert!(
+            findings[0].1.contains("penetration 0.1250 m"),
+            "{opening:?}: {findings:?}"
+        );
+    }
+}
+
 /// Room #19 (x 0..2.4, y 0..1.6, 3 m high) with door #50 in its north
 /// wall: hinged at (1.2, 1.7), its 0.9 m leaf closed westward and opening
 /// south over the quarter disc south-west of its hinge.

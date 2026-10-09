@@ -308,6 +308,47 @@ unmeasured.
 | 9 | One `IfcTriangulatedFaceSet` listing each corner once per face, closed by its coordinates but not by its indices | m03 | Engine gap | #313 | Not yet: merging coincident corners closes it, but changes many public parity entries; the outcome names the open surface |
 | 9 | One item of a furniture whose own triangles cross; a space prism whose cap triangles cross once placed at georeferenced coordinates | m11, m14 | Not classified yet; the space reads as a kernel gap (the same prism measures near the origin) | — | The outcome names the refused bodies: 15 outcomes |
 
+### Sixth ranking
+
+The sixth ranking ran on 2026-10-09 on all 15 models, on main after #223,
+#308–#312, #315 and #316, with `ifc-geometry` 0.15. It recorded
+**10,858 outcomes and 707 unmeasured objects** under 38 causes, down from
+11,105. **1,294 of the outcomes are now labelled model data**, so they
+point at the authoring tool, not the engine.
+
+**Resolved:**
+
+- Face sets that repeat each corner per face are registered as the closed solids they are (#308). Their clash refusals on three models are gone.
+- Free-floor obstacles are judged by the pieces that reach the floor (#309). The cause drops from 698 to 155, and all 155 are model data.
+- Hosts whose openings remove their whole body are model data (#310): 227 outcomes, and each object gets the warning `shape.voided-body`.
+- Bodies authored as open surfaces are model data (#311). Each object gets the warning `shape.open-surface`. MEP models carry many of them.
+- Furniture made of overlapping closed items is measured shell by shell (#312). Containment drops from 172 to 52.
+- A whole's openings are subtracted from the parts they cut (#223). Openings flush with parts already cut are decided within the cut test's 10 µm (#316). No corpus model has uncut layers, so nothing is subtracted on the corpus yet.
+
+**Changed findings:** a penetration is only witnessed at a point of the
+body it reaches from (#315).
+
+- On m01, 58 false hard clashes are gone.
+- On m11, 12 stair flights are newly found reaching 2–4 cm into their stair.
+
+| # | Cause | Outcomes | Unmeasured | Models | Issue |
+|---|---|---:|---:|---:|---|
+| 1 | Whole made of parts, one part's planar face finds no ear | 5,097 | 16 | 3 | #299 (axiolid/kernel#269) |
+| 2 | Curved surface without a certified bound (non-forward planar extrusion) | 2,451 | 4 | 2 | #301 (axiolid/kernel#275) |
+| 3 | Polygonal half-space bounded by a circular arc | 873 | 1 | 1 | #307 (openbimrs/ifc#398, axiolid/kernel#277) |
+| 4 | No shape representation (model data) | 771 | 467 | 5 | #219 |
+| 5 | Planar face: outer ring overlaps itself (keyhole) | 523 | 35 | 1 | #299 (axiolid/kernel#270) |
+| 6 | Openings remove the whole body (model data) | 227 | 58 | 1 | #310 |
+| 7 | Free floor: open obstacle below the band (model data) | 155 | 0 | 4 | #309, #311 |
+| 8 | Planar face finds no ear | 126 | 61 | 4 | #299 (axiolid/kernel#269) |
+| 9 | Clash: neither body closed (model data) | 75 | 0 | 5 | #311 |
+| 10–15 | Stair of separate treads; space boundaries on curved faces or with too few points; containment with an open surface or a refused body; a face whose rings cross (model data); a keyhole face set | 335 | 42 | ≤ 2 | #312, #298 |
+| 16–38 | Smaller causes | 225 | 23 | — | — |
+
+The kernel gaps of #298 (rows 1, 5, 8 and the keyhole face sets) account
+for 5,787 outcomes, more than half. axiolid/kernel#269, #270 and #275 are
+scheduled for one release.
+
 Cases 3 and 5 are resolved upstream (`axiolid-mesh-compile` 0.3.13). A
 warped authored face is now meshed, and the body is tessellated within
 the width of the slab the face's corners span about its fit plane, which

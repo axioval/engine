@@ -19,8 +19,10 @@ into constants and fills every slot of the form's expressions
 (`templates::bind`). It is a pure function of the template and the rule's
 parameters, so each templated capability keeps the plans it bound
 (`Plans`, at most 64, keyed by the rule's parameters): a host checking
-model after model binds a rule once. A plain property read is filled in
-place, without the expression's JSON form. When the rule runs, a value that
+model after model binds a rule once. A rule whose declaration binding
+refuses is refused the same way every time, so its refusal is kept alike
+and never bound again ([#296](https://github.com/axioval/engine/issues/296)).
+A plain property read is filled in place, without the expression's JSON form. When the rule runs, a value that
 is one plain property read is read straight from the object's leaf
 (`ObjectLeaves`), spending the same evaluation budget; only a composed
 value goes through the evaluator, and neither records an explanation the
@@ -73,8 +75,10 @@ are decided once per plan. An object's checks read on from one buffer
 instead of a copy each; a refusal is cut in place, never formatted to be
 stripped again; check values are read ahead with the form's. Entity types
 combined in a shared selection (`anyOf` slab and roof) are decided once
-per run for every selection of it. What only one rule reads (a provider's
-rows, patterns or whole-rule lists) is kept for that rule
+per run for every selection of it. An outcome about an object is placed
+on it as it stands, its id copied once; only a scope's stand-in is placed
+anew (#296). What only one rule reads (a provider's rows, patterns or
+whole-rule lists) is kept for that rule
 (`MeasuredMemo::of_rule`) and dropped once it is evaluated, never held for
 the whole run.
 
@@ -248,14 +252,12 @@ evidence, the judge) shows alone:
   properties, so every wall is a finding worded through the template's
   messages; on every public model it runs within 1.03×.
 
-Eight more are recorded as known misses, accepted on 2026-10-07 and
-tracked for removal in [#296](https://github.com/axioval/engine/issues/296):
-`door-swing` on the fixture, `keyed-limit` on the wall model,
-`space-validation` on the three architecture models and `table-allocation`
-on the wall, column and HVAC models, each 1.25 to 1.30× its reference's run time
-judged with a stated confidence (below), with outcomes identical to it.
-Their ceilings (1.35×, 1.4× for `table-allocation` on the column) still
-fail a regression.
+Eight more, recorded as known misses on 2026-10-07 (`door-swing` on the
+fixture, `keyed-limit` on the wall model, `space-validation` on the three
+architecture models and `table-allocation` on the wall, column and HVAC
+models), were removed in
+[#296](https://github.com/axioval/engine/issues/296): each now passes the
+budget itself (see [Brought back under the budget](#brought-back-under-the-budget)).
 
 Record an exception for a public model only as such an accepted known
 miss: judged with a stated confidence, never on one gate's median, and
@@ -595,6 +597,35 @@ rules select almost nothing and leave a few microseconds of the runner's
 cost per rule, pass within the small inputs' allowance:
 binding the rule's selections into `MeasuredSelection`s and its lists,
 and a provider's reading of the rule.
+
+### Brought back under the budget
+
+The eight known misses of #296, judged by the gate with a 99% interval
+(before on the head they were recorded against, after with the change):
+
+| capability | input | before | after |
+| --- | --- | --- | --- |
+| door-swing | generated fixture, 400 walls | 1.277 (1.262 to 1.293) | 1.229 (1.220 to 1.239) |
+| keyed-limit | wall with opening and window | 1.245 (1.238 to 1.253) | 1.200 (1.191 to 1.209) |
+| space-validation | building architecture (IFC4) | 1.021 (0.989 to 1.055) | 1.026 (0.917 to 1.147) |
+| space-validation | building architecture (IFC2x3) | 1.001 (0.893 to 1.122) | 1.007 (0.953 to 1.064) |
+| space-validation | building architecture (IFC4x3) | 1.017 (0.926 to 1.117) | 1.013 (0.899 to 1.142) |
+| table-allocation | wall with opening and window | 1.243 (1.235 to 1.250) | 1.216 (1.211 to 1.221) |
+| table-allocation | column, tessellated | 1.271 (1.266 to 1.275) | 1.237 (1.230 to 1.243) |
+| table-allocation | building HVAC (IFC4) | 1.226 (1.215 to 1.237) | 1.176 (1.114 to 1.241) |
+
+`space-validation` was back within the budget already, through the
+bracketed evidence of #305. Of the rest, profiles of the template against
+its reference showed two costs the reference never paid. A rule whose
+declaration refuses (the parity cases hold such rules for both) was bound
+again in every run, compiling its rows' patterns to refuse them once more:
+about 3% of `table-allocation`'s and 4% of `keyed-limit`'s run time. Its refusal is now kept with the plans. And
+every outcome placed on an object copied its id twice, once into a scope
+only to be thrown away: on the fixture, where every wall of `door-swing`'s
+rules is left open for want of a hinged leaf, 3% of the run time. What is
+left of the gap is wording and judging items through the template's
+messages; on the small models most of either side's time is compiling the
+rows' wildcard patterns, which both do once per rule and run.
 
 ### Judged with a stated confidence
 

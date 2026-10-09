@@ -23,54 +23,6 @@
       "input": "fixture-400-walls.ifc",
       "time": 1.45,
       "reason": "The generated fixture states none of the case's properties, so every wall is a finding worded through the template's messages; on every public model it runs within 1.03x."
-    },
-    {
-      "capability": "axioval:capability.door-swing",
-      "input": "fixture-400-walls.ifc",
-      "time": 1.35,
-      "reason": "Measured 1.27x. Accepted on 2026-10-07 as a known miss: judged over the budget with a 99% interval over 20 rounds in three consecutive gates (#293), the runner's fixed cost per rule and per object not outweighed on this input; outcomes are identical to the reference. Tracked for removal in #296."
-    },
-    {
-      "capability": "axioval:capability.keyed-limit",
-      "input": "bs-ifc4-wall-with-opening-and-window.ifc",
-      "time": 1.35,
-      "reason": "Measured 1.25x. Accepted on 2026-10-07 as a known miss: judged over the budget with a 99% interval over 20 rounds in three consecutive gates (#293), the runner's fixed cost per rule and per object not outweighed on this input; outcomes are identical to the reference. Tracked for removal in #296."
-    },
-    {
-      "capability": "axioval:capability.space-validation",
-      "input": "bs-ifc4-building-architecture.ifc",
-      "time": 1.35,
-      "reason": "Measured 1.26x. Accepted on 2026-10-07 as a known miss: judged over the budget with a 99% interval over 20 rounds in three consecutive gates (#293), the runner's fixed cost per rule and per object not outweighed on this input; outcomes are identical to the reference. Tracked for removal in #296."
-    },
-    {
-      "capability": "axioval:capability.space-validation",
-      "input": "bs-ifc2x3-building-architecture.ifc",
-      "time": 1.35,
-      "reason": "Measured 1.25x. Accepted on 2026-10-07 as a known miss: judged over the budget with a 99% interval over 20 rounds in three consecutive gates (#293), the runner's fixed cost per rule and per object not outweighed on this input; outcomes are identical to the reference. Tracked for removal in #296."
-    },
-    {
-      "capability": "axioval:capability.space-validation",
-      "input": "bs-ifc4x3-building-architecture.ifc",
-      "time": 1.35,
-      "reason": "Measured 1.28x. Accepted on 2026-10-07 as a known miss: judged over the budget with a 99% interval over 20 rounds in three consecutive gates (#293), the runner's fixed cost per rule and per object not outweighed on this input; outcomes are identical to the reference. Tracked for removal in #296."
-    },
-    {
-      "capability": "axioval:capability.table-allocation",
-      "input": "bs-ifc4-wall-with-opening-and-window.ifc",
-      "time": 1.35,
-      "reason": "Measured 1.25x. Accepted on 2026-10-07 as a known miss: judged over the budget with a 99% interval over 20 rounds in three consecutive gates (#293), the runner's fixed cost per rule and per object not outweighed on this input; outcomes are identical to the reference. Tracked for removal in #296."
-    },
-    {
-      "capability": "axioval:capability.table-allocation",
-      "input": "bs-ifc4-column-straight-rectangle-tessellation.ifc",
-      "time": 1.4,
-      "reason": "Measured 1.28 to 1.30x. Accepted on 2026-10-07 as a known miss: judged over the budget with a 99% interval over 20 rounds in three consecutive gates (#293), the runner's fixed cost per rule and per object not outweighed on this input; outcomes are identical to the reference. Tracked for removal in #296."
-    },
-    {
-      "capability": "axioval:capability.table-allocation",
-      "input": "bs-ifc4-building-hvac.ifc",
-      "time": 1.35,
-      "reason": "Measured 1.248x (99% interval 1.241 to 1.256, at the line). Accepted on 2026-10-07 as a known miss: judged over the budget with a 99% interval over 20 rounds in three consecutive gates (#293), the runner's fixed cost per rule and per object not outweighed on this input; outcomes are identical to the reference. Tracked for removal in #296."
     }
   ]
 }

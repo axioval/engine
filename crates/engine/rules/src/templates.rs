@@ -305,13 +305,19 @@ impl Plan<'_> {
 
 /// The plans of a template's rules, bound once and kept: a rule binds the
 /// same way every time it runs, so a host checking model after model binds
-/// it once. Kept by the rule's parameters; at most [`PLANS_KEPT`], the
-/// oldest dropped first. A rule that does not bind is never kept.
+/// it once. Binding reads the rule's parameters alone, so a rule that does
+/// not bind is refused the same way every time too, and its refusal is
+/// kept alike. Kept by the rule's parameters; at most [`PLANS_KEPT`], the
+/// oldest dropped first.
 #[derive(Default)]
 pub(crate) struct Plans(Mutex<Vec<Kept>>);
 
-/// A bound plan kept with the parameters it was bound from.
-type Kept = (BTreeMap<String, ParameterValue>, Arc<Bound>);
+/// A bound plan, or the refusal of the declaration, kept with the
+/// parameters it was bound from.
+type Kept = (
+    BTreeMap<String, ParameterValue>,
+    Result<Arc<Bound>, Unavailable>,
+);
 
 /// How many bound plans a template keeps.
 const PLANS_KEPT: usize = 64;
@@ -337,15 +343,15 @@ fn plan<'t>(
     let bound = if let Some(bound) = kept {
         bound
     } else {
-        let bound = Arc::new(bind(template, rule)?);
+        let bound = bind(template, rule).map(Arc::new);
         if let Ok(mut kept) = plans.0.lock() {
             if kept.len() >= PLANS_KEPT {
-                kept.remove(0);
+                drop(kept.remove(0));
             }
             kept.push((rule.parameters.clone(), bound.clone()));
         }
         bound
-    };
+    }?;
     Ok(Plan {
         template,
         form: &template.forms[bound.form],
@@ -3668,6 +3674,12 @@ fn push(
     push_on(evaluation, rule, &object.id, outcome);
 }
 
+/// Whether `id` is a scope's stand-in rather than an object
+/// ([`axioval_engine::template::placed_scope`] places it anew).
+fn stand_in(id: &ObjectId) -> bool {
+    id.local_id == axioval_engine::template::SCOPE_STAND_IN
+}
+
 /// Pushes one outcome about the object `id` into `evaluation`: on the
 /// source or the project a scope's stand-in names
 /// ([`axioval_engine::template::placed_scope`]).
@@ -3693,11 +3705,18 @@ fn push_on(
                 }
             }
             let mut found = finding(rule, id, message, cited, related);
-            found.scope = axioval_engine::template::placed_scope(id);
+            // An object's own outcome is placed on it already: only a
+            // stand-in is placed anew, without copying the id twice.
+            if stand_in(id) {
+                found.scope = axioval_engine::template::placed_scope(id);
+            }
             if let Some(severity) = severity {
                 found.severity = severity;
             }
             evaluation.push_finding_deviating(found, deviation);
+        }
+        Outcome::Open(reason, message) if !stand_in(id) => {
+            evaluation.push_object_not_evaluated(id.clone(), reason, message);
         }
         Outcome::Open(reason, message) => match axioval_engine::template::placed_scope(id) {
             axioval_ir::Scope::Source(source) => {

@@ -523,7 +523,9 @@ impl Judging<'_, '_> {
         }
     }
 
-    /// The fields keying the pair's group, where findings are grouped.
+    /// The fields keying the pair's group, where findings are grouped; its
+    /// types and storeys left out where they state no words, as every text
+    /// is.
     fn group(
         &mut self,
         fields: &mut BTreeMap<&'static str, MemberValue>,
@@ -537,13 +539,11 @@ impl Judging<'_, '_> {
         match keys.key(pair, (subject, counterpart), unmatched) {
             Ok(key) => {
                 fields.insert("group", text(key.encoded()));
-                fields.insert("sides", text(key.sides_words()));
-                fields.insert("on", text(key.on_words()));
+                put(fields, "sides", key.sides_words());
+                put(fields, "on", key.on_words());
             }
             Err(why) => {
                 fields.insert("group", MemberValue::Undecided { why });
-                fields.insert("sides", text(""));
-                fields.insert("on", text(""));
             }
         }
     }

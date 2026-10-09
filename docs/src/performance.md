@@ -544,13 +544,20 @@ budget there and are the open part of #283.
 
 `clash` and `clash-matrix` run the `clashes` case's rules (four and two):
 1.00 to 1.11× their reference's run time on every input above the floor
-and 1.03 to 1.29× its peak heap, the generated walls and the infra road
-the highest. The list measures each pair once, as the capability did; it
+and 1.04 to 1.36× its peak heap, `clash` on the architecture (IFC2x3)
+model the highest. The list measures each pair once, as the capability did; it
 states only what a pair states (a text without words, a false truth, a
 switched-on class and a `null` are left out, and `clash`'s tolerances are
 the rule's parameters rather than fields of every pair), lists each
 object's open outcome once, and the judge lets each pair go once judged:
-before that, the infra road held 2.0× the reference's peak heap. On the
+before that, the infra road held 2.0× the reference's peak heap. A pair
+leaves out its group's types and storeys too where they state no words
+([#318](https://github.com/axioval/engine/issues/318)): once the public
+samples' meshes were registered as the closed solids they are (#308), the
+infra road's pairs were measured rather than refused, and those two empty
+texts took each pair's fields past one node of their map, 1.79× the
+reference's peak heap (702.6 KiB against 392.2 KiB); without them it is
+1.25× (491.2 KiB). On the
 one model under the floor (three objects, no pair) the template runs
 1.72× (`clash`) and 1.29× (`clash-matrix`): about 9 µs per rule of the
 runner's fixed cost (selecting, binding the list's two selections and

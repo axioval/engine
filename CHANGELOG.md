@@ -6,6 +6,12 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **IFC**: moved to `openbim-ifc` 0.25, `ifc-geometry` 0.19 and
+  `ifc-alignment` 0.8. A linear placement on a seam between two basis
+  segments takes the incoming segment's tangent, and its cached position is
+  checked against that frame. A Viennese cant bend that rotates about a held
+  rail lowers to the banked curve.
+
 - **Geometry**: a physical product with no body and no parts is unmeasured
   as `no shape representation` when it has no representation at all, and as
   `no body representation; it has Axis, FootPrint` (naming the identifiers

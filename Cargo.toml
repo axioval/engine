@@ -147,7 +147,7 @@ openbim-ids = { version = "0.2.2", features = ["audit-schema"] }
 # only in the IFC facade, which joins `ifc-geometry` and `ifc-properties`; `geometry-select`
 # compiles no geometry kernel.
 # 0.24 re-exports `ifc-geometry` 0.18; its `authoring` feature stays off.
-openbim_ifc = { package = "openbim-ifc", version = "0.24.0", default-features = false, features = ["geometry-select", "properties", "ifc2x3", "ifc4", "ifc4x3"] }
+openbim_ifc = { package = "openbim-ifc", version = "0.25.0", default-features = false, features = ["geometry-select", "properties", "ifc2x3", "ifc4", "ifc4x3"] }
 ifc-classification = "0.4.0"
 # The CLI reads each `IfcAlignment`'s centreline, stationing and cant to
 # locate products along it (engine#252). 0.7 evaluates Viennese bends for
@@ -155,7 +155,9 @@ ifc-classification = "0.4.0"
 # `ifc-geometry` 0.13 requires it. 0.7.1 gives a station on a seam the
 # incoming tangent, mitres sectioned runs across seams and snaps stations
 # within `ARC_LENGTH_TOLERANCE` to the seam (0.7.2 for ifc-geometry 0.18).
-ifc-alignment = "0.7.2"
+# 0.8 lowers a Viennese bend that rotates about a held rail to the banked
+# curve (#364), for ifc-geometry 0.19.
+ifc-alignment = "0.8.0"
 # 0.9 lowers IFC4X3 stations, offset curves by distances and sectioned
 # solids and surfaces (openbimrs/ifc#307) and, since 0.8.2, refuses an
 # `IfcParameterValue` along an alignment by name (openbimrs/ifc#347). 0.10
@@ -175,8 +177,10 @@ ifc-alignment = "0.7.2"
 # (`IfcCompositeCurve` of trimmed circles, `IfcIndexedPolyCurve` with an
 # `IfcArcIndex`) exactly as a contour of lines and arcs (#398); 0.18 lowers
 # stations on composite, trimmed and station-placed bases, a joint reading
-# its incoming segment (#346), and curve segments placed linearly (#311).
-ifc-geometry = { version = "0.18.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
+# its incoming segment (#346), and curve segments placed linearly (#311);
+# 0.19 derives a linear placement on a seam with the incoming tangent and
+# verifies its cached position against that frame (#409).
+ifc-geometry = { version = "0.19.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
 # Map conversions only: without the default `transform` feature it links no
 # geometry crate (never Axiolid).
 ifc-georef = { version = "0.6.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }

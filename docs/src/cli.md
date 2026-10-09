@@ -1352,7 +1352,9 @@ lowering derives the frame from the basis curve with the Axiolid reference
 curve evaluator (`ifc-geometry` 0.10, `LoweringSession::with_curve_evaluator`
 and `product_world_transform_with_evaluator`, openbimrs/ifc#353), in IFC4.3's
 (tangent, left, up) frame, so a positive `OffsetLateral` lies to the left of
-the curve's direction and the product's Z is up (#355). A cached
+the curve's direction and the product's Z is up (#355). On a seam between
+two segments the frame takes the incoming segment's tangent (`ifc-geometry`
+0.19, openbimrs/ifc#409). A cached
 `CartesianPosition` is checked against the derived position
 (`CachedPositionPolicy::Verify`, #354): within the model's precision the
 derived frame is used, and farther apart the product is unmeasured with

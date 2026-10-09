@@ -100,6 +100,20 @@ All notable changes are documented here. This project follows Semantic Versionin
   (`;whole-openings:<body>=<opening>+...`, `AxiolidGeometry::
   with_whole_openings`)
   ([#223](https://github.com/axioval/engine/issues/223)).
+- **Geometry**: a whole's opening that is neither convex nor an extrusion
+  (a rebated window written as one faceted Brep) is decided cell by convex
+  cell of the planes its own faces lie on, so an opening flush with the
+  holes its parts already carry is clear of them within 10 µm, as a box or
+  prism opening is, instead of falling back to the shared volume, whose
+  rounding (a few 1e-12 m³ far from the origin) left the parts and their
+  whole unmeasured. The shared volume now cuts only beyond a layer 10 µm
+  thick over the opening's faces where the two can meet, and stays clear
+  only within the rounding of touching bodies; a pair between the two is
+  unmeasured naming the opening, never cut on rounding. Corpus m13: its 38
+  parts and 14 walls left unmeasured are measured again, four openings
+  no longer cut the parts they were flush with, and its unmeasured objects
+  and not-evaluated outcomes are those before #223
+  ([#316](https://github.com/axioval/engine/issues/316)).
 - **Geometry**: a mesh whose faces repeat their corners (a face set written
   for flat shading, each face with its own copies of its corners) is
   registered with equal corners sharing one index when that makes it a

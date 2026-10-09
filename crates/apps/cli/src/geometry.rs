@@ -1555,10 +1555,13 @@ enum Cut {
 /// each connected piece of its mesh is one convex cell when it is convex
 /// (an extruded rectangle, as exporters write most openings), one prism
 /// per cap triangle when it is an extrusion of any other profile, and
-/// otherwise only bounded by a convex cell holding it. What that leaves
-/// open, and every tessellated pair, is read from the certified volume the
-/// two share ([`shared_volume_cut`]). Anything still open is undecided,
-/// never a guess either way.
+/// otherwise the cells its own planes split its box into (a rebated
+/// window written as one Brep, #316), with the convex cell holding it to
+/// decide it clear where one of those cannot; a piece too complex to split
+/// is only bounded by that cell. What that leaves open, and every
+/// tessellated pair, is read from the certified volume the two share
+/// ([`shared_volume_cut`]). Anything still open is undecided, never a
+/// guess either way.
 fn cuts(
     part: &ObjectId,
     body: &Body,
@@ -1581,12 +1584,22 @@ fn cuts(
     }
     if slack == 0.0 {
         let mut open = false;
-        for cell in OpeningCell::all(void) {
-            match cell_cut(&body.mesh, &cell) {
-                Some(Cut::Clear) => {}
-                Some(decided) => return decided,
-                None => open = true,
+        for (cells, hull) in OpeningCell::pieces(void) {
+            let mut piece_open = false;
+            for cell in &cells {
+                match cell_cut(&body.mesh, cell) {
+                    Some(Cut::Clear) => {}
+                    Some(decided) => return decided,
+                    None => piece_open = true,
+                }
             }
+            if piece_open
+                && let Some(hull) = hull
+                && cell_cut(&body.mesh, &hull) == Some(Cut::Clear)
+            {
+                piece_open = false;
+            }
+            open |= piece_open;
         }
         if !open {
             return Cut::Clear;
@@ -1611,9 +1624,19 @@ struct OpeningCell {
 }
 
 impl OpeningCell {
-    /// The cells of every connected piece of `mesh` (triangles joined by
-    /// shared indices).
+    /// The cells of every connected piece of `mesh`.
+    #[cfg(test)]
     fn all(mesh: &axiolid_mesh::TriMesh) -> Vec<Self> {
+        Self::pieces(mesh)
+            .into_iter()
+            .flat_map(|(cells, _)| cells)
+            .collect()
+    }
+
+    /// The cells of every connected piece of `mesh` (triangles joined by
+    /// shared indices), each with the convex cell holding it where its
+    /// cells are those of its planes ([`Self::piece`]).
+    fn pieces(mesh: &axiolid_mesh::TriMesh) -> Vec<(Vec<Self>, Option<Self>)> {
         let count = mesh.positions.len();
         let mut parent: Vec<usize> = (0..count).collect();
         let triangles: Vec<[usize; 3]> = mesh
@@ -1639,12 +1662,15 @@ impl OpeningCell {
         let points: Vec<[f64; 3]> = mesh.positions.iter().map(|p| [p.x, p.y, p.z]).collect();
         pieces
             .into_values()
-            .flat_map(|triangles| Self::piece(&points, &triangles))
+            .map(|triangles| Self::piece(&points, &triangles))
             .collect()
     }
 
-    /// The cells of one closed piece.
-    fn piece(points: &[[f64; 3]], triangles: &[[usize; 3]]) -> Vec<Self> {
+    /// The cells of one closed piece, and for a piece split into the
+    /// cells of its planes ([`Self::arrangement`]) the convex cell holding
+    /// it besides, which may still decide it clear where one of those
+    /// cells cannot.
+    fn piece(points: &[[f64; 3]], triangles: &[[usize; 3]]) -> (Vec<Self>, Option<Self>) {
         let corners: Vec<[f64; 3]> = triangles
             .iter()
             .flatten()
@@ -1677,17 +1703,27 @@ impl OpeningCell {
                     .all(|corner| dot(*normal, *corner) - offset <= slack)
             });
         if convex {
-            return vec![Self {
+            let cell = Self {
                 centre: mean(&corners),
                 planes,
                 within: true,
                 corners,
-            }];
+            };
+            return (vec![cell], None);
         }
         if let Some(prisms) = Self::prisms(points, triangles, &planes, &corners, slack) {
-            return prisms;
+            return (prisms, None);
         }
-        // Bounded by the slabs its own faces and the axes span.
+        let hull = Self::hull(&planes, corners);
+        match Self::arrangement(points, triangles, &planes, &hull.corners, sign, slack) {
+            Some(cells) => (cells, Some(hull)),
+            None => (vec![hull], None),
+        }
+    }
+
+    /// The convex cell holding a piece: bounded by the slabs its own faces
+    /// and the axes span.
+    fn hull(planes: &[([f64; 3], f64)], corners: Vec<[f64; 3]>) -> Self {
         let mut normals: Vec<[f64; 3]> = planes.iter().map(|(normal, _)| *normal).collect();
         normals.extend([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]);
         let mut bounds = Vec::with_capacity(2 * normals.len());
@@ -1702,12 +1738,12 @@ impl OpeningCell {
             bounds.push((normal, high));
             bounds.push((normal.map(|value| -value), -low));
         }
-        vec![Self {
+        Self {
             planes: bounds,
             within: false,
             centre: mean(&corners),
             corners,
-        }]
+        }
     }
 
     /// The prisms of a piece extruded from a profile of any shape: its
@@ -1771,6 +1807,100 @@ impl OpeningCell {
             }
         }
         None
+    }
+
+    /// The convex cells of a piece of any other shape (a stepped opening
+    /// with a rebate, written as one faceted Brep): its box split by every
+    /// plane its faces lie on. No cell of that arrangement meets a face
+    /// inside, so each lies wholly within the piece or wholly outside it,
+    /// as the winding number of its centre tells (`orientation`, the sign
+    /// of the piece's volume, inside); the cells within it are the piece.
+    /// `None` when the piece states no plane, too many planes or its box
+    /// too many cells, or a cell's centre does not tell: a winding number
+    /// off a whole one, or any but none and one, as a piece crossing
+    /// itself has.
+    fn arrangement(
+        points: &[[f64; 3]],
+        triangles: &[[usize; 3]],
+        planes: &[([f64; 3], f64)],
+        corners: &[[f64; 3]],
+        orientation: f64,
+        slack: f64,
+    ) -> Option<Vec<Self>> {
+        if planes.is_empty() {
+            return None;
+        }
+        let mut distinct: Vec<([f64; 3], f64)> = Vec::new();
+        for (normal, offset) in planes {
+            // One orientation per plane: its largest component positive.
+            let largest = normal.iter().copied().fold(0.0_f64, |largest, value| {
+                if value.abs() > largest.abs() {
+                    value
+                } else {
+                    largest
+                }
+            });
+            let sign = largest.signum();
+            let (normal, offset) = (normal.map(|value| sign * value), sign * offset);
+            let same = |(other, at): &([f64; 3], f64)| {
+                (0..3).all(|axis| (other[axis] - normal[axis]).abs() <= CONVEX_SLACK)
+                    && (at - offset).abs() <= slack
+            };
+            if !distinct.iter().any(same) {
+                distinct.push((normal, offset));
+            }
+        }
+        if distinct.len() > MAX_CELL_PLANES {
+            return None;
+        }
+        let (low, high) = corners.iter().fold(
+            ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]),
+            |(low, high), corner| {
+                (
+                    std::array::from_fn(|axis| low[axis].min(corner[axis])),
+                    std::array::from_fn(|axis| high[axis].max(corner[axis])),
+                )
+            },
+        );
+        let mut cells = vec![Polytope::cuboid(low, high)];
+        for (normal, offset) in distinct {
+            let mut split = Vec::with_capacity(cells.len());
+            for cell in cells {
+                match cell.split(normal, offset, slack) {
+                    Some((below, above)) => split.extend([below, above]),
+                    None => split.push(cell),
+                }
+            }
+            if split.len() > MAX_CELLS {
+                return None;
+            }
+            cells = split;
+        }
+        let mut within = Vec::new();
+        for cell in cells {
+            let corners = cell.corners();
+            let centre = mean(&corners);
+            let winding = orientation
+                * winding(
+                    triangles
+                        .iter()
+                        .map(|[a, b, c]| [points[*a], points[*b], points[*c]]),
+                    centre,
+                );
+            let inside = (winding - 1.0).abs() <= 0.1;
+            if !inside && winding.abs() > 0.1 {
+                return None;
+            }
+            if inside {
+                within.push(Self {
+                    planes: cell.faces.iter().map(|(plane, _)| *plane).collect(),
+                    within: true,
+                    centre,
+                    corners,
+                });
+            }
+        }
+        (!within.is_empty()).then_some(within)
     }
 
     /// The triangle `cap` swept by `vector`; `None` when it bounds no
@@ -1858,6 +1988,141 @@ impl OpeningCell {
             polygon = kept;
         }
         true
+    }
+}
+
+/// A piece of an opening states no more planes than this, and its box
+/// holds no more cells, for [`OpeningCell::arrangement`] to split it.
+const MAX_CELL_PLANES: usize = 64;
+const MAX_CELLS: usize = 4096;
+
+/// A plane as its outward unit normal and offset: `n · x <= d` inside.
+type Plane = ([f64; 3], f64);
+
+/// A convex polytope, as its faces: each the plane it lies on and its
+/// corners in order.
+#[derive(Debug, Clone)]
+struct Polytope {
+    faces: Vec<(Plane, Vec<[f64; 3]>)>,
+}
+
+impl Polytope {
+    /// The box from `low` to `high`.
+    fn cuboid(low: [f64; 3], high: [f64; 3]) -> Self {
+        let mut faces = Vec::with_capacity(6);
+        for axis in 0..3 {
+            let (u, v) = ((axis + 1) % 3, (axis + 2) % 3);
+            for (sign, level) in [(-1.0, low[axis]), (1.0, high[axis])] {
+                let corner = |a: f64, b: f64| {
+                    let mut point = [0.0; 3];
+                    point[axis] = level;
+                    point[u] = a;
+                    point[v] = b;
+                    point
+                };
+                let mut normal = [0.0; 3];
+                normal[axis] = sign;
+                faces.push((
+                    (normal, sign * level),
+                    vec![
+                        corner(low[u], low[v]),
+                        corner(high[u], low[v]),
+                        corner(high[u], high[v]),
+                        corner(low[u], high[v]),
+                    ],
+                ));
+            }
+        }
+        Self { faces }
+    }
+
+    /// Its distinct corners.
+    fn corners(&self) -> Vec<[f64; 3]> {
+        let mut corners: Vec<[f64; 3]> = Vec::new();
+        for point in self.faces.iter().flat_map(|(_, polygon)| polygon) {
+            if !corners.contains(point) {
+                corners.push(*point);
+            }
+        }
+        corners
+    }
+
+    /// The two parts the plane `n · x = d` splits it into, below and
+    /// above; `None` when its corners do not reach beyond `slack` on both
+    /// sides, or the cut states no face.
+    fn split(&self, normal: [f64; 3], offset: f64, slack: f64) -> Option<(Self, Self)> {
+        let side = |point: &[f64; 3]| {
+            let distance = dot(normal, *point) - offset;
+            if distance > slack {
+                1
+            } else if distance < -slack {
+                -1
+            } else {
+                0
+            }
+        };
+        let corners = self.corners();
+        if !corners.iter().any(|corner| side(corner) < 0)
+            || !corners.iter().any(|corner| side(corner) > 0)
+        {
+            return None;
+        }
+        let mut cap: Vec<[f64; 3]> = corners
+            .iter()
+            .copied()
+            .filter(|corner| side(corner) == 0)
+            .collect();
+        let (mut below, mut above) = (Vec::new(), Vec::new());
+        for (plane, polygon) in &self.faces {
+            let (mut low, mut high) = (Vec::new(), Vec::new());
+            for (index, point) in polygon.iter().enumerate() {
+                let next = polygon[(index + 1) % polygon.len()];
+                let (here, there) = (side(point), side(&next));
+                if here <= 0 {
+                    low.push(*point);
+                }
+                if here >= 0 {
+                    high.push(*point);
+                }
+                if here * there < 0 {
+                    let (from, to) = (dot(normal, *point) - offset, dot(normal, next) - offset);
+                    let t = from / (from - to);
+                    let crossing =
+                        std::array::from_fn(|axis| point[axis] + t * (next[axis] - point[axis]));
+                    low.push(crossing);
+                    high.push(crossing);
+                    if !cap.contains(&crossing) {
+                        cap.push(crossing);
+                    }
+                }
+            }
+            if low.len() >= 3 {
+                below.push((*plane, low));
+            }
+            if high.len() >= 3 {
+                above.push((*plane, high));
+            }
+        }
+        if cap.len() < 3 {
+            return None;
+        }
+        // The cut face's corners in order about their mean.
+        let centre = mean(&cap);
+        let helper = if normal[0].abs() < 0.9 {
+            [1.0, 0.0, 0.0]
+        } else {
+            [0.0, 1.0, 0.0]
+        };
+        let u = cross(normal, helper);
+        let v = cross(normal, u);
+        let angle = |point: &[f64; 3]| {
+            let from = sub(*point, centre);
+            dot(from, v).atan2(dot(from, u))
+        };
+        cap.sort_by(|a, b| angle(a).total_cmp(&angle(b)));
+        below.push(((normal, offset), cap.clone()));
+        above.push(((normal.map(|value| -value), -offset), cap));
+        Some((Self { faces: below }, Self { faces: above }))
     }
 }
 
@@ -1959,13 +2224,21 @@ fn cell_cut(part: &axiolid_mesh::TriMesh, cell: &OpeningCell) -> Option<Cut> {
 fn winding_number(mesh: &axiolid_mesh::TriMesh, point: [f64; 3]) -> f64 {
     let corner = |index: u32| {
         let p = mesh.positions[index as usize];
-        sub([p.x, p.y, p.z], point)
+        [p.x, p.y, p.z]
     };
-    let angle: f64 = mesh
-        .indices
-        .chunks_exact(3)
-        .map(|corners| {
-            let (a, b, c) = (corner(corners[0]), corner(corners[1]), corner(corners[2]));
+    winding(
+        mesh.indices
+            .chunks_exact(3)
+            .map(|corners| [corner(corners[0]), corner(corners[1]), corner(corners[2])]),
+        point,
+    )
+}
+
+/// The generalized winding number of closed triangles about `point`.
+fn winding(triangles: impl Iterator<Item = [[f64; 3]; 3]>, point: [f64; 3]) -> f64 {
+    let angle: f64 = triangles
+        .map(|triangle| {
+            let [a, b, c] = triangle.map(|corner| sub(corner, point));
             let (la, lb, lc) = (dot(a, a).sqrt(), dot(b, b).sqrt(), dot(c, c).sqrt());
             let numerator = dot(a, cross(b, c));
             let denominator = la * lb * lc + dot(a, b) * lc + dot(b, c) * la + dot(c, a) * lb;
@@ -1993,11 +2266,17 @@ fn sub(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
 
 /// Whether `opening`'s void cuts `part`'s body by the volume they share,
 /// as the proximity service certifies it: the part inside the opening is
-/// [`Cut::Inside`], the opening inside the part or a shared volume beyond
-/// `TOUCHING_VOLUME` is [`Cut::Cuts`], apart or a shared volume within it
-/// is [`Cut::Clear`]; anything else is undecided. A penetration witness is
-/// no proof here: a point on a face an opening shares with a hole already
-/// cut reads deep.
+/// [`Cut::Inside`]; the opening inside the part, or a shared volume beyond
+/// a layer [`TOUCHING_DEPTH`] thick over the opening's faces where the two
+/// can meet ([`contact_area`]), is [`Cut::Cuts`]: material of the part
+/// within that depth of the opening's faces fills no more, so some of it
+/// lies deeper (#316). Apart, or a shared volume within the rounding of
+/// bodies that only touch (`TOUCHING_VOLUME`), is [`Cut::Clear`]; anything
+/// between is undecided. A volume never shows that nothing reaches deeper
+/// than the depth, so clear stays at rounding: a layer over the faces would
+/// pass centimetres of material reaching into a small patch. A penetration
+/// witness is no proof here: a point on a face an opening shares with a
+/// hole already cut reads deep.
 fn shared_volume_cut(
     part: &ObjectId,
     body: &Body,
@@ -2032,17 +2311,82 @@ fn shared_volume_cut(
     if measured.separation_interval_metres().0 > ON_SURFACE {
         return Cut::Clear;
     }
+    let deviation = |fit: Fit| match fit {
+        Fit::Exact => 0.0,
+        Fit::Within(deviation) => deviation,
+    };
+    let area = body_box(body).map_or(0.0, |(min, max)| {
+        let grow = TOUCHING_DEPTH + deviation(fit) + ON_SURFACE;
+        contact_area(
+            void,
+            (min.map(|value| value - grow), max.map(|value| value + grow)),
+        )
+    });
+    let layer = TOUCHING_VOLUME.max(area * TOUCHING_DEPTH);
     match measured.intersection_volume() {
-        Some(volume) if volume.shared().lower_cubic_metres() > TOUCHING_VOLUME => Cut::Cuts,
+        Some(volume) if volume.shared().lower_cubic_metres() > layer => Cut::Cuts,
         Some(volume) if volume.shared().upper_cubic_metres() <= TOUCHING_VOLUME => Cut::Clear,
         Some(volume) => Cut::Undecided(format!(
-            "they meet, and the volume they share, {:.3e} to {:.3e} m³, is not bounded away \
-             from the rounding of bodies that only touch",
+            "they meet, and the volume they share, {:.3e} to {:.3e} m³, is neither within \
+             the rounding of bodies that only touch, {TOUCHING_VOLUME:.0e} m³, nor beyond \
+             {layer:.3e} m³, a layer 10 µm thick over the {area:.3e} m² of the opening's \
+             faces where they can meet",
             volume.shared().lower_cubic_metres(),
             volume.shared().upper_cubic_metres()
         )),
         None => Cut::Undecided("they meet, and the volume they share cannot be measured".into()),
     }
+}
+
+/// The area, in square metres, of `mesh`'s triangles inside the box
+/// `(min, max)`: each clipped by the box's six planes.
+fn contact_area(mesh: &axiolid_mesh::TriMesh, (min, max): Extent) -> f64 {
+    let point = |index: u32| {
+        let p = mesh.positions[index as usize];
+        [p.x, p.y, p.z]
+    };
+    let mut area = 0.0;
+    for corners in mesh.indices.chunks_exact(3) {
+        let mut polygon = vec![point(corners[0]), point(corners[1]), point(corners[2])];
+        for axis in 0..3 {
+            for (sign, level) in [(-1.0, min[axis]), (1.0, max[axis])] {
+                // Keep `sign * x[axis] <= sign * level`.
+                let outside = |p: &[f64; 3]| sign * (p[axis] - level);
+                let mut kept = Vec::with_capacity(polygon.len() + 1);
+                for (index, here) in polygon.iter().enumerate() {
+                    let next = polygon[(index + 1) % polygon.len()];
+                    let (from, to) = (outside(here), outside(&next));
+                    if from <= 0.0 {
+                        kept.push(*here);
+                    }
+                    if (from < 0.0 && to > 0.0) || (from > 0.0 && to < 0.0) {
+                        let t = from / (from - to);
+                        kept.push(std::array::from_fn(|axis| {
+                            here[axis] + t * (next[axis] - here[axis])
+                        }));
+                    }
+                }
+                polygon = kept;
+                if polygon.len() < 3 {
+                    break;
+                }
+            }
+            if polygon.len() < 3 {
+                break;
+            }
+        }
+        if polygon.len() < 3 {
+            continue;
+        }
+        let normal = polygon[1..]
+            .windows(2)
+            .map(|pair| cross(sub(pair[0], polygon[0]), sub(pair[1], polygon[0])))
+            .fold([0.0; 3], |sum, part| {
+                std::array::from_fn(|axis| sum[axis] + part[axis])
+            });
+        area += dot(normal, normal).sqrt() / 2.0;
+    }
+    area
 }
 
 /// A mesh's box; `None` for an empty one.
@@ -4619,5 +4963,182 @@ mod tests {
         }
         assert_eq!(decide(filling, Fit::Exact, &notched), Cut::Clear);
         assert_eq!(decide(layer, Fit::Exact, &notched), Cut::Cuts);
+    }
+
+    /// The closed, outward mesh of the cells of the grid `lines` that
+    /// `filled` picks, turned by `angle` about the vertical and moved by
+    /// `offset`.
+    fn blocks(
+        lines: [&[f64]; 3],
+        filled: impl Fn([usize; 3]) -> bool,
+        angle: f64,
+        offset: [f64; 3],
+    ) -> axiolid_mesh::TriMesh {
+        let counts = lines.map(|line| line.len() - 1);
+        let mut corners: std::collections::BTreeMap<[usize; 3], u32> =
+            std::collections::BTreeMap::new();
+        let mut positions = Vec::new();
+        let mut indices = Vec::new();
+        let (sin, cos) = angle.sin_cos();
+        let mut corner = |grid: [usize; 3]| {
+            *corners.entry(grid).or_insert_with(|| {
+                let [x, y, z] = [0, 1, 2].map(|axis| lines[axis][grid[axis]]);
+                positions.push(axiolid_core::Point3::new(
+                    offset[0] + cos * x - sin * y,
+                    offset[1] + sin * x + cos * y,
+                    offset[2] + z,
+                ));
+                u32::try_from(positions.len() - 1).unwrap()
+            })
+        };
+        for i in 0..counts[0] {
+            for j in 0..counts[1] {
+                for k in 0..counts[2] {
+                    let cell = [i, j, k];
+                    if !filled(cell) {
+                        continue;
+                    }
+                    for axis in 0..3 {
+                        let (u, v) = ((axis + 1) % 3, (axis + 2) % 3);
+                        for side in [0usize, 1] {
+                            let neighbour = if side == 1 {
+                                Some(cell[axis] + 1).filter(|index| *index < counts[axis])
+                            } else {
+                                cell[axis].checked_sub(1)
+                            };
+                            if neighbour.is_some_and(|index| {
+                                let mut next = cell;
+                                next[axis] = index;
+                                filled(next)
+                            }) {
+                                continue;
+                            }
+                            let at = |a: usize, b: usize| {
+                                let mut grid = cell;
+                                grid[axis] += side;
+                                grid[u] += a;
+                                grid[v] += b;
+                                grid
+                            };
+                            // Counter-clockwise about +axis; reversed below.
+                            let mut quad = [at(0, 0), at(1, 0), at(1, 1), at(0, 1)];
+                            if side == 0 {
+                                quad.reverse();
+                            }
+                            let quad = quad.map(&mut corner);
+                            indices.extend([quad[0], quad[1], quad[2], quad[0], quad[2], quad[3]]);
+                        }
+                    }
+                }
+            }
+        }
+        axiolid_mesh::TriMesh::new(positions, indices)
+    }
+
+    /// A rebated window opening, written as one faceted Brep whose steps
+    /// make it neither convex nor an extrusion, is read cell by convex
+    /// cell of its own planes (#316). Turned and far from the origin, as
+    /// corpus m13's openings are, its layers already cut flush with it
+    /// share only rounding with it, and the cells decide them clear; a
+    /// layer it reaches 50 µm into or runs through is cut, one 5 µm into
+    /// only touched.
+    #[test]
+    fn a_wholes_stepped_opening_is_read_cell_by_cell_of_its_planes() {
+        use super::{Cut, Fit};
+        let (angle, offset) = (0.101_06, [88.9, -16.9, -1.67]);
+        // The leaf's rebate: x 1.5..2.5 and z 1..2 for y -0.2..0, x 1.45..2.55
+        // and z 1..2.05 for y 0..0.2.
+        let window = blocks(
+            [
+                &[1.45, 1.5, 2.5, 2.55],
+                &[-0.2, 0.0, 0.2],
+                &[1.0, 2.0, 2.05],
+            ],
+            |[i, j, k]| j == 1 || (i == 1 && k == 0),
+            angle,
+            offset,
+        );
+        let cells = super::OpeningCell::all(&window);
+        assert!(
+            cells.len() > 1 && cells.iter().all(|cell| cell.within),
+            "{cells:?}"
+        );
+        // A layer, 4 m by 3 m, with a hole (its x and z) already cut.
+        let layer = |y: [f64; 2], [x0, x1]: [f64; 2], [z0, z1]: [f64; 2]| {
+            blocks(
+                [&[0.0, x0, x1, 4.0], &y, &[0.0, z0, z1, 3.0]],
+                |[i, _, k]| i != 1 || k != 1,
+                angle,
+                offset,
+            )
+        };
+        let front = layer([-0.1, 0.0], [1.5, 2.5], [1.0, 2.0]);
+        assert_eq!(decide(front, Fit::Exact, &window), Cut::Clear);
+        let back = layer([0.0, 0.1], [1.45, 2.55], [1.0, 2.05]);
+        assert_eq!(decide(back, Fit::Exact, &window), Cut::Clear);
+        for (reach, expected) in [(5e-6, Cut::Clear), (5e-5, Cut::Cuts)] {
+            let back = layer([0.0, 0.1], [1.45 + reach, 2.55], [1.0, 2.05]);
+            assert_eq!(decide(back, Fit::Exact, &window), expected, "{reach}");
+        }
+        let uncut = blocks(
+            [&[0.0, 4.0], &[0.0, 0.1], &[0.0, 3.0]],
+            |_| true,
+            angle,
+            offset,
+        );
+        assert_eq!(decide(uncut, Fit::Exact, &window), Cut::Cuts);
+    }
+
+    /// What the cells leave to the certified shared volume cuts only
+    /// beyond their depth (#316): a shared volume beyond a layer 10 µm
+    /// thick over the opening's faces where the two can meet cuts, one
+    /// within the rounding of bodies that only touch is clear, and one
+    /// between, a tessellated layer 5 µm into the jamb or flush with it
+    /// within 1 mm, stays undecided, never cut.
+    #[test]
+    fn a_wholes_opening_cuts_by_volume_only_beyond_the_cut_tests_depth() {
+        use super::{Cut, Fit};
+        let door = cuboid([1.5, -0.2, 0.0], [2.5, 0.2, 2.1]);
+        // The door's jamb, 0.1 m by 2.1 m, is all the layer can meet:
+        // 10 µm over it is 2.1e-6 m³.
+        let area = super::contact_area(&door, ([0.0, -0.1, 0.0], [1.5, 0.0, 3.0]));
+        assert!((area - 0.21).abs() < 1e-9, "{area}");
+
+        let source = axioval::ir::SourceId::new("ifc-step", "model.ifc").unwrap();
+        let by_volume = |part: axiolid_mesh::TriMesh, fit| {
+            let body = super::Body {
+                mesh: part,
+                fit,
+                boundary: None,
+                applied: Vec::new(),
+                taken: Vec::new(),
+            };
+            super::shared_volume_cut(
+                &ObjectId::new(source.clone(), "#1").unwrap(),
+                &body,
+                &ObjectId::new(source.clone(), "#2").unwrap(),
+                &door,
+                Fit::Exact,
+            )
+        };
+        let left = cuboid([0.0, -0.1, 0.0], [1.5, 0.0, 3.0]);
+        assert_eq!(by_volume(left.clone(), Fit::Exact), Cut::Clear);
+        let Cut::Undecided(why) = by_volume(left, Fit::Within(0.001)) else {
+            panic!("a tessellated touch within 1 mm is undecided");
+        };
+        // Its box, grown by its deviation, reaches a little more.
+        assert!(
+            why.contains("nor beyond 2.144e-6 m³, a layer 10 µm thick over the 2.144e-1 m²"),
+            "{why}"
+        );
+        // 5 µm into the jamb shares 1e-6 m³: no cut, and no touch either.
+        let touching = cuboid([0.0, -0.1, 0.0], [1.500_005, 0.0, 3.0]);
+        assert!(
+            matches!(by_volume(touching, Fit::Within(1e-9)), Cut::Undecided(_)),
+            "within the depth by volume is undecided"
+        );
+        // 1 mm into it shares 2.1e-4 m³.
+        let into = cuboid([0.0, -0.1, 0.0], [1.501, 0.0, 3.0]);
+        assert_eq!(by_volume(into, Fit::Within(1e-9)), Cut::Cuts);
     }
 }

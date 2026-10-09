@@ -2385,6 +2385,152 @@ fn with_geometry_a_wholes_opening_already_cut_from_its_parts_changes_nothing() {
     );
 }
 
+/// The wall of [`voided_layered_wall`] with a rebated window instead of
+/// its door: opening #39 is one faceted Brep, x 1.5..2.5 and z 1..2 for
+/// y -0.2..0 and x 1.45..2.55 and z 1..2.05 for y 0..0.2, so neither convex
+/// nor an extrusion. Each layer already carries its step of the hole (#69,
+/// #79); pipe #49 runs through the window, pipe #59 through the wall. The
+/// whole stands turned and 90 m from the origin, as corpus m13's walls do.
+fn rebated_window_wall() -> String {
+    let layer = "IFCBUILDINGELEMENTPART('GID',$,$,$,$,PL,REP,$,$)";
+    let pipe = "IFCPIPESEGMENT('GID',$,$,$,$,PL,REP,$,$)";
+    let hole = "IFCOPENINGELEMENT('GID',$,$,$,$,PL,REP,$,.OPENING.)";
+    let brep = rebated_window();
+    let model = format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         {}{}{}{}{}{}{brep}\
+         #100=IFCWALL('0000000000000000000100',$,$,$,$,#3,$,$,$);\n\
+         #101=IFCRELAGGREGATES('0000000000000000000101',$,$,$,#100,(#19,#29));\n\
+         #102=IFCRELVOIDSELEMENT('0000000000000000000102',$,$,$,#100,#39);\n\
+         #103=IFCRELVOIDSELEMENT('0000000000000000000103',$,$,$,#19,#69);\n\
+         #104=IFCRELVOIDSELEMENT('0000000000000000000104',$,$,$,#29,#79);\n\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        placed_box(10, [2.0, -0.05, 0.0], [4.0, 0.1, 3.0], layer),
+        placed_box(20, [2.0, 0.05, 0.0], [4.0, 0.1, 3.0], layer),
+        placed_box(40, [2.0, 0.0, 1.4], [0.2, 1.0, 0.2], pipe),
+        placed_box(50, [3.5, 0.0, 1.0], [0.2, 1.0, 0.2], pipe),
+        placed_box(60, [2.0, 0.0, 1.0], [1.0, 0.4, 1.0], hole),
+        placed_box(70, [2.0, 0.0, 1.0], [1.1, 0.4, 1.05], hole),
+    );
+    // Every product placed under one turned frame far from the origin.
+    model
+        .replace("IFCLOCALPLACEMENT($,", "IFCLOCALPLACEMENT(#900,")
+        .replace(
+            "#100=IFCWALL",
+            "#900=IFCLOCALPLACEMENT($,#901);\n\
+             #901=IFCAXIS2PLACEMENT3D(#902,#4,#903);\n\
+             #902=IFCCARTESIANPOINT((88.9,-16.9,-1.67));\n\
+             #903=IFCDIRECTION((0.9948970404901194,0.10089538554364882,0.));\n\
+             #100=IFCWALL",
+        )
+}
+
+/// Opening #39 of [`rebated_window_wall`], placed by #354: a closed faceted
+/// Brep of ten faces, its sill and the rebate's face not convex.
+fn rebated_window() -> String {
+    let corners = [
+        [1.5, -0.2, 1.0],
+        [2.5, -0.2, 1.0],
+        [2.5, -0.2, 2.0],
+        [1.5, -0.2, 2.0],
+        [1.5, 0.0, 1.0],
+        [2.5, 0.0, 1.0],
+        [2.5, 0.0, 2.0],
+        [1.5, 0.0, 2.0],
+        [1.45, 0.0, 1.0],
+        [2.55, 0.0, 1.0],
+        [2.55, 0.0, 2.05],
+        [1.45, 0.0, 2.05],
+        [1.45, 0.2, 1.0],
+        [2.55, 0.2, 1.0],
+        [2.55, 0.2, 2.05],
+        [1.45, 0.2, 2.05],
+    ];
+    // Outward faces by corner: the leaf's front, sides and head, the sill
+    // under both steps, the rebate's face, and the frame's sides, head and
+    // back.
+    let faces: [&[usize]; 10] = [
+        &[0, 1, 2, 3],
+        &[0, 3, 7, 4],
+        &[1, 5, 6, 2],
+        &[3, 2, 6, 7],
+        &[4, 8, 12, 13, 9, 5, 1, 0],
+        &[8, 4, 7, 6, 5, 9, 10, 11],
+        &[8, 11, 15, 12],
+        &[9, 13, 14, 10],
+        &[11, 10, 14, 15],
+        &[12, 15, 14, 13],
+    ];
+    let mut brep = String::new();
+    for (index, [x, y, z]) in corners.iter().enumerate() {
+        writeln!(
+            brep,
+            "#{}=IFCCARTESIANPOINT(({x:.2},{y:.2},{z:.2}));",
+            300 + index
+        )
+        .unwrap();
+    }
+    let mut ids = Vec::new();
+    for (index, face) in faces.iter().enumerate() {
+        let points: Vec<String> = face
+            .iter()
+            .map(|corner| format!("#{}", 300 + corner))
+            .collect();
+        let (lp, bound, id) = (320 + index, 330 + index, 340 + index);
+        writeln!(
+            brep,
+            "#{lp}=IFCPOLYLOOP(({}));\n#{bound}=IFCFACEOUTERBOUND(#{lp},.T.);\n#{id}=IFCFACE((#{bound}));",
+            points.join(",")
+        )
+        .unwrap();
+        ids.push(format!("#{id}"));
+    }
+    writeln!(
+        brep,
+        "#350=IFCCLOSEDSHELL(({}));\n\
+         #351=IFCFACETEDBREP(#350);\n\
+         #352=IFCSHAPEREPRESENTATION(#5,'Body','Brep',(#351));\n\
+         #353=IFCPRODUCTDEFINITIONSHAPE($,$,(#352));\n\
+         #354=IFCLOCALPLACEMENT($,#2);\n\
+         #39=IFCOPENINGELEMENT('0000000000000000000039',$,$,$,$,#354,#353,$,.OPENING.);",
+        ids.join(",")
+    )
+    .unwrap();
+    brep
+}
+
+/// A whole's opening written as one Brep that is neither convex nor an
+/// extrusion (a rebated window), flush with the holes its turned layers
+/// already carry, is read cell by convex cell of its own planes: it cuts
+/// neither layer, both are measured, and the pipe through the window
+/// clashes with nothing (#316).
+#[test]
+fn with_geometry_a_wholes_rebated_opening_flush_with_its_parts_changes_nothing() {
+    let case = Case::new("geometry-whole-opening-rebated");
+    let (output, found, result) = element_clashes(&case, &rebated_window_wall());
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let geometry = &result["geometry"];
+    assert_eq!(geometry["unmeasured"], json!([]), "{geometry:#}");
+    assert_eq!(geometry["composed"], 1, "{geometry:#}");
+    let openings = geometry["whole_openings"].as_array().unwrap();
+    assert_eq!(openings.len(), 1, "{geometry:#}");
+    assert_eq!(openings[0]["opening"]["local_id"], "#39");
+    assert_eq!(openings[0]["subtracted_from"], json!([]), "{geometry:#}");
+    assert_eq!(
+        found,
+        pairs(&[("#100", "#59"), ("#19", "#59"), ("#29", "#59")]),
+        "{result:#}"
+    );
+}
+
 /// Where whether a whole's opening cuts its parts cannot be decided, the
 /// whole is unmeasured with the opening named, never measured filled: an
 /// opening with no representation leaves the wall unmeasured, and a layer

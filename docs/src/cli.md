@@ -1121,20 +1121,30 @@ already carries and the opening that made it are written apart). For two
 exact bodies this is decided cell by cell of the opening's mesh: each
 connected piece is one convex cell (an extruded rectangle, as most
 openings are written), one prism per cap triangle when it is an extrusion
-of another profile, and otherwise only a convex cell holding it; the part
-cuts a cell when its surface reaches into the cell's core (the cell
-shrunk by those 10 µm) or the core lies inside the part (a cavity), by
-its winding number, and is clear of it otherwise. Material left in the
-opening is then at most 20 µm thick. What that leaves open, and any
-tessellated pair, is decided by the certified volume the two share: one
-beyond the rounding of touching bodies (about 1e-12 m³) cuts, one within
-it does not. The opening is subtracted from each part it cuts, and from
+of another profile, and otherwise (a rebated window written as one
+faceted Brep) the convex cells the planes of its own faces split its box
+into, each wholly inside the piece or wholly outside it by the winding
+number of its centre; a piece of more than 64 planes or 4096 cells, or
+one that crosses itself, is only bounded by a convex cell holding it,
+which can decide it clear but never cut, and that cell may still decide
+clear a piece one of whose own cells cannot. The part cuts a cell when
+its surface reaches into the cell's core (the cell shrunk by those 10 µm)
+or the core lies inside the part (a cavity), by its winding number, and
+is clear of it otherwise. Material left in the opening is then at most
+20 µm thick, about any face of the opening or between its cells. What
+that leaves open, and any tessellated pair, is decided by the certified
+volume the two share: one beyond a layer 10 µm thick over the opening's
+faces where the two can meet (the area of the opening's faces inside the
+part's box) cuts, since material within those 10 µm of the faces fills
+no more; one within the rounding of touching bodies (1e-12 m³) does not;
+anything between is undecided. A volume never shows that nothing reaches
+deeper than 10 µm, so clear stays at rounding. The opening is subtracted from each part it cuts, and from
 no other: the part is meshed again, net of its own openings, less the
 opening's `Body` lowered by its own placement (in world coordinates), and
 the whole is composed from the parts so cut. A part whose cut cannot be
 decided (a tessellated part flush with the opening, whose shared volume
-straddles that rounding; a malformed opening piece the volume cannot be
-measured against), that lies wholly within the opening, or that the
+lies between that rounding and that layer; a malformed opening piece the
+volume cannot be measured against), that lies wholly within the opening, or that the
 compiler cannot cut (a net body of several solids is refused by name) is
 unmeasured with a reason naming the opening and the whole, and the whole
 with it, naming the part. A whole one of whose

@@ -103,30 +103,31 @@ pub(crate) fn collinear(points: &[Point2]) -> bool {
         .all(|point| along.perp_dot(*point - first).abs() <= reach * length)
 }
 
-/// Signed shoelace area of a ring.
+/// Signed shoelace area of a ring, summed about its first vertex.
+///
+/// A shoelace over the coordinates themselves cancels products of the
+/// coordinates' size: at georeferenced coordinates (some 10⁶ m) each term
+/// is about 10¹² m², whose rounding (some 10⁻⁴ m²) exceeds the area of a
+/// thin ring and can flip its sign (#304). Vectors from the first vertex
+/// are exact up to their own rounding, so the sum is accurate to the
+/// ring's size, not to where it lies, as the overlay decides orientation
+/// relative to a vertex since axiolid-overlay 0.3.11 (axiolid/kernel#274).
 pub(crate) fn ring_area(ring: &Ring) -> f64 {
     let points = &ring.points;
+    let Some(&origin) = points.first() else {
+        return 0.0;
+    };
     let mut sum = 0.0;
-    for index in 0..points.len() {
-        let current = points[index];
-        let next = points[(index + 1) % points.len()];
-        sum += current.x * next.y - next.x * current.y;
+    for index in 1..points.len().saturating_sub(1) {
+        sum += (points[index] - origin).perp_dot(points[index + 1] - origin);
     }
     sum * 0.5
 }
 
-/// Signed area of a plan triangle, taken about its first vertex.
-///
-/// [`ring_area`] sums the shoelace over the coordinates themselves, which
-/// cancels products of the coordinates' size: at georeferenced coordinates
-/// (some 10⁶ m) each term is about 10¹² m², whose rounding exceeds the area
-/// of a thin triangle and can flip its sign. That wound such a triangle
-/// clockwise in [`projected_polygons`], and the overlay refused the
-/// footprint as self-intersecting. Edge vectors from the first vertex are
-/// exact up to their own rounding, so this is accurate to the triangle's
-/// size, not to where it lies. The overlay still takes a ring's orientation
-/// and its `ZeroArea` check from the coordinates (axiolid/kernel#274), so
-/// such a triangle may yet be refused there.
+/// Signed area of a plan triangle, taken about its first vertex, as
+/// [`ring_area`] takes a ring's: accurate to the triangle's size wherever
+/// it lies, so a thin triangle far from the origin keeps its winding in
+/// [`projected_polygons`].
 fn triangle_area(points: [Point2; 3]) -> f64 {
     let [a, b, c] = points;
     0.5 * (b - a).perp_dot(c - a)
@@ -514,6 +515,19 @@ impl Shadows {
     }
 }
 
+/// Whether a counter-clockwise fan triangle of a hull is kept for the plan
+/// overlay: it encloses more than rounding (`f64::EPSILON` m²), and the
+/// overlay does not refuse it as degenerate at the plan tolerance
+/// ([`refused_ring`]). A fan over a hull with two corners a rounding apart
+/// has a sliver there, which the overlay refuses with the whole soup
+/// (`RepeatedVertex`); its area, taken about a vertex ([`ring_area`]), is
+/// no longer rounded to nothing far from the origin, so the area alone no
+/// longer leaves it out (#304).
+pub(crate) fn kept_fan_triangle(ring: &Ring) -> bool {
+    ring_area(ring) > f64::EPSILON
+        && crate::plan_area::tolerance().is_ok_and(|tolerance| !refused_ring(ring, tolerance))
+}
+
 /// Whether the overlay refuses a triangle's ring as degenerate: two corners
 /// within its linear tolerance, or an area within its square. The same
 /// tests `axiolid-overlay` runs (`validate_ring`), in the same arithmetic;
@@ -654,7 +668,7 @@ pub(crate) fn grown_polygons(triangles: &[Triangle], radius: f64, disc: Disc) ->
                     .map(|(x, y)| Point2::new(x, y))
                     .collect(),
             };
-            if ring_area(&ring) > f64::EPSILON {
+            if kept_fan_triangle(&ring) {
                 grown.push(Polygon {
                     outer: ring,
                     holes: Vec::new(),

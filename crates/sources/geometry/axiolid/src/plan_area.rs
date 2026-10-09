@@ -49,7 +49,7 @@ use axioval_ir::{Evidence, ObjectId, SourceId};
 use crate::geometry::{AxiolidGeometry, Triangle, triangles};
 use crate::planar::{
     Disc, certified_perimeter, footprint_measure, footprint_polygons, grown_polygons, hull_of,
-    plan_overlap_area, polygons_overlap_area, projected_polygons, ring_area,
+    kept_fan_triangle, plan_overlap_area, polygons_overlap_area, projected_polygons,
 };
 
 /// How far a computed band cut is moved, in metres, plus `CUT_SCALE` of the
@@ -306,7 +306,7 @@ fn cut(hull: &[(f64, f64)], direction: [f64; 2], low: f64, high: f64) -> Vec<Pol
                     .map(|(x, y)| Point2::new(x, y))
                     .collect(),
             };
-            (ring_area(&ring) > f64::EPSILON).then_some(Polygon {
+            kept_fan_triangle(&ring).then_some(Polygon {
                 outer: ring,
                 holes: Vec::new(),
             })

@@ -219,9 +219,17 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   tessellated outline refused (`SpaceError::InexactEvidence`). `tests/space.rs`
   pins a room with a leaning face (`leaning_room`) in all three aspects.
   `projected_polygons` winds each triangle by its area about a vertex
-  (`triangle_area`), never by `ring_area`'s sum over the raw coordinates,
-  whose products swamp a thin triangle's area at georeferenced
-  coordinates and flip its winding (#304).
+  (`triangle_area`), and `ring_area` sums about a ring's first vertex too:
+  a sum over the raw coordinates swamps a thin ring's area at
+  georeferenced coordinates and flips its winding (#304), as the overlay
+  decides it about a vertex since 0.3.11 (axiolid/kernel#274). Hull fan
+  triangles go to the overlay only through `kept_fan_triangle` (area
+  above `f64::EPSILON` and not refused by `refused_ring`): their area no
+  longer rounds a sliver between two hull corners a rounding apart to
+  nothing, and the overlay refuses the whole soup for one
+  (`RepeatedVertex`). `tests/space.rs`
+  `spaces_far_from_the_origin_beside_a_curved_one_are_measured` pins a
+  room and a round-cornered hall at (600 000, 5 600 000), turned.
 - `src/envelope_membership.rs` derives envelope membership: an object bounds
   the envelope when its plan footprint meets a bounding space. The bounding
   spaces are the request's (the rule's selection), never host-declared; a

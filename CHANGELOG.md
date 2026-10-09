@@ -67,6 +67,14 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **Space**: plan rings far from the origin keep their area and winding:
+  the adapter's shoelace is summed about a ring's first vertex, and
+  axiolid-overlay 0.3.11 decides orientation and `ZeroArea` relative to a
+  vertex (axiolid/kernel#274), so a 1e-4 m² footprint at georeferenced
+  coordinates is measured where the overlay refused it. Hull fan triangles
+  the overlay would refuse as degenerate are left out of grown covers and
+  cuts, as tiny ones were
+  ([#304](https://github.com/axioval/engine/issues/304)).
 - **Geometry**: a faceted body whose planar face has a corner a fraction of
   a micrometre off the line through its neighbours is meshed as the closed
   solid it is authored as, where the corner was dropped from one face and

@@ -42,8 +42,8 @@ use axioval_ir::{Evidence, ObjectId};
 use crate::geometry::Triangle;
 use crate::plan_area::{AxiolidPlanAreaService, band, tolerance};
 use crate::planar::{
-    footprint_measure, hull_of, plan_frame, polygons_overlap_area, projected_polygons, ring_area,
-    ring_perimeter,
+    footprint_measure, hull_of, kept_fan_triangle, plan_frame, polygons_overlap_area,
+    projected_polygons, ring_perimeter,
 };
 
 /// How far a projected coordinate may round when the axis is off the
@@ -369,7 +369,7 @@ fn triangle_polygon(points: [(f64, f64); 3]) -> Option<Polygon> {
     let ring = Ring {
         points: points.into_iter().map(|(x, y)| Point2::new(x, y)).collect(),
     };
-    (ring_area(&ring) > f64::EPSILON).then_some(Polygon {
+    kept_fan_triangle(&ring).then_some(Polygon {
         outer: ring,
         holes: Vec::new(),
     })

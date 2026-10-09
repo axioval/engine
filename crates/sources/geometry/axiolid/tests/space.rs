@@ -1,5 +1,7 @@
 //! Space validation measured from real geometry, one aspect at a time.
 
+use std::f64::consts::FRAC_PI_2;
+
 use axiolid_core::Point3;
 use axiolid_mesh::TriMesh;
 use axioval_axiolid::{AxiolidGeometry, AxiolidSpaceService};
@@ -1039,9 +1041,11 @@ fn a_thin_triangle_far_from_the_origin_keeps_its_winding() {
     );
 }
 
-/// A prism over a 1e-4 m² triangle at georeferenced coordinates, whose
-/// plan the overlay refuses (`ZeroArea`): it takes a ring's area from a
-/// shoelace over the coordinates, which rounds this one to zero.
+/// A prism over a 1e-4 m² triangle at georeferenced coordinates. The
+/// overlay refused its plan (`ZeroArea`) while it took a ring's area from a
+/// shoelace over the coordinates, which rounds this one to zero; since
+/// axiolid-overlay 0.3.11 it decides it relative to a vertex
+/// (axiolid/kernel#274).
 fn far_sliver(z0: f64, z1: f64) -> TriMesh {
     let corners = [
         (600_000.0, 5_600_000.0),
@@ -1056,11 +1060,13 @@ fn far_sliver(z0: f64, z1: f64) -> TriMesh {
 }
 
 /// A space is measured against the bodies that can reach it in plan only:
-/// a space, wall or slab elsewhere at its height, whose footprint the
-/// overlay refuses, neither duplicates, overlaps nor caps it, and so does
-/// not refuse it.
+/// a space, wall or slab elsewhere at its height neither duplicates,
+/// overlaps nor caps it, and a footprint the overlay refused there could
+/// not refuse it. The far sliver itself, refused until the overlay decided
+/// orientation and `ZeroArea` relative to a vertex (axiolid/kernel#274),
+/// is measured: its cap is the far slab.
 #[test]
-fn a_footprint_refused_elsewhere_leaves_the_space_measured() {
+fn a_footprint_elsewhere_leaves_the_space_measured() {
     let space = closed_box(0.0, 4.0, 0.0, 4.0, 0.0, 3.0);
     let geometry = AxiolidGeometry::new()
         .with_mesh(id("space"), space.clone())
@@ -1090,13 +1096,113 @@ fn a_footprint_refused_elsewhere_leaves_the_space_measured() {
         .measure_cap_coverage(&id("space"), &CapRequest::new(Cap::Top))
         .expect("measured");
     assert_eq!(coverage.elements(), &[id("slab")]);
-    // The far space's own cap, which needs its footprint, is still
-    // refused by name, never measured empty.
-    let far_cap = service.measure_cap_coverage(&id("far space"), &CapRequest::new(Cap::Top));
-    assert!(
-        matches!(far_cap, Err(SpaceError::Refused(_))),
-        "{far_cap:?}"
-    );
+    let far_cap = service
+        .measure_cap_coverage(&id("far space"), &CapRequest::new(Cap::Top))
+        .expect("measured");
+    assert_eq!(far_cap.elements(), &[id("far slab")]);
+    assert!((far_cap.covered_ratio() - 1.0).abs() < 1e-6, "{far_cap:?}");
+}
+
+/// The site of a georeferenced model: about 600 km east and 5600 km north
+/// of the origin, turned 2.3 degrees from grid north.
+fn georeferenced(x: f64, y: f64) -> (f64, f64) {
+    let (sin, cos) = 2.3_f64.to_radians().sin_cos();
+    (
+        600_000.0 + x * cos - y * sin,
+        5_600_000.0 + x * sin + y * cos,
+    )
+}
+
+/// A closed, outward-wound upright prism over the convex plan `ring`
+/// (counter-clockwise, local coordinates), placed at the georeferenced
+/// site, its caps fanned from the first corner as a tessellated round
+/// body's are: thin chord triangles along each arc.
+fn far_prism(ring: &[Xy], z0: f64, z1: f64) -> TriMesh {
+    let n = u32::try_from(ring.len()).unwrap();
+    let mut positions = Vec::new();
+    for z in [z0, z1] {
+        for &(x, y) in ring {
+            let (x, y) = georeferenced(x, y);
+            positions.push(Point3::new(x, y, z));
+        }
+    }
+    let mut indices = Vec::new();
+    for i in 1..n - 1 {
+        indices.extend([0, i + 1, i]);
+        indices.extend([n, n + i, n + i + 1]);
+    }
+    for i in 0..n {
+        let j = (i + 1) % n;
+        indices.extend([i, j, n + j, i, n + j, n + i]);
+    }
+    TriMesh::new(positions, indices)
+}
+
+/// A rectangle `x0..x1` by `y0..y1` with its corners rounded to `radius`,
+/// each quarter turn tessellated by `steps` chords, counter-clockwise.
+fn rounded_ring(x0: f64, x1: f64, y0: f64, y1: f64, radius: f64, steps: u32) -> Vec<Xy> {
+    let centres = [
+        (x1 - radius, y0 + radius),
+        (x1 - radius, y1 - radius),
+        (x0 + radius, y1 - radius),
+        (x0 + radius, y0 + radius),
+    ];
+    let mut ring = Vec::new();
+    for (quarter, (cx, cy)) in centres.into_iter().enumerate() {
+        let start = (f64::from(u32::try_from(quarter).unwrap()) - 1.0) * FRAC_PI_2;
+        for step in 0..=steps {
+            let angle = start + FRAC_PI_2 * f64::from(step) / f64::from(steps);
+            ring.push((cx + radius * angle.cos(), cy + radius * angle.sin()));
+        }
+    }
+    ring
+}
+
+/// engine#304: a room at georeferenced coordinates beside a round-cornered
+/// stair hall of the same height, tessellated with thin chord triangles,
+/// under one slab. Every space measurement of both is decided: neither
+/// duplicates nor overlaps the other, and the slab caps each whole. A
+/// shoelace over the coordinates (some 10¹² m² a term there) wound the
+/// hall's thin triangles either way, and the overlay refused its footprint
+/// (`SelfIntersection`, then `ZeroArea`), which refused the room too.
+#[test]
+fn spaces_far_from_the_origin_beside_a_curved_one_are_measured() {
+    let room = far_prism(&[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)], 0.0, 3.0);
+    let hall = far_prism(&rounded_ring(4.0, 8.0, 0.0, 4.0, 1.5, 64), 0.0, 3.0);
+    let slab = far_prism(&[(0.0, 0.0), (8.0, 0.0), (8.0, 4.0), (0.0, 4.0)], 3.0, 3.2);
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("room"), room)
+        .with_mesh(id("hall"), hall)
+        .with_mesh(id("slab"), slab);
+    let service = AxiolidSpaceService::new(geometry, source())
+        .with_space(id("room"))
+        .with_space(id("hall"))
+        .with_slab(id("slab"));
+    for space in ["room", "hall"] {
+        assert_eq!(
+            service.measure_duplicates(&id(space)).expect(space),
+            Vec::<ObjectId>::new(),
+            "{space}"
+        );
+        let overlaps = service
+            .measure_overlaps(&id(space), &OverlapRequest::new())
+            .expect(space);
+        assert!(
+            overlaps
+                .iter()
+                .all(|overlap| overlap.area_square_metres() < 1e-6),
+            "{space}: {overlaps:?}"
+        );
+        let coverage = service
+            .measure_cap_coverage(&id(space), &CapRequest::new(Cap::Top))
+            .expect(space);
+        assert_eq!(coverage.elements(), &[id("slab")], "{space}");
+        assert!(
+            (coverage.covered_ratio() - 1.0).abs() < 1e-6,
+            "{space}: {}",
+            coverage.covered_ratio()
+        );
+    }
 }
 
 // Space measurements next to tessellated bodies, bracketed by their chord

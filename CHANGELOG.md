@@ -67,13 +67,20 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **Geometry**: moves to openbim-ifc 0.24, ifc-geometry 0.18 and
+  ifc-alignment 0.7.2. Stations on a plain `IfcCompositeCurve`, an
+  `IfcTrimmedCurve` or a station-placed composite basis lower, one on a
+  joint reading the incoming segment, and so do sectioned and offset runs
+  across a joint (openbimrs/ifc#346), where they were refused by name; an
+  `IfcCurveSegment` placed by an `IfcAxis2PlacementLinear` lowers onto
+  its station (openbimrs/ifc#311).
 - **Geometry**: moves to axiolid-mesh-compile 0.3.17 (with
   axiolid-brep-boolean 0.1.7, axiolid-evaluate 0.3.9, axiolid-curve 0.3.5),
   which sews booleans cut by the cylinder, sphere, cone or torus wall of a
   mirrored (downward) construction instead of refusing them as `kept faces
   do not sew into a solid` (axiolid/kernel#288). A slab with round or
   round-cornered openings cut down from its top is measured.
-- **Geometry**: moves to openbim-ifc 0.23 and ifc-geometry 0.17, which
+- **Geometry**: ifc-geometry 0.17 and later
   lower a polygonal half-space boundary with circular-arc segments (an
   `IfcCompositeCurve` of trimmed circles, an `IfcIndexedPolyCurve` with an
   `IfcArcIndex`) exactly as a contour of lines and arcs (openbimrs/ifc#398,

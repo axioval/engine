@@ -146,16 +146,16 @@ openbim-ids = { version = "0.2.2", features = ["audit-schema"] }
 # Door and window operation geometry (openbimrs/ifc#148, #170) is published
 # only in the IFC facade, which joins `ifc-geometry` and `ifc-properties`; `geometry-select`
 # compiles no geometry kernel.
-# 0.23 re-exports `ifc-geometry` 0.17; its `authoring` feature stays off.
-openbim_ifc = { package = "openbim-ifc", version = "0.23.0", default-features = false, features = ["geometry-select", "properties", "ifc2x3", "ifc4", "ifc4x3"] }
+# 0.24 re-exports `ifc-geometry` 0.18; its `authoring` feature stays off.
+openbim_ifc = { package = "openbim-ifc", version = "0.24.0", default-features = false, features = ["geometry-select", "properties", "ifc2x3", "ifc4", "ifc4x3"] }
 ifc-classification = "0.4.0"
 # The CLI reads each `IfcAlignment`'s centreline, stationing and cant to
 # locate products along it (engine#252). 0.7 evaluates Viennese bends for
 # the section's cant and refuses those it does not determine (#312, #364);
 # `ifc-geometry` 0.13 requires it. 0.7.1 gives a station on a seam the
 # incoming tangent, mitres sectioned runs across seams and snaps stations
-# within `ARC_LENGTH_TOLERANCE` to the seam.
-ifc-alignment = "0.7.1"
+# within `ARC_LENGTH_TOLERANCE` to the seam (0.7.2 for ifc-geometry 0.18).
+ifc-alignment = "0.7.2"
 # 0.9 lowers IFC4X3 stations, offset curves by distances and sectioned
 # solids and surfaces (openbimrs/ifc#307) and, since 0.8.2, refuses an
 # `IfcParameterValue` along an alignment by name (openbimrs/ifc#347). 0.10
@@ -173,8 +173,10 @@ ifc-alignment = "0.7.1"
 # sections and offsets across one, refused by name before (#346); 0.17
 # lowers polygonal half-space boundaries with circular-arc segments
 # (`IfcCompositeCurve` of trimmed circles, `IfcIndexedPolyCurve` with an
-# `IfcArcIndex`) exactly as a contour of lines and arcs (#398).
-ifc-geometry = { version = "0.17.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
+# `IfcArcIndex`) exactly as a contour of lines and arcs (#398); 0.18 lowers
+# stations on composite, trimmed and station-placed bases, a joint reading
+# its incoming segment (#346), and curve segments placed linearly (#311).
+ifc-geometry = { version = "0.18.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
 # Map conversions only: without the default `transform` feature it links no
 # geometry crate (never Axiolid).
 ifc-georef = { version = "0.6.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }

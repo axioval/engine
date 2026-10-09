@@ -1334,10 +1334,19 @@ and `RefDirection`), `IfcOffsetCurveByDistances`,
 stations (openbimrs/ifc#307). A sectioned solid still leaves its
 object unmeasured: the mesh compiler samples the surface between stations
 and certifies no bound on it, so it is never declared within the chord
-tolerance. A station given as `IfcParameterValue`, one on a tangent
-discontinuity of its basis or a run of sections across one, and one on a
-plain `IfcCompositeCurve` basis are refused by name (openbimrs/ifc#346), as
-is an `IfcSegmentedReferenceCurve`. A product placed by an
+tolerance. Since `ifc-geometry` 0.18 (openbimrs/ifc#346) stations also
+lower on a plain `IfcCompositeCurve`, an `IfcTrimmedCurve` and a
+station-placed composite basis, and one on a joint or tangent
+discontinuity reads the incoming segment, as IFC4.3 ADD2 8.9.3.48.3
+says; a run of sections or offsets across a joint lowers too (`tests/check.rs`
+`with_geometry_stations_on_a_composite_basis_lower`: a deck along a
+composite of two polylines, straight or turned at the joint, with a station
+on it, reaches the mesh compiler, where it was refused by name). An
+`IfcCurveSegment` placed by an `IfcAxis2PlacementLinear` lowers to a
+placement at a station (openbimrs/ifc#311). Still refused by name: a
+station given as `IfcParameterValue`, an offset-curve basis
+(openbimrs/ifc#414), a relation mixing plan-measured and arc-length pieces,
+and an `IfcSegmentedReferenceCurve`. A product placed by an
 `IfcLinearPlacement` is placed where its linear expression puts it: every
 lowering derives the frame from the basis curve with the Axiolid reference
 curve evaluator (`ifc-geometry` 0.10, `LoweringSession::with_curve_evaluator`

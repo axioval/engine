@@ -18774,3 +18774,54 @@ fn with_geometry_a_faceted_prism_with_a_nearly_collinear_corner_is_a_closed_soli
         );
     }
 }
+
+/// A deck sectioned along a plain `IfcCompositeCurve` (#90 of two
+/// polylines meeting at x = 25 m), with a third station on that joint, and
+/// the same with the second polyline turned 90 degrees so the joint is a
+/// tangent discontinuity. Since ifc-geometry 0.18 (openbimrs/ifc#346) the
+/// stations lower on such a basis, the joint's on the incoming segment,
+/// where they were refused by name: the deck reaches the mesh compiler,
+/// which certifies no bound between stations, and is unmeasured for that.
+#[test]
+fn with_geometry_stations_on_a_composite_basis_lower() {
+    let deck = |corner: &str| {
+        format!(
+            "#86=IFCCARTESIANPOINT((20.,0.,0.));\n\
+             #87=IFCCARTESIANPOINT((25.,0.,0.));\n\
+             #88=IFCCARTESIANPOINT({corner});\n\
+             #84=IFCPOLYLINE((#86,#87));\n\
+             #85=IFCPOLYLINE((#87,#88));\n\
+             #89=IFCCOMPOSITECURVESEGMENT(.CONTINUOUS.,.T.,#84);\n\
+             #91=IFCCOMPOSITECURVESEGMENT(.DISCONTINUOUS.,.T.,#85);\n\
+             #90=IFCCOMPOSITECURVE((#89,#91),.F.);\n\
+             #93=IFCRECTANGLEPROFILEDEF(.AREA.,'narrow',#95,2.,1.);\n\
+             #94=IFCRECTANGLEPROFILEDEF(.AREA.,'wide',#95,4.,1.);\n\
+             #95=IFCAXIS2PLACEMENT2D(#96,$);\n\
+             #96=IFCCARTESIANPOINT((0.,0.));\n\
+             #97=IFCAXIS2PLACEMENTLINEAR(#98,$,$);\n\
+             #98=IFCPOINTBYDISTANCEEXPRESSION(IFCLENGTHMEASURE(0.),$,$,$,#90);\n\
+             #99=IFCAXIS2PLACEMENTLINEAR(#100,$,$);\n\
+             #100=IFCPOINTBYDISTANCEEXPRESSION(IFCLENGTHMEASURE(5.),$,$,$,#90);\n\
+             #101=IFCAXIS2PLACEMENTLINEAR(#102,$,$);\n\
+             #102=IFCPOINTBYDISTANCEEXPRESSION(IFCLENGTHMEASURE(10.),$,$,$,#90);\n\
+             #50=IFCSECTIONEDSOLIDHORIZONTAL(#90,(#93,#94,#94),(#97,#99,#101));\n\
+             #51=IFCSHAPEREPRESENTATION(#5,'Body','AdvancedSweptSolid',(#50));\n\
+             #52=IFCPRODUCTDEFINITIONSHAPE($,$,(#51));\n\
+             #53=IFCBUILDINGELEMENTPROXY('0000000000000000000053',$,$,$,$,#3,#52,$,$);\n"
+        )
+    };
+    let case = Case::new("geometry-composite-stations");
+    for corner in ["(30.,0.,0.)", "(25.,5.,0.)"] {
+        let model = crossing_walls_with(&deck(corner))
+            .replace("FILE_SCHEMA(('IFC4'))", "FILE_SCHEMA(('IFC4X3_ADD2'))");
+        let (output, result) = case.wall_clash(&model, &json!({}));
+        assert!(output.status.code().is_some(), "{}", stderr(&output));
+        let reason = unmeasured_reasons(&result)
+            .remove("#53")
+            .unwrap_or_else(|| panic!("{corner}: {result:#}"));
+        assert!(
+            reason.contains("certifies no bound") && reason.contains("stationed sections"),
+            "{corner}: {reason}"
+        );
+    }
+}

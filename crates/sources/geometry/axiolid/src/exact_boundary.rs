@@ -13,8 +13,12 @@
 //!   `f64` transform, each coordinate rounded once;
 //! - over an extrusion of a rectangle (sharp, rounded or hollow), circle
 //!   (filled or hollow), ellipse, structural section or contour of lines and
-//!   circular arcs with any number of voids, along the profile normal (or
-//!   obliquely where the kernel builds it);
+//!   circular arcs with any number of voids, along the profile normal
+//!   either way, or obliquely for a profile of straight edges only: an
+//!   oblique extrusion of a profile that may hold arcs or curves is refused
+//!   ([`SHEARED_CURVED_EXTRUSION`], axiolid/kernel#280), as an operand of a
+//!   boolean too, and so is a direction in the profile plane
+//!   ([`IN_PLANE_EXTRUSION`]);
 //! - a revolution of the same profiles about the profile's local y axis,
 //!   a full turn or part of one, never touching the axis on a full turn;
 //! - a disk, solid or bored, swept along one straight segment or one
@@ -79,7 +83,7 @@ use axiolid_contracts::ExecutionOptions;
 use axiolid_core::{
     BooleanOperator, Interval, Point2, Point3, Tolerance, Transform2, Transform3, Vec2, Vec3,
 };
-use axiolid_curve::{Circle3, Curve3};
+use axiolid_curve::{Circle3, Curve2, Curve3};
 use axiolid_mesh_compile::{ExactDirectrix, ReferenceExactCompiler, exact_directrix};
 use axiolid_model::{GeometryGraph, GeometryNode, NodeId, SolidOperation};
 use axiolid_overlay::ArcRing;
@@ -698,7 +702,12 @@ impl Chain {
                     }
                     return Ok(());
                 }
-                _ => return Ok(()),
+                _ => {
+                    return match untrusted_extrusion(graph, id, TOLERANCE, true) {
+                        Some(reason) => Err(reason.into()),
+                        None => Ok(()),
+                    };
+                }
             }
         }
         Err("the boolean chain is too deep".into())
@@ -781,6 +790,9 @@ fn construct(
             direction,
             depth,
         })) => {
+            if let Some(reason) = untrusted_extrusion(graph, leaf, TOLERANCE, true) {
+                return Err(reason.into());
+            }
             let profile = profile_of(graph, *profile)?;
             if !direction.is_finite() || !depth.is_finite() || *depth <= 0.0 {
                 return Err("the extrusion is degenerate".into());
@@ -872,6 +884,92 @@ fn profile_of(graph: &GeometryGraph, id: NodeId) -> Result<&Profile, String> {
     match graph.get(id) {
         Some(GeometryNode::Profile(profile)) => Ok(profile),
         _ => Err("the solid has no profile".into()),
+    }
+}
+
+/// Why an extrusion whose direction lies in its profile's plane is refused:
+/// it sweeps no volume.
+///
+/// The kernel's exact extrusion refuses it under this name, but its mesh
+/// extrusion builds a sliver or a flat "solid" instead
+/// (axiolid/kernel#281), so a host refuses it before either is asked.
+pub const IN_PLANE_EXTRUSION: &str =
+    "extrusion direction in the profile plane: it sweeps no volume";
+
+/// Why an extrusion oblique to its profile's normal, of a profile that
+/// may hold arcs or other curves, has no exact construction here.
+///
+/// The kernel builds each arc's wall of such an extrusion as a right
+/// cylinder along the profile normal, where the sheared extrusion sweeps an
+/// oblique one, and reports no error (axiolid/kernel#280). Every exact
+/// construction of it (an exact boundary, and the exact boolean a mesh's
+/// certified deviation is measured against) would be wrong by up to the
+/// shear, so it is refused by name until the kernel builds it or refuses
+/// it itself (#317).
+pub const SHEARED_CURVED_EXTRUSION: &str = "an extrusion oblique to its profile's normal, of a \
+     profile with arcs or curves, has no trusted exact construction";
+
+/// How far an extrusion may shear its profile sideways, over its whole
+/// depth, and still count as along the profile normal: one micrometre.
+const SHEAR: f64 = 1e-6;
+
+/// Why the extrusion at `node`, if it is one, is not handed to the
+/// kernel: a direction within `tolerance` of the profile plane
+/// ([`IN_PLANE_EXTRUSION`]), or, when its `exact` construction is to be
+/// built, a direction oblique to the profile normal with a profile that
+/// may hold arcs or curves ([`SHEARED_CURVED_EXTRUSION`]). `None` for any
+/// other node.
+///
+/// A profile counts as curved unless it is a sharp rectangle or a contour
+/// (or a placed copy or composite of them) of straight segments only, so
+/// a structural section, whatever its fillets, counts as curved: the guard
+/// fails closed.
+#[must_use]
+pub fn untrusted_extrusion(
+    graph: &GeometryGraph,
+    node: NodeId,
+    tolerance: Tolerance,
+    exact: bool,
+) -> Option<&'static str> {
+    let Some(GeometryNode::SolidOperation(SolidOperation::Extrusion {
+        profile,
+        direction,
+        depth,
+    })) = graph.get(node)
+    else {
+        return None;
+    };
+    let length = direction.length();
+    if !(length > 0.0 && length.is_finite() && depth.is_finite()) {
+        // Degenerate; the kernel refuses it by its own name.
+        return None;
+    }
+    let offset = *direction / length * *depth;
+    if offset.z.abs() <= tolerance.linear() {
+        return Some(IN_PLANE_EXTRUSION);
+    }
+    let curved = match graph.get(*profile) {
+        Some(GeometryNode::Profile(profile)) => may_hold_curves(profile),
+        _ => true,
+    };
+    (exact && curved && offset.x.hypot(offset.y) > SHEAR).then_some(SHEARED_CURVED_EXTRUSION)
+}
+
+/// Whether `profile` may hold an arc or other curve: anything but a sharp
+/// rectangle or straight-edged contour, placed or composed.
+fn may_hold_curves(profile: &Profile) -> bool {
+    match profile {
+        Profile::Rectangle(rectangle) => [rectangle.outer_radius, rectangle.inner_radius]
+            .into_iter()
+            .flatten()
+            .any(|radius| radius != 0.0),
+        Profile::Contour(contour) => std::iter::once(&contour.outer)
+            .chain(&contour.holes)
+            .flat_map(|ring| &ring.segments)
+            .any(|segment| !matches!(segment.curve, Curve2::Line(_) | Curve2::Polyline(_))),
+        Profile::Derived { basis, .. } => may_hold_curves(basis),
+        Profile::Composite(members) => members.iter().any(may_hold_curves),
+        _ => true,
     }
 }
 

@@ -67,6 +67,31 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **Geometry**: moves to axiolid-construct 0.3.16, axiolid-mesh-compile
+  0.3.15 and their contracts. Faces the mesh compiler refused are measured:
+  a ring whose lowest corner has a `-0.0` twin, which "found no ear"
+  (axiolid/kernel#269), and a hole joined to its outer boundary by a seam
+  (a keyhole) in a face set or surface model (axiolid/kernel#270; in an
+  extruded profile it is refused by name, `... runs along a seam both ways
+  ...`) ([#299](https://github.com/axioval/engine/issues/299)). A boolean
+  with an extrusion against its profile normal (`ExtrudedDirection (0, 0,
+  -1)`, an opening cut down from a slab's top) is certified against the
+  exact boolean and measured, where it was unmeasured as `... (non-forward
+  planar extrusion)` (axiolid/kernel#275,
+  [#301](https://github.com/axioval/engine/issues/301)). Rings touching
+  inside a shared edge are welded, so such a B-rep closes; a declared solid
+  whose mesh does not close is measured as an open surface and refused as
+  a boolean operand by name (axiolid/kernel#265).
+- **Geometry**: two kernel defects are refused by name instead of
+  measured wrong (#317). An extrusion oblique to its profile's normal, of a
+  profile with arcs or curves, gets no exact boundary and, as a boolean
+  operand, leaves its object unmeasured as `an extrusion oblique to its
+  profile's normal, of a profile with arcs or curves, has no trusted exact
+  construction, ...`: the kernel builds its arc walls as right cylinders
+  without an error (axiolid/kernel#280). An extrusion whose direction lies
+  in its profile's plane leaves its object unmeasured as `extrusion
+  direction in the profile plane: it sweeps no volume`, where the mesh
+  compiler built a sliver (axiolid/kernel#281).
 - **Clash**: a penetration is witnessed only at a point of the body it
   reaches from. A closed body's vertex centroid and the midpoints of the
   chords its largest triangle's normal cuts through it are taken only where

@@ -74,8 +74,11 @@ clap = { version = "4.5.46", features = ["derive"] }
 axiolid-brep = "0.3.3"
 # 0.3.13 mitres a swept disk's sharp corners again (axiolid/kernel#245);
 # 0.3.14 lowers I sections of decimal (IPE, HEA) sizes at no tolerance (#250);
-# 0.3.15 refuses pinched rings unless asked to accept them (#253, #262).
-axiolid-construct = "0.3.15"
+# 0.3.15 refuses pinched rings unless asked to accept them (#253, #262);
+# 0.3.16 reads a `-0.0` corner as `0.0` when ordering a ring (#269), accepts
+# keyhole rings on surface paths (#270) and builds exact extrusions down or
+# oblique to the profile normal (#275).
+axiolid-construct = "0.3.16"
 axiolid-core = "0.3.0"
 axiolid-inspect = "0.3.5"
 axiolid-mesh = "0.3.0"
@@ -92,10 +95,10 @@ axiolid-spatial = "0.3.0"
 axiolid-contracts = "0.3.3"
 # 0.3.3 and model 0.3.4 carry the exact alignment relations (CUBIC
 # transitions, vertical arcs and clothoids, cant) `ifc-geometry` 0.8 lowers to.
-axiolid-curve = "0.3.3"
+axiolid-curve = "0.3.4"
 # The CLI derives IFC4X3 linear placements with its reference evaluator
 # (`ReferenceCurveEvaluator`, through `ifc-geometry` 0.10, engine#224).
-axiolid-evaluate = "0.3.6"
+axiolid-evaluate = "0.3.7"
 # 0.3.9 subtracts placed extrusions exactly (axiolid/kernel#228, through
 # axiolid-brep-boolean 0.1.2) and reports a certified deviation per mesh
 # (#232, with axiolid-reference 0.3.4); 0.3.10 clips by half-spaces (#234),
@@ -110,15 +113,17 @@ axiolid-evaluate = "0.3.6"
 # boundaries of curve-bounded planes (#255); 0.3.14 reports a warped face's
 # slab width as certified (#257, #261), triangulates planar and B-rep faces
 # with the certified clipper (#260) and sweeps along elevated directrices
-# (#252).
-axiolid-mesh-compile = "0.3.14"
+# (#252); 0.3.15 welds shared edges through inserted corners and reports a
+# Solid label whose mesh does not close as `MeshClosure::OpenSolid` (#265).
+axiolid-mesh-compile = "0.3.15"
 axiolid-exact-compile-contract = "0.3.1"
-axiolid-mesh-compile-contract = "0.3.1"
+# 0.3.3 adds `MeshClosure::OpenSolid` (#265).
+axiolid-mesh-compile-contract = "0.3.3"
 # 0.3.4 declares its scratch as a true upper bound on a thread pool (#226).
 axiolid-mesh-boolean-boolmesh = "0.3.4"
 # 0.3.5 adds oriented stations (#246), additively; `ifc-geometry` 0.9
 # requires it for the IFC4X3 stations it lowers.
-axiolid-model = "0.3.5"
+axiolid-model = "0.3.6"
 axiolid-primitive = "0.3.0"
 axiolid-profile = "0.3.0"
 axiolid-surface = "0.3.0"

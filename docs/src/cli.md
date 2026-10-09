@@ -991,11 +991,20 @@ back) bounds no region, so the mesh compiler refuses it and the product is
 unmeasured with the refusal (`... profile outer ring intersects itself`,
 `... folds back on itself at vertex 6`). That too is model data, reported
 once per object as the integrity warning `shape.self-intersecting-face`
-(located `ifc:<fingerprint>:self-intersecting-face:#<id>`). A ring that
-overlaps itself is not: the ones seen are a hole joined to the outer
-boundary by a seam traversed both ways, a valid face the compiler does not
-accept yet (axiolid/kernel#270). Neither is a face the clipper finds no
-ear in (axiolid/kernel#269).
+(located `ifc:<fingerprint>:self-intersecting-face:#<id>`). A hole
+joined to the outer boundary by a seam traversed both ways (a keyhole) is
+a valid face: since axiolid-construct 0.3.16 (axiolid/kernel#270) it is
+triangulated on surface paths, so a face set or surface model carrying one
+is measured, while an extruded profile with one is refused by name (`...
+runs along a seam both ways (edges <n> and <n>), which a solid cannot
+extrude`), not model data. A face whose lowest corner has a `-0.0` twin,
+which the clipper found no ear in, is measured since the same release
+(axiolid/kernel#269). A keyhole face of a B-rep whose seam ends up as a
+triangle edge leaves the solid's mesh not two-manifold
+(axiolid/kernel#283): the compiler reports it as a solid whose mesh is
+not closed, so it is measured as an open surface, and as an operand of a
+boolean it is unmeasured (`... boolean <operand> is a solid whose mesh is
+not closed: it encloses no volume to combine`).
 
 A host whose openings remove its whole body, such as a frame modelled as a
 wall and voided by the opening meant for the wall around it, compiles to
@@ -1202,7 +1211,21 @@ certifies none, the body is unmeasured with the paths it names, never
 declared within a tolerance nothing proves: a boolean the exact compiler
 refuses (a union; a hole a fraction of the tolerance off a turned beam's
 filleted flange: `… where the contact cannot be placed`), a tapered
-extrusion, a sectioned spine. A round hole touching a planar face (a web
+extrusion, a sectioned spine. An extrusion against its profile normal
+(`ExtrudedDirection (0, 0, -1)`, an opening cut down from a slab's top)
+is built exactly as the mirror of the forward one since
+axiolid-construct 0.3.16 (axiolid/kernel#275), so a boolean with one is
+certified like any other. An extrusion oblique to its profile's normal,
+of a profile with arcs or curves, is built by the kernel with a wrong
+wall and no error (axiolid/kernel#280): as an operand of a boolean it
+leaves the body unmeasured by name (`an extrusion oblique to its
+profile's normal, of a profile with arcs or curves, has no trusted exact
+construction, …`), and no exact boundary is built from it; alone, its
+deviation is bounded from its profile and it is measured. An extrusion
+whose direction lies in its profile's plane sweeps no volume and is
+refused by name (`extrusion direction in the profile plane: it sweeps no
+volume`) before the mesh compiler, which would build a sliver
+(axiolid/kernel#281). A round hole touching a planar face (a web
 hole touching an I-beam's flange, with or without root fillets) is built
 and certified since axiolid-mesh-compile 0.3.13 (axiolid/kernel#243,
 #249). A space boundary whose curve-bounded plane is bounded by a
@@ -1236,10 +1259,12 @@ crossing after rounding, overlapping trims), which the earlier
 triangulator covered partly without a word, are refused by name, and the
 body is unmeasured with the reason. Rings touching at a single point
 bound a valid face and are accepted (#262). Where such a point lies
-inside an edge another face shares, that face keeps the edge whole and
-the mesh has a T-junction; the mesh audit then finds the edge open, so
-the body is measured as an open surface (no volume, no containment
-inside it), never as a closed solid.
+inside an edge another face shares, the compiler welds that face's edge
+through it since axiolid-mesh-compile 0.3.15 (axiolid/kernel#265), so the
+mesh closes. Every result it labels a solid is checked for closure: one
+that does not close is never claimed a solid, so a body whose mesh is
+open is measured as an open surface (no volume, no containment inside
+it), and is unmeasured as an operand of a boolean, which needs a volume.
 A disk swept round a
 polyline corner without a fillet radius is mitred at half angle, as
 `IfcSweptDiskSolid` defines it, and certified within the budget

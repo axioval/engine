@@ -4,6 +4,7 @@
 //! asserts the status first.
 #![allow(missing_docs)]
 
+use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -1633,7 +1634,8 @@ fn face_set_wall(first: u32, corners: &[(f64, f64)], ring: &[usize]) -> String {
 /// The crossing walls with four walls of one face each, after the corpus
 /// behind #298: `#49` a quad written in Z order, `#59` a square with a spike
 /// out and back, `#69` a square less a hole joined to it by a seam
-/// traversed both ways, and `#79` a rectangle the clipper finds no ear in.
+/// traversed both ways, and `#79` a rectangle the clipper found no ear in
+/// before axiolid/kernel#269.
 fn self_intersecting_faces() -> String {
     let crossing = face_set_wall(
         40,
@@ -1673,7 +1675,7 @@ fn self_intersecting_faces() -> String {
     // A valid rectangle with a straight corner on one side, a render
     // layer's end face in the corpus: projected onto its plane, the corners
     // level with the first get -0.0, and the clipper reads the ring as
-    // clockwise and finds no ear (axiolid/kernel#269). Not model data.
+    // clockwise and found no ear until axiolid/kernel#269. Not model data.
     let rectangle = "#70=IFCCARTESIANPOINT((211.2679299712594,127.1711345978437,2.66));\n\
          #71=IFCCARTESIANPOINT((211.1655923859374,127.13083957435984,2.66));\n\
          #72=IFCCARTESIANPOINT((211.1655923859374,127.13083957435984,-0.3));\n\
@@ -1696,9 +1698,9 @@ fn self_intersecting_faces() -> String {
 /// and since that is model data it is also reported once as the integrity
 /// warning `shape.self-intersecting-face` (#298). The rings are the
 /// smallest of their kind in the corpus behind #298. Two valid faces the
-/// compiler does not accept yet are never reported as model data: a square
-/// less a hole joined to it by a seam traversed both ways
-/// (axiolid/kernel#270), and a rectangle the clipper finds no ear in
+/// compiler refused until axiolid-construct 0.3.16 are measured (#299): a
+/// square less a hole joined to it by a seam traversed both ways
+/// (axiolid/kernel#270), and a rectangle the clipper found no ear in
 /// (axiolid/kernel#269).
 #[test]
 fn with_geometry_a_face_crossing_itself_is_model_data() {
@@ -1732,18 +1734,13 @@ fn with_geometry_a_face_crossing_itself_is_model_data() {
         reason("#59").ends_with("profile outer ring folds back on itself at vertex 4"),
         "{unmeasured:?}"
     );
-    // Refused until axiolid/kernel#270 and #269, measured after.
-    let refused = |id: &str| unmeasured.iter().find(|(local, _)| *local == id);
-    if let Some((_, keyhole)) = refused("#69") {
+    // The keyhole is accepted on a surface path since axiolid-construct
+    // 0.3.16 (axiolid/kernel#270), and the rectangle's `-0.0` corners order
+    // as `0.0` (#269): both are measured (#299).
+    for id in ["#69", "#79"] {
         assert!(
-            keyhole.ends_with("profile outer ring overlaps itself"),
-            "{keyhole}"
-        );
-    }
-    if let Some((_, rectangle)) = refused("#79") {
-        assert!(
-            rectangle.ends_with("found no ear among 5 remaining vertices"),
-            "{rectangle}"
+            unmeasured.iter().all(|(local, _)| *local != id),
+            "{id} is unmeasured: {unmeasured:?}"
         );
     }
 
@@ -17919,6 +17916,179 @@ fn with_geometry_a_roof_clipped_wall_with_a_round_window_is_certified() {
     assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
     assert_eq!(result["geometry"]["exact_boundaries"], 2, "{result:#}");
     assert!(finding_ids(&result).is_empty(), "{result:#}");
+}
+
+/// A 6 x 9 x 0.25 m floor slab #306 at x 40 less a round hole (#315,
+/// radius 0.5 m, extruded up through it) and a 2 x 1 m rectangle (#326)
+/// placed above the slab's top and extruded down through it
+/// (`ExtrudedDirection (0, 0, -1)`), and a member #356: a rounded
+/// rectangle (quarter arcs at its corners) at x 50 extruded down from
+/// `z = 3` to `z = 1` and clipped above a plane tilted about y through
+/// `z = 2` (`IfcBooleanClippingResult` of an `IfcHalfSpaceSolid`).
+/// `direction` is the member's extrusion direction.
+fn cut_down_bodies(direction: &str) -> String {
+    crossing_walls_with(&format!(
+        "#300=IFCRECTANGLEPROFILEDEF(.AREA.,$,#302,6.,9.);\n\
+         #301=IFCCARTESIANPOINT((40.,0.));\n\
+         #302=IFCAXIS2PLACEMENT2D(#301,$);\n\
+         #303=IFCEXTRUDEDAREASOLID(#300,#2,#4,0.25);\n\
+         #304=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#303));\n\
+         #305=IFCPRODUCTDEFINITIONSHAPE($,$,(#304));\n\
+         #306=IFCSLAB('0000000000000000000306',$,$,$,$,#3,#305,$,.FLOOR.);\n\
+         #307=IFCCIRCLEPROFILEDEF(.AREA.,$,#309,0.5);\n\
+         #308=IFCCARTESIANPOINT((41.5,2.));\n\
+         #309=IFCAXIS2PLACEMENT2D(#308,$);\n\
+         #310=IFCCARTESIANPOINT((0.,0.,-0.1));\n\
+         #311=IFCAXIS2PLACEMENT3D(#310,$,$);\n\
+         #312=IFCEXTRUDEDAREASOLID(#307,#311,#4,0.45);\n\
+         #313=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#312));\n\
+         #314=IFCPRODUCTDEFINITIONSHAPE($,$,(#313));\n\
+         #315=IFCOPENINGELEMENT('0000000000000000000315',$,$,$,$,#3,#314,$,.OPENING.);\n\
+         #316=IFCRELVOIDSELEMENT('0000000000000000000316',$,$,$,#306,#315);\n\
+         #317=IFCRECTANGLEPROFILEDEF(.AREA.,$,#319,2.,1.);\n\
+         #318=IFCCARTESIANPOINT((39.,-2.));\n\
+         #319=IFCAXIS2PLACEMENT2D(#318,$);\n\
+         #320=IFCCARTESIANPOINT((0.,0.,0.35));\n\
+         #321=IFCAXIS2PLACEMENT3D(#320,$,$);\n\
+         #322=IFCDIRECTION((0.,0.,-1.));\n\
+         #323=IFCEXTRUDEDAREASOLID(#317,#321,#322,0.45);\n\
+         #324=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#323));\n\
+         #325=IFCPRODUCTDEFINITIONSHAPE($,$,(#324));\n\
+         #326=IFCOPENINGELEMENT('0000000000000000000326',$,$,$,$,#3,#325,$,.OPENING.);\n\
+         #327=IFCRELVOIDSELEMENT('0000000000000000000327',$,$,$,#306,#326);\n\
+         #340=IFCROUNDEDRECTANGLEPROFILEDEF(.AREA.,$,#342,1.,0.6,0.1);\n\
+         #341=IFCCARTESIANPOINT((50.,0.));\n\
+         #342=IFCAXIS2PLACEMENT2D(#341,$);\n\
+         #343=IFCCARTESIANPOINT((0.,0.,3.));\n\
+         #344=IFCAXIS2PLACEMENT3D(#343,$,$);\n\
+         #345=IFCDIRECTION({direction});\n\
+         #346=IFCEXTRUDEDAREASOLID(#340,#344,#345,2.);\n\
+         #347=IFCCARTESIANPOINT((50.,0.,2.));\n\
+         #348=IFCDIRECTION((0.3,0.,1.));\n\
+         #349=IFCDIRECTION((1.,0.,-0.3));\n\
+         #350=IFCAXIS2PLACEMENT3D(#347,#348,#349);\n\
+         #351=IFCPLANE(#350);\n\
+         #352=IFCHALFSPACESOLID(#351,.F.);\n\
+         #353=IFCBOOLEANCLIPPINGRESULT(.DIFFERENCE.,#346,#352);\n\
+         #354=IFCSHAPEREPRESENTATION(#5,'Body','Clipping',(#353));\n\
+         #355=IFCPRODUCTDEFINITIONSHAPE($,$,(#354));\n\
+         #356=IFCMEMBER('0000000000000000000356',$,$,$,$,#3,#355,$,$);\n\
+         #357=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#346));\n\
+         #358=IFCPRODUCTDEFINITIONSHAPE($,$,(#357));\n\
+         #359=IFCMEMBER('0000000000000000000359',$,$,$,$,#3,#358,$,$);\n"
+    ))
+}
+
+/// The unmeasured objects of a geometry run over [`crossing_walls_with`],
+/// by local id, but for its proxy #30, which has no shape representation.
+fn unmeasured_reasons(result: &Value) -> BTreeMap<String, String> {
+    result["geometry"]["unmeasured"]
+        .as_array()
+        .map(|entries| {
+            entries
+                .iter()
+                .filter(|entry| entry["object"]["local_id"] != "#30")
+                .map(|entry| {
+                    (
+                        entry["object"]["local_id"].as_str().unwrap().to_owned(),
+                        entry["reason"].as_str().unwrap().to_owned(),
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// A slab less an opening cut down from its top, and a curved body
+/// extruded down and clipped by a half-space, are measured as tessellated
+/// within the bound the mesh compiler certifies against the exact boolean
+/// (#301): since axiolid-construct 0.3.16 the exact extrusion builds a
+/// direction against the profile normal as the mirror of the forward one
+/// (axiolid/kernel#275), where it refused it as a "non-forward planar
+/// extrusion" and left both unmeasured. The member's unclipped extrusion
+/// (#359) is measured beside it.
+#[test]
+fn with_geometry_bodies_cut_down_against_their_profile_normal_are_certified() {
+    let case = Case::new("geometry-cut-down");
+    let (output, result) = case.wall_clash(&cut_down_bodies("(0.,0.,-1.)"), &json!({}));
+    assert!(output.status.code().is_some(), "{}", stderr(&output));
+    assert_eq!(unmeasured_reasons(&result), BTreeMap::new(), "{result:#}");
+    // The slab, the clipped member and the plain one; the crossing walls
+    // are planar and exact.
+    assert_eq!(result["geometry"]["tessellated"], 3, "{result:#}");
+}
+
+/// The kernel builds an oblique exact extrusion of a profile with arcs
+/// with a wrong wall and no error (axiolid/kernel#280), and its mesh
+/// extrusion builds a sliver for a direction in the profile plane
+/// (axiolid/kernel#281). The engine refuses both by name before the kernel
+/// is asked: the sheared, clipped member (#356) is unmeasured, since the
+/// clip's certified deviation is measured against that exact construction,
+/// while the same sheared extrusion alone (#359), whose deviation comes
+/// from its profile, is measured; an extrusion in the profile plane is
+/// unmeasured either way. A sheared extrusion of a profile of straight
+/// edges is built correctly, so the guard leaves it alone.
+#[test]
+fn with_geometry_extrusions_the_kernel_builds_wrong_are_refused_by_name() {
+    let case = Case::new("geometry-sheared-extrusion");
+    let (output, result) = case.wall_clash(&cut_down_bodies("(0.3,-0.2,-1.)"), &json!({}));
+    assert!(output.status.code().is_some(), "{}", stderr(&output));
+    let unmeasured = unmeasured_reasons(&result);
+    assert_eq!(
+        unmeasured.keys().map(String::as_str).collect::<Vec<_>>(),
+        ["#356"],
+        "{result:#}"
+    );
+    assert_eq!(
+        unmeasured["#356"],
+        "an extrusion oblique to its profile's normal, of a profile with arcs or curves, has \
+         no trusted exact construction, so nothing bounds how far the boolean it is an \
+         operand of lies from its mesh"
+    );
+
+    // An opening of the slab sheared the same way: the exact difference the
+    // slab's deviation is certified against would carry the wrong wall.
+    let sheared_opening = cut_down_bodies("(0.,0.,-1.)")
+        .replace(
+            "#317=IFCRECTANGLEPROFILEDEF(.AREA.,$,#319,2.,1.)",
+            "#317=IFCROUNDEDRECTANGLEPROFILEDEF(.AREA.,$,#319,2.,1.,0.2)",
+        )
+        .replace(
+            "#322=IFCDIRECTION((0.,0.,-1.))",
+            "#322=IFCDIRECTION((0.3,-0.2,-1.))",
+        );
+    let (output, result) = case.wall_clash(&sheared_opening, &json!({}));
+    assert!(output.status.code().is_some(), "{}", stderr(&output));
+    let unmeasured = unmeasured_reasons(&result);
+    assert_eq!(
+        unmeasured.keys().map(String::as_str).collect::<Vec<_>>(),
+        ["#306"],
+        "{result:#}"
+    );
+    assert!(
+        unmeasured["#306"].starts_with("an extrusion oblique to its profile's normal"),
+        "{result:#}"
+    );
+
+    let (output, result) = case.wall_clash(&cut_down_bodies("(1.,0.,0.)"), &json!({}));
+    assert!(output.status.code().is_some(), "{}", stderr(&output));
+    let unmeasured = unmeasured_reasons(&result);
+    for member in ["#356", "#359"] {
+        assert!(
+            unmeasured
+                .get(member)
+                .is_some_and(|reason| reason.contains("extrusion direction in the profile plane")),
+            "{member}: {result:#}"
+        );
+    }
+
+    let straight = cut_down_bodies("(0.3,-0.2,-1.)").replace(
+        "IFCROUNDEDRECTANGLEPROFILEDEF(.AREA.,$,#342,1.,0.6,0.1)",
+        "IFCRECTANGLEPROFILEDEF(.AREA.,$,#342,1.,0.6)",
+    );
+    let (output, result) = case.wall_clash(&straight, &json!({}));
+    assert!(output.status.code().is_some(), "{}", stderr(&output));
+    assert_eq!(unmeasured_reasons(&result), BTreeMap::new(), "{result:#}");
 }
 
 /// A wall #31 (`x` -2 to 2, 0.3 m thick, 3 m high) whose right half is cut

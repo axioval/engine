@@ -39,6 +39,13 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   axiolid-mesh-compile's public `exact_directrix`, 0.3.8,
   axiolid/kernel#230, as its compilers read it; never re-implement that
   reading here, and refuse an `ExactDirectrix` form not yet known).
+  `untrusted_extrusion` refuses by name, before the kernel is asked, an
+  extrusion in its profile plane (`IN_PLANE_EXTRUSION`) and an oblique
+  one of a profile that may hold arcs or curves (`SHEARED_CURVED_EXTRUSION`,
+  any profile but a sharp rectangle or straight-edged contour), alone or as
+  a boolean operand: the kernel builds its arc walls as right cylinders
+  without an error (axiolid/kernel#280). The CLI calls it too. Keep it
+  until the kernel fixes #280 (#317).
   Every other node, a scale or shear, and every kernel refusal
   refuse with the reason; never approximate a placement, an ellipse or a
   sweep. The extent is computed in closed form from the construction and

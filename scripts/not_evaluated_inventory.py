@@ -68,9 +68,9 @@ IDENTIFIERS = re.compile(r"(no body representation; it has )[^;]+$")
 MODEL_DATA = frozenset({"no shape representation"})
 # Reason patterns that are model data too: a face ring that crosses or runs
 # back along itself bounds no region (#298, the CLI's
-# `shape.self-intersecting-face`). A ring that overlaps itself is not: the
-# corpus's are holes joined to the outer boundary by a seam, which the
-# compiler does not accept yet (axiolid/kernel#270).
+# `shape.self-intersecting-face`). A hole joined to the outer boundary by a
+# seam is not: it is a valid face, measured on surface paths and refused by
+# name in an extruded profile (axiolid/kernel#270).
 # So is a host whose openings remove its whole body (#310, the CLI's
 # `shape.voided-body`).
 # Outcomes refused because a body is no closed solid, and whether the

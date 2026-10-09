@@ -2536,9 +2536,10 @@ fn model_data_notes(
 /// The compiler's ring checks are exact on the face's projection onto its
 /// plane. On the corpus behind #298 every such crossing lies at least
 /// 10 um inside the other edge, far above rounding, or follows from a
-/// boundary that runs back along itself. A ring that overlaps itself is
-/// not read as model data: a hole joined to the outer boundary by a seam
-/// traversed both ways bounds a region the compiler does not yet accept
+/// boundary that runs back along itself. A hole joined to the outer
+/// boundary by a seam traversed both ways is not read as model data: it
+/// bounds a region, triangulated on surface paths since axiolid-construct
+/// 0.3.16 and refused by its own name in an extruded profile
 /// (axiolid/kernel#270). Neither is a ring refused for other reasons.
 fn self_intersecting_face(reason: &str) -> Option<&'static str> {
     let refusal = reason.strip_prefix("mesh compilation refused: invalid geometry input: ")?;
@@ -3210,6 +3211,7 @@ fn compile(
     root: NodeId,
 ) -> Result<(axiolid_mesh::TriMesh, Fit), String> {
     let options = ExecutionOptions::new(TOLERANCE);
+    untrusted_extrusions(graph, root)?;
     let leaves = authored_leaves(graph, root)?;
     for &leaf in &leaves.under_boolean {
         let (_, report) = backend
@@ -3359,6 +3361,55 @@ fn authored_leaves(graph: &GeometryGraph, root: NodeId) -> Result<AuthoredLeaves
     let mut leaves = AuthoredLeaves::default();
     visit(graph, root, false, &mut NODE_BUDGET.clone(), &mut leaves)?;
     Ok(leaves)
+}
+
+/// Refuses, by name, an extrusion under `root` the kernel would build
+/// wrong without an error: one whose direction lies in its profile's plane
+/// anywhere (the mesh extrusion builds a sliver, axiolid/kernel#281), and
+/// one oblique to its profile's normal with arcs or curves as an operand
+/// of a boolean (axiolid/kernel#280), whose certified deviation the
+/// compiler measures against an exact construction with a wrong wall.
+/// Alone, such an extrusion's deviation is bounded from its profile and
+/// its mesh is not affected. Walked through instances, collections and
+/// boolean operands, as [`authored_leaves`] walks them.
+fn untrusted_extrusions(graph: &GeometryGraph, root: NodeId) -> Result<(), String> {
+    fn visit(
+        graph: &GeometryGraph,
+        id: NodeId,
+        boolean: bool,
+        budget: &mut usize,
+    ) -> Result<(), String> {
+        if *budget == 0 {
+            return Err(
+                "the geometry graph is too large to find the extrusions the kernel builds wrong"
+                    .into(),
+            );
+        }
+        *budget -= 1;
+        match graph.get(id) {
+            Some(GeometryNode::Instance(instance)) => {
+                visit(graph, instance.source, boolean, budget)
+            }
+            Some(GeometryNode::Collection(children)) => children
+                .iter()
+                .try_for_each(|child| visit(graph, *child, boolean, budget)),
+            Some(GeometryNode::SolidOperation(SolidOperation::Boolean { left, right, .. })) => {
+                visit(graph, *left, true, budget)?;
+                visit(graph, *right, true, budget)
+            }
+            _ => match axioval::axiolid::untrusted_extrusion(graph, id, TOLERANCE, boolean) {
+                Some(reason) if reason == axioval::axiolid::SHEARED_CURVED_EXTRUSION => {
+                    Err(format!(
+                        "{reason}, so nothing bounds how far the boolean it is an operand of \
+                         lies from its mesh"
+                    ))
+                }
+                Some(reason) => Err(reason.to_owned()),
+                None => Ok(()),
+            },
+        }
+    }
+    visit(graph, root, false, &mut NODE_BUDGET.clone())
 }
 
 /// Why a curved mesh has no certified deviation: the paths the compiler
@@ -4506,16 +4557,14 @@ mod tests {
     }
 
     #[test]
-    fn a_t_junction_left_by_a_vertex_on_another_rings_edge_is_no_closed_solid() {
+    fn a_vertex_on_another_rings_edge_is_welded_into_a_closed_solid() {
         // axiolid-mesh-compile 0.3.14 triangulates a B-rep face whose
         // rings touch (#262): the pocket's rim corner is inserted into the
-        // top face's outer edge, but the right face, which shares that
-        // edge, keeps it whole. The mesh then has a T-junction there,
-        // although the B-rep's topology is closed and the compiler calls
-        // it a solid. The mesh audit every service reads finds the edge
-        // open, so the body is measured as an exact surface, never as a
-        // closed solid: no volume, containment or inside-of-solid reading
-        // trusts it.
+        // top face's outer edge. The right face, which shares that edge,
+        // kept it whole there, leaving a T-junction the mesh audit read as
+        // open. Since 0.3.15 the compiler welds a shared edge through every
+        // corner inserted into it (axiolid/kernel#265), so the touching
+        // pocket closes as the clear one does.
         let health = |rim: f64| {
             let model = axioval::ifc::read_ifc_step(pocket_box(rim).as_bytes()).unwrap();
             let units = ifc_geometry::units::resolve(&model);
@@ -4535,10 +4584,7 @@ mod tests {
             axiolid_mesh::audit_mesh(&body.mesh, super::TOLERANCE)
         };
         let touching = health(1.0);
-        assert!(touching.is_surface_usable(), "{touching:?}");
-        assert!(!touching.is_closed_two_manifold(), "{touching:?}");
-        assert!(touching.boundary_edges > 0, "{touching:?}");
-        // The same pocket clear of the edge closes.
+        assert!(touching.is_closed_two_manifold(), "{touching:?}");
         let clear = health(0.9);
         assert!(clear.is_closed_two_manifold(), "{clear:?}");
     }

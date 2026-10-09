@@ -25,7 +25,7 @@ use axiolid_model::{
     SolidOperation, TrimSelector, TrimmingPreference,
 };
 use axiolid_profile::{CircleProfile, ContourProfile, EllipseProfile, Profile, RectangleProfile};
-use axioval_axiolid::{AxiolidGeometry, ExactBoundary, exact_boundary};
+use axioval_axiolid::{AxiolidGeometry, ExactBoundary, SHEARED_CURVED_EXTRUSION, exact_boundary};
 use axioval_ir::{ObjectId, SourceId};
 
 /// The chord deviation the mesh compiler keeps to, declared for its meshes.
@@ -548,4 +548,76 @@ fn a_hollow_circle_keeps_its_bore() {
         PI * (0.09 - 0.0625) * 2.0,
         1e-9,
     );
+}
+
+/// An extrusion oblique to its profile's normal is built only for a
+/// profile of straight edges: with arcs the kernel builds each arc's wall
+/// as a right cylinder and reports no error (axiolid/kernel#280), so the
+/// exact boundary is refused by name, alone and as a boolean's operand,
+/// upward and downward. The same shear of a sharp rectangle agrees with its
+/// mesh, and a rounded rectangle along the normal either way is built.
+#[test]
+fn an_oblique_extrusion_of_a_profile_with_arcs_is_refused_by_name() {
+    let rounded = || {
+        Profile::Rectangle(RectangleProfile {
+            x: 0.6,
+            y: 0.4,
+            thickness: None,
+            outer_radius: Some(0.1),
+            inner_radius: None,
+        })
+    };
+    let sheared = [Vec3::new(0.3, -0.2, 1.0), Vec3::new(0.3, -0.2, -1.0)];
+    for direction in sheared {
+        let (body, root) = extrusion(rounded(), direction, 0.75, Transform3::IDENTITY);
+        assert_eq!(
+            exact_boundary(&body, root).unwrap_err(),
+            SHEARED_CURVED_EXTRUSION,
+            "{direction:?}"
+        );
+        let (body, root) = graph(|builder| {
+            let block = push(builder, GeometryNode::Profile(rectangle(2.0, 2.0)));
+            let block = push(
+                builder,
+                GeometryNode::SolidOperation(SolidOperation::Extrusion {
+                    profile: block,
+                    direction: Vec3::Z,
+                    depth: 1.0,
+                }),
+            );
+            let profile = push(builder, GeometryNode::Profile(rounded()));
+            let cut = push(
+                builder,
+                GeometryNode::SolidOperation(SolidOperation::Extrusion {
+                    profile,
+                    direction,
+                    depth: 0.75,
+                }),
+            );
+            let cut = placed(
+                builder,
+                cut,
+                Transform3::from_translation(Vec3::new(0.0, 0.0, 0.5)),
+            );
+            push(
+                builder,
+                GeometryNode::SolidOperation(SolidOperation::Boolean {
+                    left: block,
+                    right: cut,
+                    operator: BooleanOperator::Difference,
+                }),
+            )
+        });
+        assert_eq!(
+            exact_boundary(&body, root).unwrap_err(),
+            SHEARED_CURVED_EXTRUSION,
+            "{direction:?}"
+        );
+        let (body, root) = extrusion(rectangle(0.6, 0.4), direction, 0.75, Transform3::IDENTITY);
+        agreeing(&body, root);
+    }
+    for direction in [Vec3::Z, -Vec3::Z] {
+        let (body, root) = extrusion(rounded(), direction, 0.75, Transform3::IDENTITY);
+        agreeing(&body, root);
+    }
 }

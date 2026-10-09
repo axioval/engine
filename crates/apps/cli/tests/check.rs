@@ -18711,6 +18711,219 @@ fn refused_spaces(
     }
 }
 
+/// Spaces #16 (x 0..4), #26 (x 20..24) and #46 (x 40..44), each 4 x 4 m
+/// and 3 m high, beside two unmeasured obstacles (#357, #358):
+///
+/// - wall #66 in #16 (x 1..2, y 1..2, 3 m high), its extrusion clipped by a
+///   polygonal bounded half-space whose boundary has a point off its plane,
+///   which `ifc-geometry` refuses as geometrically invalid. A clip only
+///   removes material, so the extrusion bounds it;
+/// - railing #80 in #26, with no body of its own, made of member #78, one
+///   vertical face (x 21..22, y 2, z 0..1) whose boundary crosses itself
+///   (its first and third edges cross), which the mesh compiler refuses. Its authored
+///   corners bound the member, and the member bounds the railing.
+fn spaces_beside_unmeasured_obstacles() -> String {
+    let space = |first: u32, x: f64| {
+        body(
+            first,
+            x,
+            4.0,
+            3.0,
+            &format!(
+                "IFCSPACE('00000000000000000000{:02}',$,$,$,$,#3,REP,$,.ELEMENT.,$,$)",
+                first + 6
+            ),
+        )
+    };
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         {}{}{}\
+         #50=IFCCARTESIANPOINT((1.5,1.5));\n\
+         #51=IFCAXIS2PLACEMENT2D(#50,$);\n\
+         #52=IFCRECTANGLEPROFILEDEF(.AREA.,$,#51,1.,1.);\n\
+         #53=IFCEXTRUDEDAREASOLID(#52,#2,#4,3.);\n\
+         #54=IFCCARTESIANPOINT((0.,0.,2.));\n\
+         #55=IFCAXIS2PLACEMENT3D(#54,$,$);\n\
+         #56=IFCPLANE(#55);\n\
+         #57=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #58=IFCCARTESIANPOINT((3.,0.,0.));\n\
+         #59=IFCCARTESIANPOINT((3.,3.,0.25));\n\
+         #60=IFCCARTESIANPOINT((0.,3.,0.));\n\
+         #61=IFCPOLYLINE((#57,#58,#59,#60,#57));\n\
+         #62=IFCPOLYGONALBOUNDEDHALFSPACE(#56,.F.,#55,#61);\n\
+         #63=IFCBOOLEANCLIPPINGRESULT(.DIFFERENCE.,#53,#62);\n\
+         #64=IFCSHAPEREPRESENTATION(#5,'Body','Clipping',(#63));\n\
+         #65=IFCPRODUCTDEFINITIONSHAPE($,$,(#64));\n\
+         #66=IFCWALL('0000000000000000000066',$,$,$,$,#3,#65,$,$);\n\
+         #70=IFCCARTESIANPOINTLIST3D(((21.,2.,0.),(22.,2.,1.),(22.,2.,0.),(21.,2.,0.5)),$);\n\
+         #71=IFCINDEXEDPOLYGONALFACE((1,2,3,4));\n\
+         #72=IFCPOLYGONALFACESET(#70,.F.,(#71),$);\n\
+         #73=IFCSHAPEREPRESENTATION(#5,'Body','Tessellation',(#72));\n\
+         #74=IFCPRODUCTDEFINITIONSHAPE($,$,(#73));\n\
+         #78=IFCMEMBER('0000000000000000000078',$,$,$,$,#3,#74,$,.MEMBER.);\n\
+         #80=IFCRAILING('0000000000000000000080',$,$,$,$,#3,$,$,.HANDRAIL.);\n\
+         #81=IFCRELAGGREGATES('0000000000000000000081',$,$,$,#80,(#78));\n\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        space(10, 2.0),
+        space(20, 22.0),
+        space(40, 42.0),
+    )
+}
+
+/// Invalid IFC geometry, and a whole unmeasured only through a part's model
+/// data, are model data (#357): wall #66 is reported once as the integrity
+/// warning `shape.invalid-geometry`, and railing #80 with its member's code,
+/// `shape.self-intersecting-face`, beside the member's own.
+///
+/// Both stay unmeasured but are bounded soundly (#358): the wall by its
+/// clipped extrusion, the member by its authored corners and the railing by
+/// its member. So each refuses the free floor of the space it stands in
+/// and only that one, and the space apart from both decides.
+#[test]
+fn with_geometry_unmeasured_obstacles_bounded_apart_leave_a_floor_search_decided() {
+    let inventory = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../scripts/inventory");
+    let case = Case::new("space-unmeasured-obstacles");
+    let model = case.write("model.ifc", &spaces_beside_unmeasured_obstacles());
+    let saved = case.path("result.json");
+    let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+        .args(["check", "--geometry", "--model"])
+        .arg(&model)
+        .args([
+            "--definitions",
+            &format!("{inventory}/definitions.json"),
+            "--ruleset",
+            &format!("{inventory}/ruleset.json"),
+            "--report",
+        ])
+        .arg(&saved)
+        .output()
+        .unwrap();
+    assert!(
+        matches!(output.status.code(), Some(3 | 4)),
+        "{}",
+        stderr(&output)
+    );
+    let result: Value = serde_json::from_str(&std::fs::read_to_string(&saved).unwrap()).unwrap();
+
+    let reason = |local: &str| {
+        result["geometry"]["unmeasured"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|entry| entry["object"]["local_id"] == local)
+            .and_then(|entry| entry["reason"].as_str())
+            .unwrap_or_else(|| panic!("{local} is measured: {:#}", result["geometry"]))
+            .to_owned()
+    };
+    assert!(
+        reason("#66").starts_with("#59 (IFCCARTESIANPOINT) is geometrically invalid: "),
+        "{}",
+        reason("#66")
+    );
+    assert!(
+        reason("#78").ends_with("profile outer ring intersects itself"),
+        "{}",
+        reason("#78")
+    );
+    assert!(
+        reason("#80").starts_with(
+            "no body representation of its own, and its body is the union of its 1 part, \
+             and part ifc-step:model.ifc/#78 is unmeasured: "
+        ),
+        "{}",
+        reason("#80")
+    );
+
+    let notes: Vec<(&str, &str, &str)> = result["integrity"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|record| record["severity"] == "warning")
+        .filter_map(|record| {
+            let locator = record["locator"].as_str()?;
+            Some((
+                record["code"].as_str()?,
+                locator.rsplit_once(':')?.1,
+                record["message"].as_str()?,
+            ))
+        })
+        .filter(|(code, _, _)| code.starts_with("shape."))
+        .collect();
+    assert_eq!(
+        notes
+            .iter()
+            .map(|(code, local, _)| (*code, *local))
+            .collect::<Vec<_>>(),
+        [
+            ("shape.invalid-geometry", "#66"),
+            ("shape.self-intersecting-face", "#78"),
+            ("shape.self-intersecting-face", "#80"),
+        ],
+        "{:#}",
+        result["integrity"]
+    );
+    assert!(
+        notes[0].2.starts_with(
+            "#66 IFCWALL has geometry that cannot exist as written (#59 (IFCCARTESIANPOINT) is \
+             geometrically invalid: "
+        ),
+        "{}",
+        notes[0].2
+    );
+    assert_eq!(
+        notes[2].2,
+        "#80 IFCRAILING has no body of its own, and its part #78 IFCMEMBER is unmeasured for \
+         its model data (shape.self-intersecting-face); every measurement of it is not \
+         evaluated"
+    );
+    let locators = result["integrity"].to_string();
+    assert!(locators.contains(":invalid-geometry:#66\""), "{locators}");
+    assert!(locators.contains(":self-intersecting-face:#80\""), "{locators}");
+
+    // Each space's free floor: refused by the obstacle it holds alone,
+    // decided where none stands.
+    let floors: BTreeMap<String, String> = ["#16", "#26", "#46"]
+        .into_iter()
+        .map(|space| {
+            let refusal = result["report"]["not_evaluated"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|outcome| {
+                    outcome["rule_id"] == "space-free-floor"
+                        && outcome["object_id"]["local_id"] == space
+                })
+                .map_or_else(
+                    || "decided".to_owned(),
+                    |outcome| {
+                        let message = outcome["message"].as_str().unwrap();
+                        ["#66", "#78", "#80"]
+                            .into_iter()
+                            .filter(|obstacle| message.contains(&format!("/{obstacle}")))
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                    },
+                );
+            (space.to_owned(), refusal)
+        })
+        .collect();
+    assert_eq!(
+        floors,
+        BTreeMap::from([
+            ("#16".to_owned(), "#66".to_owned()),
+            ("#26".to_owned(), "#78".to_owned()),
+            ("#46".to_owned(), "decided".to_owned()),
+        ]),
+        "{:#}",
+        result["report"]["not_evaluated"]
+    );
+}
+
 /// engine#314: a faceted prism 0.03 m high over a pentagon whose corner `v`
 /// lies about 0.4 um off the line through its neighbours `a` and `b`
 /// (axiolid/kernel#278's repro). The mesh compiler dropped `v` from the top

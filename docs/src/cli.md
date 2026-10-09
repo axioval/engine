@@ -337,8 +337,10 @@ With `--geometry` it lists, as `shape.no-representation` warnings, every
 physical product with no shape representation and no parts, and as
 `shape.self-intersecting-face` warnings every product unmeasured for a face
 whose boundary crosses or runs back along itself, as `shape.voided-body`
-warnings every product whose openings remove its whole body, and as
-`shape.open-surface` warnings every measured product whose faces, as
+warnings every product whose openings remove its whole body, as
+`shape.invalid-geometry` warnings every product whose geometry is
+geometrically invalid as written (a whole unmeasured only through such
+parts with its part's code), and as `shape.open-surface` warnings every measured product whose faces, as
 authored, leave edges bounding one face only, once each (see
 [Geometry](#geometry)).
 `objects` maps every object the report names to its kind and, when it has one,
@@ -1016,6 +1018,22 @@ as the integrity warning `shape.voided-body` (located
 `ifc:<fingerprint>:voided-body:#<id>`, #310). A body empty before any
 opening keeps `mesh compilation produced no triangles`.
 
+Geometry that `ifc-geometry` refuses as impossible as written, such as a
+composite curve whose segments leave a gap or a half-space boundary point
+off its plane, leaves the product unmeasured as `#<id> (<TYPE>) is
+geometrically invalid: <detail>`. That is model data, reported once per
+object as the integrity warning `shape.invalid-geometry` (located
+`ifc:<fingerprint>:invalid-geometry:#<id>`, #357). An opening that cannot
+be subtracted is not: the host's own geometry is valid.
+
+A whole measured through its parts that is unmeasured because a part is
+(`no body representation of its own, and its body is the union of its
+<n> parts, and part <object> is unmeasured: …`) is model data when every
+part is measured, has no body, or is unmeasured for model data: it is
+reported once with the code of the part its reason names (located
+`ifc:<fingerprint>:<detail>:#<whole>`, such as
+`self-intersecting-face`), beside that part's own warning (#357).
+
 A body whose faces, as authored, do not close is an open surface: it has
 no inside, so a clash between two such bodies cannot tell touching from
 crossing, and the room it takes up above a floor is undecided where it
@@ -1185,7 +1203,18 @@ world coordinate system above the placement chain) and enclosed. A
 product without one whose openings leave it unmeasured is bounded by its
 gross body, before the openings are subtracted, when that is measured:
 the net body is the gross body less its openings, so it lies inside the
-gross mesh's extent grown by the deviation certified for it (#301). A whole
+gross mesh's extent grown by the deviation certified for it (#301). Any
+other product left unmeasured by its own meshing is bounded by its `Body`
+items, each read on its own and the boxes enclosed (#358): an item that
+compiles by its mesh grown by its certified deviation; a boolean difference
+or intersection, and a clip by a half-space, by its first operand, since
+it only removes material from it (a union by both operands); a polygon
+mesh, a triangle mesh or a B-rep with planar faces and straight edges by
+the box of its authored vertices, whatever face of it is refused; every
+placement (instances, mapped items) applied to the box's corners. An item
+whose lowering is refused (a clip whose half-space boundary is invalid)
+is read through its IFC boolean or mapped item the same way. Any item
+that cannot be bounded so leaves the product without a bound. A whole
 measured through its parts is measured and needs no bound. A space
 measurement no bound can reach is evaluated; one a bound reaches is not
 evaluated and names the product. Without a bound, or with one that cannot

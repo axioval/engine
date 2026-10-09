@@ -28,8 +28,10 @@ unmeasured reason that is a fact about the model data (`no shape
 representation`: a product with no representation at all; a face whose
 boundary crosses or runs back along itself, which the mesh compiler refuses
 as `... profile outer ring intersects itself` or `... folds back on itself
-at vertex <n>`; a host whose openings remove its whole body) is labelled
-`unmeasured (model data): ...`. An outcome
+at vertex <n>`; a host whose openings remove its whole body; geometry
+refused as `#<id> (<TYPE>) is geometrically invalid: ...`; a whole
+measured through its parts and unmeasured because a part is, for one of
+these) is labelled `unmeasured (model data): ...`. An outcome
 refused because a body is not a closed solid (`... is not a closed solid`,
 `... neither body is a closed solid`) is model data when every body it
 rests on carries the CLI's `shape.open-surface` integrity warning (faces
@@ -91,7 +93,26 @@ MODEL_DATA_PATTERNS = re.compile(
     r"(?:intersects itself|folds back on itself at vertex <n>)"
     r"|its openings remove its whole body: nothing is left once the <n> opening\(s\) "
     r"voiding it are subtracted"
+    # Geometry `ifc-geometry` refuses as invalid as written (#357, the CLI's
+    # `shape.invalid-geometry`): a composite curve with a gap, a boundary
+    # point off its plane.
+    r"|#<id> \([A-Z0-9_]+\) is geometrically invalid: .+"
 )
+# A whole measured through its parts and unmeasured through one of them
+# (#357): model data when the part's reason is, as the CLI reports it with
+# the part's integrity code.
+WHOLE_THROUGH_PART = re.compile(
+    r"no body representation of its own, and its body is the union of its <n> parts?, "
+    r"and part <object> is unmeasured: (?P<part>.+)"
+)
+
+
+def model_data_reason(reason: str) -> bool:
+    """Whether an unmeasured reason pattern is a fact about the model data."""
+    whole = WHOLE_THROUGH_PART.fullmatch(reason)
+    if whole is not None:
+        return model_data_reason(whole["part"])
+    return reason in MODEL_DATA or MODEL_DATA_PATTERNS.fullmatch(reason) is not None
 
 
 def pattern(message: str) -> str:
@@ -152,7 +173,7 @@ class Cause:
     def model_data(self) -> bool:
         if self.kind != "unmeasured":
             return self.text.startswith(f"{self.kind} (model data) · ")
-        return self.text in MODEL_DATA or MODEL_DATA_PATTERNS.fullmatch(self.text) is not None
+        return model_data_reason(self.text)
 
     def label(self) -> str:
         if self.kind != "unmeasured":

@@ -152,6 +152,7 @@ use std::sync::{Arc, OnceLock};
 
 mod alignment;
 mod authored_faces;
+mod outer_bound;
 pub mod timings;
 
 /// Linear tolerance handed to the mesh compiler: with no explicit chord
@@ -262,6 +263,57 @@ fn voided_body(reason: &str) -> bool {
 /// inside. Measurements that need one (a clash between two such bodies, the
 /// room a body takes up above a floor) stay not evaluated (#311).
 pub const OPEN_SURFACE: &str = "shape.open-surface";
+
+/// The integrity code of a product whose geometry `ifc-geometry` refuses
+/// as geometrically invalid (`GeometryError::Degenerate`, "… is
+/// geometrically invalid: …"): the file parses, but what it states cannot
+/// exist, such as a composite curve whose segments leave a gap or a
+/// boundary point off its plane. It has no body to measure (#357).
+pub const INVALID_GEOMETRY: &str = "shape.invalid-geometry";
+
+/// The entity and why, when `reason` is `ifc-geometry` refusing the
+/// product's own geometry as geometrically invalid
+/// (`GeometryError::Degenerate`, displayed `#<id> (<TYPE>) is
+/// geometrically invalid: <detail>`). An opening that cannot be subtracted
+/// is not read here: the host's own geometry is valid.
+fn invalid_geometry(reason: &str) -> Option<(&str, &str)> {
+    let (entity, detail) = reason.split_once(" is geometrically invalid: ")?;
+    let (id, kind) = entity.strip_prefix('#')?.split_once(" (")?;
+    let kind = kind.strip_suffix(')')?;
+    (id.parse::<u64>().is_ok()
+        && !kind.is_empty()
+        && kind
+            .chars()
+            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
+        && !detail.is_empty())
+    .then_some((entity, detail))
+}
+
+/// The integrity code of an unmeasured `reason` that is a fact about the
+/// model data, `None` for any other.
+fn model_data_code(reason: &str) -> Option<&'static str> {
+    if reason == Bodiless::Shapeless.reason() {
+        Some(NO_SHAPE_REPRESENTATION)
+    } else if voided_body(reason) {
+        Some(VOIDED_BODY)
+    } else if self_intersecting_face(reason).is_some() {
+        Some(SELF_INTERSECTING_FACE)
+    } else if invalid_geometry(reason).is_some() {
+        Some(INVALID_GEOMETRY)
+    } else {
+        None
+    }
+}
+
+/// The locator detail of a model-data integrity `code`, as in
+/// `ifc:<fingerprint>:<detail>:<local id>`.
+fn model_data_detail(code: &str) -> &str {
+    if code == NO_SHAPE_REPRESENTATION {
+        "no-shape"
+    } else {
+        code.strip_prefix("shape.").unwrap_or(code)
+    }
+}
 
 /// A fact about the model data the bridge found, for the host to report as
 /// an integrity warning.
@@ -941,6 +993,7 @@ pub fn attach(
                 geometry = geometry.with_unmeasured(id.clone(), error);
                 if let Some((min, max)) = stated_box(model, units, linear, entity)
                     .or_else(|| gross_bound(&backend, model, units, linear, entity, *net))
+                    .or_else(|| outer_bound::outer_bound(&backend, model, units, linear, entity))
                 {
                     geometry = geometry.with_unmeasured_bound(id, min, max);
                 }
@@ -1032,7 +1085,7 @@ pub fn attach(
         }
     }
 
-    geometry = Composer {
+    let (composed, model_data_wholes) = Composer {
         geometry,
         parts,
         wholes: wholes.iter().cloned().collect(),
@@ -1042,13 +1095,21 @@ pub fn attach(
         openings: cuts,
         report: &mut report,
         keep_meshes: options.keep_meshes,
+        model_data: BTreeMap::new(),
     }
     .compose_all(&wholes);
+    geometry = composed;
     report.applied_openings.sort();
     clock.lap("geometry: compose wholes");
     report.unmeasured.sort_by(|a, b| a.0.cmp(&b.0));
     open_surfaces.sort();
-    report.model_data = model_data_notes(&report.unmeasured, &open_surfaces, &snapshots, &kinds);
+    report.model_data = model_data_notes(
+        &report.unmeasured,
+        &model_data_wholes,
+        &open_surfaces,
+        &snapshots,
+        &kinds,
+    );
     for (group, members) in groups(relationships, &kinds, &is_a) {
         geometry = match members {
             Ok(members) => geometry.with_group(group, members),
@@ -1137,14 +1198,50 @@ struct Composer<'r> {
     openings: WholeOpenings,
     report: &'r mut GeometryReport,
     keep_meshes: bool,
+    /// Wholes unmeasured only because parts are unmeasured for model data,
+    /// each with the code of the part named and that part.
+    model_data: ModelDataWholes,
 }
 
+/// Each whole unmeasured only through parts unmeasured for model data, with
+/// the model-data code of the part its refusal names and that part.
+type ModelDataWholes = BTreeMap<ObjectId, (&'static str, ObjectId)>;
+
 impl Composer<'_> {
-    fn compose_all(mut self, wholes: &[ObjectId]) -> AxiolidGeometry {
+    fn compose_all(mut self, wholes: &[ObjectId]) -> (AxiolidGeometry, ModelDataWholes) {
         for whole in wholes {
             self.compose(whole);
         }
-        self.geometry
+        (self.geometry, self.model_data)
+    }
+
+    /// The model-data code and part a whole of `parts` that could not be
+    /// composed is unmeasured through, when every part is measured, has no
+    /// body, or is unmeasured for model data (#357): the first unmeasured
+    /// part in identity order, the one the compose refusal names. `None`
+    /// when any part is unmeasured for another reason or undescribed.
+    fn model_data_part(&self, parts: &[ObjectId]) -> Option<(&'static str, ObjectId)> {
+        let mut parts = parts.to_vec();
+        parts.sort();
+        parts.dedup();
+        let mut named = None;
+        for part in parts {
+            if self.geometry.is_unmeasured(&part) {
+                let code = match self.model_data.get(&part) {
+                    Some((code, _)) => *code,
+                    None => self
+                        .report
+                        .unmeasured
+                        .iter()
+                        .find(|(id, _)| *id == part)
+                        .and_then(|(_, reason)| model_data_code(reason))?,
+                };
+                named.get_or_insert((code, part));
+            } else if self.geometry.mesh(&part).is_none() && !self.geometry.has_no_body(&part) {
+                return None;
+            }
+        }
+        named
     }
 
     /// Decides `whole` after every part of it that is a whole itself. A
@@ -1224,6 +1321,9 @@ impl Composer<'_> {
                 self.geometry = geometry;
             }
             Err(error) => {
+                if let Some(part) = self.model_data_part(&parts) {
+                    self.model_data.insert(whole.clone(), part);
+                }
                 // Its body is the union of its parts', so the box around
                 // their bodies and declared boxes bounds it.
                 let bound = self.geometry.parts_bound(&parts);
@@ -2458,16 +2558,18 @@ fn reference_only(model: &Model, opening: EntityId) -> bool {
 
 /// Every product left unmeasured for a fact about the model data, once
 /// each, as an integrity warning: no shape representation (and no parts),
-/// a face whose boundary crosses or runs back along itself, or openings
-/// that remove the whole body; then every measured product in
-/// `open_surfaces`, whose authored faces leave edges bounding one face only.
+/// a face whose boundary crosses or runs back along itself, openings that
+/// remove the whole body, or geometry invalid as written; every whole in
+/// `wholes`, unmeasured only through parts unmeasured for such a fact,
+/// with its part's code; then every measured product in `open_surfaces`,
+/// whose authored faces leave edges bounding one face only.
 fn model_data_notes(
     unmeasured: &[(ObjectId, String)],
+    wholes: &ModelDataWholes,
     open_surfaces: &[(ObjectId, usize)],
     snapshots: &[SourceSnapshot],
     kinds: &BTreeMap<ObjectId, String>,
 ) -> Vec<ModelData> {
-    let shapeless = Bodiless::Shapeless.reason();
     let fingerprint = |id: &ObjectId| {
         snapshots
             .iter()
@@ -2498,34 +2600,47 @@ fn model_data_notes(
         .filter_map(|(id, reason)| {
             let (fingerprint, kind) = (fingerprint(id), kind(id));
             let local = &id.local_id;
-            if *reason == shapeless {
+            if let Some((code, part)) = wholes.get(id) {
+                let part_kind = kinds.get(part).map_or("", String::as_str);
                 return Some(ModelData {
-                    code: NO_SHAPE_REPRESENTATION,
+                    code,
                     message: format!(
-                        "{local} {kind} has no shape representation and no parts; every \
-                         measurement of it is not evaluated"
+                        "{local} {kind} has no body of its own, and its part {} {part_kind} \
+                         is unmeasured for its model data ({code}); every measurement of it \
+                         is not evaluated",
+                        part.local_id
                     ),
-                    locator: format!("ifc:{fingerprint}:no-shape:{local}"),
+                    locator: format!("ifc:{fingerprint}:{}:{local}", model_data_detail(code)),
                 });
             }
-            if voided_body(reason) {
-                return Some(ModelData {
-                    code: VOIDED_BODY,
-                    message: format!(
-                        "{local} {kind} has openings that remove its whole body; every \
-                         measurement of it is not evaluated"
-                    ),
-                    locator: format!("ifc:{fingerprint}:voided-body:{local}"),
-                });
-            }
-            let defect = self_intersecting_face(reason)?;
-            Some(ModelData {
-                code: SELF_INTERSECTING_FACE,
-                message: format!(
-                    "{local} {kind} has a face whose boundary {defect}, so it bounds no \
-                     region; every measurement of it is not evaluated"
+            let code = model_data_code(reason)?;
+            let message = match code {
+                NO_SHAPE_REPRESENTATION => format!(
+                    "{local} {kind} has no shape representation and no parts; every \
+                     measurement of it is not evaluated"
                 ),
-                locator: format!("ifc:{fingerprint}:self-intersecting-face:{local}"),
+                VOIDED_BODY => format!(
+                    "{local} {kind} has openings that remove its whole body; every \
+                     measurement of it is not evaluated"
+                ),
+                SELF_INTERSECTING_FACE => format!(
+                    "{local} {kind} has a face whose boundary {}, so it bounds no region; \
+                     every measurement of it is not evaluated",
+                    self_intersecting_face(reason)?
+                ),
+                _ => {
+                    let (entity, detail) = invalid_geometry(reason)?;
+                    format!(
+                        "{local} {kind} has geometry that cannot exist as written ({entity} \
+                         is geometrically invalid: {detail}); every measurement of it is not \
+                         evaluated"
+                    )
+                }
+            };
+            Some(ModelData {
+                code,
+                message,
+                locator: format!("ifc:{fingerprint}:{}:{local}", model_data_detail(code)),
             })
         })
         .chain(open)

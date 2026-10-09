@@ -48,6 +48,23 @@ All notable changes are documented here. This project follows Semantic Versionin
   model data; its outcomes stay not evaluated. The not-evaluated inventory
   labels the reason `unmeasured (model data)`
   ([#310](https://github.com/axioval/engine/issues/310)).
+- **Geometry**: a product whose geometry `ifc-geometry` refuses as
+  geometrically invalid (`#<id> (<TYPE>) is geometrically invalid: …`,
+  such as a half-space boundary that does not close) is listed once per
+  object as the integrity warning `shape.invalid-geometry`, as model data.
+  A whole measured through its parts and unmeasured only because parts are
+  unmeasured for model data is listed with the code of the part its reason
+  names. Reasons and outcomes are unchanged; the not-evaluated inventory
+  labels both `unmeasured (model data)`
+  ([#357](https://github.com/axioval/engine/issues/357)).
+- **Geometry**: more unmeasured products are bounded for the space and
+  free-floor searches, so a search apart from them decides: a boolean
+  difference or half-space clip by its first operand, a faceted or
+  tessellated body refused for a face by its authored vertices, each item
+  by its own mesh where it compiles, placements applied; a whole is then
+  bounded by its parts. Anything that cannot be bounded soundly stays
+  unbounded and refuses every search it could reach
+  ([#358](https://github.com/axioval/engine/issues/358)).
 - **Containment**: a body of several closed shells that overlap or touch,
   which the volume kernel refuses as one self-intersecting mesh, is
   measured shell by shell against a closed body: its volume between its

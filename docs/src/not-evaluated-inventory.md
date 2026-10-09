@@ -78,7 +78,14 @@ runs back along itself (`… profile outer ring intersects itself`, `… folds
 back on itself at vertex <n>`) is model data too (#298; the result lists it
 once as `shape.self-intersecting-face`), and is labelled the same way, as
 is a host whose openings remove its whole body (`its openings remove its
-whole body: …`, #310; listed once as `shape.voided-body`).
+whole body: …`, #310; listed once as `shape.voided-body`), and geometry
+refused as invalid as written (`#<id> (<TYPE>) is geometrically invalid:
+…`, #357; listed once as `shape.invalid-geometry`). A whole measured
+through its parts and unmeasured because a part is (`no body
+representation of its own, and its body is the union of its <n> parts,
+and part <object> is unmeasured: …`) is labelled model data when the
+part's reason is (#357); the CLI lists it with the part's code, and only
+when no other part is unmeasured for another reason.
 `--format json` marks model-data causes with `"model_data": true`. Causes are ranked by the outcomes they account for, then by unmeasured
 objects, then by models affected.
 

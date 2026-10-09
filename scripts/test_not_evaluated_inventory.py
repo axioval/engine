@@ -172,6 +172,57 @@ class InventoryTests(unittest.TestCase):
             [(1, 2)],
         )
 
+    def test_invalid_geometry_is_model_data(self) -> None:
+        invalid = result(
+            [("#1", "IFCWALL", "#1906924 (IFCCOMPOSITECURVE) is geometrically invalid: "
+              "segment 2 starts 0.83 m from where segment 1 ends"),
+             ("#2", "IFCSLAB", "#12 (IFCPOLYLINE) is geometrically invalid: point #14 lies "
+              "off the boundary plane (BoundaryDim)"),
+             ("#3", "IFCWALL", "IFCTRIMMEDCURVE (#5) is valid IFC but not yet interpreted: "
+              "an arc")],
+            [outcome("clash", "#1", "incomplete_evidence", "proximity unavailable")],
+        )
+        causes = inventory.inventory([("a", invalid)], RULES)
+        rows = {cause.label(): (cause.outcomes, cause.objects) for cause in causes}
+        self.assertEqual(
+            rows,
+            {"unmeasured (model data): #<id> (IFCCOMPOSITECURVE) is geometrically invalid: "
+             "segment <n> starts <n> m from where segment <n> ends": (1, 1),
+             "unmeasured (model data): #<id> (IFCPOLYLINE) is geometrically invalid: point "
+             "#<id> lies off the boundary plane (BoundaryDim)": (0, 1),
+             "unmeasured: IFCTRIMMEDCURVE (#<id>) is valid IFC but not yet interpreted: an "
+             "arc": (0, 1)},
+        )
+
+    def test_a_whole_unmeasured_through_a_part_is_model_data_when_the_part_is(self) -> None:
+        whole = ("no body representation of its own, and its body is the union of its {} "
+                 "parts, and part ifc-step:m.ifc/#2 is unmeasured: {}")
+        crossing = ("mesh compilation refused: invalid geometry input: planar face cannot be "
+                    "triangulated: profile outer ring intersects itself")
+        refused = "mesh compilation refused: backend cannot apply Sweep"
+        wholes = result(
+            [("#1", "IFCRAILING", whole.format(99, crossing)),
+             ("#2", "IFCMEMBER", crossing),
+             ("#3", "IFCSTAIR", whole.format(2, refused)),
+             # A whole of wholes: through its part's part.
+             ("#4", "IFCSTAIR", whole.format(1, whole.format(99, crossing)).replace(
+                 "parts, and", "part, and", 1))],
+            [outcome("clash", "#1", "incomplete_evidence", "proximity unavailable"),
+             outcome("clash", "#3", "incomplete_evidence", "proximity unavailable")],
+        )
+        causes = inventory.inventory([("a", wholes)], RULES)
+        rows = {cause.label(): (cause.outcomes, cause.objects) for cause in causes}
+        through = ("no body representation of its own, and its body is the union of its <n> "
+                   "parts, and part <object> is unmeasured: ")
+        self.assertEqual(
+            rows,
+            {"unmeasured (model data): " + through + inventory.pattern(crossing): (1, 1),
+             "unmeasured (model data): " + inventory.pattern(crossing): (0, 1),
+             "unmeasured: " + through + inventory.pattern(refused): (1, 1),
+             "unmeasured (model data): " + through.replace("parts,", "part,")
+             + through + inventory.pattern(crossing): (0, 1)},
+        )
+
     def test_bodies_authored_open_are_model_data_only_when_all_are(self) -> None:
         meet = ("surfaces meet ifc-step:m.ifc/{}, but neither body is a closed solid, so "
                 "touching cannot be told from crossing")

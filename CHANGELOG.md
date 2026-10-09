@@ -67,6 +67,11 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **Geometry**: a faceted body whose planar face has a corner a fraction of
+  a micrometre off the line through its neighbours is meshed as the closed
+  solid it is authored as, where the corner was dropped from one face and
+  the body measured as an open surface (axiolid-mesh-compile 0.3.16,
+  axiolid/kernel#278) ([#314](https://github.com/axioval/engine/issues/314)).
 - **Geometry**: a host whose openings stop a rounding error short of its
   face (an opening exported `0.124999999999995` m deep in a wall
   `0.125` m thick) is measured at georeferenced coordinates: since

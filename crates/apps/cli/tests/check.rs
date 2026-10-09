@@ -18653,3 +18653,108 @@ fn refused_spaces(
         refused
     }
 }
+
+/// engine#314: a faceted prism 0.03 m high over a pentagon whose corner `v`
+/// lies about 0.4 um off the line through its neighbours `a` and `b`
+/// (axiolid/kernel#278's repro). The mesh compiler dropped `v` from the top
+/// cap only, so three edges bounded one triangle each and the body was an
+/// open surface with no volume. Since axiolid-mesh-compile 0.3.16 every
+/// corner is kept, the body closes, and its volume is the pentagon's area
+/// times its height, and so is the mirrored prism's.
+#[test]
+fn with_geometry_a_faceted_prism_with_a_nearly_collinear_corner_is_a_closed_solid() {
+    let case = Case::new("geometry-nearly-collinear-corner");
+    let pentagon: [[f64; 2]; 5] = [
+        [0.877_258, 2.548_603],
+        [-0.586_191, 1.488_751],
+        [0.0, 0.0],
+        [0.054_955, -0.139_57],
+        [0.183_174, -0.465_204],
+    ];
+    let height = 0.03;
+    let area = (0..5)
+        .map(|i| {
+            let ([x0, y0], [x1, y1]) = (pentagon[i], pentagon[(i + 1) % 5]);
+            x0 * y1 - x1 * y0
+        })
+        .sum::<f64>()
+        / 2.0;
+    let prism = |mirrored: bool| {
+        // Mirrored in x, the ring is reversed to stay counter-clockwise.
+        let ring: Vec<[f64; 2]> = if mirrored {
+            pentagon.iter().rev().map(|[x, y]| [-x, *y]).collect()
+        } else {
+            pentagon.to_vec()
+        };
+        let mut data = String::new();
+        for (index, [x, y]) in ring.iter().enumerate() {
+            for (level, z) in [0.0_f64, height].into_iter().enumerate() {
+                writeln!(
+                    data,
+                    "#{}=IFCCARTESIANPOINT(({x:?},{y:?},{z:?}));",
+                    100 + 10 * level + index
+                )
+                .unwrap();
+            }
+        }
+        let (bottom, top) = (|i: usize| 100 + i, |i: usize| 110 + i);
+        // Outward: the bottom cap clockwise seen from above, the top cap
+        // counter-clockwise, and each side quad.
+        let mut faces: Vec<Vec<usize>> = vec![
+            (0..5).rev().map(bottom).collect(),
+            (0..5).map(top).collect(),
+        ];
+        for i in 0..5 {
+            let j = (i + 1) % 5;
+            faces.push(vec![bottom(i), bottom(j), top(j), top(i)]);
+        }
+        let mut face_ids = Vec::new();
+        for (index, face) in faces.iter().enumerate() {
+            let [poly, bound, id] = [0, 1, 2].map(|offset| 200 + 3 * index + offset);
+            let points: Vec<String> = face.iter().map(|c| format!("#{c}")).collect();
+            writeln!(
+                data,
+                "#{poly}=IFCPOLYLOOP(({}));\n#{bound}=IFCFACEOUTERBOUND(#{poly},.T.);\n\
+                 #{id}=IFCFACE((#{bound}));",
+                points.join(",")
+            )
+            .unwrap();
+            face_ids.push(format!("#{id}"));
+        }
+        writeln!(
+            data,
+            "#240=IFCCLOSEDSHELL(({}));\n#241=IFCFACETEDBREP(#240);\n\
+             #242=IFCSHAPEREPRESENTATION(#5,'Body','Brep',(#241));\n\
+             #243=IFCPRODUCTDEFINITIONSHAPE($,$,(#242));\n\
+             #69=IFCWALL('0000000000000000000069',$,$,$,$,#3,#243,$,$);",
+            face_ids.join(",")
+        )
+        .unwrap();
+        model_with(&data)
+    };
+    let volume = json!({"kind": "property", "propertySet": "axioval:measured",
+                        "property": "volume"});
+    let cubic = |value: f64| json!({"kind": "literal", "value": {"type": "quantity", "value": value, "unit": "m3"}});
+    for mirrored in [false, true] {
+        let (output, result) = case.geometry_rule(
+            &prism(mirrored),
+            &[("wall", "IfcWall")],
+            "axioval:capability.expression",
+            &registry_signature("axioval:capability.expression"),
+            entity("wall"),
+            json!({"requirement": {"type": "expression", "value":
+                {"kind": "between", "operand": volume,
+                 "low": cubic(area * height - 1e-9), "high": cubic(area * height + 1e-9)}}}),
+        );
+        assert_eq!(output.status.code(), Some(0), "{mirrored}: {result:#}");
+        assert_eq!(result["report"]["findings"], json!([]), "{mirrored}");
+        assert_eq!(result["report"]["not_evaluated"], json!([]), "{mirrored}");
+        assert_eq!(result["geometry"]["exact"], 1, "{mirrored}: {result:#}");
+        assert!(
+            !result["integrity"]
+                .to_string()
+                .contains("shape.open-surface"),
+            "{mirrored}: {result:#}"
+        );
+    }
+}

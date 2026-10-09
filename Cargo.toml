@@ -77,16 +77,21 @@ axiolid-brep = "0.3.3"
 # 0.3.15 refuses pinched rings unless asked to accept them (#253, #262);
 # 0.3.16 reads a `-0.0` corner as `0.0` when ordering a ring (#269), accepts
 # keyhole rings on surface paths (#270) and builds exact extrusions down or
-# oblique to the profile normal (#275).
-axiolid-construct = "0.3.16"
+# oblique to the profile normal (#275); 0.3.17 builds exact oblique
+# extrusions of arc profiles and oblique circles with exact tilted
+# elliptical-cylinder walls and refuses oblique ellipses by name (#280).
+axiolid-construct = "0.3.17"
 axiolid-core = "0.3.0"
 axiolid-inspect = "0.3.5"
 axiolid-mesh = "0.3.0"
-axiolid-measure = "0.3.9"
+# 0.3.10 stops the exact boundary distance early on a shown touch or
+# crossing (axiolid/kernel#273).
+axiolid-measure = "0.3.10"
 # 0.3.5 to 0.3.9 regressed coverage through an opening and cut cost regions
 # with a sliver along a turned wall (axiolid/kernel#219, #222); 0.3.10 fixes
-# both.
-axiolid-overlay = "0.3.10"
+# both; 0.3.11 decides ring orientation and `ZeroArea` exactly relative to
+# a vertex, so small rings far from the origin keep their winding (#274).
+axiolid-overlay = "0.3.11"
 axiolid-ray-mesh = "0.4.0"
 axiolid-route = "0.3.7"
 axiolid-spatial = "0.3.0"
@@ -98,7 +103,7 @@ axiolid-contracts = "0.3.3"
 axiolid-curve = "0.3.4"
 # The CLI derives IFC4X3 linear placements with its reference evaluator
 # (`ReferenceCurveEvaluator`, through `ifc-geometry` 0.10, engine#224).
-axiolid-evaluate = "0.3.7"
+axiolid-evaluate = "0.3.8"
 # 0.3.9 subtracts placed extrusions exactly (axiolid/kernel#228, through
 # axiolid-brep-boolean 0.1.2) and reports a certified deviation per mesh
 # (#232, with axiolid-reference 0.3.4); 0.3.10 clips by half-spaces (#234),
@@ -114,8 +119,13 @@ axiolid-evaluate = "0.3.7"
 # slab width as certified (#257, #261), triangulates planar and B-rep faces
 # with the certified clipper (#260) and sweeps along elevated directrices
 # (#252); 0.3.15 welds shared edges through inserted corners and reports a
-# Solid label whose mesh does not close as `MeshClosure::OpenSolid` (#265).
-axiolid-mesh-compile = "0.3.15"
+# Solid label whose mesh does not close as `MeshClosure::OpenSolid` (#265);
+# 0.3.16 refuses a mesh extrusion along its profile plane (#281), snaps away
+# a difference's skin thinner than tolerance and reports it under
+# `deviation::SNAPPED_OPERANDS` (#276, through axiolid-brep-boolean 0.1.6),
+# keeps planar face corners through the sliver split (#278) and bounds
+# half-spaces by profile contours with arcs (#277).
+axiolid-mesh-compile = "0.3.16"
 axiolid-exact-compile-contract = "0.3.1"
 # 0.3.3 adds `MeshClosure::OpenSolid` (#265).
 axiolid-mesh-compile-contract = "0.3.3"
@@ -123,7 +133,7 @@ axiolid-mesh-compile-contract = "0.3.3"
 axiolid-mesh-boolean-boolmesh = "0.3.4"
 # 0.3.5 adds oriented stations (#246), additively; `ifc-geometry` 0.9
 # requires it for the IFC4X3 stations it lowers.
-axiolid-model = "0.3.6"
+axiolid-model = "0.3.7"
 axiolid-primitive = "0.3.0"
 axiolid-profile = "0.3.0"
 axiolid-surface = "0.3.0"
@@ -134,14 +144,16 @@ openbim-ids = { version = "0.2.2", features = ["audit-schema"] }
 # Door and window operation geometry (openbimrs/ifc#148, #170) is published
 # only in the IFC facade, which joins `ifc-geometry` and `ifc-properties`; `geometry-select`
 # compiles no geometry kernel.
-# 0.21 re-exports `ifc-geometry` 0.15; its `authoring` feature stays off.
-openbim_ifc = { package = "openbim-ifc", version = "0.21.0", default-features = false, features = ["geometry-select", "properties", "ifc2x3", "ifc4", "ifc4x3"] }
+# 0.22 re-exports `ifc-geometry` 0.16; its `authoring` feature stays off.
+openbim_ifc = { package = "openbim-ifc", version = "0.22.0", default-features = false, features = ["geometry-select", "properties", "ifc2x3", "ifc4", "ifc4x3"] }
 ifc-classification = "0.4.0"
 # The CLI reads each `IfcAlignment`'s centreline, stationing and cant to
 # locate products along it (engine#252). 0.7 evaluates Viennese bends for
 # the section's cant and refuses those it does not determine (#312, #364);
-# `ifc-geometry` 0.13 requires it.
-ifc-alignment = "0.7.0"
+# `ifc-geometry` 0.13 requires it. 0.7.1 gives a station on a seam the
+# incoming tangent, mitres sectioned runs across seams and snaps stations
+# within `ARC_LENGTH_TOLERANCE` to the seam.
+ifc-alignment = "0.7.1"
 # 0.9 lowers IFC4X3 stations, offset curves by distances and sectioned
 # solids and surfaces (openbimrs/ifc#307) and, since 0.8.2, refuses an
 # `IfcParameterValue` along an alignment by name (openbimrs/ifc#347). 0.10
@@ -154,8 +166,10 @@ ifc-alignment = "0.7.0"
 # (#388), so flush openings in georeferenced hosts mesh; 0.14 lowers
 # polygonal half-space boundaries given as straight-edged `IfcCompositeCurve`
 # or `IfcIndexedPolyCurve` like their `IfcPolyline` twin (#393); 0.15 lowers
-# a collinear `IfcArcIndex` as straight segments (#396).
-ifc-geometry = { version = "0.15.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
+# a collinear `IfcArcIndex` as straight segments (#396); 0.16 lowers
+# stations on a tangent discontinuity with the incoming tangent and runs of
+# sections and offsets across one, refused by name before (#346).
+ifc-geometry = { version = "0.16.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
 # Map conversions only: without the default `transform` feature it links no
 # geometry crate (never Axiolid).
 ifc-georef = { version = "0.6.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }

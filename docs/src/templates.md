@@ -1885,7 +1885,7 @@ bound into the values: a selection of nothing states the value absent and
 the check passes, one leaving objects undecided refuses it (`boundary
 elements could not be selected: …`). Findings read `duplicate_space:
 space body duplicated by {duplicates:least} other space(s)` (relating
-them), `insufficient_height: clear height {height:fixed3} below required
+them), `insufficient_height: clear height {height:upper3} below required
 {required_height_metres:fixed3}`, `uncovered_boundary: {uncovered:fixed3}
 m of space boundary is uncovered` (relating the elements along the runs),
 `contained_body: space is contained by another body`, `… contains another

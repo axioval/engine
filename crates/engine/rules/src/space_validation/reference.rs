@@ -5,9 +5,9 @@
 use std::collections::BTreeMap;
 
 use axioval_engine::{
-    BoundaryRequest, Cap, CapCoverage, CapRequest, CapabilityEvaluation, CompiledRule, Containment,
-    Deviation, NotEvaluatedReason, OverlapRequest, ParameterDescriptor, ParameterType,
-    RuleCapability, RuleContext, SpaceError, SpaceService, SpaceServiceHandle, UnallocatedRegion,
+    BoundaryRequest, Cap, CapRequest, CapabilityEvaluation, CompiledRule, Containment, Deviation,
+    NotEvaluatedReason, OverlapRequest, ParameterDescriptor, ParameterType, RuleCapability,
+    RuleContext, SpaceError, SpaceService, SpaceServiceHandle, UnallocatedRegion,
 };
 use axioval_ir::contract::{ParameterValue, Selector};
 use axioval_ir::{Evidence, Finding, ObjectId, Severity};
@@ -427,7 +427,22 @@ fn check_height(
 ) {
     match service.measure_clear_height(space) {
         Ok(height) => {
-            if height.metres() + policy.tolerance_metres < policy.required_height_metres {
+            let (lower, upper) = height.bounds_metres();
+            let short =
+                |metres: f64| metres + policy.tolerance_metres < policy.required_height_metres;
+            if short(lower) != short(upper) {
+                // A tessellated space's chord deviation straddles the
+                // requirement: neither a finding nor a pass.
+                evaluation.push_object_not_evaluated(
+                    space.clone(),
+                    NotEvaluatedReason::IncompleteEvidence,
+                    format!(
+                        "clear height between {lower:.3} and {upper:.3} straddles the required \
+                         {:.3} within the space's chord deviation",
+                        policy.required_height_metres
+                    ),
+                );
+            } else if short(upper) {
                 evaluation.push_finding(finding(
                     rule,
                     space.clone(),
@@ -435,8 +450,7 @@ fn check_height(
                     message(
                         SpaceCategory::InsufficientHeight,
                         &format!(
-                            "clear height {:.3} below required {:.3}",
-                            height.metres(),
+                            "clear height {upper:.3} below required {:.3}",
                             policy.required_height_metres
                         ),
                     ),
@@ -569,7 +583,27 @@ fn check_cap(
     let cap = request.cap();
     match service.measure_cap_coverage(space, request) {
         Ok(coverage) => {
-            if let Some((severity, ratio)) = cap_shortfall(&coverage) {
+            let (lower, upper) = coverage.covered_ratio_bounds();
+            // A cap short at both ends is graded by its least coverage, the
+            // most severe grade it may have; one complete at only one end is
+            // undecided.
+            let (low, high) = (cap_shortfall(lower), cap_shortfall(upper));
+            if low.is_some() != high.is_some() {
+                // The chord deviation of a tessellated space or cap element
+                // leaves the coverage on both sides of complete.
+                evaluation.push_object_not_evaluated(
+                    space.clone(),
+                    NotEvaluatedReason::IncompleteEvidence,
+                    format!(
+                        "{} cap coverage from {:.1}% straddles complete within the chord \
+                         deviation of a tessellated body",
+                        cap_name(cap),
+                        lower * 100.0
+                    ),
+                );
+                return;
+            }
+            if let Some((severity, ratio)) = low {
                 let related = coverage.elements().to_vec();
                 evaluation.push_finding(
                     finding(
@@ -599,8 +633,7 @@ fn check_cap(
 
 /// Grades cap coverage: almost none is severe, a little is a warning, and
 /// nearly complete is informational.
-fn cap_shortfall(coverage: &CapCoverage) -> Option<(Severity, f64)> {
-    let ratio = coverage.covered_ratio();
+fn cap_shortfall(ratio: f64) -> Option<(Severity, f64)> {
     if ratio >= CAP_COMPLETE_RATIO {
         return None;
     }

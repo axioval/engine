@@ -615,6 +615,32 @@ overlay refusal left after the slivers are out, is
 `SpaceError::Refused` with its reason (the overlay's error by name), not
 the bare `Unavailable` of a body that could not be read.
 
+A tessellated space or candidate is bracketed by its chord deviation `d`
+(#305), never refused for being near. Its vertical bounds are its mesh's
+lowest and highest points widened by `d`, narrowed by extent bounds the
+host certifies (`with_extent_bounds`): a slab whose certified top is the
+floor stays out of the space. A plan area widens by the band its outline
+may move, `2·d·ℓ + π·d²` per outline edge of length `ℓ` (for a shared
+area only the edges within the other footprint's box). Clear height of a
+tessellated space is the interval of its vertical bounds
+(`ClearHeightEvidence::try_bracketed`), and cap coverage brackets both
+areas (`CapCoverage::try_bracketed`): covered at least by the elements
+surely at the cap's plane, their outlines moved in, at most by every
+element possibly there, moved out. `space-validation` decides a height
+or a cap grade only where both ends agree and otherwise leaves the space
+not evaluated. Duplicates are decided where containment and the 1 µm
+span match hold or fail at both ends of the bracket; overlaps where a
+tessellated pair is surely apart in height or plan, and any overlap such
+a pair may have is refused (its area and height are reported as points).
+A boundary point is covered by a tessellated element only farther than
+its deviation inside its outline, missed only farther outside; between,
+with no other element covering it, the gaps are refused, and so are a
+tessellated space's own (its boundary is chords). What a deviation could
+tip stays `SpaceError::InexactEvidence`; a deviation that bounds nothing
+refuses. Evidence stays exact, since every decision holds for every body
+within the deviation; a bracketed clear height names the space in its
+locator (`:within-chord-deviation=`).
+
 `AxiolidPlanAreaService` measures plan footprints and footprint overlaps
 through the same plan overlay. A planar mesh measures exactly. A tessellated
 mesh with chord deviation `d` and footprint perimeter `P` measures within

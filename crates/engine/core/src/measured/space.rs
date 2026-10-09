@@ -66,8 +66,9 @@ fn gap_length(
 
 /// The share `part / whole` of two areas the service states, rounded
 /// outward and kept in `[0, 1]`.
-fn share(part: Interval, whole: f64) -> Result<(f64, f64), PropertyResolutionError> {
-    let (lower, upper) = super::bounds(part.divided_by(super::span(whole, whole)))?;
+fn share(part: (f64, f64), whole: (f64, f64)) -> Result<(f64, f64), PropertyResolutionError> {
+    let (lower, upper) =
+        super::bounds(super::span(part.0, part.1).divided_by(super::span(whole.0, whole.1)))?;
     Ok((lower.clamp(0.0, 1.0), upper.clamp(0.0, 1.0)))
 }
 
@@ -179,11 +180,7 @@ impl Measures {
                 let coverage = service
                     .measure_cap_coverage(object, &request)
                     .map_err(unavailable)?;
-                let covered = coverage.covered_area_square_metres();
-                let (lower, upper) = share(
-                    super::span(covered, covered),
-                    coverage.whole_area_square_metres(),
-                )?;
+                let (lower, upper) = share(coverage.covered_bounds(), coverage.whole_bounds())?;
                 Ok(Answer::Value(lower, upper, None, locator, exact))
             }
             "support_count" => {

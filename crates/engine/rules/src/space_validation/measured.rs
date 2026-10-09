@@ -236,7 +236,7 @@ fn value(
                 .map_err(|error| refusal(&error))?;
             Ok((
                 interval(
-                    (height.metres(), height.metres()),
+                    height.bounds_metres(),
                     Some(QuantityDimension::Length),
                     evidence.exact,
                     evidence.locator.clone(),
@@ -311,10 +311,9 @@ fn value(
             let coverage = service
                 .measure_cap_coverage(space, &request)
                 .map_err(|error| refusal(&error))?;
-            let ratio = coverage.covered_ratio();
             Ok((
                 interval(
-                    (ratio, ratio),
+                    coverage.covered_ratio_bounds(),
                     None,
                     evidence.exact,
                     evidence.locator.clone(),

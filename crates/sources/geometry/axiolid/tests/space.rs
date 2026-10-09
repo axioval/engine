@@ -1098,3 +1098,275 @@ fn a_footprint_refused_elsewhere_leaves_the_space_measured() {
         "{far_cap:?}"
     );
 }
+
+// Space measurements next to tessellated bodies, bracketed by their chord
+// deviation (#305).
+
+/// A plan point.
+type Xy = (f64, f64);
+
+/// Closed, outward-wound upright prisms over plan quads (counter-clockwise
+/// corners), as one mesh of separate shells.
+fn quad_prisms(quads: &[[Xy; 4]], z0: f64, z1: f64) -> TriMesh {
+    let mut positions = Vec::new();
+    let mut indices = Vec::new();
+    for quad in quads {
+        let base = u32::try_from(positions.len()).unwrap();
+        for z in [z0, z1] {
+            for (x, y) in quad {
+                positions.push(Point3::new(*x, *y, z));
+            }
+        }
+        let (b, t) = (base, base + 4);
+        indices.extend([b, b + 2, b + 1, b, b + 3, b + 2]);
+        indices.extend([t, t + 1, t + 2, t, t + 2, t + 3]);
+        for i in 0..4 {
+            let j = (i + 1) % 4;
+            indices.extend([b + i, b + j, t + j, b + i, t + j, t + i]);
+        }
+    }
+    TriMesh::new(positions, indices)
+}
+
+fn quad(x0: f64, x1: f64, y0: f64, y1: f64) -> [Xy; 4] {
+    [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+}
+
+/// Sides of the polygon a full circle is tessellated with.
+const SIDES: u32 = 16;
+
+fn sagitta(radius: f64) -> f64 {
+    radius * (1.0 - (std::f64::consts::PI / f64::from(SIDES)).cos())
+}
+
+/// A point at `k` sixteenths of a turn and `radius` from `centre`.
+fn on_circle(centre: Xy, radius: f64, k: u32) -> Xy {
+    let angle = 2.0 * std::f64::consts::PI * f64::from(k) / f64::from(SIDES);
+    let (s, c) = angle.sin_cos();
+    (centre.0 + radius * c, centre.1 + radius * s)
+}
+
+/// A unit cell centred on `centre` less a round hole of `radius`, as quads
+/// from the hole's polygon out along its rays to the cell's sides.
+fn holed_cell(centre: Xy, radius: f64) -> Vec<[Xy; 4]> {
+    let at = |k: u32| {
+        let angle = 2.0 * std::f64::consts::PI * f64::from(k) / f64::from(SIDES);
+        let (s, c) = angle.sin_cos();
+        let reach = 0.5 / c.abs().max(s.abs());
+        (
+            on_circle(centre, radius, k),
+            (centre.0 + reach * c, centre.1 + reach * s),
+        )
+    };
+    (0..SIDES)
+        .map(|k| {
+            let (p0, q0) = at(k);
+            let (p1, q1) = at(k + 1);
+            [p0, q0, q1, p1]
+        })
+        .collect()
+}
+
+/// The room of #302 and #305: a 12 x 8 slab with a round hole of radius
+/// 0.3 m under space `a`, walls, a ceiling slab and spaces `a` and `b`. The
+/// floor slab is tessellated; `certified` registers the extent its
+/// construction gives, as a host with its exact boundary does.
+fn holed_room(certified: bool) -> AxiolidSpaceService {
+    let mut slab = vec![
+        quad(0.0, 12.0, 1.5, 8.0),
+        quad(0.0, 12.0, 0.0, 0.5),
+        quad(0.0, 0.5, 0.5, 1.5),
+        quad(1.5, 12.0, 0.5, 1.5),
+    ];
+    slab.extend(holed_cell((1.0, 1.0), 0.3));
+    let walls = [
+        quad(0.0, 12.0, 0.0, 0.2),
+        quad(0.0, 12.0, 7.8, 8.0),
+        quad(0.0, 0.2, 0.2, 7.8),
+        quad(11.8, 12.0, 0.2, 7.8),
+        quad(5.9, 6.1, 0.2, 7.8),
+    ];
+    let mut geometry = AxiolidGeometry::new()
+        .with_tessellated_mesh(id("slab"), quad_prisms(&slab, -0.25, 0.0), sagitta(0.3))
+        .with_mesh(id("walls"), quad_prisms(&walls, 0.0, 2.8))
+        .with_mesh(
+            id("ceiling"),
+            quad_prisms(&[quad(0.0, 12.0, 0.0, 8.0)], 2.8, 3.05),
+        )
+        .with_mesh(id("a"), quad_prisms(&[quad(0.2, 5.9, 0.2, 7.8)], 0.0, 2.8))
+        .with_mesh(id("b"), quad_prisms(&[quad(6.1, 11.8, 0.2, 7.8)], 0.0, 2.8));
+    if certified {
+        let extent = ([0.0, 0.0, -0.25], [12.0, 8.0, 0.0]);
+        geometry = geometry.with_extent_bounds(id("slab"), extent, Some(extent));
+    }
+    AxiolidSpaceService::new(geometry, source())
+        .with_space(id("a"))
+        .with_space(id("b"))
+        .with_slab(id("slab"))
+        .with_slab(id("ceiling"))
+}
+
+/// Every aspect of both spaces over the slab with a round hole is decided:
+/// the slab's certified extent ends at the floor, so it overlaps neither in
+/// height and sits at the bottom cap, and the hole's chords move the
+/// covered area by a band far below any grade. Space `a`, over the hole,
+/// is 99.4 % covered whatever the true hole's outline.
+#[test]
+fn a_slab_with_a_round_hole_leaves_every_aspect_decided() {
+    let service = holed_room(true);
+    for space in ["a", "b"] {
+        let space = id(space);
+        assert!(service.measure_duplicates(&space).unwrap().is_empty());
+        let height = service.measure_clear_height(&space).unwrap();
+        assert_eq!(height.bounds_metres(), (2.8, 2.8));
+        assert!(
+            service
+                .measure_overlaps(&space, &OverlapRequest::new())
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            service
+                .measure_boundary_gaps(&space, &BoundaryRequest::new())
+                .unwrap()
+                .is_empty()
+        );
+        let top = service
+            .measure_cap_coverage(&space, &CapRequest::new(Cap::Top))
+            .unwrap();
+        assert!((top.covered_ratio() - 1.0).abs() < 1e-9);
+    }
+    let bottom = service
+        .measure_cap_coverage(&id("a"), &CapRequest::new(Cap::Bottom))
+        .unwrap();
+    let (lower, upper) = bottom.covered_ratio_bounds();
+    assert!(
+        lower > 0.99 && upper < 0.997 && lower < upper,
+        "{lower} {upper}"
+    );
+    assert_eq!(bottom.elements(), &[id("slab")]);
+    let bottom = service
+        .measure_cap_coverage(&id("b"), &CapRequest::new(Cap::Bottom))
+        .unwrap();
+    let (lower, upper) = bottom.covered_ratio_bounds();
+    assert!(lower > 0.999 && upper <= 1.0, "{lower} {upper}");
+}
+
+/// Without a certified extent the slab's top may rise its deviation into
+/// the spaces or sink as far below their floor: an overlap with it is
+/// refused, and its bottom cap coverage spans none to nearly all.
+#[test]
+fn a_slab_that_may_rise_into_the_space_is_refused_where_it_could_tip() {
+    let service = holed_room(false);
+    assert_eq!(
+        service.measure_overlaps(&id("a"), &OverlapRequest::new()),
+        Err(SpaceError::InexactEvidence)
+    );
+    let bottom = service
+        .measure_cap_coverage(&id("a"), &CapRequest::new(Cap::Bottom))
+        .unwrap();
+    let (lower, upper) = bottom.covered_ratio_bounds();
+    assert!(lower == 0.0 && upper > 0.99, "{lower} {upper}");
+    // What the slab cannot reach is still decided.
+    assert!(service.measure_duplicates(&id("a")).unwrap().is_empty());
+}
+
+/// A rectangle `x0..x1` by `y0..y1` with corners rounded by `radius`, as
+/// quads: a cross and a fan in each corner.
+fn rounded(x0: f64, x1: f64, y0: f64, y1: f64, radius: f64) -> Vec<[Xy; 4]> {
+    let r = radius;
+    let mut quads = vec![
+        quad(x0 + r, x1 - r, y0, y1),
+        quad(x0, x0 + r, y0 + r, y1 - r),
+        quad(x1 - r, x1, y0 + r, y1 - r),
+    ];
+    // Corners anticlockwise from the east one, each a quarter turn.
+    let corners = [
+        (x1 - r, y1 - r),
+        (x0 + r, y1 - r),
+        (x0 + r, y0 + r),
+        (x1 - r, y0 + r),
+    ];
+    for (index, centre) in corners.into_iter().enumerate() {
+        let first = u32::try_from(index).unwrap() * SIDES / 4;
+        for k in (first..first + SIDES / 4).step_by(2) {
+            quads.push([
+                centre,
+                on_circle(centre, r, k),
+                on_circle(centre, r, k + 1),
+                on_circle(centre, r, k + 2),
+            ]);
+        }
+    }
+    quads
+}
+
+/// A round-cornered hall (tessellated) beside a room, `gap` apart, both
+/// floor to ceiling on one storey; `twin` adds a second hall over the
+/// first's body.
+fn hall_beside_room(gap: f64, twin: bool) -> AxiolidSpaceService {
+    let hall = || quad_prisms(&rounded(0.0, 4.0, 0.0, 3.0, 0.5), 0.0, 2.8);
+    let deviation = sagitta(0.5);
+    let mut geometry = AxiolidGeometry::new()
+        .with_tessellated_mesh(id("hall"), hall(), deviation)
+        .with_mesh(
+            id("room"),
+            quad_prisms(&[quad(4.0 + gap, 8.0, 0.0, 3.0)], 0.0, 2.8),
+        );
+    if twin {
+        geometry = geometry.with_tessellated_mesh(id("twin"), hall(), deviation);
+    }
+    let service = AxiolidSpaceService::new(geometry, source())
+        .with_space(id("hall"))
+        .with_space(id("room"));
+    if twin {
+        service.with_space(id("twin"))
+    } else {
+        service
+    }
+}
+
+/// Duplicates and overlaps next to a round-cornered hall a wall's width
+/// away are decided both ways round, and the hall's clear height is the
+/// interval its deviation leaves.
+#[test]
+fn a_round_cornered_space_beside_a_room_is_decided() {
+    let service = hall_beside_room(0.2, false);
+    for space in ["hall", "room"] {
+        assert!(service.measure_duplicates(&id(space)).unwrap().is_empty());
+        assert!(
+            service
+                .measure_overlaps(&id(space), &OverlapRequest::new())
+                .unwrap()
+                .is_empty()
+        );
+    }
+    let (lower, upper) = service
+        .measure_clear_height(&id("hall"))
+        .unwrap()
+        .bounds_metres();
+    assert!(
+        lower < 2.8 && upper > 2.8 && (upper - lower - 4.0 * sagitta(0.5)).abs() < 1e-12,
+        "{lower} {upper}"
+    );
+}
+
+/// Inside the deviation band nothing is decided: a room touching the hall
+/// may share a sliver with its true outline, and a second hall over the
+/// first's body may or may not span the same height to the micrometre.
+#[test]
+fn a_round_cornered_space_within_its_deviation_is_refused() {
+    let touching = hall_beside_room(0.0, false);
+    assert_eq!(
+        touching.measure_overlaps(&id("room"), &OverlapRequest::new()),
+        Err(SpaceError::InexactEvidence)
+    );
+    // Duplicates only compare spaces of one span and coincident plan: the
+    // room is surely not one.
+    assert!(touching.measure_duplicates(&id("room")).unwrap().is_empty());
+    let twins = hall_beside_room(0.2, true);
+    assert_eq!(
+        twins.measure_duplicates(&id("hall")),
+        Err(SpaceError::InexactEvidence)
+    );
+}

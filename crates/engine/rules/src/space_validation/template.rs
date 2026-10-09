@@ -248,11 +248,14 @@ fn height() -> FormCheck {
     let mut height = check(
         vec![measured("height", "space_height"), lowered],
         at_least("raised", Operand::Parameter("required_height_metres")),
-        "insufficient_height: clear height {height:fixed3} below required \
+        "insufficient_height: clear height {height:upper3} below required \
          {required_height_metres:fixed3}",
         None,
         fixed(Severity::Warning),
     );
+    // A tessellated space's height is an interval (#305).
+    height.undecided = "clear height between {height:lower3} and {height:upper3} straddles the \
+                        required {required_height_metres:fixed3} within the space's chord deviation";
     // The height and the tolerance summed as the capability summed them.
     height.derived = vec![Derived::Difference(Difference {
         name: "raised",
@@ -361,8 +364,13 @@ fn overlaps() -> FormCheck {
 }
 
 /// A cap covered all but a fiftieth, graded by how little is.
-fn cap(value: &'static str, list: &'static str, fail: &'static str) -> FormCheck {
-    check(
+fn cap(
+    value: &'static str,
+    list: &'static str,
+    fail: &'static str,
+    undecided: &'static str,
+) -> FormCheck {
+    let mut cap = check(
         vec![optional(value, list)],
         at_least(value, Operand::Value("complete")),
         fail,
@@ -392,7 +400,10 @@ fn cap(value: &'static str, list: &'static str, fail: &'static str) -> FormCheck
                 when: None,
             },
         ],
-    )
+    );
+    // A tessellated space's or element's coverage is an interval (#305).
+    cap.undecided = undecided;
+    cap
 }
 
 /// A requirement bounding an item's number by the rule's parameter.
@@ -560,11 +571,15 @@ pub(crate) fn template() -> Template {
                     "top",
                     "space_cap;cap=top;check=@check_top_cap;elements=@top_cap_elements",
                     "uncovered_top_cap: top cap only {top:hundred1}% covered",
+                    "top cap coverage from {top:hundred1}% straddles complete within the chord \
+                     deviation of a tessellated body",
                 ),
                 cap(
                     "bottom",
                     "space_cap;cap=bottom;check=@check_bottom_cap;elements=@bottom_cap_elements",
                     "uncovered_bottom_cap: bottom cap only {bottom:hundred1}% covered",
+                    "bottom cap coverage from {bottom:hundred1}% straddles complete within the \
+                     chord deviation of a tessellated body",
                 ),
             ],
             unless: Vec::new(),

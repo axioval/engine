@@ -85,9 +85,13 @@ type ResidualRows = Vec<(ObjectId, f64, Vec<ObjectId>)>;
 struct Stub {
     duplicates: Answer<Vec<ObjectId>>,
     height: Answer<f64>,
+    /// A bracketed clear height, as a tessellated space's, instead.
+    height_bounds: Option<(f64, f64)>,
     gaps: Answer<GapRows>,
     overlaps: Answer<OverlapRows>,
     cap: Answer<(f64, f64)>,
+    /// Bracketed whole and covered areas instead.
+    cap_bounds: Option<((f64, f64), (f64, f64))>,
     residuals: Answer<ResidualRows>,
     /// The gross floor area every residual states, if any.
     floor: Option<f64>,
@@ -118,6 +122,9 @@ impl SpaceService for Stub {
     }
     fn measure_clear_height(&self, space: &ObjectId) -> Result<ClearHeightEvidence, SpaceError> {
         self.height_requests.lock().unwrap().push(space.clone());
+        if let Some((lower, upper)) = self.height_bounds {
+            return ClearHeightEvidence::try_bracketed(space.clone(), lower, upper, evidence());
+        }
         let metres = self.height.clone().unwrap_or(Ok(3.0))?;
         ClearHeightEvidence::try_new(space.clone(), metres, evidence())
     }
@@ -155,6 +162,9 @@ impl SpaceService for Stub {
         request: &CapRequest,
     ) -> Result<CapCoverage, SpaceError> {
         self.cap_requests.lock().unwrap().push(request.clone());
+        if let Some((whole, covered)) = self.cap_bounds {
+            return CapCoverage::try_bracketed(whole, covered, Vec::new());
+        }
         let (whole, covered) = self.cap.clone().unwrap_or(Ok((10.0, 10.0)))?;
         CapCoverage::try_new(whole, covered, Vec::new())
     }
@@ -384,6 +394,61 @@ fn containment_and_substantial_intersection_are_errors_but_contact_is_not() {
         &rule(),
     );
     assert!(touching.findings().is_empty());
+}
+
+/// A bracketed clear height (a tessellated space's, #305) is judged at
+/// both ends: short at both is a finding, short at neither passes, and one
+/// straddling the requirement is not evaluated.
+#[test]
+fn a_bracketed_height_is_decided_only_where_both_ends_agree() {
+    let judged = |bounds| {
+        evaluate(
+            Stub {
+                height_bounds: Some(bounds),
+                ..Stub::default()
+            },
+            &rule(),
+        )
+    };
+    let low = judged((1.9, 1.95));
+    assert_eq!(low.findings().len(), 1);
+    assert!(
+        low.findings()[0].message.contains("1.950 below"),
+        "{}",
+        low.findings()[0].message
+    );
+    let high = judged((2.9, 3.1));
+    assert!(high.findings().is_empty() && high.not_evaluated_outcomes().is_empty());
+    let straddling = judged((2.48, 2.52));
+    assert!(straddling.findings().is_empty());
+    assert_eq!(straddling.not_evaluated_outcomes().len(), 1);
+}
+
+/// A bracketed cap coverage is decided only where both ends are complete
+/// or short, and a short one graded by its least coverage.
+#[test]
+fn a_bracketed_cap_is_decided_only_where_both_ends_agree() {
+    let enabled = [("check_top_cap", ParameterValue::Boolean { value: true })];
+    let judged = |bounds| {
+        evaluate(
+            Stub {
+                cap_bounds: Some(bounds),
+                ..Stub::default()
+            },
+            &rule_with(&enabled),
+        )
+    };
+    let complete = judged(((10.0, 10.0), (9.85, 9.95)));
+    assert!(complete.findings().is_empty() && complete.not_evaluated_outcomes().is_empty());
+    let partial = judged(((10.0, 10.1), (4.9, 5.1)));
+    assert_eq!(partial.findings()[0].severity, Severity::Info);
+    let straddling = judged(((10.0, 10.0), (9.7, 9.9)));
+    assert!(straddling.findings().is_empty());
+    assert_eq!(straddling.not_evaluated_outcomes().len(), 1);
+    // Short at both ends but across the warning band: the most severe
+    // grade it may have.
+    let graded = judged(((10.0, 10.0), (1.0, 2.0)));
+    assert_eq!(graded.findings()[0].severity, Severity::Warning);
 }
 
 #[test]

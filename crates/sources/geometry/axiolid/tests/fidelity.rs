@@ -235,8 +235,28 @@ fn space_measurements_refuse_a_curved_part_touching_the_space() {
             .unwrap_err(),
         SpaceError::InexactEvidence
     );
-    assert_eq!(
+    // The column stands inside, farther than its deviation from every
+    // boundary point, so it surely covers none of them (#305).
+    assert!(
         near.measure_boundary_gaps(&id("space"), &BoundaryRequest::new())
+            .is_ok()
+    );
+    // One whose outline passes within its deviation of a boundary
+    // point (the west edge's midpoint) may cover it or not.
+    let touching = AxiolidSpaceService::new(
+        AxiolidGeometry::new()
+            .with_mesh(id("space"), cuboid([0.0, 4.0], [0.0, 4.0], [0.0, 3.0]))
+            .with_tessellated_mesh(
+                id("column"),
+                cuboid([-0.3, 0.001], [1.9, 2.1], [0.0, 3.0]),
+                CHORD,
+            ),
+        source(),
+    )
+    .with_space(id("space"));
+    assert_eq!(
+        touching
+            .measure_boundary_gaps(&id("space"), &BoundaryRequest::new())
             .unwrap_err(),
         SpaceError::InexactEvidence
     );
@@ -254,20 +274,33 @@ fn space_measurements_refuse_a_curved_part_touching_the_space() {
     );
 }
 
+/// A curved space's clear height is the interval its chord deviation
+/// leaves it in, never a point; with no other space it has no duplicate
+/// whatever its deviation (#305). Its boundary is chords, so its gaps are
+/// refused.
 #[test]
-fn a_curved_space_is_not_measured_exactly() {
+fn a_curved_space_is_measured_within_its_deviation() {
     let geometry = AxiolidGeometry::new().with_tessellated_mesh(
         id("vault"),
         cuboid([0.0, 4.0], [0.0, 4.0], [0.0, 3.0]),
         CHORD,
     );
     let service = AxiolidSpaceService::new(geometry, source()).with_space(id("vault"));
-    assert_eq!(
-        service.measure_clear_height(&id("vault")).unwrap_err(),
-        SpaceError::InexactEvidence
+    let height = service.measure_clear_height(&id("vault")).unwrap();
+    let (lower, upper) = height.bounds_metres();
+    assert!((lower - (3.0 - 2.0 * CHORD)).abs() < 1e-12, "{lower}");
+    assert!((upper - (3.0 + 2.0 * CHORD)).abs() < 1e-12, "{upper}");
+    assert!(height.evidence().exact);
+    assert!(
+        height.evidence().locator.contains("within-chord-deviation"),
+        "{}",
+        height.evidence().locator
     );
+    assert!(service.measure_duplicates(&id("vault")).unwrap().is_empty());
     assert_eq!(
-        service.measure_duplicates(&id("vault")).unwrap_err(),
+        service
+            .measure_boundary_gaps(&id("vault"), &BoundaryRequest::new())
+            .unwrap_err(),
         SpaceError::InexactEvidence
     );
 }

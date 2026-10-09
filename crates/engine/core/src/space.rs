@@ -144,17 +144,29 @@ fn finite_non_negative(value: f64) -> bool {
     value.is_finite() && value >= 0.0
 }
 
-/// The clear height of a space, in metres.
+/// The clear height of a space, in metres: a point, or the interval a
+/// tessellated space's chord deviation leaves it in (#305). The evidence is
+/// exact either way: the true height surely lies in the interval.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ClearHeightEvidence {
     space: ObjectId,
-    metres: f64,
+    lower: f64,
+    upper: f64,
     evidence: Evidence,
 }
 
 impl ClearHeightEvidence {
     pub fn try_new(space: ObjectId, metres: f64, evidence: Evidence) -> Result<Self, SpaceError> {
-        if !finite_non_negative(metres) {
+        Self::try_bracketed(space, metres, metres, evidence)
+    }
+    /// A clear height known to lie between `lower` and `upper` metres.
+    pub fn try_bracketed(
+        space: ObjectId,
+        lower: f64,
+        upper: f64,
+        evidence: Evidence,
+    ) -> Result<Self, SpaceError> {
+        if !finite_non_negative(lower) || !finite_non_negative(upper) || lower > upper {
             return Err(SpaceError::InvalidQuantity);
         }
         if !reviewable_exact_evidence(&evidence) {
@@ -162,15 +174,22 @@ impl ClearHeightEvidence {
         }
         Ok(Self {
             space,
-            metres,
+            lower,
+            upper,
             evidence,
         })
     }
     pub fn space(&self) -> &ObjectId {
         &self.space
     }
+    /// The clear height; its lower bound when bracketed
+    /// ([`Self::bounds_metres`]).
     pub fn metres(&self) -> f64 {
-        self.metres
+        self.lower
+    }
+    /// The clear height's `(lower, upper)` bounds, equal for a point.
+    pub fn bounds_metres(&self) -> (f64, f64) {
+        (self.lower, self.upper)
     }
     pub fn evidence(&self) -> &Evidence {
         &self.evidence
@@ -281,10 +300,14 @@ impl SpaceOverlap {
 const OVERLAP_AREA_EPSILON_M2: f64 = 1.0e-8;
 
 /// How much of a space's horizontal cap is covered by elements.
+///
+/// Both areas are points, or intervals where a tessellated space or cap
+/// element leaves them within its chord deviation (#305); the true areas
+/// surely lie in them.
 #[derive(Clone, Debug, PartialEq)]
 pub struct CapCoverage {
-    whole_area_square_metres: f64,
-    covered_area_square_metres: f64,
+    whole: (f64, f64),
+    covered: (f64, f64),
     elements: Vec<ObjectId>,
 }
 
@@ -292,41 +315,83 @@ impl CapCoverage {
     pub fn try_new(
         whole_area_square_metres: f64,
         covered_area_square_metres: f64,
+        elements: Vec<ObjectId>,
+    ) -> Result<Self, SpaceError> {
+        Self::try_bracketed(
+            (whole_area_square_metres, whole_area_square_metres),
+            (covered_area_square_metres, covered_area_square_metres),
+            elements,
+        )
+    }
+    /// A cap whose whole and covered areas lie within the `(lower, upper)`
+    /// bounds given, in square metres.
+    pub fn try_bracketed(
+        whole: (f64, f64),
+        covered: (f64, f64),
         mut elements: Vec<ObjectId>,
     ) -> Result<Self, SpaceError> {
-        if !finite_non_negative(whole_area_square_metres)
-            || !finite_non_negative(covered_area_square_metres)
-            || whole_area_square_metres <= 0.0
+        if ![whole.0, whole.1, covered.0, covered.1]
+            .into_iter()
+            .all(finite_non_negative)
+            || whole.0 <= 0.0
+            || whole.0 > whole.1
+            || covered.0 > covered.1
             // A cap cannot be covered over more than its own area.
-            || covered_area_square_metres > whole_area_square_metres
+            || covered.1 > whole.1
         {
             return Err(SpaceError::InvalidQuantity);
         }
         elements.sort();
         elements.dedup();
         Ok(Self {
-            whole_area_square_metres,
+            whole,
             // A geometry kernel can return -0.0 for an empty intersection.
             // It compares equal to 0.0 but renders as "-0.0", so a cap with no
             // coverage would report "-0.0% covered". Normalise at the boundary.
-            covered_area_square_metres: covered_area_square_metres + 0.0,
+            covered: (covered.0 + 0.0, covered.1 + 0.0),
             elements,
         })
     }
+    /// The cap's area; its lower bound when bracketed.
     pub fn whole_area_square_metres(&self) -> f64 {
-        self.whole_area_square_metres
+        self.whole.0
     }
+    /// The covered area; its lower bound when bracketed.
     pub fn covered_area_square_metres(&self) -> f64 {
-        self.covered_area_square_metres
+        self.covered.0
+    }
+    /// The cap's area as `(lower, upper)` bounds.
+    pub fn whole_bounds(&self) -> (f64, f64) {
+        self.whole
+    }
+    /// The covered area as `(lower, upper)` bounds.
+    pub fn covered_bounds(&self) -> (f64, f64) {
+        self.covered
     }
     pub fn elements(&self) -> &[ObjectId] {
         &self.elements
     }
-    /// Fraction of the cap that is covered, computed exactly.
+    /// Fraction of the cap that is covered, computed exactly; its lower
+    /// bound when bracketed ([`Self::covered_ratio_bounds`]).
     ///
-    /// The divisor is validated positive in [`Self::try_new`].
+    /// The divisor is validated positive in [`Self::try_bracketed`].
     pub fn covered_ratio(&self) -> f64 {
-        self.covered_area_square_metres / self.whole_area_square_metres
+        self.covered_ratio_bounds().0
+    }
+    /// The covered fraction's `(lower, upper)` bounds: the least covered
+    /// area over the largest whole, and the most over the least (at most
+    /// one).
+    // A point is a point bit for bit: its ratio is divided once.
+    #[allow(clippy::float_cmp)]
+    pub fn covered_ratio_bounds(&self) -> (f64, f64) {
+        if self.whole.0 == self.whole.1 && self.covered.0 == self.covered.1 {
+            let ratio = self.covered.0 / self.whole.0;
+            return (ratio, ratio);
+        }
+        (
+            self.covered.0 / self.whole.1,
+            (self.covered.1 / self.whole.0).min(1.0),
+        )
     }
 }
 

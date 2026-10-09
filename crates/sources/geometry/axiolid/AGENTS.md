@@ -203,7 +203,15 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   a pair they rule out never refuses, and so is the plan box
   (`apart_in_plan`: enclosing extents grown by the chord deviation): a
   candidate apart from the space is never measured, so a footprint the
-  overlay refuses elsewhere refuses nothing here (#304). `tests/space.rs`
+  overlay refuses elsewhere refuses nothing here (#304). Tessellated
+  spaces and candidates are bracketed by their deviation (#305): vertical
+  bounds from `AxiolidGeometry::vertical_bounds` (mesh ± `d`, narrowed by
+  certified extent bounds), plan areas widened by `deviation_band` (per
+  outline edge `2·d·ℓ + π·d²`, clipped to the other footprint's box);
+  clear height and cap coverage are intervals (`try_bracketed`),
+  duplicates decided only where both ends agree, a possible overlap of a
+  tessellated pair and a boundary point within a deviation of a
+  tessellated outline refused (`SpaceError::InexactEvidence`). `tests/space.rs`
   pins a room with a leaning face (`leaning_room`) in all three aspects.
   `projected_polygons` winds each triangle by its area about a vertex
   (`triangle_area`), never by `ring_area`'s sum over the raw coordinates,
@@ -553,9 +561,9 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   and decides a vertex's side only beyond its deviation.
 - **Every service honours fidelity.** Proximity reports approximate evidence.
   The services whose contracts only accept exact evidence -- contact,
-  envelope, clearance and free area, guard, space -- refuse with their inexact-evidence
-  error when a tessellation could change the answer (placement and
-  circulation bracket it instead, above): the subject itself, or a
+  envelope, clearance and free area, guard -- refuse with their inexact-evidence
+  error when a tessellation could change the answer (placement,
+  circulation and space bracket it instead, above): the subject itself, or a
   part whose enclosing extent (mesh box grown by its chord deviation) comes
   within the measurement's reach (`AxiolidGeometry::tessellated_near`). A
   curved part elsewhere in the model blocks nothing. Shelf length is an

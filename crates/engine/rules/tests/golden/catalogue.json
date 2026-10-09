@@ -55307,8 +55307,8 @@
                   ],
                   "rounding": []
                 },
-                "fail": "insufficient_height: clear height {height:fixed3} below required {required_height_metres:fixed3}",
-                "undecided": "{why}",
+                "fail": "insufficient_height: clear height {height:upper3} below required {required_height_metres:fixed3}",
+                "undecided": "clear height between {height:lower3} and {height:upper3} straddles the required {required_height_metres:fixed3} within the space's chord deviation",
                 "grading": {
                   "bands": [
                     {
@@ -55487,7 +55487,7 @@
                   "rounding": []
                 },
                 "fail": "uncovered_top_cap: top cap only {top:hundred1}% covered",
-                "undecided": "{why}",
+                "undecided": "top cap coverage from {top:hundred1}% straddles complete within the chord deviation of a tessellated body",
                 "related": "top",
                 "grading": {
                   "bands": [
@@ -55544,7 +55544,7 @@
                   "rounding": []
                 },
                 "fail": "uncovered_bottom_cap: bottom cap only {bottom:hundred1}% covered",
-                "undecided": "{why}",
+                "undecided": "bottom cap coverage from {bottom:hundred1}% straddles complete within the chord deviation of a tessellated body",
                 "related": "bottom",
                 "grading": {
                   "bands": [

@@ -19,7 +19,8 @@ use axioval_engine::{
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
-use crate::geometry::{AxiolidGeometry, Extent, Triangle, extent_gap, triangles};
+use crate::free_space::within_deviation;
+use crate::geometry::{AxiolidGeometry, Extent, Triangle, VerticalBounds, extent_gap, triangles};
 use crate::planar::{
     BoundedOverlap, boundary_rings, bounded_footprint, bounded_plan_overlap, footprint_polygons,
     overlay_refusal, plan_frame, polygon_area, ring_segments, snapping_area,
@@ -247,31 +248,21 @@ impl AxiolidSpaceService {
         self.role(object) == Some(Role::Space)
     }
 
-    /// Refuses a measurement of `space` that a tessellation could change: the
-    /// space itself, or an object `candidate` accepts whose true body could
-    /// come within `reach` of it. Space evidence is exact.
-    fn require_exact(
-        &self,
-        space: &ObjectId,
-        reach: f64,
-        plan: bool,
-        candidate: impl Fn(&ObjectId) -> bool,
-    ) -> Result<(), SpaceError> {
-        let extent = self
-            .geometry
-            .enclosing_extent(space)
-            .ok_or(SpaceError::Unavailable)?;
-        if self.geometry.is_tessellated(space)
-            || self
-                .geometry
-                .tessellated_near(&extent, reach, plan, |object| {
-                    object == space || !candidate(object)
-                })
-                .is_some()
-        {
-            return Err(SpaceError::InexactEvidence);
-        }
-        Ok(())
+    /// An object's chord deviation, zero for an exact mesh. One that bounds
+    /// nothing refuses: no bracket holds the true body.
+    fn deviation(&self, object: &ObjectId) -> Result<f64, SpaceError> {
+        self.geometry
+            .deviation(object)
+            .ok_or(SpaceError::InexactEvidence)
+    }
+
+    /// Where an object's true body begins and ends vertically (#305):
+    /// points for an exact mesh, its mesh's widened by its deviation and
+    /// narrowed by certified extent bounds otherwise.
+    fn vertical(&self, object: &ObjectId) -> Result<VerticalBounds, SpaceError> {
+        self.geometry
+            .vertical_bounds(object)
+            .ok_or(SpaceError::InexactEvidence)
     }
 
     /// Triangles of a declared object, or `Unavailable` when it has no mesh.
@@ -294,6 +285,16 @@ struct PlanArea {
 }
 
 impl PlanArea {
+    /// The same area with `band` more uncertainty either way: the bracket a
+    /// tessellated outline leaves it in.
+    fn widened(&self, band: f64) -> Self {
+        Self {
+            lower: (self.lower - band).max(0.0),
+            upper: self.upper + band,
+            polygons: self.polygons.clone(),
+        }
+    }
+
     fn of(bounded: BoundedOverlap) -> Self {
         let lower: f64 = bounded.polygons.iter().map(polygon_area).sum();
         Self {
@@ -377,6 +378,104 @@ fn within_rounding(whole: f64, covered: f64, rounding: f64) -> f64 {
     }
 }
 
+/// A plan box `(min, max)`.
+type Box2 = ([f64; 2], [f64; 2]);
+
+/// The plan box of `polygons` grown by `grow`; `None` for none.
+fn plan_box(polygons: &[Polygon], grow: f64) -> Option<Box2> {
+    let mut points = polygons
+        .iter()
+        .flat_map(|polygon| std::iter::once(&polygon.outer).chain(&polygon.holes))
+        .flat_map(|ring| ring.points.iter());
+    let first = points.next()?;
+    let (min, max) = points.fold(([first.x, first.y], [first.x, first.y]), |(min, max), p| {
+        (
+            [min[0].min(p.x), min[1].min(p.y)],
+            [max[0].max(p.x), max[1].max(p.y)],
+        )
+    });
+    Some((
+        [min[0] - grow, min[1] - grow],
+        [max[0] + grow, max[1] + grow],
+    ))
+}
+
+/// The length of segment `a`-`b` inside `bounds` (Liang-Barsky), `None`
+/// when it misses it.
+fn clipped_length(a: Point2, b: Point2, bounds: &Box2) -> Option<f64> {
+    let (dx, dy) = (b.x - a.x, b.y - a.y);
+    let (mut t0, mut t1) = (0.0_f64, 1.0_f64);
+    for (p, q) in [
+        (-dx, a.x - bounds.0[0]),
+        (dx, bounds.1[0] - a.x),
+        (-dy, a.y - bounds.0[1]),
+        (dy, bounds.1[1] - a.y),
+    ] {
+        if p == 0.0 {
+            if q < 0.0 {
+                return None;
+            }
+        } else {
+            let t = q / p;
+            if p < 0.0 {
+                t0 = t0.max(t);
+            } else {
+                t1 = t1.min(t);
+            }
+        }
+    }
+    (t0 <= t1).then(|| (t1 - t0) * dx.hypot(dy))
+}
+
+/// An upper bound on how much a footprint whose outline may lie up to
+/// `deviation` off `polygons`' outline can differ in area from theirs
+/// within `near` (everywhere without it): the `deviation`-neighbourhood of
+/// every outline edge meeting `near` grown by `deviation`, each at most
+/// `2·d·ℓ + π·d²` for the length `ℓ` it runs inside, as the plan-area
+/// service bounds a tessellated footprint (#305). Zero for an exact one.
+fn deviation_band(polygons: &[Polygon], deviation: f64, near: Option<Box2>) -> f64 {
+    if deviation <= 0.0 {
+        return 0.0;
+    }
+    let near = near.map(|(min, max)| {
+        (
+            [min[0] - deviation, min[1] - deviation],
+            [max[0] + deviation, max[1] + deviation],
+        )
+    });
+    polygons
+        .iter()
+        .flat_map(|polygon| std::iter::once(&polygon.outer).chain(&polygon.holes))
+        .flat_map(ring_segments)
+        .filter_map(|(a, b)| match &near {
+            Some(bounds) => clipped_length(a, b, bounds),
+            None => Some((b.x - a.x).hypot(b.y - a.y)),
+        })
+        .map(|length| 2.0 * deviation * length + std::f64::consts::PI * deviation * deviation)
+        .sum()
+}
+
+/// Whether two values whose difference lies in `difference` (`low`,
+/// `high`) differ by less than `limit`: possibly, and surely.
+fn within(difference: (f64, f64), limit: f64) -> (bool, bool) {
+    let possible = difference.0 < limit && difference.1 > -limit;
+    let sure = difference.0 > -limit && difference.1 < limit;
+    (possible, sure)
+}
+
+/// The range of `first - second` for values in the two ranges.
+fn difference(first: (f64, f64), second: (f64, f64)) -> (f64, f64) {
+    (first.0 - second.1, first.1 - second.0)
+}
+
+/// How far two coincident spaces' spans may differ.
+const SPAN_MATCH_M: f64 = 1.0e-6;
+
+/// Why an aspect is refused where a chord deviation could tip it.
+fn tipped() -> SpaceError {
+    SpaceError::InexactEvidence
+}
+
 /// Vertical span of a triangle set as `(min_z, max_z)`.
 fn vertical_span(triangles: &[Triangle]) -> Option<(f64, f64)> {
     let mut span: Option<(f64, f64)> = None;
@@ -417,11 +516,12 @@ impl SpaceService for AxiolidSpaceService {
         self.complete_near(aspect, space, &[], 0.0, false, None, |candidate| {
             self.is_space(candidate)
         })?;
-        self.require_exact(space, 0.0, false, |candidate| self.is_space(candidate))?;
         let tolerance = tolerance()?;
-        let subject_span = vertical_span(&subject).ok_or(SpaceError::Unavailable)?;
+        vertical_span(&subject).ok_or(SpaceError::Unavailable)?;
+        let deviation = self.deviation(space)?;
+        let span = self.vertical(space)?;
         let extent = self.geometry.enclosing_extent(space);
-        let mut subject_area = None;
+        let mut subject_area: Option<PlanArea> = None;
 
         let mut duplicates = Vec::new();
         for (candidate, mesh) in self.geometry.objects() {
@@ -435,28 +535,50 @@ impl SpaceService for AxiolidSpaceService {
             // Coincident means each body is essentially the other: mutual
             // containment in plan AND the same vertical extent. Plan alone
             // would call a stacked space on the storey above a duplicate.
-            let Some(other_span) = vertical_span(&other) else {
-                continue;
-            };
-            let spans_match = (subject_span.0 - other_span.0).abs() < 1.0e-6
-                && (subject_span.1 - other_span.1).abs() < 1.0e-6;
-            if !spans_match {
+            if vertical_span(&other).is_none() {
                 continue;
             }
-            let subject_area = match &subject_area {
-                Some(area) => area,
-                None => subject_area.insert(plan_area(&subject, tolerance)?),
+            let other_deviation = self.deviation(candidate)?;
+            let other_span = self.vertical(candidate)?;
+            // Spans a deviation leaves within the match either way or not.
+            let (bottom, bottom_sure) =
+                within(difference(span.bottom, other_span.bottom), SPAN_MATCH_M);
+            let (top, top_sure) = within(difference(span.top, other_span.top), SPAN_MATCH_M);
+            if !(bottom && top) {
+                continue;
+            }
+            let subject_area = if let Some(area) = &subject_area {
+                area
+            } else {
+                let measured = plan_area(&subject, tolerance)?;
+                let band = deviation_band(&measured.polygons, deviation, None);
+                subject_area.insert(measured.widened(band))
             };
-            let other_area = plan_area(&other, tolerance)?;
-            let shared = shared_area(&subject, &other, tolerance)?;
-            // A pair the slivers left out could make or unmake is refused,
-            // never passed.
+            let measured = plan_area(&other, tolerance)?;
+            let other_area =
+                measured.widened(deviation_band(&measured.polygons, other_deviation, None));
+            // The shared area moves by what either outline may move within
+            // the other's box.
+            let shared = shared_area(&subject, &other, tolerance)?.widened(
+                deviation_band(
+                    &subject_area.polygons,
+                    deviation,
+                    plan_box(&other_area.polygons, other_deviation),
+                ) + deviation_band(
+                    &other_area.polygons,
+                    other_deviation,
+                    plan_box(&subject_area.polygons, deviation),
+                ),
+            );
+            // A pair the slivers left out, or a chord deviation, could make
+            // or unmake is refused, never passed.
             let mutual = match (
                 contains(subject_area, &shared),
                 contains(&other_area, &shared),
             ) {
                 (Some(false), _) | (_, Some(false)) => false,
-                (Some(true), Some(true)) => true,
+                (Some(true), Some(true)) if bottom_sure && top_sure => true,
+                _ if deviation > 0.0 || other_deviation > 0.0 => return Err(tipped()),
                 _ => return Err(SpaceError::Refused(SLIVERS_COULD_DECIDE)),
             };
             if mutual {
@@ -469,12 +591,30 @@ impl SpaceService for AxiolidSpaceService {
     fn measure_clear_height(&self, space: &ObjectId) -> Result<ClearHeightEvidence, SpaceError> {
         // Measured from the space's own body: no other object changes it.
         let subject = self.subject(SpaceAspect::ClearHeight, space)?;
-        self.require_exact(space, 0.0, false, |_| false)?;
         let (floor, ceiling) = vertical_span(&subject).ok_or(SpaceError::Unavailable)?;
-        ClearHeightEvidence::try_new(
+        let deviation = self.deviation(space)?;
+        if deviation == 0.0 {
+            return ClearHeightEvidence::try_new(
+                space.clone(),
+                (ceiling - floor).max(0.0),
+                Evidence::exact(space.source.clone(), "axiolid:space"),
+            );
+        }
+        // A tessellated space's floor and ceiling each lie within its
+        // vertical bounds, so its height lies between the nearest and the
+        // farthest they allow (#305).
+        let span = self.vertical(space)?;
+        ClearHeightEvidence::try_bracketed(
             space.clone(),
-            (ceiling - floor).max(0.0),
-            Evidence::exact(space.source.clone(), "axiolid:space"),
+            (span.top.0 - span.bottom.1).max(0.0),
+            (span.top.1 - span.bottom.0).max(0.0),
+            Evidence::exact(
+                space.source.clone(),
+                format!(
+                    "axiolid:space{}",
+                    within_deviation(&[(space.clone(), deviation)])
+                ),
+            ),
         )
     }
 
@@ -496,11 +636,31 @@ impl SpaceService for AxiolidSpaceService {
             None,
             |candidate| self.bounds(request.elements(), candidate),
         )?;
-        // Any bounding footprint touching the boundary in plan may cover it.
-        self.require_exact(space, 0.0, true, |candidate| {
-            self.bounds(request.elements(), candidate)
-        })?;
+        // A tessellated space's boundary is chords: its gaps' lengths are
+        // not the true ones.
+        if self.deviation(space)? > 0.0 {
+            return Err(tipped());
+        }
         let tolerance = tolerance()?;
+        // Tessellated bounding bodies near the space in plan, with their
+        // outlines: a boundary point covers or misses them surely only
+        // farther than their deviation from that outline.
+        let extent = self.geometry.enclosing_extent(space);
+        let mut curved = BTreeMap::new();
+        for (candidate, mesh) in self.geometry.objects() {
+            if candidate == space
+                || !self.bounds(request.elements(), candidate)
+                || self.apart_in_plan(extent.as_ref(), candidate)
+            {
+                continue;
+            }
+            let deviation = self.deviation(candidate)?;
+            if deviation > 0.0 {
+                let body = triangles(mesh);
+                let outline = plan_area(&body, tolerance)?.polygons;
+                curved.insert(candidate.clone(), (body, outline, deviation));
+            }
+        }
         // Unioning the triangle soup collapses interior edges, leaving the
         // real perimeter: the shared edge between two triangles of one slab is
         // not boundary, and walking it as such would report phantom gaps.
@@ -513,7 +673,8 @@ impl SpaceService for AxiolidSpaceService {
             for (a, b) in ring_segments(ring) {
                 let length = ((b.x - a.x).powi(2) + (b.y - a.y).powi(2)).sqrt();
                 let midpoint = Point2::new(f64::midpoint(a.x, b.x), f64::midpoint(a.y, b.y));
-                let coverer = self.covering_element(space, midpoint, request.elements());
+                let coverer =
+                    self.covering_element(space, midpoint, request.elements(), &curved)?;
                 match coverer {
                     Some(element) => {
                         // A covered segment closes the current run. The gap
@@ -547,6 +708,7 @@ impl SpaceService for AxiolidSpaceService {
         Ok(gaps)
     }
 
+    #[allow(clippy::too_many_lines)]
     fn measure_overlaps(
         &self,
         space: &ObjectId,
@@ -568,11 +730,14 @@ impl SpaceService for AxiolidSpaceService {
             None,
             chosen,
         )?;
-        self.require_exact(space, 0.0, false, chosen)?;
         let tolerance = tolerance()?;
         let subject_span = vertical_span(&subject).ok_or(SpaceError::Unavailable)?;
+        let deviation = self.deviation(space)?;
+        let span = self.vertical(space)?;
         let extent = self.geometry.enclosing_extent(space);
         let mut subject_area = None;
+        // The subject's own outline, for the band of a tessellated pair.
+        let mut subject_outline: Option<Vec<Polygon>> = None;
 
         let mut overlaps = Vec::new();
         for (candidate, mesh) in self.geometry.objects() {
@@ -588,6 +753,37 @@ impl SpaceService for AxiolidSpaceService {
             };
             // Bodies on different storeys share plan area without touching:
             // the vertical overlap is what makes it a real intersection.
+            let other_deviation = self.deviation(candidate)?;
+            if deviation > 0.0 || other_deviation > 0.0 {
+                // A tessellated pair is apart where no reading of their
+                // bounds overlaps, in height or in plan (#305); any overlap
+                // it may have moves with the deviation, so it is refused.
+                let other_bounds = self.vertical(candidate)?;
+                let possible =
+                    span.top.1.min(other_bounds.top.1) - span.bottom.0.max(other_bounds.bottom.0);
+                if possible <= 0.0 {
+                    continue;
+                }
+                let shared = shared_area(&subject, &other, tolerance)?;
+                let outline = match &subject_outline {
+                    Some(outline) => outline,
+                    None => subject_outline.insert(plan_area(&subject, tolerance)?.polygons),
+                };
+                let other_outline = plan_area(&other, tolerance)?.polygons;
+                let band = deviation_band(
+                    outline,
+                    deviation,
+                    plan_box(&other_outline, other_deviation),
+                ) + deviation_band(
+                    &other_outline,
+                    other_deviation,
+                    plan_box(outline, deviation),
+                );
+                if shared.upper + band <= AREA_EPSILON_M2 {
+                    continue;
+                }
+                return Err(tipped());
+            }
             let height = overlapping_height(subject_span, other_span);
             if height <= 0.0 {
                 continue;
@@ -634,6 +830,7 @@ impl SpaceService for AxiolidSpaceService {
         Ok(overlaps)
     }
 
+    #[allow(clippy::too_many_lines)]
     fn measure_cap_coverage(
         &self,
         space: &ObjectId,
@@ -652,9 +849,6 @@ impl SpaceService for AxiolidSpaceService {
             Some(cap),
             |candidate| self.caps(request, candidate),
         )?;
-        self.require_exact(space, CAP_PLANE_TOLERANCE_M, false, |candidate| {
-            self.caps(request, candidate)
-        })?;
         let tolerance = tolerance()?;
         let whole = plan_area(&subject, tolerance)?;
         // A footprint measured empty is an incoherent quantity; one only the
@@ -664,6 +858,19 @@ impl SpaceService for AxiolidSpaceService {
         }
         let (floor, ceiling) = vertical_span(&subject).ok_or(SpaceError::Unavailable)?;
         let extent = self.geometry.enclosing_extent(space);
+        let deviation = self.deviation(space)?;
+        let span = self.vertical(space)?;
+        // Where the cap's plane may lie.
+        let plane = match cap {
+            Cap::Top => span.top,
+            Cap::Bottom => span.bottom,
+        };
+        // Tessellated cap elements and those a deviation may or may not put
+        // at the plane, bracketed: the sure cover and the possible one, and
+        // the bands their outlines may move within the space's box.
+        let mut bracketed = deviation > 0.0;
+        let (mut sure, mut sure_band) = (Vec::new(), 0.0);
+        let (mut possible, mut possible_band) = (Vec::new(), 0.0);
 
         let mut covering = Vec::new();
         let mut cover = Vec::new();
@@ -680,6 +887,41 @@ impl SpaceService for AxiolidSpaceService {
             let Some((low, high)) = vertical_span(&other) else {
                 continue;
             };
+            let other_deviation = self.deviation(candidate)?;
+            if deviation > 0.0 || other_deviation > 0.0 {
+                // The element sits at the plane surely, possibly or not,
+                // whichever reading of both bodies' bounds is true.
+                let bounds = self.vertical(candidate)?;
+                let reaches = |from: f64, to: f64, bottom: f64, top: f64| {
+                    from >= bottom - CAP_PLANE_TOLERANCE_M && to <= top + CAP_PLANE_TOLERANCE_M
+                };
+                let may = reaches(plane.1, plane.0, bounds.bottom.0, bounds.top.1);
+                let must = reaches(plane.0, plane.1, bounds.bottom.1, bounds.top.0);
+                if !may {
+                    continue;
+                }
+                let shared = shared_area(&subject, &other, tolerance)?;
+                let outline = plan_area(&other, tolerance)?.polygons;
+                let band = deviation_band(
+                    &outline,
+                    other_deviation,
+                    plan_box(&whole.polygons, deviation),
+                );
+                if shared.upper + band <= AREA_EPSILON_M2 {
+                    continue;
+                }
+                bracketed = true;
+                if must {
+                    if shared.lower - band > AREA_EPSILON_M2 {
+                        covering.push(candidate.clone());
+                    }
+                    sure.extend(other.iter().copied());
+                    sure_band += band;
+                }
+                possible.extend(other.iter().copied());
+                possible_band += band;
+                continue;
+            }
             // The element must actually sit at the cap it is claimed to cover.
             let plane = match cap {
                 Cap::Top => ceiling,
@@ -698,7 +940,31 @@ impl SpaceService for AxiolidSpaceService {
             if shared.lower > AREA_EPSILON_M2 {
                 covering.push(candidate.clone());
             }
+            sure.extend(other.iter().copied());
+            possible.extend(other.iter().copied());
             cover.extend(other);
+        }
+        if bracketed {
+            // Every area an interval the true one lies in (#305): the
+            // space's outline may move by its deviation, each tessellated
+            // element's within the space's box by its own.
+            let own = deviation_band(&whole.polygons, deviation, None);
+            let whole = (whole.lower - own, whole.upper + own);
+            if whole.0 <= 0.0 {
+                return Err(tipped());
+            }
+            let upper = if possible.is_empty() {
+                0.0
+            } else {
+                shared_area(&subject, &possible, tolerance)?.upper + possible_band + own
+            };
+            let lower = if sure.is_empty() {
+                0.0
+            } else {
+                (shared_area(&subject, &sure, tolerance)?.lower - sure_band - own).max(0.0)
+            };
+            let upper = upper.min(whole.1);
+            return CapCoverage::try_bracketed(whole, (lower.min(upper), upper), covering);
         }
 
         // The cover is one footprint under the non-zero rule: two slabs
@@ -822,23 +1088,48 @@ impl AxiolidSpaceService {
     ///
     /// "Covered" means a bounding object other than the space itself has plan
     /// footprint at that point: a wall standing on the boundary covers it, and
-    /// an unbounded stretch has nothing there.
+    /// an unbounded stretch has nothing there. A tessellated body (`curved`,
+    /// with its triangles, outline and deviation; one apart from the space
+    /// is in none) covers it surely when the point lies inside its
+    /// footprint farther than its deviation from the outline, and misses it
+    /// surely farther than that outside; between, and with no other body
+    /// covering it, the point is refused (#305).
     fn covering_element(
         &self,
         space: &ObjectId,
         point: Point2,
         elements: Option<&[ObjectId]>,
-    ) -> Option<ObjectId> {
+        curved: &BTreeMap<ObjectId, (Vec<Triangle>, Vec<Polygon>, f64)>,
+    ) -> Result<Option<ObjectId>, SpaceError> {
+        let mut undecided = false;
         for (candidate, mesh) in self.geometry.objects() {
             if candidate == space || !self.bounds(elements, candidate) {
                 continue;
             }
+            if let Some((body, outline, deviation)) = curved.get(candidate) {
+                let inside = point_in_footprint(body, point);
+                if outline_distance(outline, point) > *deviation {
+                    if inside {
+                        return Ok(Some(candidate.clone()));
+                    }
+                } else {
+                    undecided = true;
+                }
+                continue;
+            }
+            if self.geometry.is_tessellated(candidate) {
+                // Apart from the space in plan: it reaches no boundary point.
+                continue;
+            }
             let body = triangles(mesh);
             if point_in_footprint(&body, point) {
-                return Some(candidate.clone());
+                return Ok(Some(candidate.clone()));
             }
         }
-        None
+        if undecided {
+            return Err(tipped());
+        }
+        Ok(None)
     }
 }
 
@@ -869,6 +1160,25 @@ impl AxiolidSpaceService {
             .map(|(object, _)| object.clone())
             .collect()
     }
+}
+
+/// The distance from `point` to the nearest outline edge of `polygons`.
+fn outline_distance(polygons: &[Polygon], point: Point2) -> f64 {
+    polygons
+        .iter()
+        .flat_map(|polygon| std::iter::once(&polygon.outer).chain(&polygon.holes))
+        .flat_map(ring_segments)
+        .map(|(a, b)| {
+            let (dx, dy) = (b.x - a.x, b.y - a.y);
+            let length = dx * dx + dy * dy;
+            let t = if length > 0.0 {
+                (((point.x - a.x) * dx + (point.y - a.y) * dy) / length).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+            (point.x - a.x - t * dx).hypot(point.y - a.y - t * dy)
+        })
+        .fold(f64::INFINITY, f64::min)
 }
 
 /// Whether a plan point lies within a triangle set's projected footprint.

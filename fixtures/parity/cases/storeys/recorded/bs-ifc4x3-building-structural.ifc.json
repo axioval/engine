@@ -75,7 +75,7 @@
       "rule_id": "space-share"
     },
     {
-      "message": "facade area unavailable: winding number of ifc-step:bs-ifc4x3-building-structural.ifc/#50 unavailable: MeshNotWindingUsable(MeshHealth { positions: 96, triangles: 68, usable_triangles: 64, invalid_indices: 0, non_finite_positions: 0, degenerate_triangles: 4, boundary_edges: 96, non_manifold_edges: 0, inconsistent_winding_edges: 0, first_invalid_index: None, first_non_finite_position: None })",
+      "message": "facade area unavailable: winding number of ifc-step:bs-ifc4x3-building-structural.ifc/#50 unavailable: MeshNotWindingUsable(MeshHealth { positions: 96, triangles: 68, usable_triangles: 64, invalid_indices: 0, non_finite_positions: 0, degenerate_triangles: 4, boundary_edges: 8, non_manifold_edges: 0, inconsistent_winding_edges: 0, first_invalid_index: None, first_non_finite_position: None })",
       "object_id": {
         "local_id": "#45",
         "source": {
@@ -123,7 +123,7 @@
       "rule_id": "storey-space-heights"
     },
     {
-      "message": "facade area unavailable: winding number of ifc-step:bs-ifc4x3-building-structural.ifc/#50 unavailable: MeshNotWindingUsable(MeshHealth { positions: 96, triangles: 68, usable_triangles: 64, invalid_indices: 0, non_finite_positions: 0, degenerate_triangles: 4, boundary_edges: 96, non_manifold_edges: 0, inconsistent_winding_edges: 0, first_invalid_index: None, first_non_finite_position: None })",
+      "message": "facade area unavailable: winding number of ifc-step:bs-ifc4x3-building-structural.ifc/#50 unavailable: MeshNotWindingUsable(MeshHealth { positions: 96, triangles: 68, usable_triangles: 64, invalid_indices: 0, non_finite_positions: 0, degenerate_triangles: 4, boundary_edges: 8, non_manifold_edges: 0, inconsistent_winding_edges: 0, first_invalid_index: None, first_non_finite_position: None })",
       "object_id": {
         "local_id": "#112",
         "source": {
@@ -135,7 +135,7 @@
       "rule_id": "wall-facade"
     },
     {
-      "message": "facade area unavailable: winding number of ifc-step:bs-ifc4x3-building-structural.ifc/#50 unavailable: MeshNotWindingUsable(MeshHealth { positions: 96, triangles: 68, usable_triangles: 64, invalid_indices: 0, non_finite_positions: 0, degenerate_triangles: 4, boundary_edges: 96, non_manifold_edges: 0, inconsistent_winding_edges: 0, first_invalid_index: None, first_non_finite_position: None })",
+      "message": "facade area unavailable: winding number of ifc-step:bs-ifc4x3-building-structural.ifc/#50 unavailable: MeshNotWindingUsable(MeshHealth { positions: 96, triangles: 68, usable_triangles: 64, invalid_indices: 0, non_finite_positions: 0, degenerate_triangles: 4, boundary_edges: 8, non_manifold_edges: 0, inconsistent_winding_edges: 0, first_invalid_index: None, first_non_finite_position: None })",
       "object_id": {
         "local_id": "#147",
         "source": {
@@ -147,7 +147,7 @@
       "rule_id": "wall-facade"
     },
     {
-      "message": "facade area unavailable: winding number of ifc-step:bs-ifc4x3-building-structural.ifc/#131 unavailable: MeshNotWindingUsable(MeshHealth { positions: 156, triangles: 100, usable_triangles: 98, invalid_indices: 0, non_finite_positions: 0, degenerate_triangles: 2, boundary_edges: 154, non_manifold_edges: 0, inconsistent_winding_edges: 0, first_invalid_index: None, first_non_finite_position: None })",
+      "message": "facade area unavailable: winding number of ifc-step:bs-ifc4x3-building-structural.ifc/#131 unavailable: MeshNotWindingUsable(MeshHealth { positions: 156, triangles: 100, usable_triangles: 98, invalid_indices: 0, non_finite_positions: 0, degenerate_triangles: 2, boundary_edges: 6, non_manifold_edges: 0, inconsistent_winding_edges: 0, first_invalid_index: None, first_non_finite_position: None })",
       "object_id": {
         "local_id": "#69",
         "source": {
@@ -159,7 +159,7 @@
       "rule_id": "wall-facade"
     },
     {
-      "message": "facade area unavailable: winding number of ifc-step:bs-ifc4x3-building-structural.ifc/#50 unavailable: MeshNotWindingUsable(MeshHealth { positions: 96, triangles: 68, usable_triangles: 64, invalid_indices: 0, non_finite_positions: 0, degenerate_triangles: 4, boundary_edges: 96, non_manifold_edges: 0, inconsistent_winding_edges: 0, first_invalid_index: None, first_non_finite_position: None })",
+      "message": "facade area unavailable: winding number of ifc-step:bs-ifc4x3-building-structural.ifc/#50 unavailable: MeshNotWindingUsable(MeshHealth { positions: 96, triangles: 68, usable_triangles: 64, invalid_indices: 0, non_finite_positions: 0, degenerate_triangles: 4, boundary_edges: 8, non_manifold_edges: 0, inconsistent_winding_edges: 0, first_invalid_index: None, first_non_finite_position: None })",
       "object_id": {
         "local_id": "#93",
         "source": {
@@ -171,7 +171,7 @@
       "rule_id": "wall-facade"
     },
     {
-      "message": "facade area unavailable: winding number of ifc-step:bs-ifc4x3-building-structural.ifc/#50 unavailable: MeshNotWindingUsable(MeshHealth { positions: 96, triangles: 68, usable_triangles: 64, invalid_indices: 0, non_finite_positions: 0, degenerate_triangles: 4, boundary_edges: 96, non_manifold_edges: 0, inconsistent_winding_edges: 0, first_invalid_index: None, first_non_finite_position: None })",
+      "message": "facade area unavailable: winding number of ifc-step:bs-ifc4x3-building-structural.ifc/#50 unavailable: MeshNotWindingUsable(MeshHealth { positions: 96, triangles: 68, usable_triangles: 64, invalid_indices: 0, non_finite_positions: 0, degenerate_triangles: 4, boundary_edges: 8, non_manifold_edges: 0, inconsistent_winding_edges: 0, first_invalid_index: None, first_non_finite_position: None })",
       "object_id": {
         "local_id": "#45",
         "source": {

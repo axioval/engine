@@ -1853,6 +1853,88 @@ fn with_geometry_a_host_its_openings_remove_whole_is_model_data() {
     );
 }
 
+/// A wall `#{first + 9}` whose `Body` is an `IfcTriangulatedFaceSet` box
+/// spanning `min..max`, each face carrying its own four corners (as a face
+/// set written for flat shading does) and `Closed` unset, as instances
+/// `first..first + 9`.
+fn face_set_box(first: u32, min: [f64; 3], max: [f64; 3]) -> String {
+    let [points, set, shape, definition] = [0, 1, 2, 3].map(|offset| first + offset);
+    let wall = first + 9;
+    let corner = |i: usize| {
+        let pick = |axis: usize| {
+            if i >> axis & 1 == 0 {
+                min[axis]
+            } else {
+                max[axis]
+            }
+        };
+        format!("({:?},{:?},{:?})", pick(0), pick(1), pick(2))
+    };
+    // Outward quads by corner number (bit 0 x, bit 1 y, bit 2 z): bottom,
+    // top, front, back, left, right.
+    let quads = [
+        [0, 2, 3, 1],
+        [4, 5, 7, 6],
+        [0, 1, 5, 4],
+        [2, 6, 7, 3],
+        [0, 4, 6, 2],
+        [1, 3, 7, 5],
+    ];
+    let coordinates: Vec<String> = quads.iter().flatten().map(|i| corner(*i)).collect();
+    let triangles: Vec<String> = (0..6)
+        .flat_map(|face| {
+            let base = 4 * face + 1;
+            [
+                format!("({},{},{})", base, base + 1, base + 2),
+                format!("({},{},{})", base, base + 2, base + 3),
+            ]
+        })
+        .collect();
+    format!(
+        "#{points}=IFCCARTESIANPOINTLIST3D(({}),$);\n\
+         #{set}=IFCTRIANGULATEDFACESET(#{points},$,$,({}),$);\n\
+         #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','Tessellation',(#{set}));\n\
+         #{definition}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n\
+         #{wall}=IFCWALL('00000000000000000000{wall}',$,$,$,$,#3,#{definition},$,$);\n",
+        coordinates.join(","),
+        triangles.join(","),
+    )
+}
+
+/// Two walls crossing as the crossing walls do, both authored as
+/// [`face_set_box`], beside them: `#49` along x, `#69` along y.
+fn crossing_face_set_walls() -> String {
+    let along_x = face_set_box(40, [10.0, -0.1, 0.0], [14.0, 0.1, 3.0]);
+    let along_y = face_set_box(60, [11.9, -2.0, 0.0], [12.1, 2.0, 3.0]);
+    crossing_walls_with(&format!("{along_x}{along_y}"))
+}
+
+/// A face set that repeats each corner once per face shares no index
+/// between faces, yet its faces close up: equal coordinates are one point.
+/// Both walls are measured as the closed solids they are, and their clash
+/// is found, never left undecided as two open surfaces (#308).
+#[test]
+fn with_geometry_a_face_set_repeating_its_corners_is_a_closed_solid() {
+    let case = Case::new("geometry-corners-per-face");
+    let (output, result) = case.wall_clash(&crossing_face_set_walls(), &json!({}));
+    let findings = result["report"]["findings"].as_array().unwrap();
+    let pair = findings
+        .iter()
+        .find(|finding| {
+            finding["object_id"]["local_id"] == "#49" && finding["related"][0]["local_id"] == "#69"
+        })
+        .unwrap_or_else(|| panic!("{}\n{result:#}", stderr(&output)));
+    assert!(
+        pair["message"]
+            .as_str()
+            .unwrap()
+            .starts_with("hard clash with ifc-step:model.ifc/#69: penetration 0.1000 m"),
+        "{pair:#}"
+    );
+    let not_evaluated = result["report"]["not_evaluated"].to_string();
+    assert!(!not_evaluated.contains("closed solid"), "{not_evaluated}");
+}
+
 /// A box `lx` by `ly` centred on `(cx, cy)`, 3 m high, as instances
 /// `first..first + 5`; `product` is the product line with `REP` for its
 /// shape.

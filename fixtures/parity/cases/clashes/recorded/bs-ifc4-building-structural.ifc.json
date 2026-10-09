@@ -1,7 +1,513 @@
 {
   "findings": [
     {
-      "evidence": [],
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:overlap-along:ifc-step:bs-ifc4-building-structural.ifc/#175:ifc-step:bs-ifc4-building-structural.ifc/#112",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-building-structural.ifc/#175:ifc-step:bs-ifc4-building-structural.ifc/#112",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:903b5a005901397aa2b235daf6a60f46c099eae286cb01c815abf0a341707432:placement:#112:#119<#47<#40<#30<#23",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:903b5a005901397aa2b235daf6a60f46c099eae286cb01c815abf0a341707432:placement:#175:#184<#168<#30<#23",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "db5c6b7e-ebda-5c6d-95c1-c7448cdbd3a9",
+      "message": "clearance clash with ifc-step:bs-ifc4-building-structural.ifc/#112: separation 0.0000 m below required 0.0100 m",
+      "object_id": {
+        "local_id": "#175",
+        "source": {
+          "document": "bs-ifc4-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#112",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "info"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:overlap-along:ifc-step:bs-ifc4-building-structural.ifc/#197:ifc-step:bs-ifc4-building-structural.ifc/#147",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:overlap-along:ifc-step:bs-ifc4-building-structural.ifc/#197:ifc-step:bs-ifc4-building-structural.ifc/#69",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:overlap-along:ifc-step:bs-ifc4-building-structural.ifc/#197:ifc-step:bs-ifc4-building-structural.ifc/#93",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-building-structural.ifc/#197:ifc-step:bs-ifc4-building-structural.ifc/#147",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-building-structural.ifc/#197:ifc-step:bs-ifc4-building-structural.ifc/#69",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-building-structural.ifc/#197:ifc-step:bs-ifc4-building-structural.ifc/#93",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:903b5a005901397aa2b235daf6a60f46c099eae286cb01c815abf0a341707432:placement:#147:#154<#47<#40<#30<#23",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:903b5a005901397aa2b235daf6a60f46c099eae286cb01c815abf0a341707432:placement:#197:#203<#168<#30<#23",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:903b5a005901397aa2b235daf6a60f46c099eae286cb01c815abf0a341707432:placement:#69:#78<#47<#40<#30<#23",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:903b5a005901397aa2b235daf6a60f46c099eae286cb01c815abf0a341707432:placement:#93:#100<#47<#40<#30<#23",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "d70ecab1-47bc-525a-98e0-414b62cf251f",
+      "message": "3 clashes: [ifc-step:bs-ifc4-building-structural.ifc/#197] hard clash with ifc-step:bs-ifc4-building-structural.ifc/#147: penetration 0.0000 m exceeds tolerance 0.0000 m, graded error: the most severe grade its shared volume of 0.000000 to 0.116000 m³ may reach; [ifc-step:bs-ifc4-building-structural.ifc/#197] clearance clash with ifc-step:bs-ifc4-building-structural.ifc/#69: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-building-structural.ifc/#197] clearance clash with ifc-step:bs-ifc4-building-structural.ifc/#93: separation 0.0000 m below required 0.0100 m",
+      "object_id": {
+        "local_id": "#197",
+        "source": {
+          "document": "bs-ifc4-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#147",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#69",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#93",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:overlap-along:ifc-step:bs-ifc4-building-structural.ifc/#213:ifc-step:bs-ifc4-building-structural.ifc/#69",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-building-structural.ifc/#213:ifc-step:bs-ifc4-building-structural.ifc/#69",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:903b5a005901397aa2b235daf6a60f46c099eae286cb01c815abf0a341707432:placement:#213:#219<#168<#30<#23",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:903b5a005901397aa2b235daf6a60f46c099eae286cb01c815abf0a341707432:placement:#69:#78<#47<#40<#30<#23",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "6e0167e8-165c-55eb-a7e6-43715555b947",
+      "message": "clearance clash with ifc-step:bs-ifc4-building-structural.ifc/#69: separation 0.0000 m below required 0.0100 m",
+      "object_id": {
+        "local_id": "#213",
+        "source": {
+          "document": "bs-ifc4-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#69",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "info"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:overlap-along:ifc-step:bs-ifc4-building-structural.ifc/#229:ifc-step:bs-ifc4-building-structural.ifc/#147",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:overlap-along:ifc-step:bs-ifc4-building-structural.ifc/#229:ifc-step:bs-ifc4-building-structural.ifc/#69",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-building-structural.ifc/#229:ifc-step:bs-ifc4-building-structural.ifc/#147",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-building-structural.ifc/#229:ifc-step:bs-ifc4-building-structural.ifc/#69",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:903b5a005901397aa2b235daf6a60f46c099eae286cb01c815abf0a341707432:placement:#147:#154<#47<#40<#30<#23",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:903b5a005901397aa2b235daf6a60f46c099eae286cb01c815abf0a341707432:placement:#229:#235<#168<#30<#23",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:903b5a005901397aa2b235daf6a60f46c099eae286cb01c815abf0a341707432:placement:#69:#78<#47<#40<#30<#23",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "0810cfbc-b918-512b-87d2-aeb0211f5ace",
+      "message": "2 clashes: [ifc-step:bs-ifc4-building-structural.ifc/#229] clearance clash with ifc-step:bs-ifc4-building-structural.ifc/#147: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-building-structural.ifc/#229] clearance clash with ifc-step:bs-ifc4-building-structural.ifc/#69: separation 0.0000 m below required 0.0100 m",
+      "object_id": {
+        "local_id": "#229",
+        "source": {
+          "document": "bs-ifc4-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#147",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#69",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "info"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-building-structural.ifc/#245:ifc-step:bs-ifc4-building-structural.ifc/#147",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-building-structural.ifc/#245:ifc-step:bs-ifc4-building-structural.ifc/#69",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-building-structural.ifc/#245:ifc-step:bs-ifc4-building-structural.ifc/#93",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "c52c1688-aa4f-532b-a872-c359c528f743",
+      "message": "3 clashes: [ifc-step:bs-ifc4-building-structural.ifc/#245] clearance clash with ifc-step:bs-ifc4-building-structural.ifc/#147: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-building-structural.ifc/#245] clearance clash with ifc-step:bs-ifc4-building-structural.ifc/#69: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-building-structural.ifc/#245] clearance clash with ifc-step:bs-ifc4-building-structural.ifc/#93: separation 0.0000 m below required 0.0100 m",
+      "object_id": {
+        "local_id": "#245",
+        "source": {
+          "document": "bs-ifc4-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#147",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#69",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#93",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "info"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:overlap-along:ifc-step:bs-ifc4-building-structural.ifc/#261:ifc-step:bs-ifc4-building-structural.ifc/#147",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:overlap-along:ifc-step:bs-ifc4-building-structural.ifc/#261:ifc-step:bs-ifc4-building-structural.ifc/#69",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:overlap-along:ifc-step:bs-ifc4-building-structural.ifc/#261:ifc-step:bs-ifc4-building-structural.ifc/#93",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-building-structural.ifc/#261:ifc-step:bs-ifc4-building-structural.ifc/#147",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-building-structural.ifc/#261:ifc-step:bs-ifc4-building-structural.ifc/#69",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-building-structural.ifc/#261:ifc-step:bs-ifc4-building-structural.ifc/#93",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:903b5a005901397aa2b235daf6a60f46c099eae286cb01c815abf0a341707432:placement:#147:#154<#47<#40<#30<#23",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:903b5a005901397aa2b235daf6a60f46c099eae286cb01c815abf0a341707432:placement:#261:#267<#168<#30<#23",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:903b5a005901397aa2b235daf6a60f46c099eae286cb01c815abf0a341707432:placement:#69:#78<#47<#40<#30<#23",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:903b5a005901397aa2b235daf6a60f46c099eae286cb01c815abf0a341707432:placement:#93:#100<#47<#40<#30<#23",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "dcecc094-35df-5373-8ca5-344cf7611e68",
+      "message": "3 clashes: [ifc-step:bs-ifc4-building-structural.ifc/#261] hard clash with ifc-step:bs-ifc4-building-structural.ifc/#147: penetration 0.0000 m exceeds tolerance 0.0000 m, graded error: the most severe grade its shared volume of 0.000000 to 0.116000 m³ may reach; [ifc-step:bs-ifc4-building-structural.ifc/#261] clearance clash with ifc-step:bs-ifc4-building-structural.ifc/#69: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-building-structural.ifc/#261] clearance clash with ifc-step:bs-ifc4-building-structural.ifc/#93: separation 0.0000 m below required 0.0100 m",
+      "object_id": {
+        "local_id": "#261",
+        "source": {
+          "document": "bs-ifc4-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#147",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#69",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#93",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "clash_matrix_pairs;subjects=@selection;counterparts=@counterparts;cells=@cells;key_1=@key_1;key_2=@key_2;key_3=@key_3;case_sensitive=@case_sensitive;symmetric=@symmetric;report_unmatched=@report_unmatched;exclude_same_system=@exclude_same_system;system_path=@system_path;exclude_paths=@exclude_paths;exclude_target_property=@exclude_target_property;exclude_same_layer=@exclude_same_layer;group_by=@group_by;per_storey=@per_storey;storey_path=@storey_path;group_property=@group_property;group_tolerance_metres=@group_tolerance_metres;duplicate_quantities=@duplicate_quantities;tolerance_cases=@tolerance_cases#1",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
       "id": "6dc98606-4996-5065-a72b-43f2594b962b",
       "message": "no clash matrix cell covers ifc-step:bs-ifc4-building-structural.ifc/#112 against ifc-step:bs-ifc4-building-structural.ifc/#175",
       "object_id": {
@@ -24,7 +530,16 @@
       "severity": "warning"
     },
     {
-      "evidence": [],
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "clash_matrix_pairs;subjects=@selection;counterparts=@counterparts;cells=@cells;key_1=@key_1;key_2=@key_2;key_3=@key_3;case_sensitive=@case_sensitive;symmetric=@symmetric;report_unmatched=@report_unmatched;exclude_same_system=@exclude_same_system;system_path=@system_path;exclude_paths=@exclude_paths;exclude_target_property=@exclude_target_property;exclude_same_layer=@exclude_same_layer;group_by=@group_by;per_storey=@per_storey;storey_path=@storey_path;group_property=@group_property;group_tolerance_metres=@group_tolerance_metres;duplicate_quantities=@duplicate_quantities;tolerance_cases=@tolerance_cases#2",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
       "id": "4e29a243-1adb-5d64-913f-7b767db244c1",
       "message": "no clash matrix cell covers ifc-step:bs-ifc4-building-structural.ifc/#147 against ifc-step:bs-ifc4-building-structural.ifc/#197",
       "object_id": {
@@ -47,7 +562,16 @@
       "severity": "warning"
     },
     {
-      "evidence": [],
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "clash_matrix_pairs;subjects=@selection;counterparts=@counterparts;cells=@cells;key_1=@key_1;key_2=@key_2;key_3=@key_3;case_sensitive=@case_sensitive;symmetric=@symmetric;report_unmatched=@report_unmatched;exclude_same_system=@exclude_same_system;system_path=@system_path;exclude_paths=@exclude_paths;exclude_target_property=@exclude_target_property;exclude_same_layer=@exclude_same_layer;group_by=@group_by;per_storey=@per_storey;storey_path=@storey_path;group_property=@group_property;group_tolerance_metres=@group_tolerance_metres;duplicate_quantities=@duplicate_quantities;tolerance_cases=@tolerance_cases#3",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
       "id": "fd1467b6-4b33-5840-90cb-0e97850af19e",
       "message": "no clash matrix cell covers ifc-step:bs-ifc4-building-structural.ifc/#147 against ifc-step:bs-ifc4-building-structural.ifc/#229",
       "object_id": {
@@ -70,7 +594,16 @@
       "severity": "warning"
     },
     {
-      "evidence": [],
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "clash_matrix_pairs;subjects=@selection;counterparts=@counterparts;cells=@cells;key_1=@key_1;key_2=@key_2;key_3=@key_3;case_sensitive=@case_sensitive;symmetric=@symmetric;report_unmatched=@report_unmatched;exclude_same_system=@exclude_same_system;system_path=@system_path;exclude_paths=@exclude_paths;exclude_target_property=@exclude_target_property;exclude_same_layer=@exclude_same_layer;group_by=@group_by;per_storey=@per_storey;storey_path=@storey_path;group_property=@group_property;group_tolerance_metres=@group_tolerance_metres;duplicate_quantities=@duplicate_quantities;tolerance_cases=@tolerance_cases#4",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
       "id": "b1294992-ae9f-55b0-886d-a777aecd2d6e",
       "message": "no clash matrix cell covers ifc-step:bs-ifc4-building-structural.ifc/#147 against ifc-step:bs-ifc4-building-structural.ifc/#245",
       "object_id": {
@@ -93,7 +626,16 @@
       "severity": "warning"
     },
     {
-      "evidence": [],
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "clash_matrix_pairs;subjects=@selection;counterparts=@counterparts;cells=@cells;key_1=@key_1;key_2=@key_2;key_3=@key_3;case_sensitive=@case_sensitive;symmetric=@symmetric;report_unmatched=@report_unmatched;exclude_same_system=@exclude_same_system;system_path=@system_path;exclude_paths=@exclude_paths;exclude_target_property=@exclude_target_property;exclude_same_layer=@exclude_same_layer;group_by=@group_by;per_storey=@per_storey;storey_path=@storey_path;group_property=@group_property;group_tolerance_metres=@group_tolerance_metres;duplicate_quantities=@duplicate_quantities;tolerance_cases=@tolerance_cases#5",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
       "id": "d5256aed-6dc0-5e54-8955-ec7eae90d753",
       "message": "no clash matrix cell covers ifc-step:bs-ifc4-building-structural.ifc/#147 against ifc-step:bs-ifc4-building-structural.ifc/#261",
       "object_id": {
@@ -116,7 +658,16 @@
       "severity": "warning"
     },
     {
-      "evidence": [],
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "clash_matrix_pairs;subjects=@selection;counterparts=@counterparts;cells=@cells;key_1=@key_1;key_2=@key_2;key_3=@key_3;case_sensitive=@case_sensitive;symmetric=@symmetric;report_unmatched=@report_unmatched;exclude_same_system=@exclude_same_system;system_path=@system_path;exclude_paths=@exclude_paths;exclude_target_property=@exclude_target_property;exclude_same_layer=@exclude_same_layer;group_by=@group_by;per_storey=@per_storey;storey_path=@storey_path;group_property=@group_property;group_tolerance_metres=@group_tolerance_metres;duplicate_quantities=@duplicate_quantities;tolerance_cases=@tolerance_cases#6",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
       "id": "98b43fea-b9e5-576a-ad59-e946fd96d3ed",
       "message": "no clash matrix cell covers ifc-step:bs-ifc4-building-structural.ifc/#197 against ifc-step:bs-ifc4-building-structural.ifc/#69",
       "object_id": {
@@ -139,7 +690,16 @@
       "severity": "warning"
     },
     {
-      "evidence": [],
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "clash_matrix_pairs;subjects=@selection;counterparts=@counterparts;cells=@cells;key_1=@key_1;key_2=@key_2;key_3=@key_3;case_sensitive=@case_sensitive;symmetric=@symmetric;report_unmatched=@report_unmatched;exclude_same_system=@exclude_same_system;system_path=@system_path;exclude_paths=@exclude_paths;exclude_target_property=@exclude_target_property;exclude_same_layer=@exclude_same_layer;group_by=@group_by;per_storey=@per_storey;storey_path=@storey_path;group_property=@group_property;group_tolerance_metres=@group_tolerance_metres;duplicate_quantities=@duplicate_quantities;tolerance_cases=@tolerance_cases#7",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
       "id": "b4d7d64a-c774-5dc7-a41c-a8a3445a7c22",
       "message": "no clash matrix cell covers ifc-step:bs-ifc4-building-structural.ifc/#197 against ifc-step:bs-ifc4-building-structural.ifc/#93",
       "object_id": {
@@ -162,7 +722,16 @@
       "severity": "warning"
     },
     {
-      "evidence": [],
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "clash_matrix_pairs;subjects=@selection;counterparts=@counterparts;cells=@cells;key_1=@key_1;key_2=@key_2;key_3=@key_3;case_sensitive=@case_sensitive;symmetric=@symmetric;report_unmatched=@report_unmatched;exclude_same_system=@exclude_same_system;system_path=@system_path;exclude_paths=@exclude_paths;exclude_target_property=@exclude_target_property;exclude_same_layer=@exclude_same_layer;group_by=@group_by;per_storey=@per_storey;storey_path=@storey_path;group_property=@group_property;group_tolerance_metres=@group_tolerance_metres;duplicate_quantities=@duplicate_quantities;tolerance_cases=@tolerance_cases#8",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
       "id": "96c44eaf-7d0b-5bd1-9b53-c91480e58364",
       "message": "no clash matrix cell covers ifc-step:bs-ifc4-building-structural.ifc/#213 against ifc-step:bs-ifc4-building-structural.ifc/#69",
       "object_id": {
@@ -185,7 +754,16 @@
       "severity": "warning"
     },
     {
-      "evidence": [],
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "clash_matrix_pairs;subjects=@selection;counterparts=@counterparts;cells=@cells;key_1=@key_1;key_2=@key_2;key_3=@key_3;case_sensitive=@case_sensitive;symmetric=@symmetric;report_unmatched=@report_unmatched;exclude_same_system=@exclude_same_system;system_path=@system_path;exclude_paths=@exclude_paths;exclude_target_property=@exclude_target_property;exclude_same_layer=@exclude_same_layer;group_by=@group_by;per_storey=@per_storey;storey_path=@storey_path;group_property=@group_property;group_tolerance_metres=@group_tolerance_metres;duplicate_quantities=@duplicate_quantities;tolerance_cases=@tolerance_cases#9",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
       "id": "df2daf45-2fcb-5438-9109-074267e64fd9",
       "message": "no clash matrix cell covers ifc-step:bs-ifc4-building-structural.ifc/#229 against ifc-step:bs-ifc4-building-structural.ifc/#69",
       "object_id": {
@@ -208,7 +786,16 @@
       "severity": "warning"
     },
     {
-      "evidence": [],
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "clash_matrix_pairs;subjects=@selection;counterparts=@counterparts;cells=@cells;key_1=@key_1;key_2=@key_2;key_3=@key_3;case_sensitive=@case_sensitive;symmetric=@symmetric;report_unmatched=@report_unmatched;exclude_same_system=@exclude_same_system;system_path=@system_path;exclude_paths=@exclude_paths;exclude_target_property=@exclude_target_property;exclude_same_layer=@exclude_same_layer;group_by=@group_by;per_storey=@per_storey;storey_path=@storey_path;group_property=@group_property;group_tolerance_metres=@group_tolerance_metres;duplicate_quantities=@duplicate_quantities;tolerance_cases=@tolerance_cases#10",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
       "id": "04802e47-a5c1-54b5-8ece-e603abe9df23",
       "message": "no clash matrix cell covers ifc-step:bs-ifc4-building-structural.ifc/#245 against ifc-step:bs-ifc4-building-structural.ifc/#69",
       "object_id": {
@@ -231,7 +818,16 @@
       "severity": "warning"
     },
     {
-      "evidence": [],
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "clash_matrix_pairs;subjects=@selection;counterparts=@counterparts;cells=@cells;key_1=@key_1;key_2=@key_2;key_3=@key_3;case_sensitive=@case_sensitive;symmetric=@symmetric;report_unmatched=@report_unmatched;exclude_same_system=@exclude_same_system;system_path=@system_path;exclude_paths=@exclude_paths;exclude_target_property=@exclude_target_property;exclude_same_layer=@exclude_same_layer;group_by=@group_by;per_storey=@per_storey;storey_path=@storey_path;group_property=@group_property;group_tolerance_metres=@group_tolerance_metres;duplicate_quantities=@duplicate_quantities;tolerance_cases=@tolerance_cases#11",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
       "id": "01403ddf-09b0-599a-b4ce-a0e82b81e458",
       "message": "no clash matrix cell covers ifc-step:bs-ifc4-building-structural.ifc/#245 against ifc-step:bs-ifc4-building-structural.ifc/#93",
       "object_id": {
@@ -254,7 +850,16 @@
       "severity": "warning"
     },
     {
-      "evidence": [],
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "clash_matrix_pairs;subjects=@selection;counterparts=@counterparts;cells=@cells;key_1=@key_1;key_2=@key_2;key_3=@key_3;case_sensitive=@case_sensitive;symmetric=@symmetric;report_unmatched=@report_unmatched;exclude_same_system=@exclude_same_system;system_path=@system_path;exclude_paths=@exclude_paths;exclude_target_property=@exclude_target_property;exclude_same_layer=@exclude_same_layer;group_by=@group_by;per_storey=@per_storey;storey_path=@storey_path;group_property=@group_property;group_tolerance_metres=@group_tolerance_metres;duplicate_quantities=@duplicate_quantities;tolerance_cases=@tolerance_cases#12",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
       "id": "eebd1b39-81a5-529e-bd9e-cb22f5dcdc9e",
       "message": "no clash matrix cell covers ifc-step:bs-ifc4-building-structural.ifc/#261 against ifc-step:bs-ifc4-building-structural.ifc/#69",
       "object_id": {
@@ -277,7 +882,16 @@
       "severity": "warning"
     },
     {
-      "evidence": [],
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "clash_matrix_pairs;subjects=@selection;counterparts=@counterparts;cells=@cells;key_1=@key_1;key_2=@key_2;key_3=@key_3;case_sensitive=@case_sensitive;symmetric=@symmetric;report_unmatched=@report_unmatched;exclude_same_system=@exclude_same_system;system_path=@system_path;exclude_paths=@exclude_paths;exclude_target_property=@exclude_target_property;exclude_same_layer=@exclude_same_layer;group_by=@group_by;per_storey=@per_storey;storey_path=@storey_path;group_property=@group_property;group_tolerance_metres=@group_tolerance_metres;duplicate_quantities=@duplicate_quantities;tolerance_cases=@tolerance_cases#13",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
       "id": "896f0193-9888-5fbd-bed3-0ca88d0ac656",
       "message": "no clash matrix cell covers ifc-step:bs-ifc4-building-structural.ifc/#261 against ifc-step:bs-ifc4-building-structural.ifc/#93",
       "object_id": {
@@ -312,330 +926,6 @@
       }
     },
     {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-structural.ifc/#147, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#112",
-        "source": {
-          "document": "bs-ifc4-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-structural.ifc/#175, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#112",
-        "source": {
-          "document": "bs-ifc4-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-structural.ifc/#197, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#147",
-        "source": {
-          "document": "bs-ifc4-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-structural.ifc/#229, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#147",
-        "source": {
-          "document": "bs-ifc4-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-structural.ifc/#245, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#147",
-        "source": {
-          "document": "bs-ifc4-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-structural.ifc/#261, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#147",
-        "source": {
-          "document": "bs-ifc4-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-structural.ifc/#69, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#197",
-        "source": {
-          "document": "bs-ifc4-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-structural.ifc/#93, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#197",
-        "source": {
-          "document": "bs-ifc4-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-structural.ifc/#69, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#213",
-        "source": {
-          "document": "bs-ifc4-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-structural.ifc/#69, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#229",
-        "source": {
-          "document": "bs-ifc4-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-structural.ifc/#69, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#245",
-        "source": {
-          "document": "bs-ifc4-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-structural.ifc/#93, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#245",
-        "source": {
-          "document": "bs-ifc4-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-structural.ifc/#69, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#261",
-        "source": {
-          "document": "bs-ifc4-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-structural.ifc/#93, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#261",
-        "source": {
-          "document": "bs-ifc4-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-structural.ifc/#112, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#175",
-        "source": {
-          "document": "bs-ifc4-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-structural.ifc/#147, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#197",
-        "source": {
-          "document": "bs-ifc4-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-structural.ifc/#69, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#197",
-        "source": {
-          "document": "bs-ifc4-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-structural.ifc/#93, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#197",
-        "source": {
-          "document": "bs-ifc4-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-structural.ifc/#69, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#213",
-        "source": {
-          "document": "bs-ifc4-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-structural.ifc/#147, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#229",
-        "source": {
-          "document": "bs-ifc4-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-structural.ifc/#69, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#229",
-        "source": {
-          "document": "bs-ifc4-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-structural.ifc/#147, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#245",
-        "source": {
-          "document": "bs-ifc4-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-structural.ifc/#69, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#245",
-        "source": {
-          "document": "bs-ifc4-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-structural.ifc/#93, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#245",
-        "source": {
-          "document": "bs-ifc4-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-structural.ifc/#147, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#261",
-        "source": {
-          "document": "bs-ifc4-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-structural.ifc/#69, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#261",
-        "source": {
-          "document": "bs-ifc4-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-structural.ifc/#93, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#261",
-        "source": {
-          "document": "bs-ifc4-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
       "message": "the clash matrix cell cannot be chosen: source `ifc-step:bs-ifc4-building-structural.ifc` declares no discipline, so the clash matrix cannot decide; 7 object(s) of source `ifc-step:bs-ifc4-building-structural.ifc` not evaluated (e.g. #112, #147, #197, +4 more)",
       "object_id": null,
       "reason": "not_recorded",
@@ -644,18 +934,6 @@
         "document": "bs-ifc4-building-structural.ifc",
         "system": "ifc-step"
       }
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-structural.ifc/#147, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#112",
-        "source": {
-          "document": "bs-ifc4-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "matrix-selectors"
     }
   ],
   "rules": [
@@ -676,16 +954,16 @@
     {
       "checked": 10,
       "failed": 0,
-      "not_evaluated": 7,
+      "not_evaluated": 0,
       "rule_id": "clash-structure",
-      "status": "not_evaluated"
+      "status": "passed"
     },
     {
       "checked": 6,
-      "failed": 0,
-      "not_evaluated": 6,
+      "failed": 6,
+      "not_evaluated": 0,
       "rule_id": "clash-subjects",
-      "status": "not_evaluated"
+      "status": "failed"
     },
     {
       "checked": 10,
@@ -697,7 +975,7 @@
     {
       "checked": 10,
       "failed": 7,
-      "not_evaluated": 1,
+      "not_evaluated": 0,
       "rule_id": "matrix-selectors",
       "status": "failed"
     }

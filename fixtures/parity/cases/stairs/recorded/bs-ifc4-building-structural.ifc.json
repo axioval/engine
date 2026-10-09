@@ -2,7 +2,7 @@
   "findings": [],
   "not_evaluated": [
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-building-structural.ifc/#175 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: a face of ifc-step:bs-ifc4-building-structural.ifc/#175 slopes at 45°, neither walkable nor steep",
       "object_id": {
         "local_id": "#175",
         "source": {
@@ -14,7 +14,7 @@
       "rule_id": "beam-ramps"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-building-structural.ifc/#197 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: a face of ifc-step:bs-ifc4-building-structural.ifc/#197 slopes at 45°, neither walkable nor steep",
       "object_id": {
         "local_id": "#197",
         "source": {
@@ -26,7 +26,7 @@
       "rule_id": "beam-ramps"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-building-structural.ifc/#213 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: a face of ifc-step:bs-ifc4-building-structural.ifc/#213 slopes at 45°, neither walkable nor steep",
       "object_id": {
         "local_id": "#213",
         "source": {
@@ -38,7 +38,7 @@
       "rule_id": "beam-ramps"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-building-structural.ifc/#229 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: a face of ifc-step:bs-ifc4-building-structural.ifc/#229 slopes at 45°, neither walkable nor steep",
       "object_id": {
         "local_id": "#229",
         "source": {
@@ -50,7 +50,7 @@
       "rule_id": "beam-ramps"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-building-structural.ifc/#245 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-building-structural.ifc/#245 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#245",
         "source": {
@@ -62,7 +62,7 @@
       "rule_id": "beam-ramps"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-building-structural.ifc/#261 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: a face of ifc-step:bs-ifc4-building-structural.ifc/#261 slopes at 45°, neither walkable nor steep",
       "object_id": {
         "local_id": "#261",
         "source": {

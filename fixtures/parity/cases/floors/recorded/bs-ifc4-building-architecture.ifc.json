@@ -1,6 +1,180 @@
 {
   "findings": [
     {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:free-space",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "clearance_checks;side=@side;sides=@sides;quantifier=@quantifier;front_axis=@front_axis;both_sides=@both_sides;width=@width;width_mode=@width_mode;width_minimum=@width_minimum;width_maximum=@width_maximum;depth=@depth;depth_mode=@depth_mode;depth_minimum=@depth_minimum;depth_maximum=@depth_maximum;depth_from=@depth_from;radius=@radius;height=@height;height_mode=@height_mode;height_minimum=@height_minimum;height_maximum=@height_maximum;size_mode=@size_mode;size_tolerance=@size_tolerance;offset=@offset;lateral_offset=@lateral_offset;align=@align;slide_from=@slide_from;slide_to=@slide_to;depth_slide_from=@depth_slide_from;depth_slide_to=@depth_slide_to;height_reference=@height_reference;vertical_offset=@vertical_offset;top_datum=@top_datum;top_offset=@top_offset;obstacles=@obstacles;allowed_intruders=@allowed_intruders;protrusion=@protrusion;within_space=@within_space;space_path=@space_path;wall_selector=@wall_selector;wall_reach=@wall_reach;wall_inset=@wall_inset;support_selector=@support_selector;support_tolerance=@support_tolerance;clear_width_property=@clear_width_property;clear_width_from_leaves=@clear_width_from_leaves;overall_width=@overall_width;width_deduction=@width_deduction#1",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "directional-extent:ifc-step:bs-ifc4-building-architecture.ifc/#116:[-0.0000000000000015394380663318816,-1,0.0000000000000005661703895142863]",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "directional-extent:ifc-step:bs-ifc4-building-architecture.ifc/#116:[1,-0.0000000000000015394380663318816,-0.00000000000000000000000000000007032049538395806]",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:8790a1e193e82b8e7e7f337ec2633cd40f2120590317a1443503a25b079e2e80:placement:#116:#120<#87<#47<#40<#30<#23",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-building-architecture.ifc/#116",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "bf5e4a2b-9f76-58da-b1a9-f5442e0c6519",
+      "message": "front clearance (0.75 m in radius, 2 m high) is obstructed by ifc-step:bs-ifc4-building-architecture.ifc/#182, ifc-step:bs-ifc4-building-architecture.ifc/#228",
+      "object_id": {
+        "local_id": "#116",
+        "source": {
+          "document": "bs-ifc4-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#182",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#228",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cc-cylinder",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:free-space",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axioval:derived.contained-in-space;horizontal=0;vertical=0:derived-from:ifc-step:bs-ifc4-building-architecture.ifc/#116:2 space(s)",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axioval:derived.contained-in-space;horizontal=0;vertical=0:ifc-step:bs-ifc4-building-architecture.ifc/#116->ifc-step:bs-ifc4-building-architecture.ifc/#85:contains-point(7.850000,6.300000,0.450000)",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "clearance_checks;side=@side;sides=@sides;quantifier=@quantifier;front_axis=@front_axis;both_sides=@both_sides;width=@width;width_mode=@width_mode;width_minimum=@width_minimum;width_maximum=@width_maximum;depth=@depth;depth_mode=@depth_mode;depth_minimum=@depth_minimum;depth_maximum=@depth_maximum;depth_from=@depth_from;radius=@radius;height=@height;height_mode=@height_mode;height_minimum=@height_minimum;height_maximum=@height_maximum;size_mode=@size_mode;size_tolerance=@size_tolerance;offset=@offset;lateral_offset=@lateral_offset;align=@align;slide_from=@slide_from;slide_to=@slide_to;depth_slide_from=@depth_slide_from;depth_slide_to=@depth_slide_to;height_reference=@height_reference;vertical_offset=@vertical_offset;top_datum=@top_datum;top_offset=@top_offset;obstacles=@obstacles;allowed_intruders=@allowed_intruders;protrusion=@protrusion;within_space=@within_space;space_path=@space_path;wall_selector=@wall_selector;wall_reach=@wall_reach;wall_inset=@wall_inset;support_selector=@support_selector;support_tolerance=@support_tolerance;clear_width_property=@clear_width_property;clear_width_from_leaves=@clear_width_from_leaves;overall_width=@overall_width;width_deduction=@width_deduction#3",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "directional-extent:ifc-step:bs-ifc4-building-architecture.ifc/#116:[-0.0000000000000015394380663318816,-1,0.0000000000000005661703895142863]",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "directional-extent:ifc-step:bs-ifc4-building-architecture.ifc/#116:[1,-0.0000000000000015394380663318816,-0.00000000000000000000000000000007032049538395806]",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:8790a1e193e82b8e7e7f337ec2633cd40f2120590317a1443503a25b079e2e80:placement:#116:#120<#87<#47<#40<#30<#23",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-building-architecture.ifc/#85",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "c2207165-dbec-5e20-be2d-ebea62afdc41",
+      "message": "right clearance (0.7 m wide, 0.9 m deep, 2 m high) is obstructed by ifc-step:bs-ifc4-building-architecture.ifc/#182, ifc-step:bs-ifc4-building-architecture.ifc/#228",
+      "object_id": {
+        "local_id": "#116",
+        "source": {
+          "document": "bs-ifc4-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#182",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#228",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cc-left-within",
+      "severity": "warning"
+    },
+    {
       "evidence": [],
       "id": "4517e4e4-eecf-5588-9f6f-eb8bcfe88517",
       "message": "ifc-step:bs-ifc4-building-architecture.ifc/#135 has no entrance: no door or opening reaches it along axioval:derived.adjacent-space",
@@ -110,7 +284,7 @@
       "rule_id": "cc-any-side"
     },
     {
-      "message": "front clearance: free space: free-space query unavailable: obstacle ifc-step:bs-ifc4-building-architecture.ifc/#182 is not a closed, consistently wound surface, so it bounds no solid to test the clearance volume against",
+      "message": "front clearance: free space: free-space geometry is unavailable for `ifc-step:bs-ifc4-building-architecture.ifc/#220`",
       "object_id": {
         "local_id": "#116",
         "source": {
@@ -122,19 +296,7 @@
       "rule_id": "cc-component-sized"
     },
     {
-      "message": "front clearance: free space: free-space query unavailable: obstacle ifc-step:bs-ifc4-building-architecture.ifc/#182 is not a closed, consistently wound surface, so it bounds no solid to test the clearance volume against",
-      "object_id": {
-        "local_id": "#116",
-        "source": {
-          "document": "bs-ifc4-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "backend_unavailable",
-      "rule_id": "cc-cylinder"
-    },
-    {
-      "message": "front clearance: free space: free-space query unavailable: obstacle ifc-step:bs-ifc4-building-architecture.ifc/#182 is not a closed, consistently wound surface, so it bounds no solid to test the clearance volume against",
+      "message": "front clearance: free space: free-space geometry is unavailable for `ifc-step:bs-ifc4-building-architecture.ifc/#220`",
       "object_id": {
         "local_id": "#116",
         "source": {
@@ -153,18 +315,6 @@
     },
     {
       "message": "left clearance: free space: free-space query unavailable: overlay: RepeatedVertex",
-      "object_id": {
-        "local_id": "#116",
-        "source": {
-          "document": "bs-ifc4-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "backend_unavailable",
-      "rule_id": "cc-left-within"
-    },
-    {
-      "message": "right clearance: free space: free-space query unavailable: obstacle ifc-step:bs-ifc4-building-architecture.ifc/#182 is not a closed, consistently wound surface, so it bounds no solid to test the clearance volume against",
       "object_id": {
         "local_id": "#116",
         "source": {
@@ -638,10 +788,10 @@
     },
     {
       "checked": 1,
-      "failed": 0,
-      "not_evaluated": 1,
+      "failed": 1,
+      "not_evaluated": 0,
       "rule_id": "cc-cylinder",
-      "status": "not_evaluated"
+      "status": "failed"
     },
     {
       "checked": 1,
@@ -659,10 +809,10 @@
     },
     {
       "checked": 1,
-      "failed": 0,
+      "failed": 1,
       "not_evaluated": 1,
       "rule_id": "cc-left-within",
-      "status": "not_evaluated"
+      "status": "failed"
     },
     {
       "checked": 1,

@@ -418,8 +418,14 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   headroom through `walking_surface`'s `tread_flight`, `sloped_runs` and
   `headroom`, the same measurements the walking-surface service answers.
 - `src/shell.rs` (internal) reads closure from positions, not indices
-  (#309): corners with equal coordinates (`-0.0` as `0.0`) are one vertex,
-  never corners within a tolerance. `pieces` splits a mesh into the pieces
+  (#308, #309): corners with equal coordinates (`-0.0` as `0.0`) are one
+  vertex, never corners within a tolerance. `welded_where_closed` is
+  applied by `with_mesh` and `with_tessellated_mesh`: it shares repeated
+  corners only when that makes a mesh a closed two-manifold it was not,
+  keeping positions and triangles. It never welds a mesh closed by its own
+  indices, nor keeps a weld that joins shells along an edge or at a corner
+  (`single_fans`): touching items would become one non-manifold shell and
+  could no longer be measured shell by shell (#312). `pieces` splits a mesh into the pieces
   its surface connects; a piece is closed when its triangles, zero-area
   ones counted and those repeating a corner left out, use every edge as
   often one way as the other, so its winding number is whole off the

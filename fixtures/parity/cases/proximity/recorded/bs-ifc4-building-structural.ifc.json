@@ -4,6 +4,29 @@
       "evidence": [
         {
           "exact": true,
+          "locator": "containment_counts;counterparts=@counterparts;minimum_volume_ratio=@minimum_volume_ratio;combine_adjacent=@combine_adjacent;cover=@cover;minimum_count=@minimum_count;maximum_count=@maximum_count;report_orphans=@report_orphans;selection=@selection#4",
+          "source": {
+            "document": "project",
+            "system": "axioval"
+          }
+        }
+      ],
+      "id": "c60bac1f-073b-5b01-a540-3a195491ec0d",
+      "message": "holds 0 inner elements, fewer than the minimum 1",
+      "object_id": {
+        "local_id": "#93",
+        "source": {
+          "document": "bs-ifc4-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "containment-cover",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
           "locator": "axiolid:distance:vertical-below:ifc-step:bs-ifc4-building-structural.ifc/#175:ifc-step:bs-ifc4-building-structural.ifc/#112",
           "source": {
             "document": "bs-ifc4-building-structural.ifc",
@@ -495,7 +518,7 @@
       "rule_id": "containment-cover"
     },
     {
-      "message": "holds between 0 and 4 inner elements, so its count cannot be judged",
+      "message": "holds between 0 and 3 inner elements, so its count cannot be judged",
       "object_id": {
         "local_id": "#147",
         "source": {
@@ -507,7 +530,7 @@
       "rule_id": "containment-cover"
     },
     {
-      "message": "its cover to ifc-step:bs-ifc4-building-structural.ifc/#112 is not checked: the volume shared with ifc-step:bs-ifc4-building-structural.ifc/#112 is not measured, so whether it lies inside cannot be decided: the volume of ifc-step:bs-ifc4-building-structural.ifc/#175 is unavailable: the geometry kernel refused the measurement: the body's mesh is an open surface, which encloses no volume; the volume of ifc-step:bs-ifc4-building-structural.ifc/#112 is unavailable: the geometry kernel refused the measurement: the body's mesh is an open surface, which encloses no volume",
+      "message": "its cover to ifc-step:bs-ifc4-building-structural.ifc/#112 is not checked: whether it lies in ifc-step:bs-ifc4-building-structural.ifc/#112 cannot be decided: the shared volume is 0.0000 to 1.0000 of the smaller body, ratio 0.5000",
       "object_id": {
         "local_id": "#175",
         "source": {
@@ -519,7 +542,7 @@
       "rule_id": "containment-cover"
     },
     {
-      "message": "its cover to ifc-step:bs-ifc4-building-structural.ifc/#147 is not checked: the volume shared with ifc-step:bs-ifc4-building-structural.ifc/#147 is not measured, so whether it lies inside cannot be decided: the volume of ifc-step:bs-ifc4-building-structural.ifc/#197 is unavailable: the geometry kernel refused the measurement: the body's mesh is an open surface, which encloses no volume; the volume of ifc-step:bs-ifc4-building-structural.ifc/#147 is unavailable: the geometry kernel refused the measurement: the body's mesh is an open surface, which encloses no volume",
+      "message": "its cover to ifc-step:bs-ifc4-building-structural.ifc/#147 is not checked: whether it lies in ifc-step:bs-ifc4-building-structural.ifc/#147 cannot be decided: the shared volume is 0.0000 to 1.0000 of the smaller body, ratio 0.5000",
       "object_id": {
         "local_id": "#197",
         "source": {
@@ -531,7 +554,7 @@
       "rule_id": "containment-cover"
     },
     {
-      "message": "its cover to ifc-step:bs-ifc4-building-structural.ifc/#69 is not checked: the volume shared with ifc-step:bs-ifc4-building-structural.ifc/#69 is not measured, so whether it lies inside cannot be decided: the volume of ifc-step:bs-ifc4-building-structural.ifc/#197 is unavailable: the geometry kernel refused the measurement: the body's mesh is an open surface, which encloses no volume; the volume of ifc-step:bs-ifc4-building-structural.ifc/#69 is unavailable: the geometry kernel refused the measurement: the body's mesh is an open surface, which encloses no volume",
+      "message": "its cover to ifc-step:bs-ifc4-building-structural.ifc/#69 is not checked: the volume shared with ifc-step:bs-ifc4-building-structural.ifc/#69 is not measured, so whether it lies inside cannot be decided: the volume of ifc-step:bs-ifc4-building-structural.ifc/#69 is unavailable: the geometry kernel refused the measurement: the volume kernel refused a self-intersecting mesh (SelfIntersecting)",
       "object_id": {
         "local_id": "#197",
         "source": {
@@ -543,19 +566,7 @@
       "rule_id": "containment-cover"
     },
     {
-      "message": "its cover to ifc-step:bs-ifc4-building-structural.ifc/#93 is not checked: the volume shared with ifc-step:bs-ifc4-building-structural.ifc/#93 is not measured, so whether it lies inside cannot be decided: the volume of ifc-step:bs-ifc4-building-structural.ifc/#197 is unavailable: the geometry kernel refused the measurement: the body's mesh is an open surface, which encloses no volume; the volume of ifc-step:bs-ifc4-building-structural.ifc/#93 is unavailable: the geometry kernel refused the measurement: the body's mesh is an open surface, which encloses no volume",
-      "object_id": {
-        "local_id": "#197",
-        "source": {
-          "document": "bs-ifc4-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "containment-cover"
-    },
-    {
-      "message": "its cover to ifc-step:bs-ifc4-building-structural.ifc/#69 is not checked: the volume shared with ifc-step:bs-ifc4-building-structural.ifc/#69 is not measured, so whether it lies inside cannot be decided: the volume of ifc-step:bs-ifc4-building-structural.ifc/#213 is unavailable: the geometry kernel refused the measurement: the body's mesh is an open surface, which encloses no volume; the volume of ifc-step:bs-ifc4-building-structural.ifc/#69 is unavailable: the geometry kernel refused the measurement: the body's mesh is an open surface, which encloses no volume",
+      "message": "its cover to ifc-step:bs-ifc4-building-structural.ifc/#69 is not checked: the volume shared with ifc-step:bs-ifc4-building-structural.ifc/#69 is not measured, so whether it lies inside cannot be decided: the volume of ifc-step:bs-ifc4-building-structural.ifc/#69 is unavailable: the geometry kernel refused the measurement: the volume kernel refused a self-intersecting mesh (SelfIntersecting)",
       "object_id": {
         "local_id": "#213",
         "source": {
@@ -567,7 +578,7 @@
       "rule_id": "containment-cover"
     },
     {
-      "message": "its cover to ifc-step:bs-ifc4-building-structural.ifc/#147 is not checked: the volume shared with ifc-step:bs-ifc4-building-structural.ifc/#147 is not measured, so whether it lies inside cannot be decided: the volume of ifc-step:bs-ifc4-building-structural.ifc/#229 is unavailable: the geometry kernel refused the measurement: the body's mesh is an open surface, which encloses no volume; the volume of ifc-step:bs-ifc4-building-structural.ifc/#147 is unavailable: the geometry kernel refused the measurement: the body's mesh is an open surface, which encloses no volume",
+      "message": "its cover to ifc-step:bs-ifc4-building-structural.ifc/#147 is not checked: whether it lies in ifc-step:bs-ifc4-building-structural.ifc/#147 cannot be decided: the shared volume is 0.0000 to 1.0000 of the smaller body, ratio 0.5000",
       "object_id": {
         "local_id": "#229",
         "source": {
@@ -579,7 +590,7 @@
       "rule_id": "containment-cover"
     },
     {
-      "message": "its cover to ifc-step:bs-ifc4-building-structural.ifc/#69 is not checked: the volume shared with ifc-step:bs-ifc4-building-structural.ifc/#69 is not measured, so whether it lies inside cannot be decided: the volume of ifc-step:bs-ifc4-building-structural.ifc/#229 is unavailable: the geometry kernel refused the measurement: the body's mesh is an open surface, which encloses no volume; the volume of ifc-step:bs-ifc4-building-structural.ifc/#69 is unavailable: the geometry kernel refused the measurement: the body's mesh is an open surface, which encloses no volume",
+      "message": "its cover to ifc-step:bs-ifc4-building-structural.ifc/#69 is not checked: the volume shared with ifc-step:bs-ifc4-building-structural.ifc/#69 is not measured, so whether it lies inside cannot be decided: the volume of ifc-step:bs-ifc4-building-structural.ifc/#69 is unavailable: the geometry kernel refused the measurement: the volume kernel refused a self-intersecting mesh (SelfIntersecting)",
       "object_id": {
         "local_id": "#229",
         "source": {
@@ -591,7 +602,7 @@
       "rule_id": "containment-cover"
     },
     {
-      "message": "its cover to ifc-step:bs-ifc4-building-structural.ifc/#147 is not checked: the volume shared with ifc-step:bs-ifc4-building-structural.ifc/#147 is not measured, so whether it lies inside cannot be decided: the volume of ifc-step:bs-ifc4-building-structural.ifc/#245 is unavailable: the geometry kernel refused the measurement: the body's mesh is an open surface, which encloses no volume; the volume of ifc-step:bs-ifc4-building-structural.ifc/#147 is unavailable: the geometry kernel refused the measurement: the body's mesh is an open surface, which encloses no volume",
+      "message": "its cover to ifc-step:bs-ifc4-building-structural.ifc/#69 is not checked: the volume shared with ifc-step:bs-ifc4-building-structural.ifc/#69 is not measured, so whether it lies inside cannot be decided: the volume of ifc-step:bs-ifc4-building-structural.ifc/#69 is unavailable: the geometry kernel refused the measurement: the volume kernel refused a self-intersecting mesh (SelfIntersecting)",
       "object_id": {
         "local_id": "#245",
         "source": {
@@ -603,31 +614,7 @@
       "rule_id": "containment-cover"
     },
     {
-      "message": "its cover to ifc-step:bs-ifc4-building-structural.ifc/#69 is not checked: the volume shared with ifc-step:bs-ifc4-building-structural.ifc/#69 is not measured, so whether it lies inside cannot be decided: the volume of ifc-step:bs-ifc4-building-structural.ifc/#245 is unavailable: the geometry kernel refused the measurement: the body's mesh is an open surface, which encloses no volume; the volume of ifc-step:bs-ifc4-building-structural.ifc/#69 is unavailable: the geometry kernel refused the measurement: the body's mesh is an open surface, which encloses no volume",
-      "object_id": {
-        "local_id": "#245",
-        "source": {
-          "document": "bs-ifc4-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "containment-cover"
-    },
-    {
-      "message": "its cover to ifc-step:bs-ifc4-building-structural.ifc/#93 is not checked: the volume shared with ifc-step:bs-ifc4-building-structural.ifc/#93 is not measured, so whether it lies inside cannot be decided: the volume of ifc-step:bs-ifc4-building-structural.ifc/#245 is unavailable: the geometry kernel refused the measurement: the body's mesh is an open surface, which encloses no volume; the volume of ifc-step:bs-ifc4-building-structural.ifc/#93 is unavailable: the geometry kernel refused the measurement: the body's mesh is an open surface, which encloses no volume",
-      "object_id": {
-        "local_id": "#245",
-        "source": {
-          "document": "bs-ifc4-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "containment-cover"
-    },
-    {
-      "message": "its cover to ifc-step:bs-ifc4-building-structural.ifc/#147 is not checked: the volume shared with ifc-step:bs-ifc4-building-structural.ifc/#147 is not measured, so whether it lies inside cannot be decided: the volume of ifc-step:bs-ifc4-building-structural.ifc/#261 is unavailable: the geometry kernel refused the measurement: the body's mesh is an open surface, which encloses no volume; the volume of ifc-step:bs-ifc4-building-structural.ifc/#147 is unavailable: the geometry kernel refused the measurement: the body's mesh is an open surface, which encloses no volume",
+      "message": "its cover to ifc-step:bs-ifc4-building-structural.ifc/#147 is not checked: whether it lies in ifc-step:bs-ifc4-building-structural.ifc/#147 cannot be decided: the shared volume is 0.0000 to 1.0000 of the smaller body, ratio 0.5000",
       "object_id": {
         "local_id": "#261",
         "source": {
@@ -639,19 +626,7 @@
       "rule_id": "containment-cover"
     },
     {
-      "message": "its cover to ifc-step:bs-ifc4-building-structural.ifc/#69 is not checked: the volume shared with ifc-step:bs-ifc4-building-structural.ifc/#69 is not measured, so whether it lies inside cannot be decided: the volume of ifc-step:bs-ifc4-building-structural.ifc/#261 is unavailable: the geometry kernel refused the measurement: the body's mesh is an open surface, which encloses no volume; the volume of ifc-step:bs-ifc4-building-structural.ifc/#69 is unavailable: the geometry kernel refused the measurement: the body's mesh is an open surface, which encloses no volume",
-      "object_id": {
-        "local_id": "#261",
-        "source": {
-          "document": "bs-ifc4-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "containment-cover"
-    },
-    {
-      "message": "its cover to ifc-step:bs-ifc4-building-structural.ifc/#93 is not checked: the volume shared with ifc-step:bs-ifc4-building-structural.ifc/#93 is not measured, so whether it lies inside cannot be decided: the volume of ifc-step:bs-ifc4-building-structural.ifc/#261 is unavailable: the geometry kernel refused the measurement: the body's mesh is an open surface, which encloses no volume; the volume of ifc-step:bs-ifc4-building-structural.ifc/#93 is unavailable: the geometry kernel refused the measurement: the body's mesh is an open surface, which encloses no volume",
+      "message": "its cover to ifc-step:bs-ifc4-building-structural.ifc/#69 is not checked: the volume shared with ifc-step:bs-ifc4-building-structural.ifc/#69 is not measured, so whether it lies inside cannot be decided: the volume of ifc-step:bs-ifc4-building-structural.ifc/#69 is unavailable: the geometry kernel refused the measurement: the volume kernel refused a self-intersecting mesh (SelfIntersecting)",
       "object_id": {
         "local_id": "#261",
         "source": {
@@ -673,27 +648,15 @@
       },
       "reason": "incomplete_evidence",
       "rule_id": "containment-cover"
-    },
-    {
-      "message": "holds between 0 and 3 inner elements, so its count cannot be judged",
-      "object_id": {
-        "local_id": "#93",
-        "source": {
-          "document": "bs-ifc4-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "containment-cover"
     }
   ],
   "rules": [
     {
       "checked": 6,
-      "failed": 0,
-      "not_evaluated": 10,
+      "failed": 1,
+      "not_evaluated": 9,
       "rule_id": "containment-cover",
-      "status": "not_evaluated"
+      "status": "failed"
     },
     {
       "checked": 0,

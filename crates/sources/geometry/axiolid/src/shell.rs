@@ -6,6 +6,12 @@
 //! one point, and a zero-area triangle closing a T-junction leaves the
 //! surface closed (#221), so closure is read here from the positions.
 //!
+//! A source that repeats a coordinate once per face (a triangulated face
+//! set written for flat shading, say) gives a closed shell whose faces share
+//! no index, and the audit reads every edge as open. Taking equal positions
+//! as one vertex changes nothing about the surface; it only lets the
+//! closedness the surface has be seen ([`welded_where_closed`], #308).
+//!
 //! A body of several items may also hold closed items beside open ones (a
 //! closed fitting on an open tube). Only the items a measurement needs as
 //! solids have to be closed, so the body is split into the pieces its
@@ -72,6 +78,110 @@ fn balanced(corners: &[[u32; 3]], triangles: impl Iterator<Item = usize>) -> boo
     edges
         .chunk_by(|first, second| (first.0, first.1) == (second.0, second.1))
         .all(|run| run.iter().map(|edge| i64::from(edge.2)).sum::<i64>() == 0)
+}
+
+/// Whether the triangles form a closed two-manifold chain: every edge used
+/// by exactly two triangles, once each way. Triangles repeating a vertex
+/// bound nothing and are left out; zero-area ones count.
+fn two_manifold(corners: &[[u32; 3]]) -> bool {
+    let mut edges: Vec<(u32, u32, i8)> = Vec::new();
+    for [a, b, c] in corners {
+        if a == b || b == c || c == a {
+            continue;
+        }
+        for (from, to) in [(a, b), (b, c), (c, a)] {
+            edges.push((*from.min(to), *from.max(to), if from < to { 1 } else { -1 }));
+        }
+    }
+    if edges.is_empty() {
+        return false;
+    }
+    edges.sort_unstable();
+    edges
+        .chunk_by(|first, second| (first.0, first.1) == (second.0, second.1))
+        .all(|run| run.len() == 2 && run[0].2 != run[1].2)
+}
+
+/// Whether the triangles around every vertex form one fan: each vertex's
+/// triangles are joined through the edges they share at it. Two closed
+/// shells touching at a corner share that vertex with two fans, so the
+/// mesh holding both is no single surface there. Triangles repeating a
+/// vertex are left out.
+fn single_fans(corners: &[[u32; 3]]) -> bool {
+    // (vertex, triangle, the two other corners), grouped by vertex.
+    let mut around: Vec<(u32, usize, [u32; 2])> = Vec::new();
+    for (triangle, [a, b, c]) in corners.iter().enumerate() {
+        if a == b || b == c || c == a {
+            continue;
+        }
+        around.extend([
+            (*a, triangle, [*b, *c]),
+            (*b, triangle, [*c, *a]),
+            (*c, triangle, [*a, *b]),
+        ]);
+    }
+    around.sort_unstable();
+    around
+        .chunk_by(|first, second| first.0 == second.0)
+        .all(|fan| {
+            // Join the triangles of one vertex through their other corners.
+            let mut parent: Vec<usize> = (0..fan.len()).collect();
+            let mut by_corner: BTreeMap<u32, usize> = BTreeMap::new();
+            for (slot, (_, _, others)) in fan.iter().enumerate() {
+                for other in others {
+                    if let Some(held) = by_corner.insert(*other, slot) {
+                        let (a, b) = (root(&mut parent, held), root(&mut parent, slot));
+                        parent[a] = b;
+                    }
+                }
+            }
+            let first = root(&mut parent, 0);
+            (1..fan.len()).all(|slot| root(&mut parent, slot) == first)
+        })
+}
+
+/// `mesh` with every set of exactly equal positions addressed by one index,
+/// when that makes it a closed two-manifold chain it was not, with one fan
+/// of triangles round every vertex; otherwise `mesh` as it is.
+///
+/// The positions stay as they are (unused duplicates included), so every
+/// coordinate and every triangle is unchanged: only the indices show that
+/// faces meeting at equal points share them. A mesh whose items are each
+/// closed by their indices keeps them apart, and so does a weld that would
+/// join shells along an edge (four triangles on it) or at a corner (two
+/// fans round it): shells measured one by one stay apart.
+#[must_use]
+pub(crate) fn welded_where_closed(mesh: TriMesh) -> TriMesh {
+    let as_given: Vec<[u32; 3]> = mesh
+        .indices
+        .chunks_exact(3)
+        .map(|corners| [corners[0], corners[1], corners[2]])
+        .collect();
+    if two_manifold(&as_given) {
+        return mesh;
+    }
+    let Some(welded) = welded_corners(&mesh) else {
+        return mesh;
+    };
+    if welded == as_given || !two_manifold(&welded) || !single_fans(&welded) {
+        return mesh;
+    }
+    // Number each welded vertex by the first position holding it, so the
+    // new indices address positions the mesh already has.
+    let mut first: BTreeMap<u32, u32> = BTreeMap::new();
+    for (corners, original) in welded.iter().zip(&as_given) {
+        for (vertex, index) in corners.iter().zip(original) {
+            first
+                .entry(*vertex)
+                .and_modify(|held| *held = (*held).min(*index))
+                .or_insert(*index);
+        }
+    }
+    let indices = welded
+        .iter()
+        .flat_map(|corners| corners.map(|vertex| first[&vertex]))
+        .collect();
+    TriMesh::new(mesh.positions, indices)
 }
 
 /// A connected piece of a mesh's surface.
@@ -284,5 +394,93 @@ mod tests {
     fn a_bad_index_bounds_nothing() {
         let mesh = TriMesh::new(vec![Point3::new(0.0, 0.0, 0.0)], vec![0, 0, 7]);
         assert!(pieces(&mesh).is_none());
+        assert_eq!(welded_where_closed(mesh.clone()).indices, mesh.indices);
+    }
+
+    fn triangle_points(mesh: &TriMesh) -> Vec<Point3> {
+        mesh.indices
+            .iter()
+            .map(|index| mesh.positions[*index as usize])
+            .collect()
+    }
+
+    #[test]
+    fn a_box_repeating_its_corners_per_face_is_welded_closed() {
+        let mesh = box_per_face([0.0; 3], [1.0, 2.0, 3.0]);
+        assert!(!audit_mesh(&mesh, tolerance()).is_closed_two_manifold());
+        let welded = welded_where_closed(mesh.clone());
+        assert!(audit_mesh(&welded, tolerance()).is_closed_two_manifold());
+        assert_eq!(welded.positions, mesh.positions);
+        assert_eq!(triangle_points(&welded), triangle_points(&mesh));
+        // A negative zero is the same coordinate.
+        let mut signed = box_per_face([0.0; 3], [1.0; 3]);
+        for point in signed.positions.iter_mut().step_by(5) {
+            if point.x == 0.0 {
+                point.x = -0.0;
+            }
+        }
+        let welded = welded_where_closed(signed);
+        assert!(audit_mesh(&welded, tolerance()).is_closed_two_manifold());
+    }
+
+    /// Only a weld that closes the mesh is kept: a corner off by a rounding
+    /// error, a missing face or a face wound against its neighbours leaves
+    /// the mesh as given.
+    #[test]
+    fn a_weld_that_does_not_close_the_mesh_is_not_kept() {
+        let mut rounded = box_per_face([0.0; 3], [1.0; 3]);
+        rounded.positions[0].x += 1e-12;
+        let mut open = box_per_face([0.0; 3], [1.0; 3]);
+        open.indices.truncate(30);
+        let mut inverted = box_per_face([0.0; 3], [1.0; 3]);
+        inverted.indices[..6].copy_from_slice(&[0, 2, 1, 0, 3, 2]);
+        for mesh in [rounded, open, inverted] {
+            assert_eq!(welded_where_closed(mesh.clone()).indices, mesh.indices);
+        }
+    }
+
+    /// Boxes that repeat their corners per face and touch another box at a
+    /// face or a corner are not welded: that would join two shells into one
+    /// with an edge four triangles use, or a corner two fans meet at. A box
+    /// without its top stays open.
+    #[test]
+    fn a_weld_joining_shells_or_leaving_a_hole_is_not_kept() {
+        let joined = |second: TriMesh| {
+            let first = box_per_face([0.0; 3], [1.0; 3]);
+            let offset = u32::try_from(first.positions.len()).unwrap();
+            let mut positions = first.positions.clone();
+            positions.extend(second.positions.iter().copied());
+            let mut indices = first.indices.clone();
+            indices.extend(second.indices.iter().map(|index| index + offset));
+            TriMesh::new(positions, indices)
+        };
+        let sharing_a_face = joined(box_per_face([1.0, 0.0, 0.0], [2.0, 1.0, 1.0]));
+        let sharing_a_corner = joined(box_per_face([1.0; 3], [2.0; 3]));
+        let mut without_top = box_per_face([0.0; 3], [1.0; 3]);
+        without_top.indices.drain(6..12);
+        for mesh in [sharing_a_face, sharing_a_corner, without_top] {
+            assert_eq!(welded_where_closed(mesh.clone()).indices, mesh.indices);
+        }
+        // Apart, the two boxes are welded, each into its own shell.
+        let apart = joined(box_per_face([3.0; 3], [4.0; 3]));
+        let welded = welded_where_closed(apart.clone());
+        assert_ne!(welded.indices, apart.indices);
+        assert!(audit_mesh(&welded, tolerance()).is_closed_two_manifold());
+    }
+
+    /// Two boxes sharing an edge, each closed by its own indices, stay two
+    /// closed shells: welded, that edge would carry four triangles.
+    #[test]
+    fn closed_items_touching_along_an_edge_are_not_welded() {
+        let first = welded_where_closed(box_per_face([0.0; 3], [1.0; 3]));
+        let second = welded_where_closed(box_per_face([1.0, 1.0, 0.0], [2.0, 2.0, 1.0]));
+        let offset = u32::try_from(first.positions.len()).unwrap();
+        let mut positions = first.positions.clone();
+        positions.extend(second.positions.iter().copied());
+        let mut indices = first.indices.clone();
+        indices.extend(second.indices.iter().map(|index| index + offset));
+        let both = TriMesh::new(positions, indices);
+        assert!(audit_mesh(&both, tolerance()).is_closed_two_manifold());
+        assert_eq!(welded_where_closed(both.clone()).indices, both.indices);
     }
 }

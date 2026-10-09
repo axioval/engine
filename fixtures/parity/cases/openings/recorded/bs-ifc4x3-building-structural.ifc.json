@@ -1176,7 +1176,7 @@
       }
     },
     {
-      "message": "axioval:derived.intersects: neither ifc-step:bs-ifc4x3-building-structural.ifc/#112 nor ifc-step:bs-ifc4x3-building-structural.ifc/#175 is a closed solid, so whether they share volume is undecided",
+      "message": "the opening's body is a `tessellation`, not a straight extrusion",
       "object_id": {
         "local_id": "#175",
         "source": {
@@ -1184,11 +1184,11 @@
           "system": "ifc-step"
         }
       },
-      "reason": "backend_unavailable",
+      "reason": "incomplete_evidence",
       "rule_id": "oz-beams"
     },
     {
-      "message": "axioval:derived.intersects: neither ifc-step:bs-ifc4x3-building-structural.ifc/#147 nor ifc-step:bs-ifc4x3-building-structural.ifc/#197 is a closed solid, so whether they share volume is undecided",
+      "message": "the opening's body is a `tessellation`, not a straight extrusion",
       "object_id": {
         "local_id": "#197",
         "source": {
@@ -1196,11 +1196,35 @@
           "system": "ifc-step"
         }
       },
-      "reason": "backend_unavailable",
+      "reason": "incomplete_evidence",
       "rule_id": "oz-beams"
     },
     {
-      "message": "axioval:derived.intersects: neither ifc-step:bs-ifc4x3-building-structural.ifc/#213 nor ifc-step:bs-ifc4x3-building-structural.ifc/#69 is a closed solid, so whether they share volume is undecided",
+      "message": "the opening's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#197",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "oz-beams"
+    },
+    {
+      "message": "the opening's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#197",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "oz-beams"
+    },
+    {
+      "message": "the opening's body is a `tessellation`, not a straight extrusion",
       "object_id": {
         "local_id": "#213",
         "source": {
@@ -1208,11 +1232,11 @@
           "system": "ifc-step"
         }
       },
-      "reason": "backend_unavailable",
+      "reason": "incomplete_evidence",
       "rule_id": "oz-beams"
     },
     {
-      "message": "axioval:derived.intersects: neither ifc-step:bs-ifc4x3-building-structural.ifc/#147 nor ifc-step:bs-ifc4x3-building-structural.ifc/#229 is a closed solid, so whether they share volume is undecided",
+      "message": "the opening's body is a `tessellation`, not a straight extrusion",
       "object_id": {
         "local_id": "#229",
         "source": {
@@ -1220,11 +1244,23 @@
           "system": "ifc-step"
         }
       },
-      "reason": "backend_unavailable",
+      "reason": "incomplete_evidence",
       "rule_id": "oz-beams"
     },
     {
-      "message": "axioval:derived.intersects: neither ifc-step:bs-ifc4x3-building-structural.ifc/#147 nor ifc-step:bs-ifc4x3-building-structural.ifc/#245 is a closed solid, so whether they share volume is undecided",
+      "message": "the opening's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#229",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "oz-beams"
+    },
+    {
+      "message": "axioval:derived.intersects: whether ifc-step:bs-ifc4x3-building-structural.ifc/#245 and ifc-step:bs-ifc4x3-building-structural.ifc/#69 share volume or only touch is undecided: they meet, the deepest witness reaches 0.000000000 m and the shared volume is not bounded away from rounding",
       "object_id": {
         "local_id": "#245",
         "source": {
@@ -1236,7 +1272,7 @@
       "rule_id": "oz-beams"
     },
     {
-      "message": "axioval:derived.intersects: neither ifc-step:bs-ifc4x3-building-structural.ifc/#147 nor ifc-step:bs-ifc4x3-building-structural.ifc/#261 is a closed solid, so whether they share volume is undecided",
+      "message": "the opening's body is a `tessellation`, not a straight extrusion",
       "object_id": {
         "local_id": "#261",
         "source": {
@@ -1244,7 +1280,31 @@
           "system": "ifc-step"
         }
       },
-      "reason": "backend_unavailable",
+      "reason": "incomplete_evidence",
+      "rule_id": "oz-beams"
+    },
+    {
+      "message": "the opening's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#261",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "oz-beams"
+    },
+    {
+      "message": "the opening's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#261",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
       "rule_id": "oz-beams"
     }
   ],

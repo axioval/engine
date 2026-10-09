@@ -348,6 +348,19 @@ Projected distances reuse the same pieces:
 Points are tested only against closed two-manifold meshes. A pair needs at
 least one of them to report a penetration.
 
+**Repeated corners.** The mesh audit reads a mesh's topology from its
+indices. A face set written for flat shading repeats each corner once per
+face, so its faces share no index and the audit finds every edge open,
+although the faces close up. Positions with equal coordinates are one
+point (`-0.0` and `0.0` included), so the geometry store registers such a
+mesh with them sharing one index when that makes it a closed two-manifold
+(#308); its coordinates and triangles are unchanged. A corner off by a
+rounding error is a different point and keeps the edge open. Items closed
+by their own indices are never merged, and a merge that would join shells
+along an edge (four triangles on it) or at a corner (two fans of
+triangles round it) is not kept, so bodies of touching closed items stay
+shells that are measured one by one (#312).
+
 **Zero-area triangles.** A mesh may hold triangles whose corners lie on one
 line: a warped face's triangulation leaves them, and so does a T-junction
 closed with a sliver. The kernel's triangle primitives refuse such a

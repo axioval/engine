@@ -3713,15 +3713,187 @@
       "evidence": [
         {
           "exact": true,
-          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#108:ifc-step:bs-ifc4-infra-road.ifc/#350",
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#1014:ifc-step:bs-ifc4-infra-road.ifc/#276",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#1014:ifc-step:bs-ifc4-infra-road.ifc/#294",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#1014:ifc-step:bs-ifc4-infra-road.ifc/#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#1014:ifc-step:bs-ifc4-infra-road.ifc/#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#1014:ifc-step:bs-ifc4-infra-road.ifc/#998",
           "source": {
             "document": "bs-ifc4-infra-road.ifc",
             "system": "ifc-step"
           }
         }
       ],
-      "id": "d382502c-c375-559c-b387-68106698ad1a",
-      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#350: the surfaces lie within 0.0000 m of each other, tolerance 0.0000 m; the copies agree in type; whether they differ in volume is unknown",
+      "id": "2d9dd1d7-ab9e-506b-b4a8-2ec7cee93174",
+      "message": "5 clashes: [ifc-step:bs-ifc4-infra-road.ifc/#1014] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#276: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#1014] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#294: penetration 0.0000 m exceeds tolerance 0.0000 m, graded info by its shared volume of 0.000000 to 0.000000 m³; [ifc-step:bs-ifc4-infra-road.ifc/#1014] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#460: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#1014] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#473: penetration 0.0000 m exceeds tolerance 0.0000 m, graded info by its shared volume of 0.000000 to 0.000000 m³; [ifc-step:bs-ifc4-infra-road.ifc/#1014] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#998: separation 0.0000 m below required 0.0100 m",
+      "object_id": {
+        "local_id": "#1014",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#276",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#294",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "info"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#108:ifc-step:bs-ifc4-infra-road.ifc/#131",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#108:ifc-step:bs-ifc4-infra-road.ifc/#188",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#108:ifc-step:bs-ifc4-infra-road.ifc/#276",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#108:ifc-step:bs-ifc4-infra-road.ifc/#294",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#108:ifc-step:bs-ifc4-infra-road.ifc/#323",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#108:ifc-step:bs-ifc4-infra-road.ifc/#350",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#108:ifc-step:bs-ifc4-infra-road.ifc/#363",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#108:ifc-step:bs-ifc4-infra-road.ifc/#398",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#108:ifc-step:bs-ifc4-infra-road.ifc/#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#108:ifc-step:bs-ifc4-infra-road.ifc/#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#108:ifc-step:bs-ifc4-infra-road.ifc/#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "18f68d9b-f5ee-54b0-a253-5a807e638ad8",
+      "message": "11 clashes: [ifc-step:bs-ifc4-infra-road.ifc/#108] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#131: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#108] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#188: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#108] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#276: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#108] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#294: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#108] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#323: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#108] duplicate of ifc-step:bs-ifc4-infra-road.ifc/#350: the surfaces lie within 0.0000 m of each other, tolerance 0.0000 m; the copies agree in type; whether they differ in volume is unknown; [ifc-step:bs-ifc4-infra-road.ifc/#108] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#363: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#108] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#398: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#108] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#460: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#108] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#473: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#108] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#61: separation 0.0000 m below required 0.0100 m",
       "object_id": {
         "local_id": "#108",
         "source": {
@@ -3731,197 +3903,75 @@
       },
       "related": [
         {
+          "local_id": "#131",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#188",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#276",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#294",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#323",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
           "local_id": "#350",
           "source": {
             "document": "bs-ifc4-infra-road.ifc",
             "system": "ifc-step"
           }
-        }
-      ],
-      "rule_id": "clash-subjects",
-      "severity": "info"
-    },
-    {
-      "evidence": [
-        {
-          "exact": true,
-          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#131:ifc-step:bs-ifc4-infra-road.ifc/#363",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "id": "d8f09d5f-6c4d-5fda-8345-22ff9719b3cd",
-      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#363: the surfaces lie within 0.0000 m of each other, tolerance 0.0000 m; the copies agree in type; whether they differ in volume is unknown",
-      "object_id": {
-        "local_id": "#131",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "related": [
+        },
         {
           "local_id": "#363",
           "source": {
             "document": "bs-ifc4-infra-road.ifc",
             "system": "ifc-step"
           }
-        }
-      ],
-      "rule_id": "clash-subjects",
-      "severity": "info"
-    },
-    {
-      "evidence": [
-        {
-          "exact": true,
-          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#188:ifc-step:bs-ifc4-infra-road.ifc/#398",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "id": "a132c34f-f38c-5083-99c2-ecf6f66e55fb",
-      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#398: the surfaces lie within 0.0000 m of each other, tolerance 0.0000 m; the copies agree in type; whether they differ in volume is unknown",
-      "object_id": {
-        "local_id": "#188",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "related": [
+        },
         {
           "local_id": "#398",
           "source": {
             "document": "bs-ifc4-infra-road.ifc",
             "system": "ifc-step"
           }
-        }
-      ],
-      "rule_id": "clash-subjects",
-      "severity": "info"
-    },
-    {
-      "evidence": [
-        {
-          "exact": true,
-          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#207:ifc-step:bs-ifc4-infra-road.ifc/#412",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "id": "a30c3169-148e-5528-aebd-699c99fbd811",
-      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#412: the surfaces lie within 0.0000 m of each other, tolerance 0.0000 m; the copies agree in type; whether they differ in volume is unknown",
-      "object_id": {
-        "local_id": "#207",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "related": [
-        {
-          "local_id": "#412",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "rule_id": "clash-subjects",
-      "severity": "info"
-    },
-    {
-      "evidence": [
-        {
-          "exact": true,
-          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#276:ifc-step:bs-ifc4-infra-road.ifc/#460",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "id": "f98ba66e-f122-59c9-b53e-91a617bc1fc2",
-      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#460: the surfaces lie within 0.0000 m of each other, tolerance 0.0000 m; the copies agree in type; whether they differ in volume is unknown",
-      "object_id": {
-        "local_id": "#276",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "related": [
+        },
         {
           "local_id": "#460",
           "source": {
             "document": "bs-ifc4-infra-road.ifc",
             "system": "ifc-step"
           }
-        }
-      ],
-      "rule_id": "clash-subjects",
-      "severity": "info"
-    },
-    {
-      "evidence": [
-        {
-          "exact": true,
-          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#294:ifc-step:bs-ifc4-infra-road.ifc/#473",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "id": "e3d305e7-7a0b-5a9e-baa6-3a74aa690f90",
-      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#473: the surfaces lie within 0.0000 m of each other, tolerance 0.0000 m; the copies agree in type; whether they differ in volume is unknown",
-      "object_id": {
-        "local_id": "#294",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "related": [
+        },
         {
           "local_id": "#473",
           "source": {
             "document": "bs-ifc4-infra-road.ifc",
             "system": "ifc-step"
           }
-        }
-      ],
-      "rule_id": "clash-subjects",
-      "severity": "info"
-    },
-    {
-      "evidence": [
-        {
-          "exact": true,
-          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#323:ifc-step:bs-ifc4-infra-road.ifc/#61",
-          "source": {
-            "document": "bs-ifc4-infra-road.ifc",
-            "system": "ifc-step"
-          }
-        }
-      ],
-      "id": "bcc5c8c5-51da-591f-a8b3-4cb9f170abb0",
-      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#61: the surfaces lie within 0.0000 m of each other, tolerance 0.0000 m; the copies agree in type; whether they differ in volume is unknown",
-      "object_id": {
-        "local_id": "#323",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "related": [
+        },
         {
           "local_id": "#61",
           "source": {
@@ -3937,6 +3987,1017 @@
       "evidence": [
         {
           "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#131:ifc-step:bs-ifc4-infra-road.ifc/#276",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#131:ifc-step:bs-ifc4-infra-road.ifc/#294",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#131:ifc-step:bs-ifc4-infra-road.ifc/#350",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#131:ifc-step:bs-ifc4-infra-road.ifc/#363",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#131:ifc-step:bs-ifc4-infra-road.ifc/#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#131:ifc-step:bs-ifc4-infra-road.ifc/#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "5887e892-7464-55e6-a58f-fa71e314d4cf",
+      "message": "6 clashes: [ifc-step:bs-ifc4-infra-road.ifc/#131] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#276: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#131] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#294: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#131] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#350: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#131] duplicate of ifc-step:bs-ifc4-infra-road.ifc/#363: the surfaces lie within 0.0000 m of each other, tolerance 0.0000 m; the copies agree in type; whether they differ in volume is unknown; [ifc-step:bs-ifc4-infra-road.ifc/#131] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#460: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#131] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#473: separation 0.0000 m below required 0.0100 m",
+      "object_id": {
+        "local_id": "#131",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#276",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#294",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#350",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#363",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "info"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#188:ifc-step:bs-ifc4-infra-road.ifc/#207",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#188:ifc-step:bs-ifc4-infra-road.ifc/#276",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#188:ifc-step:bs-ifc4-infra-road.ifc/#323",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#188:ifc-step:bs-ifc4-infra-road.ifc/#337",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#188:ifc-step:bs-ifc4-infra-road.ifc/#350",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#188:ifc-step:bs-ifc4-infra-road.ifc/#398",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#188:ifc-step:bs-ifc4-infra-road.ifc/#412",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#188:ifc-step:bs-ifc4-infra-road.ifc/#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#188:ifc-step:bs-ifc4-infra-road.ifc/#560",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#188:ifc-step:bs-ifc4-infra-road.ifc/#578",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#188:ifc-step:bs-ifc4-infra-road.ifc/#596",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#188:ifc-step:bs-ifc4-infra-road.ifc/#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#188:ifc-step:bs-ifc4-infra-road.ifc/#85",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#188:ifc-step:bs-ifc4-infra-road.ifc/#919",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#188:ifc-step:bs-ifc4-infra-road.ifc/#936",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#188:ifc-step:bs-ifc4-infra-road.ifc/#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "689aa40f-7155-50f1-bf51-89d7841cee8e",
+      "message": "16 clashes: [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#207: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#276: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#323: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#337: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#350: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#188] duplicate of ifc-step:bs-ifc4-infra-road.ifc/#398: the surfaces lie within 0.0000 m of each other, tolerance 0.0000 m; the copies agree in type; whether they differ in volume is unknown; [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#412: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#460: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#188] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#560: penetration 0.0000 m exceeds tolerance 0.0000 m, graded error: the most severe grade its shared volume of 0.000000 to 0.720584 m³ may reach; [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#578: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#596: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#61: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#85: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#188] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#919: penetration 0.0000 m exceeds tolerance 0.0000 m, graded info by its shared volume of 0.000000 to 0.000000 m³; [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#936: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#998: separation 0.0000 m below required 0.0100 m",
+      "object_id": {
+        "local_id": "#188",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#207",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#276",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#323",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#337",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#350",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#398",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#412",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#560",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#578",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#596",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#85",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#919",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#936",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#207:ifc-step:bs-ifc4-infra-road.ifc/#323",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#207:ifc-step:bs-ifc4-infra-road.ifc/#337",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#207:ifc-step:bs-ifc4-infra-road.ifc/#398",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#207:ifc-step:bs-ifc4-infra-road.ifc/#412",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#207:ifc-step:bs-ifc4-infra-road.ifc/#560",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#207:ifc-step:bs-ifc4-infra-road.ifc/#596",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#207:ifc-step:bs-ifc4-infra-road.ifc/#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#207:ifc-step:bs-ifc4-infra-road.ifc/#85",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#207:ifc-step:bs-ifc4-infra-road.ifc/#919",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#207:ifc-step:bs-ifc4-infra-road.ifc/#936",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "ef1c8498-8c29-58f7-b8d7-f4acb2bf85a8",
+      "message": "10 clashes: [ifc-step:bs-ifc4-infra-road.ifc/#207] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#323: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#207] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#337: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#207] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#398: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#207] duplicate of ifc-step:bs-ifc4-infra-road.ifc/#412: the surfaces lie within 0.0000 m of each other, tolerance 0.0000 m; the copies agree in type; whether they differ in volume is unknown; [ifc-step:bs-ifc4-infra-road.ifc/#207] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#560: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#207] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#596: penetration 0.0000 m exceeds tolerance 0.0000 m, graded error: the most severe grade its shared volume of 0.000000 to 0.359428 m³ may reach; [ifc-step:bs-ifc4-infra-road.ifc/#207] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#61: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#207] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#85: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#207] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#919: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#207] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#936: penetration 0.0000 m exceeds tolerance 0.0000 m, graded info by its shared volume of 0.000000 to 0.000000 m³",
+      "object_id": {
+        "local_id": "#207",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#323",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#337",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#398",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#412",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#560",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#596",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#85",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#919",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#936",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#276:ifc-step:bs-ifc4-infra-road.ifc/#294",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#276:ifc-step:bs-ifc4-infra-road.ifc/#323",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#276:ifc-step:bs-ifc4-infra-road.ifc/#350",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#276:ifc-step:bs-ifc4-infra-road.ifc/#363",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#276:ifc-step:bs-ifc4-infra-road.ifc/#398",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#276:ifc-step:bs-ifc4-infra-road.ifc/#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#276:ifc-step:bs-ifc4-infra-road.ifc/#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#276:ifc-step:bs-ifc4-infra-road.ifc/#541",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#276:ifc-step:bs-ifc4-infra-road.ifc/#560",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#276:ifc-step:bs-ifc4-infra-road.ifc/#578",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#276:ifc-step:bs-ifc4-infra-road.ifc/#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#276:ifc-step:bs-ifc4-infra-road.ifc/#919",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#276:ifc-step:bs-ifc4-infra-road.ifc/#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "18928688-fb1f-5f4d-9acd-1ac43a693f9c",
+      "message": "13 clashes: [ifc-step:bs-ifc4-infra-road.ifc/#276] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#294: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#276] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#323: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#276] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#350: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#276] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#363: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#276] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#398: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#276] duplicate of ifc-step:bs-ifc4-infra-road.ifc/#460: the surfaces lie within 0.0000 m of each other, tolerance 0.0000 m; the copies agree in type; whether they differ in volume is unknown; [ifc-step:bs-ifc4-infra-road.ifc/#276] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#473: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#276] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#541: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#276] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#560: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#276] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#578: penetration 0.0000 m exceeds tolerance 0.0000 m, graded error: its shared volume is unmeasured, so the most severe grade it may reach; [ifc-step:bs-ifc4-infra-road.ifc/#276] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#61: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#276] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#919: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#276] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#998: penetration 0.0000 m exceeds tolerance 0.0000 m, graded info by its shared volume of 0.000000 to 0.000000 m³",
+      "object_id": {
+        "local_id": "#276",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#294",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#323",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#350",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#363",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#398",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#541",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#560",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#578",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#919",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#294:ifc-step:bs-ifc4-infra-road.ifc/#350",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#294:ifc-step:bs-ifc4-infra-road.ifc/#363",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#294:ifc-step:bs-ifc4-infra-road.ifc/#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#294:ifc-step:bs-ifc4-infra-road.ifc/#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#294:ifc-step:bs-ifc4-infra-road.ifc/#541",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#294:ifc-step:bs-ifc4-infra-road.ifc/#578",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#294:ifc-step:bs-ifc4-infra-road.ifc/#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "df71cbcc-7e4d-5a7e-b8ac-d721395f0de9",
+      "message": "7 clashes: [ifc-step:bs-ifc4-infra-road.ifc/#294] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#350: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#294] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#363: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#294] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#460: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#294] duplicate of ifc-step:bs-ifc4-infra-road.ifc/#473: the surfaces lie within 0.0000 m of each other, tolerance 0.0000 m; the copies agree in type; whether they differ in volume is unknown; [ifc-step:bs-ifc4-infra-road.ifc/#294] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#541: penetration 0.0000 m exceeds tolerance 0.0000 m, graded info by its shared volume of 0.000000 to 0.000000 m³; [ifc-step:bs-ifc4-infra-road.ifc/#294] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#578: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#294] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#998: separation 0.0000 m below required 0.0100 m",
+      "object_id": {
+        "local_id": "#294",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#350",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#363",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#541",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#578",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "info"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#323:ifc-step:bs-ifc4-infra-road.ifc/#337",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#323:ifc-step:bs-ifc4-infra-road.ifc/#350",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#323:ifc-step:bs-ifc4-infra-road.ifc/#398",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#323:ifc-step:bs-ifc4-infra-road.ifc/#412",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#323:ifc-step:bs-ifc4-infra-road.ifc/#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#323:ifc-step:bs-ifc4-infra-road.ifc/#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#323:ifc-step:bs-ifc4-infra-road.ifc/#85",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "e85295cd-ba94-5f8a-a696-813361973673",
+      "message": "7 clashes: [ifc-step:bs-ifc4-infra-road.ifc/#323] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#337: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#323] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#350: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#323] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#398: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#323] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#412: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#323] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#460: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#323] duplicate of ifc-step:bs-ifc4-infra-road.ifc/#61: the surfaces lie within 0.0000 m of each other, tolerance 0.0000 m; the copies agree in type; whether they differ in volume is unknown; [ifc-step:bs-ifc4-infra-road.ifc/#323] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#85: separation 0.0000 m below required 0.0100 m",
+      "object_id": {
+        "local_id": "#323",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#337",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#350",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#398",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#412",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#85",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "info"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#337:ifc-step:bs-ifc4-infra-road.ifc/#398",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#337:ifc-step:bs-ifc4-infra-road.ifc/#412",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#337:ifc-step:bs-ifc4-infra-road.ifc/#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
           "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#337:ifc-step:bs-ifc4-infra-road.ifc/#85",
           "source": {
             "document": "bs-ifc4-infra-road.ifc",
@@ -3944,10 +5005,739 @@
           }
         }
       ],
-      "id": "c2ff0301-12f8-5cf3-8660-f9e911189ab4",
-      "message": "duplicate of ifc-step:bs-ifc4-infra-road.ifc/#85: the surfaces lie within 0.0000 m of each other, tolerance 0.0000 m; the copies agree in type; whether they differ in volume is unknown",
+      "id": "60178103-7c12-5afc-a808-8e46a3272099",
+      "message": "4 clashes: [ifc-step:bs-ifc4-infra-road.ifc/#337] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#398: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#337] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#412: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#337] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#61: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#337] duplicate of ifc-step:bs-ifc4-infra-road.ifc/#85: the surfaces lie within 0.0000 m of each other, tolerance 0.0000 m; the copies agree in type; whether they differ in volume is unknown",
       "object_id": {
         "local_id": "#337",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#398",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#412",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#85",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "info"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#350:ifc-step:bs-ifc4-infra-road.ifc/#363",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#350:ifc-step:bs-ifc4-infra-road.ifc/#398",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#350:ifc-step:bs-ifc4-infra-road.ifc/#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#350:ifc-step:bs-ifc4-infra-road.ifc/#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#350:ifc-step:bs-ifc4-infra-road.ifc/#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "5d99f57d-4dd8-5f8c-b029-e3d6a690bb83",
+      "message": "5 clashes: [ifc-step:bs-ifc4-infra-road.ifc/#350] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#363: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#350] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#398: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#350] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#460: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#350] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#473: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#350] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#61: separation 0.0000 m below required 0.0100 m",
+      "object_id": {
+        "local_id": "#350",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#363",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#398",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "info"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#363:ifc-step:bs-ifc4-infra-road.ifc/#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#363:ifc-step:bs-ifc4-infra-road.ifc/#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "3fb743b2-d1a7-5b70-bf52-f92f88a28962",
+      "message": "2 clashes: [ifc-step:bs-ifc4-infra-road.ifc/#363] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#460: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#363] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#473: separation 0.0000 m below required 0.0100 m",
+      "object_id": {
+        "local_id": "#363",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "info"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#398:ifc-step:bs-ifc4-infra-road.ifc/#412",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#398:ifc-step:bs-ifc4-infra-road.ifc/#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#398:ifc-step:bs-ifc4-infra-road.ifc/#560",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#398:ifc-step:bs-ifc4-infra-road.ifc/#578",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#398:ifc-step:bs-ifc4-infra-road.ifc/#596",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#398:ifc-step:bs-ifc4-infra-road.ifc/#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#398:ifc-step:bs-ifc4-infra-road.ifc/#85",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#398:ifc-step:bs-ifc4-infra-road.ifc/#919",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#398:ifc-step:bs-ifc4-infra-road.ifc/#936",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#398:ifc-step:bs-ifc4-infra-road.ifc/#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "65be377c-2eff-5ed0-ae62-c72f16d536b7",
+      "message": "10 clashes: [ifc-step:bs-ifc4-infra-road.ifc/#398] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#412: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#398] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#460: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#398] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#560: penetration 0.0000 m exceeds tolerance 0.0000 m, graded error: the most severe grade its shared volume of 0.000000 to 0.720584 m³ may reach; [ifc-step:bs-ifc4-infra-road.ifc/#398] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#578: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#398] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#596: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#398] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#61: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#398] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#85: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#398] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#919: penetration 0.0000 m exceeds tolerance 0.0000 m, graded info by its shared volume of 0.000000 to 0.000000 m³; [ifc-step:bs-ifc4-infra-road.ifc/#398] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#936: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#398] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#998: separation 0.0000 m below required 0.0100 m",
+      "object_id": {
+        "local_id": "#398",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#412",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#560",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#578",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#596",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#85",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#919",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#936",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#412:ifc-step:bs-ifc4-infra-road.ifc/#560",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#412:ifc-step:bs-ifc4-infra-road.ifc/#596",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#412:ifc-step:bs-ifc4-infra-road.ifc/#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#412:ifc-step:bs-ifc4-infra-road.ifc/#85",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#412:ifc-step:bs-ifc4-infra-road.ifc/#919",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#412:ifc-step:bs-ifc4-infra-road.ifc/#936",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "52d89b07-0af8-546e-b012-6ab292536313",
+      "message": "6 clashes: [ifc-step:bs-ifc4-infra-road.ifc/#412] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#560: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#412] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#596: penetration 0.0000 m exceeds tolerance 0.0000 m, graded error: the most severe grade its shared volume of 0.000000 to 0.359428 m³ may reach; [ifc-step:bs-ifc4-infra-road.ifc/#412] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#61: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#412] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#85: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#412] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#919: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#412] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#936: penetration 0.0000 m exceeds tolerance 0.0000 m, graded info by its shared volume of 0.000000 to 0.000000 m³",
+      "object_id": {
+        "local_id": "#412",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#560",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#596",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#85",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#919",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#936",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#460:ifc-step:bs-ifc4-infra-road.ifc/#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#460:ifc-step:bs-ifc4-infra-road.ifc/#541",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#460:ifc-step:bs-ifc4-infra-road.ifc/#560",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#460:ifc-step:bs-ifc4-infra-road.ifc/#578",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#460:ifc-step:bs-ifc4-infra-road.ifc/#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#460:ifc-step:bs-ifc4-infra-road.ifc/#919",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#460:ifc-step:bs-ifc4-infra-road.ifc/#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "1f7c749f-6855-5c09-ba46-2cec3061644d",
+      "message": "7 clashes: [ifc-step:bs-ifc4-infra-road.ifc/#460] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#473: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#460] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#541: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#460] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#560: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#460] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#578: penetration 0.0000 m exceeds tolerance 0.0000 m, graded error: its shared volume is unmeasured, so the most severe grade it may reach; [ifc-step:bs-ifc4-infra-road.ifc/#460] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#61: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#460] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#919: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#460] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#998: penetration 0.0000 m exceeds tolerance 0.0000 m, graded info by its shared volume of 0.000000 to 0.000000 m³",
+      "object_id": {
+        "local_id": "#460",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#541",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#560",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#578",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#919",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#473:ifc-step:bs-ifc4-infra-road.ifc/#541",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#473:ifc-step:bs-ifc4-infra-road.ifc/#578",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#473:ifc-step:bs-ifc4-infra-road.ifc/#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "3a2a4f79-92c9-5a3a-9513-fc35b1cffb3d",
+      "message": "3 clashes: [ifc-step:bs-ifc4-infra-road.ifc/#473] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#541: penetration 0.0000 m exceeds tolerance 0.0000 m, graded info by its shared volume of 0.000000 to 0.000000 m³; [ifc-step:bs-ifc4-infra-road.ifc/#473] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#578: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#473] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#998: separation 0.0000 m below required 0.0100 m",
+      "object_id": {
+        "local_id": "#473",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#541",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#578",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "info"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#541:ifc-step:bs-ifc4-infra-road.ifc/#578",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "a8f4c414-dbc2-50c4-ac4a-8dc78b97dc4f",
+      "message": "clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#578: separation 0.0000 m below required 0.0100 m",
+      "object_id": {
+        "local_id": "#541",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#578",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "info"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#560:ifc-step:bs-ifc4-infra-road.ifc/#578",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#560:ifc-step:bs-ifc4-infra-road.ifc/#596",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "a33d40e2-84d6-50ad-ae40-5a68c6189176",
+      "message": "2 clashes: [ifc-step:bs-ifc4-infra-road.ifc/#560] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#578: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#560] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#596: separation 0.0000 m below required 0.0100 m",
+      "object_id": {
+        "local_id": "#560",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#578",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#596",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "info"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#61:ifc-step:bs-ifc4-infra-road.ifc/#85",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "7be0fe6e-cbc2-5bc5-949b-30e2589836d6",
+      "message": "clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#85: separation 0.0000 m below required 0.0100 m",
+      "object_id": {
+        "local_id": "#61",
         "source": {
           "document": "bs-ifc4-infra-road.ifc",
           "system": "ifc-step"
@@ -3964,2925 +5754,398 @@
       ],
       "rule_id": "clash-subjects",
       "severity": "info"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#645:ifc-step:bs-ifc4-infra-road.ifc/#672",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#645:ifc-step:bs-ifc4-infra-road.ifc/#823",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#645:ifc-step:bs-ifc4-infra-road.ifc/#839",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "c70973b6-fdfe-5c00-babc-a21e2107f4b1",
+      "message": "3 clashes: [ifc-step:bs-ifc4-infra-road.ifc/#645] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#672: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#645] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#823: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#645] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#839: penetration 0.0000 m exceeds tolerance 0.0000 m, graded info by its shared volume of 0.000000 to 0.000000 m³",
+      "object_id": {
+        "local_id": "#645",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#672",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#823",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#839",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "info"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#659:ifc-step:bs-ifc4-infra-road.ifc/#672",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#659:ifc-step:bs-ifc4-infra-road.ifc/#685",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#659:ifc-step:bs-ifc4-infra-road.ifc/#744",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#659:ifc-step:bs-ifc4-infra-road.ifc/#761",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#659:ifc-step:bs-ifc4-infra-road.ifc/#823",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "f0f10dc9-7a8e-5bea-a3b0-e61bc5058797",
+      "message": "5 clashes: [ifc-step:bs-ifc4-infra-road.ifc/#659] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#672: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#659] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#685: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#659] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#744: penetration 0.0000 m exceeds tolerance 0.0000 m, graded error: the most severe grade its shared volume of 0.000000 to 0.720584 m³ may reach; [ifc-step:bs-ifc4-infra-road.ifc/#659] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#761: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#659] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#823: separation 0.0000 m below required 0.0100 m",
+      "object_id": {
+        "local_id": "#659",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#672",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#685",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#744",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#761",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#823",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#672:ifc-step:bs-ifc4-infra-road.ifc/#744",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#672:ifc-step:bs-ifc4-infra-road.ifc/#823",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#672:ifc-step:bs-ifc4-infra-road.ifc/#839",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "62c241bb-c0c9-5436-886b-2eab76ce2a5f",
+      "message": "3 clashes: [ifc-step:bs-ifc4-infra-road.ifc/#672] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#744: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#672] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#823: penetration 0.0000 m exceeds tolerance 0.0000 m, graded error: its shared volume is unmeasured, so the most severe grade it may reach; [ifc-step:bs-ifc4-infra-road.ifc/#672] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#839: separation 0.0000 m below required 0.0100 m",
+      "object_id": {
+        "local_id": "#672",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#744",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#823",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#839",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#685:ifc-step:bs-ifc4-infra-road.ifc/#744",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#685:ifc-step:bs-ifc4-infra-road.ifc/#761",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "15779934-5f14-5044-8e8b-22999e3d9293",
+      "message": "2 clashes: [ifc-step:bs-ifc4-infra-road.ifc/#685] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#744: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#685] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#761: penetration 0.0000 m exceeds tolerance 0.0000 m, graded error: the most severe grade its shared volume of 0.000000 to 0.359428 m³ may reach",
+      "object_id": {
+        "local_id": "#685",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#744",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#761",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#744:ifc-step:bs-ifc4-infra-road.ifc/#761",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#744:ifc-step:bs-ifc4-infra-road.ifc/#823",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "2add30a7-b929-56f3-8d55-02bdba114d68",
+      "message": "2 clashes: [ifc-step:bs-ifc4-infra-road.ifc/#744] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#761: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#744] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#823: separation 0.0000 m below required 0.0100 m",
+      "object_id": {
+        "local_id": "#744",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#761",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#823",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "info"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#823:ifc-step:bs-ifc4-infra-road.ifc/#839",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "b96aaecf-b66d-511e-9094-c607b9911a73",
+      "message": "clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#839: separation 0.0000 m below required 0.0100 m",
+      "object_id": {
+        "local_id": "#823",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#839",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "info"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#919:ifc-step:bs-ifc4-infra-road.ifc/#936",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-infra-road.ifc/#919:ifc-step:bs-ifc4-infra-road.ifc/#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "21c6086b-44c4-5eb7-bde6-843b1a1edf15",
+      "message": "2 clashes: [ifc-step:bs-ifc4-infra-road.ifc/#919] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#936: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#919] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#998: separation 0.0000 m below required 0.0100 m",
+      "object_id": {
+        "local_id": "#919",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#936",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "info"
     }
   ],
   "not_evaluated": [
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#276, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#1014",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#294, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#1014",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#460, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#1014",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#473, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#1014",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#998, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#1014",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#131, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#108",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#188, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#108",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#276, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#108",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#294, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#108",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#323, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#108",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#363, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#108",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#398, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#108",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#460, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#108",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#473, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#108",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#61, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#108",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#276, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#131",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#294, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#131",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#350, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#131",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#460, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#131",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#473, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#131",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#207, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#188",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#276, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#188",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#323, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#188",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#337, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#188",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#350, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#188",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#412, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#188",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#460, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#188",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#560, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#188",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#578, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#188",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#61, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#188",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#85, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#188",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#919, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#188",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#936, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#188",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#998, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#188",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#323, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#207",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#337, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#207",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#398, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#207",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#560, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#207",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#596, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#207",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#61, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#207",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#85, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#207",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#919, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#207",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#936, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#207",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#294, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#276",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#323, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#276",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#350, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#276",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#363, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#276",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#398, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#276",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#473, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#276",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#541, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#276",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#578, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#276",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#61, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#276",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#919, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#276",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#998, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#276",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#350, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#294",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#363, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#294",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#460, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#294",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#541, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#294",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#998, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#294",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#337, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#323",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#350, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#323",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#398, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#323",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#412, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#323",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#460, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#323",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#85, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#323",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#398, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#337",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#412, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#337",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#61, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#337",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#363, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#350",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#398, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#350",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#460, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#350",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#473, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#350",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#61, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#350",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#460, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#363",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#473, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#363",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#412, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#398",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#460, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#398",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#560, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#398",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#578, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#398",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#61, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#398",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#85, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#398",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#919, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#398",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#936, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#398",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#998, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#398",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#560, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#412",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#596, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#412",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#61, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#412",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#85, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#412",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#919, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#412",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#936, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#412",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#473, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#460",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#541, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#460",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#578, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#460",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#61, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#460",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#919, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#460",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#998, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#460",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#541, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#473",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#998, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#473",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#578, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#541",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#578, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#560",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#596, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#560",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#85, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#61",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#672, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#645",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#823, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#645",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#839, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#645",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#672, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#659",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#685, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#659",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#744, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#659",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#761, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#659",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#744, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#672",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#823, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#672",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#761, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#685",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#761, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#744",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#823, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#744",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#839, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#823",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#936, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#919",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#998, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#919",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#276, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#1014",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#294, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#1014",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#460, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#1014",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#473, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#1014",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#998, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#1014",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#131, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#108",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#188, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#108",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#276, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#108",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#294, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#108",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#323, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#108",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#363, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#108",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#398, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#108",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#460, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#108",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#473, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#108",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#61, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#108",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#276, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#131",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#294, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#131",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#350, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#131",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#460, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#131",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#473, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#131",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#207, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#188",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#276, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#188",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#323, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#188",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#337, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#188",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#350, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#188",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#412, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#188",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#460, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#188",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#560, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#188",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#578, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#188",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#596, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#188",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#61, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#188",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#85, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#188",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#919, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#188",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#936, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#188",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#998, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#188",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#323, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#207",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#337, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#207",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#398, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#207",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#560, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#207",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#596, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#207",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#61, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#207",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#85, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#207",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#919, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#207",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#936, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#207",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#294, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#276",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#323, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#276",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#350, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#276",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#363, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#276",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#398, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#276",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#473, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#276",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#541, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#276",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#560, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#276",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#578, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#276",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#61, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#276",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#919, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#276",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#998, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#276",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#350, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#294",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#363, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#294",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#460, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#294",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#541, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#294",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#578, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#294",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#998, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#294",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#337, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#323",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#350, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#323",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#398, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#323",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#412, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#323",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#460, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#323",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#85, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#323",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#398, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#337",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#412, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#337",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#61, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#337",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#363, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#350",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#398, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#350",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#460, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#350",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#473, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#350",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#61, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#350",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#460, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#363",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#473, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#363",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#412, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#398",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#460, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#398",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#560, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#398",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#578, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#398",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#596, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#398",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#61, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#398",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#85, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#398",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#919, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#398",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#936, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#398",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#998, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#398",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#560, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#412",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#596, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#412",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#61, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#412",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#85, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#412",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#919, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#412",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#936, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#412",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#473, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#460",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#541, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#460",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#560, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#460",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#578, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#460",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#61, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#460",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#919, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#460",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#998, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#460",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#541, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#473",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#578, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#473",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#998, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#473",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#578, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#541",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#578, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#560",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#596, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#560",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#85, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#61",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#672, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#645",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#823, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#645",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#839, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#645",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#672, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#659",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#685, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#659",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#744, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#659",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#761, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#659",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#823, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#659",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#744, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#672",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#823, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#672",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#839, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#672",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#744, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#685",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#761, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#685",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#761, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#744",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#823, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#744",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#839, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#823",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#936, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#919",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-infra-road.ifc/#998, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#919",
-        "source": {
-          "document": "bs-ifc4-infra-road.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
     {
       "message": "the clash matrix cell cannot be chosen: source `ifc-step:bs-ifc4-infra-road.ifc` declares no discipline, so the clash matrix cannot decide; 26 object(s) of source `ifc-step:bs-ifc4-infra-road.ifc` not evaluated (e.g. #1014, #108, #131, +23 more)",
       "object_id": null,
@@ -6912,14 +6175,14 @@
     {
       "checked": 32,
       "failed": 8,
-      "not_evaluated": 25,
+      "not_evaluated": 0,
       "rule_id": "clash-structure",
       "status": "failed"
     },
     {
       "checked": 32,
-      "failed": 8,
-      "not_evaluated": 25,
+      "failed": 25,
+      "not_evaluated": 0,
       "rule_id": "clash-subjects",
       "status": "failed"
     },

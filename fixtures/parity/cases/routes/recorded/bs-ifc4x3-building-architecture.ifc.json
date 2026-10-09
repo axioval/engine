@@ -313,7 +313,7 @@
   ],
   "not_evaluated": [
     {
-      "message": "no walkability snapshot: walkability unavailable: walkable surface ifc-step:bs-ifc4x3-building-architecture.ifc/#261 is not a closed solid",
+      "message": "no walkability snapshot: walkability unavailable: the underside of walkable surface ifc-step:bs-ifc4x3-building-architecture.ifc/#261 is not one horizontal floor",
       "object_id": {
         "local_id": "#135",
         "source": {
@@ -325,7 +325,7 @@
       "rule_id": "ar-basic"
     },
     {
-      "message": "no walkability snapshot: walkability unavailable: walkable surface ifc-step:bs-ifc4x3-building-architecture.ifc/#261 is not a closed solid",
+      "message": "no walkability snapshot: walkability unavailable: the underside of walkable surface ifc-step:bs-ifc4x3-building-architecture.ifc/#261 is not one horizontal floor",
       "object_id": {
         "local_id": "#85",
         "source": {
@@ -343,7 +343,7 @@
       "rule_id": "ar-invalid"
     },
     {
-      "message": "no walkability snapshot: walkability unavailable: walkable surface ifc-step:bs-ifc4x3-building-architecture.ifc/#116 is not a closed solid",
+      "message": "no walkability snapshot: walkability unavailable: the underside of walkable surface ifc-step:bs-ifc4x3-building-architecture.ifc/#116 is not one horizontal floor",
       "object_id": {
         "local_id": "#135",
         "source": {
@@ -355,7 +355,7 @@
       "rule_id": "ar-passing"
     },
     {
-      "message": "no walkability snapshot: walkability unavailable: walkable surface ifc-step:bs-ifc4x3-building-architecture.ifc/#116 is not a closed solid",
+      "message": "no walkability snapshot: walkability unavailable: the underside of walkable surface ifc-step:bs-ifc4x3-building-architecture.ifc/#116 is not one horizontal floor",
       "object_id": {
         "local_id": "#85",
         "source": {

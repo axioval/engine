@@ -74,6 +74,18 @@ All notable changes are documented here. This project follows Semantic Versionin
   (`;whole-openings:<body>=<opening>+...`, `AxiolidGeometry::
   with_whole_openings`)
   ([#223](https://github.com/axioval/engine/issues/223)).
+- **Geometry**: a mesh whose faces repeat their corners (a face set written
+  for flat shading, each face with its own copies of its corners) is
+  registered with equal corners sharing one index when that makes it a
+  closed two-manifold, so it is measured as the closed solid it is: a clash
+  between two such bodies is decided instead of "neither body is a closed
+  solid", and so are the services that need a closed body (walkable
+  floors, flights, containment). Coordinates and triangles are unchanged;
+  a corner off by a rounding error stays a different point. Items closed
+  by their own indices are never merged, nor shells that a merge would
+  join along an edge or at a corner, so touching items stay shells
+  measured one by one
+  ([#308](https://github.com/axioval/engine/issues/308)).
 - **Geometry**: a free-floor obstacle needs to be closed only in the pieces
   that reach from below the headroom band into it (and the sure core of a
   tessellated one in the pieces standing across its column): a body of a

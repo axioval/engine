@@ -316,10 +316,17 @@ impl AxiolidGeometry {
     /// Registers one object's mesh, asserting every face is planar so the
     /// mesh is the object's exact shape. Curved parts belong in
     /// [`Self::with_tessellated_mesh`].
+    ///
+    /// A mesh whose faces repeat their corners (equal coordinates under
+    /// different indices) and that is a closed two-manifold once equal
+    /// positions are taken as one is registered with them shared, so it is
+    /// measured as the closed solid it is. Its coordinates and triangles are
+    /// unchanged; any other mesh is registered as given.
     #[must_use]
     pub fn with_mesh(mut self, object: ObjectId, mesh: TriMesh) -> Self {
         self.chord_deviations.remove(&object);
-        self.meshes.insert(object, mesh);
+        self.meshes
+            .insert(object, crate::shell::welded_where_closed(mesh));
         self
     }
 
@@ -328,7 +335,8 @@ impl AxiolidGeometry {
     /// `chord_deviation_metres` bounds how far the true surface may lie from
     /// the mesh. Measurements that honour fidelity report such an object as
     /// approximate, never exact. An invalid deviation is kept and refused when
-    /// measured, so it cannot silently become exact.
+    /// measured, so it cannot silently become exact. Repeated corners are
+    /// shared as in [`Self::with_mesh`].
     #[must_use]
     pub fn with_tessellated_mesh(
         mut self,
@@ -338,7 +346,8 @@ impl AxiolidGeometry {
     ) -> Self {
         self.chord_deviations
             .insert(object.clone(), chord_deviation_metres);
-        self.meshes.insert(object, mesh);
+        self.meshes
+            .insert(object, crate::shell::welded_where_closed(mesh));
         self
     }
 

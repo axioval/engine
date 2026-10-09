@@ -2,7 +2,7 @@
   "findings": [],
   "not_evaluated": [
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-building-architecture.ifc/#261 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: a face of ifc-step:bs-ifc4-building-architecture.ifc/#261 slopes at 45°, neither walkable nor steep",
       "object_id": {
         "local_id": "#261",
         "source": {
@@ -14,7 +14,7 @@
       "rule_id": "flight-clearances"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-building-architecture.ifc/#285 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: a face of ifc-step:bs-ifc4-building-architecture.ifc/#285 slopes at 45°, neither walkable nor steep",
       "object_id": {
         "local_id": "#285",
         "source": {
@@ -38,7 +38,7 @@
       "rule_id": "flight-clearances"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-building-architecture.ifc/#261 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: a face of ifc-step:bs-ifc4-building-architecture.ifc/#261 slopes at 45°, neither walkable nor steep",
       "object_id": {
         "local_id": "#261",
         "source": {
@@ -50,7 +50,7 @@
       "rule_id": "flight-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-building-architecture.ifc/#285 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: a face of ifc-step:bs-ifc4-building-architecture.ifc/#285 slopes at 45°, neither walkable nor steep",
       "object_id": {
         "local_id": "#285",
         "source": {
@@ -74,7 +74,7 @@
       "rule_id": "flight-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-building-architecture.ifc/#261 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: a face of ifc-step:bs-ifc4-building-architecture.ifc/#261 slopes at 45°, neither walkable nor steep",
       "object_id": {
         "local_id": "#261",
         "source": {
@@ -86,7 +86,7 @@
       "rule_id": "flight-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-building-architecture.ifc/#285 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: a face of ifc-step:bs-ifc4-building-architecture.ifc/#285 slopes at 45°, neither walkable nor steep",
       "object_id": {
         "local_id": "#285",
         "source": {
@@ -110,7 +110,7 @@
       "rule_id": "flight-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-building-architecture.ifc/#261 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: a face of ifc-step:bs-ifc4-building-architecture.ifc/#261 slopes at 45°, neither walkable nor steep",
       "object_id": {
         "local_id": "#261",
         "source": {
@@ -122,7 +122,7 @@
       "rule_id": "flight-steps"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-building-architecture.ifc/#285 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: a face of ifc-step:bs-ifc4-building-architecture.ifc/#285 slopes at 45°, neither walkable nor steep",
       "object_id": {
         "local_id": "#285",
         "source": {
@@ -146,7 +146,7 @@
       "rule_id": "flight-steps"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-building-architecture.ifc/#261 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: a face of ifc-step:bs-ifc4-building-architecture.ifc/#261 slopes at 45°, neither walkable nor steep",
       "object_id": {
         "local_id": "#261",
         "source": {
@@ -158,7 +158,7 @@
       "rule_id": "ramp-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-building-architecture.ifc/#285 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: a face of ifc-step:bs-ifc4-building-architecture.ifc/#285 slopes at 45°, neither walkable nor steep",
       "object_id": {
         "local_id": "#285",
         "source": {
@@ -182,7 +182,7 @@
       "rule_id": "ramp-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-building-architecture.ifc/#261 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: a face of ifc-step:bs-ifc4-building-architecture.ifc/#261 slopes at 45°, neither walkable nor steep",
       "object_id": {
         "local_id": "#261",
         "source": {
@@ -194,7 +194,7 @@
       "rule_id": "ramp-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-building-architecture.ifc/#285 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: a face of ifc-step:bs-ifc4-building-architecture.ifc/#285 slopes at 45°, neither walkable nor steep",
       "object_id": {
         "local_id": "#285",
         "source": {
@@ -218,7 +218,7 @@
       "rule_id": "ramp-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-building-architecture.ifc/#261 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: a face of ifc-step:bs-ifc4-building-architecture.ifc/#261 slopes at 45°, neither walkable nor steep",
       "object_id": {
         "local_id": "#261",
         "source": {
@@ -230,7 +230,7 @@
       "rule_id": "ramp-slopes"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-building-architecture.ifc/#285 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: a face of ifc-step:bs-ifc4-building-architecture.ifc/#285 slopes at 45°, neither walkable nor steep",
       "object_id": {
         "local_id": "#285",
         "source": {

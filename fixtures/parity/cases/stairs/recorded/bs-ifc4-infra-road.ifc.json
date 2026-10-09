@@ -2,7 +2,7 @@
   "findings": [],
   "not_evaluated": [
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#1014 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#1014 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#1014",
         "source": {
@@ -14,7 +14,7 @@
       "rule_id": "flight-clearances"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#108 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#108 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#108",
         "source": {
@@ -26,7 +26,7 @@
       "rule_id": "flight-clearances"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#131 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#131 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#131",
         "source": {
@@ -38,7 +38,7 @@
       "rule_id": "flight-clearances"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#188 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#188 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#188",
         "source": {
@@ -50,7 +50,7 @@
       "rule_id": "flight-clearances"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#207 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#207 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#207",
         "source": {
@@ -62,7 +62,7 @@
       "rule_id": "flight-clearances"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#276 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#276 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#276",
         "source": {
@@ -74,7 +74,7 @@
       "rule_id": "flight-clearances"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#294 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#294 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#294",
         "source": {
@@ -86,7 +86,7 @@
       "rule_id": "flight-clearances"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#323 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#323 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#323",
         "source": {
@@ -98,7 +98,7 @@
       "rule_id": "flight-clearances"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#337 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#337 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#337",
         "source": {
@@ -110,7 +110,7 @@
       "rule_id": "flight-clearances"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#350 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#350 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#350",
         "source": {
@@ -122,7 +122,7 @@
       "rule_id": "flight-clearances"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#363 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#363 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#363",
         "source": {
@@ -134,7 +134,7 @@
       "rule_id": "flight-clearances"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#398 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#398 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#398",
         "source": {
@@ -146,7 +146,7 @@
       "rule_id": "flight-clearances"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#412 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#412 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#412",
         "source": {
@@ -158,7 +158,7 @@
       "rule_id": "flight-clearances"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#460 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#460 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#460",
         "source": {
@@ -170,7 +170,7 @@
       "rule_id": "flight-clearances"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#473 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#473 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#473",
         "source": {
@@ -182,7 +182,7 @@
       "rule_id": "flight-clearances"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#541 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#541 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#541",
         "source": {
@@ -194,7 +194,7 @@
       "rule_id": "flight-clearances"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#560 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#560 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#560",
         "source": {
@@ -218,7 +218,7 @@
       "rule_id": "flight-clearances"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#596 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#596 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#596",
         "source": {
@@ -230,7 +230,7 @@
       "rule_id": "flight-clearances"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#61 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#61 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#61",
         "source": {
@@ -242,7 +242,7 @@
       "rule_id": "flight-clearances"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#645 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#645 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#645",
         "source": {
@@ -254,7 +254,7 @@
       "rule_id": "flight-clearances"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#659 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#659 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#659",
         "source": {
@@ -278,7 +278,7 @@
       "rule_id": "flight-clearances"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#685 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#685 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#685",
         "source": {
@@ -290,7 +290,7 @@
       "rule_id": "flight-clearances"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#744 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#744 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#744",
         "source": {
@@ -302,7 +302,7 @@
       "rule_id": "flight-clearances"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#761 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#761 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#761",
         "source": {
@@ -314,7 +314,7 @@
       "rule_id": "flight-clearances"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#823 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#823 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#823",
         "source": {
@@ -326,7 +326,7 @@
       "rule_id": "flight-clearances"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#839 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#839 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#839",
         "source": {
@@ -338,7 +338,7 @@
       "rule_id": "flight-clearances"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#85 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#85 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#85",
         "source": {
@@ -350,7 +350,7 @@
       "rule_id": "flight-clearances"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#919 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#919 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#919",
         "source": {
@@ -362,7 +362,7 @@
       "rule_id": "flight-clearances"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#936 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#936 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#936",
         "source": {
@@ -374,7 +374,7 @@
       "rule_id": "flight-clearances"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#998 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#998 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#998",
         "source": {
@@ -386,7 +386,7 @@
       "rule_id": "flight-clearances"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#1014 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#1014 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#1014",
         "source": {
@@ -398,7 +398,7 @@
       "rule_id": "flight-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#108 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#108 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#108",
         "source": {
@@ -410,7 +410,7 @@
       "rule_id": "flight-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#131 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#131 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#131",
         "source": {
@@ -422,7 +422,7 @@
       "rule_id": "flight-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#188 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#188 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#188",
         "source": {
@@ -434,7 +434,7 @@
       "rule_id": "flight-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#207 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#207 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#207",
         "source": {
@@ -446,7 +446,7 @@
       "rule_id": "flight-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#276 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#276 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#276",
         "source": {
@@ -458,7 +458,7 @@
       "rule_id": "flight-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#294 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#294 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#294",
         "source": {
@@ -470,7 +470,7 @@
       "rule_id": "flight-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#323 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#323 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#323",
         "source": {
@@ -482,7 +482,7 @@
       "rule_id": "flight-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#337 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#337 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#337",
         "source": {
@@ -494,7 +494,7 @@
       "rule_id": "flight-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#350 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#350 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#350",
         "source": {
@@ -506,7 +506,7 @@
       "rule_id": "flight-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#363 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#363 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#363",
         "source": {
@@ -518,7 +518,7 @@
       "rule_id": "flight-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#398 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#398 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#398",
         "source": {
@@ -530,7 +530,7 @@
       "rule_id": "flight-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#412 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#412 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#412",
         "source": {
@@ -542,7 +542,7 @@
       "rule_id": "flight-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#460 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#460 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#460",
         "source": {
@@ -554,7 +554,7 @@
       "rule_id": "flight-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#473 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#473 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#473",
         "source": {
@@ -566,7 +566,7 @@
       "rule_id": "flight-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#541 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#541 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#541",
         "source": {
@@ -578,7 +578,7 @@
       "rule_id": "flight-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#560 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#560 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#560",
         "source": {
@@ -602,7 +602,7 @@
       "rule_id": "flight-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#596 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#596 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#596",
         "source": {
@@ -614,7 +614,7 @@
       "rule_id": "flight-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#61 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#61 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#61",
         "source": {
@@ -626,7 +626,7 @@
       "rule_id": "flight-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#645 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#645 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#645",
         "source": {
@@ -638,7 +638,7 @@
       "rule_id": "flight-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#659 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#659 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#659",
         "source": {
@@ -662,7 +662,7 @@
       "rule_id": "flight-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#685 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#685 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#685",
         "source": {
@@ -674,7 +674,7 @@
       "rule_id": "flight-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#744 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#744 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#744",
         "source": {
@@ -686,7 +686,7 @@
       "rule_id": "flight-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#761 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#761 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#761",
         "source": {
@@ -698,7 +698,7 @@
       "rule_id": "flight-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#823 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#823 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#823",
         "source": {
@@ -710,7 +710,7 @@
       "rule_id": "flight-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#839 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#839 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#839",
         "source": {
@@ -722,7 +722,7 @@
       "rule_id": "flight-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#85 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#85 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#85",
         "source": {
@@ -734,7 +734,7 @@
       "rule_id": "flight-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#919 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#919 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#919",
         "source": {
@@ -746,7 +746,7 @@
       "rule_id": "flight-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#936 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#936 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#936",
         "source": {
@@ -758,7 +758,7 @@
       "rule_id": "flight-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#998 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#998 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#998",
         "source": {
@@ -770,7 +770,7 @@
       "rule_id": "flight-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#1014 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#1014 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#1014",
         "source": {
@@ -782,7 +782,7 @@
       "rule_id": "flight-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#108 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#108 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#108",
         "source": {
@@ -794,7 +794,7 @@
       "rule_id": "flight-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#131 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#131 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#131",
         "source": {
@@ -806,7 +806,7 @@
       "rule_id": "flight-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#188 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#188 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#188",
         "source": {
@@ -818,7 +818,7 @@
       "rule_id": "flight-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#207 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#207 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#207",
         "source": {
@@ -830,7 +830,7 @@
       "rule_id": "flight-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#276 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#276 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#276",
         "source": {
@@ -842,7 +842,7 @@
       "rule_id": "flight-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#294 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#294 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#294",
         "source": {
@@ -854,7 +854,7 @@
       "rule_id": "flight-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#323 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#323 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#323",
         "source": {
@@ -866,7 +866,7 @@
       "rule_id": "flight-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#337 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#337 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#337",
         "source": {
@@ -878,7 +878,7 @@
       "rule_id": "flight-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#350 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#350 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#350",
         "source": {
@@ -890,7 +890,7 @@
       "rule_id": "flight-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#363 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#363 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#363",
         "source": {
@@ -902,7 +902,7 @@
       "rule_id": "flight-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#398 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#398 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#398",
         "source": {
@@ -914,7 +914,7 @@
       "rule_id": "flight-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#412 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#412 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#412",
         "source": {
@@ -926,7 +926,7 @@
       "rule_id": "flight-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#460 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#460 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#460",
         "source": {
@@ -938,7 +938,7 @@
       "rule_id": "flight-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#473 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#473 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#473",
         "source": {
@@ -950,7 +950,7 @@
       "rule_id": "flight-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#541 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#541 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#541",
         "source": {
@@ -962,7 +962,7 @@
       "rule_id": "flight-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#560 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#560 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#560",
         "source": {
@@ -986,7 +986,7 @@
       "rule_id": "flight-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#596 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#596 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#596",
         "source": {
@@ -998,7 +998,7 @@
       "rule_id": "flight-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#61 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#61 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#61",
         "source": {
@@ -1010,7 +1010,7 @@
       "rule_id": "flight-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#645 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#645 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#645",
         "source": {
@@ -1022,7 +1022,7 @@
       "rule_id": "flight-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#659 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#659 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#659",
         "source": {
@@ -1046,7 +1046,7 @@
       "rule_id": "flight-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#685 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#685 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#685",
         "source": {
@@ -1058,7 +1058,7 @@
       "rule_id": "flight-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#744 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#744 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#744",
         "source": {
@@ -1070,7 +1070,7 @@
       "rule_id": "flight-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#761 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#761 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#761",
         "source": {
@@ -1082,7 +1082,7 @@
       "rule_id": "flight-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#823 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#823 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#823",
         "source": {
@@ -1094,7 +1094,7 @@
       "rule_id": "flight-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#839 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#839 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#839",
         "source": {
@@ -1106,7 +1106,7 @@
       "rule_id": "flight-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#85 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#85 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#85",
         "source": {
@@ -1118,7 +1118,7 @@
       "rule_id": "flight-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#919 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#919 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#919",
         "source": {
@@ -1130,7 +1130,7 @@
       "rule_id": "flight-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#936 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#936 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#936",
         "source": {
@@ -1142,7 +1142,7 @@
       "rule_id": "flight-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#998 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#998 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#998",
         "source": {
@@ -1154,7 +1154,7 @@
       "rule_id": "flight-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#1014 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#1014 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#1014",
         "source": {
@@ -1166,7 +1166,7 @@
       "rule_id": "flight-steps"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#108 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#108 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#108",
         "source": {
@@ -1178,7 +1178,7 @@
       "rule_id": "flight-steps"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#131 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#131 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#131",
         "source": {
@@ -1190,7 +1190,7 @@
       "rule_id": "flight-steps"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#188 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#188 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#188",
         "source": {
@@ -1202,7 +1202,7 @@
       "rule_id": "flight-steps"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#207 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#207 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#207",
         "source": {
@@ -1214,7 +1214,7 @@
       "rule_id": "flight-steps"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#276 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#276 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#276",
         "source": {
@@ -1226,7 +1226,7 @@
       "rule_id": "flight-steps"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#294 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#294 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#294",
         "source": {
@@ -1238,7 +1238,7 @@
       "rule_id": "flight-steps"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#323 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#323 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#323",
         "source": {
@@ -1250,7 +1250,7 @@
       "rule_id": "flight-steps"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#337 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#337 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#337",
         "source": {
@@ -1262,7 +1262,7 @@
       "rule_id": "flight-steps"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#350 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#350 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#350",
         "source": {
@@ -1274,7 +1274,7 @@
       "rule_id": "flight-steps"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#363 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#363 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#363",
         "source": {
@@ -1286,7 +1286,7 @@
       "rule_id": "flight-steps"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#398 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#398 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#398",
         "source": {
@@ -1298,7 +1298,7 @@
       "rule_id": "flight-steps"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#412 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#412 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#412",
         "source": {
@@ -1310,7 +1310,7 @@
       "rule_id": "flight-steps"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#460 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#460 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#460",
         "source": {
@@ -1322,7 +1322,7 @@
       "rule_id": "flight-steps"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#473 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#473 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#473",
         "source": {
@@ -1334,7 +1334,7 @@
       "rule_id": "flight-steps"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#541 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#541 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#541",
         "source": {
@@ -1346,7 +1346,7 @@
       "rule_id": "flight-steps"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#560 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#560 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#560",
         "source": {
@@ -1370,7 +1370,7 @@
       "rule_id": "flight-steps"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#596 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#596 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#596",
         "source": {
@@ -1382,7 +1382,7 @@
       "rule_id": "flight-steps"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#61 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#61 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#61",
         "source": {
@@ -1394,7 +1394,7 @@
       "rule_id": "flight-steps"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#645 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#645 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#645",
         "source": {
@@ -1406,7 +1406,7 @@
       "rule_id": "flight-steps"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#659 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#659 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#659",
         "source": {
@@ -1430,7 +1430,7 @@
       "rule_id": "flight-steps"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#685 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#685 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#685",
         "source": {
@@ -1442,7 +1442,7 @@
       "rule_id": "flight-steps"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#744 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#744 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#744",
         "source": {
@@ -1454,7 +1454,7 @@
       "rule_id": "flight-steps"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#761 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#761 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#761",
         "source": {
@@ -1466,7 +1466,7 @@
       "rule_id": "flight-steps"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#823 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#823 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#823",
         "source": {
@@ -1478,7 +1478,7 @@
       "rule_id": "flight-steps"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#839 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#839 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#839",
         "source": {
@@ -1490,7 +1490,7 @@
       "rule_id": "flight-steps"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#85 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#85 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#85",
         "source": {
@@ -1502,7 +1502,7 @@
       "rule_id": "flight-steps"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#919 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#919 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#919",
         "source": {
@@ -1514,7 +1514,7 @@
       "rule_id": "flight-steps"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#936 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#936 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#936",
         "source": {
@@ -1526,7 +1526,7 @@
       "rule_id": "flight-steps"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#998 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#998 has a single tread, which gives no walking direction",
       "object_id": {
         "local_id": "#998",
         "source": {
@@ -1538,7 +1538,7 @@
       "rule_id": "flight-steps"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#1014 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#1014 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#1014",
         "source": {
@@ -1550,7 +1550,7 @@
       "rule_id": "ramp-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#108 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#108 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#108",
         "source": {
@@ -1562,7 +1562,7 @@
       "rule_id": "ramp-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#131 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#131 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#131",
         "source": {
@@ -1574,7 +1574,7 @@
       "rule_id": "ramp-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#188 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#188 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#188",
         "source": {
@@ -1586,7 +1586,7 @@
       "rule_id": "ramp-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#207 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#207 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#207",
         "source": {
@@ -1598,7 +1598,7 @@
       "rule_id": "ramp-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#276 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#276 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#276",
         "source": {
@@ -1610,7 +1610,7 @@
       "rule_id": "ramp-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#294 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#294 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#294",
         "source": {
@@ -1622,7 +1622,7 @@
       "rule_id": "ramp-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#323 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#323 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#323",
         "source": {
@@ -1634,7 +1634,7 @@
       "rule_id": "ramp-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#337 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#337 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#337",
         "source": {
@@ -1646,7 +1646,7 @@
       "rule_id": "ramp-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#350 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#350 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#350",
         "source": {
@@ -1658,7 +1658,7 @@
       "rule_id": "ramp-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#363 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#363 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#363",
         "source": {
@@ -1670,7 +1670,7 @@
       "rule_id": "ramp-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#398 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#398 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#398",
         "source": {
@@ -1682,7 +1682,7 @@
       "rule_id": "ramp-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#412 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#412 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#412",
         "source": {
@@ -1694,7 +1694,7 @@
       "rule_id": "ramp-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#460 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#460 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#460",
         "source": {
@@ -1706,7 +1706,7 @@
       "rule_id": "ramp-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#473 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#473 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#473",
         "source": {
@@ -1718,7 +1718,7 @@
       "rule_id": "ramp-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#541 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#541 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#541",
         "source": {
@@ -1730,7 +1730,7 @@
       "rule_id": "ramp-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#560 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#560 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#560",
         "source": {
@@ -1754,7 +1754,7 @@
       "rule_id": "ramp-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#596 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#596 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#596",
         "source": {
@@ -1766,7 +1766,7 @@
       "rule_id": "ramp-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#61 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#61 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#61",
         "source": {
@@ -1778,7 +1778,7 @@
       "rule_id": "ramp-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#645 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#645 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#645",
         "source": {
@@ -1790,7 +1790,7 @@
       "rule_id": "ramp-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#659 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#659 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#659",
         "source": {
@@ -1814,7 +1814,7 @@
       "rule_id": "ramp-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#685 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#685 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#685",
         "source": {
@@ -1826,7 +1826,7 @@
       "rule_id": "ramp-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#744 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#744 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#744",
         "source": {
@@ -1838,7 +1838,7 @@
       "rule_id": "ramp-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#761 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#761 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#761",
         "source": {
@@ -1850,7 +1850,7 @@
       "rule_id": "ramp-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#823 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#823 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#823",
         "source": {
@@ -1862,7 +1862,7 @@
       "rule_id": "ramp-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#839 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#839 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#839",
         "source": {
@@ -1874,7 +1874,7 @@
       "rule_id": "ramp-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#85 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#85 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#85",
         "source": {
@@ -1886,7 +1886,7 @@
       "rule_id": "ramp-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#919 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#919 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#919",
         "source": {
@@ -1898,7 +1898,7 @@
       "rule_id": "ramp-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#936 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#936 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#936",
         "source": {
@@ -1910,7 +1910,7 @@
       "rule_id": "ramp-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#998 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#998 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#998",
         "source": {
@@ -1922,7 +1922,7 @@
       "rule_id": "ramp-handrails"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#1014 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#1014 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#1014",
         "source": {
@@ -1934,7 +1934,7 @@
       "rule_id": "ramp-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#108 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#108 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#108",
         "source": {
@@ -1946,7 +1946,7 @@
       "rule_id": "ramp-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#131 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#131 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#131",
         "source": {
@@ -1958,7 +1958,7 @@
       "rule_id": "ramp-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#188 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#188 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#188",
         "source": {
@@ -1970,7 +1970,7 @@
       "rule_id": "ramp-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#207 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#207 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#207",
         "source": {
@@ -1982,7 +1982,7 @@
       "rule_id": "ramp-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#276 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#276 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#276",
         "source": {
@@ -1994,7 +1994,7 @@
       "rule_id": "ramp-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#294 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#294 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#294",
         "source": {
@@ -2006,7 +2006,7 @@
       "rule_id": "ramp-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#323 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#323 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#323",
         "source": {
@@ -2018,7 +2018,7 @@
       "rule_id": "ramp-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#337 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#337 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#337",
         "source": {
@@ -2030,7 +2030,7 @@
       "rule_id": "ramp-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#350 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#350 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#350",
         "source": {
@@ -2042,7 +2042,7 @@
       "rule_id": "ramp-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#363 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#363 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#363",
         "source": {
@@ -2054,7 +2054,7 @@
       "rule_id": "ramp-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#398 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#398 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#398",
         "source": {
@@ -2066,7 +2066,7 @@
       "rule_id": "ramp-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#412 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#412 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#412",
         "source": {
@@ -2078,7 +2078,7 @@
       "rule_id": "ramp-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#460 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#460 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#460",
         "source": {
@@ -2090,7 +2090,7 @@
       "rule_id": "ramp-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#473 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#473 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#473",
         "source": {
@@ -2102,7 +2102,7 @@
       "rule_id": "ramp-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#541 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#541 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#541",
         "source": {
@@ -2114,7 +2114,7 @@
       "rule_id": "ramp-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#560 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#560 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#560",
         "source": {
@@ -2138,7 +2138,7 @@
       "rule_id": "ramp-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#596 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#596 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#596",
         "source": {
@@ -2150,7 +2150,7 @@
       "rule_id": "ramp-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#61 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#61 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#61",
         "source": {
@@ -2162,7 +2162,7 @@
       "rule_id": "ramp-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#645 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#645 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#645",
         "source": {
@@ -2174,7 +2174,7 @@
       "rule_id": "ramp-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#659 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#659 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#659",
         "source": {
@@ -2198,7 +2198,7 @@
       "rule_id": "ramp-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#685 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#685 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#685",
         "source": {
@@ -2210,7 +2210,7 @@
       "rule_id": "ramp-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#744 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#744 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#744",
         "source": {
@@ -2222,7 +2222,7 @@
       "rule_id": "ramp-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#761 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#761 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#761",
         "source": {
@@ -2234,7 +2234,7 @@
       "rule_id": "ramp-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#823 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#823 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#823",
         "source": {
@@ -2246,7 +2246,7 @@
       "rule_id": "ramp-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#839 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#839 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#839",
         "source": {
@@ -2258,7 +2258,7 @@
       "rule_id": "ramp-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#85 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#85 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#85",
         "source": {
@@ -2270,7 +2270,7 @@
       "rule_id": "ramp-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#919 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#919 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#919",
         "source": {
@@ -2282,7 +2282,7 @@
       "rule_id": "ramp-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#936 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#936 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#936",
         "source": {
@@ -2294,7 +2294,7 @@
       "rule_id": "ramp-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#998 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#998 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#998",
         "source": {
@@ -2306,7 +2306,7 @@
       "rule_id": "ramp-landings"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#1014 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#1014 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#1014",
         "source": {
@@ -2318,7 +2318,7 @@
       "rule_id": "ramp-slopes"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#108 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#108 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#108",
         "source": {
@@ -2330,7 +2330,7 @@
       "rule_id": "ramp-slopes"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#131 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#131 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#131",
         "source": {
@@ -2342,7 +2342,7 @@
       "rule_id": "ramp-slopes"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#188 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#188 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#188",
         "source": {
@@ -2354,7 +2354,7 @@
       "rule_id": "ramp-slopes"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#207 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#207 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#207",
         "source": {
@@ -2366,7 +2366,7 @@
       "rule_id": "ramp-slopes"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#276 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#276 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#276",
         "source": {
@@ -2378,7 +2378,7 @@
       "rule_id": "ramp-slopes"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#294 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#294 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#294",
         "source": {
@@ -2390,7 +2390,7 @@
       "rule_id": "ramp-slopes"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#323 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#323 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#323",
         "source": {
@@ -2402,7 +2402,7 @@
       "rule_id": "ramp-slopes"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#337 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#337 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#337",
         "source": {
@@ -2414,7 +2414,7 @@
       "rule_id": "ramp-slopes"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#350 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#350 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#350",
         "source": {
@@ -2426,7 +2426,7 @@
       "rule_id": "ramp-slopes"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#363 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#363 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#363",
         "source": {
@@ -2438,7 +2438,7 @@
       "rule_id": "ramp-slopes"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#398 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#398 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#398",
         "source": {
@@ -2450,7 +2450,7 @@
       "rule_id": "ramp-slopes"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#412 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#412 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#412",
         "source": {
@@ -2462,7 +2462,7 @@
       "rule_id": "ramp-slopes"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#460 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#460 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#460",
         "source": {
@@ -2474,7 +2474,7 @@
       "rule_id": "ramp-slopes"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#473 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#473 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#473",
         "source": {
@@ -2486,7 +2486,7 @@
       "rule_id": "ramp-slopes"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#541 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#541 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#541",
         "source": {
@@ -2498,7 +2498,7 @@
       "rule_id": "ramp-slopes"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#560 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#560 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#560",
         "source": {
@@ -2522,7 +2522,7 @@
       "rule_id": "ramp-slopes"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#596 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#596 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#596",
         "source": {
@@ -2534,7 +2534,7 @@
       "rule_id": "ramp-slopes"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#61 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#61 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#61",
         "source": {
@@ -2546,7 +2546,7 @@
       "rule_id": "ramp-slopes"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#645 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#645 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#645",
         "source": {
@@ -2558,7 +2558,7 @@
       "rule_id": "ramp-slopes"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#659 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#659 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#659",
         "source": {
@@ -2582,7 +2582,7 @@
       "rule_id": "ramp-slopes"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#685 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#685 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#685",
         "source": {
@@ -2594,7 +2594,7 @@
       "rule_id": "ramp-slopes"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#744 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#744 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#744",
         "source": {
@@ -2606,7 +2606,7 @@
       "rule_id": "ramp-slopes"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#761 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#761 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#761",
         "source": {
@@ -2618,7 +2618,7 @@
       "rule_id": "ramp-slopes"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#823 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#823 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#823",
         "source": {
@@ -2630,7 +2630,7 @@
       "rule_id": "ramp-slopes"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#839 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#839 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#839",
         "source": {
@@ -2642,7 +2642,7 @@
       "rule_id": "ramp-slopes"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#85 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#85 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#85",
         "source": {
@@ -2654,7 +2654,7 @@
       "rule_id": "ramp-slopes"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#919 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#919 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#919",
         "source": {
@@ -2666,7 +2666,7 @@
       "rule_id": "ramp-slopes"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#936 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#936 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#936",
         "source": {
@@ -2678,7 +2678,7 @@
       "rule_id": "ramp-slopes"
     },
     {
-      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#998 is not a closed surface, so which faces look up is unknown",
+      "message": "walking surface unsupported: ifc-step:bs-ifc4-infra-road.ifc/#998 has no sloped face looking up, so no ramp run",
       "object_id": {
         "local_id": "#998",
         "source": {

@@ -4,6 +4,320 @@
       "evidence": [
         {
           "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-building-architecture.ifc/#116:ifc-step:bs-ifc4-building-architecture.ifc/#228",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "015a2474-68ae-598b-b224-a2e1b4cd63b8",
+      "message": "clearance clash with ifc-step:bs-ifc4-building-architecture.ifc/#228: separation 0.0000 m below required 0.0500 m",
+      "object_id": {
+        "local_id": "#116",
+        "source": {
+          "document": "bs-ifc4-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#228",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-clearance",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-building-architecture.ifc/#116:ifc-step:bs-ifc4-building-architecture.ifc/#53",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "247c527d-a8ba-5b61-aeca-dfb7cdff3c67",
+      "message": "clearance clash with ifc-step:bs-ifc4-building-architecture.ifc/#53: separation 0.0000 m below required 0.0500 m",
+      "object_id": {
+        "local_id": "#116",
+        "source": {
+          "document": "bs-ifc4-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#53",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-clearance",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-building-architecture.ifc/#261:ifc-step:bs-ifc4-building-architecture.ifc/#201",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-building-architecture.ifc/#261:ifc-step:bs-ifc4-building-architecture.ifc/#285",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "b1070b51-da14-511b-99d0-ac0b9220a8ca",
+      "message": "2 clashes: [ifc-step:bs-ifc4-building-architecture.ifc/#261] clearance clash with ifc-step:bs-ifc4-building-architecture.ifc/#201: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-building-architecture.ifc/#261] clearance clash with ifc-step:bs-ifc4-building-architecture.ifc/#285: separation 0.0000 m below required 0.0100 m",
+      "object_id": {
+        "local_id": "#261",
+        "source": {
+          "document": "bs-ifc4-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#201",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#285",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "info"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-building-architecture.ifc/#285:ifc-step:bs-ifc4-building-architecture.ifc/#158",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-building-architecture.ifc/#285:ifc-step:bs-ifc4-building-architecture.ifc/#182",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-building-architecture.ifc/#285:ifc-step:bs-ifc4-building-architecture.ifc/#228",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "7a7b7a78-2b4b-544c-ba53-b35ca05960c3",
+      "message": "3 clashes: [ifc-step:bs-ifc4-building-architecture.ifc/#285] clearance clash with ifc-step:bs-ifc4-building-architecture.ifc/#158: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-building-architecture.ifc/#285] clearance clash with ifc-step:bs-ifc4-building-architecture.ifc/#182: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-building-architecture.ifc/#285] clearance clash with ifc-step:bs-ifc4-building-architecture.ifc/#228: separation 0.0000 m below required 0.0100 m",
+      "object_id": {
+        "local_id": "#285",
+        "source": {
+          "document": "bs-ifc4-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#158",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#182",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#228",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "info"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-building-architecture.ifc/#53:ifc-step:bs-ifc4-building-architecture.ifc/#158",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-building-architecture.ifc/#53:ifc-step:bs-ifc4-building-architecture.ifc/#182",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-building-architecture.ifc/#53:ifc-step:bs-ifc4-building-architecture.ifc/#201",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-building-architecture.ifc/#53:ifc-step:bs-ifc4-building-architecture.ifc/#228",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "c4ccee53-b39b-5da5-9b16-2c40fbe06c78",
+      "message": "4 clashes: [ifc-step:bs-ifc4-building-architecture.ifc/#53] clearance clash with ifc-step:bs-ifc4-building-architecture.ifc/#158: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-building-architecture.ifc/#53] clearance clash with ifc-step:bs-ifc4-building-architecture.ifc/#182: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-building-architecture.ifc/#53] clearance clash with ifc-step:bs-ifc4-building-architecture.ifc/#201: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-building-architecture.ifc/#53] clearance clash with ifc-step:bs-ifc4-building-architecture.ifc/#228: separation 0.0000 m below required 0.0100 m",
+      "object_id": {
+        "local_id": "#53",
+        "source": {
+          "document": "bs-ifc4-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#158",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#182",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#201",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#228",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-subjects",
+      "severity": "info"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-building-architecture.ifc/#116:ifc-step:bs-ifc4-building-architecture.ifc/#228",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "f01b6712-e87f-501d-8fc4-89979ce91970",
+      "message": "clearance clash with ifc-step:bs-ifc4-building-architecture.ifc/#228: separation 0.0000 m below required 0.0500 m (clash matrix cell 2 `furnishing`)",
+      "object_id": {
+        "local_id": "#116",
+        "source": {
+          "document": "bs-ifc4-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#228",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "matrix-selectors",
+      "severity": "info"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-building-architecture.ifc/#116:ifc-step:bs-ifc4-building-architecture.ifc/#53",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "38dd6673-a3bd-561b-b866-f12bc2c9e24f",
+      "message": "clearance clash with ifc-step:bs-ifc4-building-architecture.ifc/#53: separation 0.0000 m below required 0.0500 m (clash matrix cell 2 `furnishing`)",
+      "object_id": {
+        "local_id": "#116",
+        "source": {
+          "document": "bs-ifc4-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#53",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "matrix-selectors",
+      "severity": "info"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
           "locator": "clash_matrix_pairs;subjects=@selection;counterparts=@counterparts;cells=@cells;key_1=@key_1;key_2=@key_2;key_3=@key_3;case_sensitive=@case_sensitive;symmetric=@symmetric;report_unmatched=@report_unmatched;exclude_same_system=@exclude_same_system;system_path=@system_path;exclude_paths=@exclude_paths;exclude_target_property=@exclude_target_property;exclude_same_layer=@exclude_same_layer;group_by=@group_by;per_storey=@per_storey;storey_path=@storey_path;group_property=@group_property;group_tolerance_metres=@group_tolerance_metres;duplicate_quantities=@duplicate_quantities;tolerance_cases=@tolerance_cases#10",
           "source": {
             "document": "bs-ifc4-building-architecture.ifc",
@@ -35,256 +349,6 @@
   ],
   "not_evaluated": [
     {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#228, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#116",
-        "source": {
-          "document": "bs-ifc4-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-clearance"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#53, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#116",
-        "source": {
-          "document": "bs-ifc4-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-clearance"
-    },
-    {
-      "message": "a clash may be excluded: whether they share a presentation layer cannot be decided: the source assigns no presentation layers (no IfcPresentationLayerAssignment); 4 object(s) of source `ifc-step:bs-ifc4-building-architecture.ifc` not evaluated (e.g. #158, #182, #201, +1 more)",
-      "object_id": null,
-      "reason": "not_recorded",
-      "rule_id": "clash-similar",
-      "source": {
-        "document": "bs-ifc4-building-architecture.ifc",
-        "system": "ifc-step"
-      }
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#285, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#158",
-        "source": {
-          "document": "bs-ifc4-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#53, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#158",
-        "source": {
-          "document": "bs-ifc4-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#285, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#182",
-        "source": {
-          "document": "bs-ifc4-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#53, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#182",
-        "source": {
-          "document": "bs-ifc4-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#261, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#201",
-        "source": {
-          "document": "bs-ifc4-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#53, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#201",
-        "source": {
-          "document": "bs-ifc4-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#285, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#228",
-        "source": {
-          "document": "bs-ifc4-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#53, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#228",
-        "source": {
-          "document": "bs-ifc4-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#285, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#261",
-        "source": {
-          "document": "bs-ifc4-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-structure"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#201, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#261",
-        "source": {
-          "document": "bs-ifc4-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#285, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#261",
-        "source": {
-          "document": "bs-ifc4-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#158, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#285",
-        "source": {
-          "document": "bs-ifc4-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#182, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#285",
-        "source": {
-          "document": "bs-ifc4-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#228, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#285",
-        "source": {
-          "document": "bs-ifc4-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#158, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#53",
-        "source": {
-          "document": "bs-ifc4-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#182, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#53",
-        "source": {
-          "document": "bs-ifc4-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#201, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#53",
-        "source": {
-          "document": "bs-ifc4-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#228, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#53",
-        "source": {
-          "document": "bs-ifc4-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "clash-subjects"
-    },
-    {
       "message": "the clash matrix cell cannot be chosen: source `ifc-step:bs-ifc4-building-architecture.ifc` declares no discipline, so the clash matrix cannot decide; 5 object(s) of source `ifc-step:bs-ifc4-building-architecture.ifc` not evaluated (e.g. #158, #182, #201, +2 more)",
       "object_id": null,
       "reason": "not_recorded",
@@ -293,156 +357,36 @@
         "document": "bs-ifc4-building-architecture.ifc",
         "system": "ifc-step"
       }
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#228, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#116",
-        "source": {
-          "document": "bs-ifc4-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "matrix-selectors"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#53, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#116",
-        "source": {
-          "document": "bs-ifc4-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "matrix-selectors"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#285, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#158",
-        "source": {
-          "document": "bs-ifc4-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "matrix-selectors"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#53, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#158",
-        "source": {
-          "document": "bs-ifc4-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "matrix-selectors"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#285, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#182",
-        "source": {
-          "document": "bs-ifc4-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "matrix-selectors"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#53, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#182",
-        "source": {
-          "document": "bs-ifc4-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "matrix-selectors"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#261, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#201",
-        "source": {
-          "document": "bs-ifc4-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "matrix-selectors"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#53, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#201",
-        "source": {
-          "document": "bs-ifc4-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "matrix-selectors"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#285, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#228",
-        "source": {
-          "document": "bs-ifc4-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "matrix-selectors"
-    },
-    {
-      "message": "surfaces meet ifc-step:bs-ifc4-building-architecture.ifc/#53, but neither body is a closed solid, so touching cannot be told from crossing",
-      "object_id": {
-        "local_id": "#228",
-        "source": {
-          "document": "bs-ifc4-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "matrix-selectors"
     }
   ],
   "rules": [
     {
       "checked": 1,
-      "failed": 0,
-      "not_evaluated": 1,
+      "failed": 1,
+      "not_evaluated": 0,
       "rule_id": "clash-clearance",
-      "status": "not_evaluated"
+      "status": "failed"
     },
     {
       "checked": 4,
       "failed": 0,
-      "not_evaluated": 4,
+      "not_evaluated": 0,
       "rule_id": "clash-similar",
-      "status": "not_evaluated"
+      "status": "passed"
     },
     {
       "checked": 7,
       "failed": 0,
-      "not_evaluated": 5,
+      "not_evaluated": 0,
       "rule_id": "clash-structure",
-      "status": "not_evaluated"
+      "status": "passed"
     },
     {
       "checked": 3,
-      "failed": 0,
-      "not_evaluated": 3,
+      "failed": 3,
+      "not_evaluated": 0,
       "rule_id": "clash-subjects",
-      "status": "not_evaluated"
+      "status": "failed"
     },
     {
       "checked": 7,
@@ -453,8 +397,8 @@
     },
     {
       "checked": 8,
-      "failed": 1,
-      "not_evaluated": 5,
+      "failed": 2,
+      "not_evaluated": 0,
       "rule_id": "matrix-selectors",
       "status": "failed"
     }

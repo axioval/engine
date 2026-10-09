@@ -21,6 +21,9 @@ axioval = { path = "../../facade/axioval", version = "0.4.0", features = ["ifc",
 # Axiolid services. Neither adapter may depend on the other, so this bridge
 # lives in the host.
 axiolid-contracts.workspace = true
+# The rings a profile flattens to and their certified deviation, which
+# bound an unmeasured extrusion of it (#358).
+axiolid-construct.workspace = true
 axiolid-core.workspace = true
 axiolid-curve.workspace = true
 axiolid-mesh.workspace = true

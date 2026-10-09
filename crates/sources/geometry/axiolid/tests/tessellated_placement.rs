@@ -467,4 +467,16 @@ fn an_unmeasured_obstacle_bounded_elsewhere_is_left_out() {
         place(near, "room", shape(), &["lost"]),
         Err(FreeSpaceError::MissingGeometry(_))
     ));
+    // Under the whole room but below its floor (a slab whose top is the
+    // floor), or high above the band: it occupies nothing in the band.
+    let below = room().with_unmeasured_bound(id("lost"), [-1.0, -1.0, -0.3], [5.0, 2.2, 0.0]);
+    found(place(below, "room", shape(), &["lost"]));
+    let above = room().with_unmeasured_bound(id("lost"), [-1.0, -1.0, 10.0], [5.0, 2.2, 11.0]);
+    found(place(above, "room", shape(), &["lost"]));
+    // Reaching a hair above the floor, it may stand in the band.
+    let into = room().with_unmeasured_bound(id("lost"), [-1.0, -1.0, -0.3], [5.0, 2.2, 0.01]);
+    assert!(matches!(
+        place(into, "room", shape(), &["lost"]),
+        Err(FreeSpaceError::MissingGeometry(_))
+    ));
 }

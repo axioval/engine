@@ -18711,8 +18711,9 @@ fn refused_spaces(
     }
 }
 
-/// Spaces #16 (x 0..4), #26 (x 20..24) and #46 (x 40..44), each 4 x 4 m
-/// and 3 m high, beside two unmeasured obstacles (#357, #358):
+/// Spaces #16 (x 0..4), #26 (x 20..24), #46 (x 40..44) and #96 (x
+/// 60..64), each 4 x 4 m and 3 m high, beside three unmeasured obstacles
+/// (#357, #358):
 ///
 /// - wall #66 in #16 (x 1..2, y 1..2, 3 m high), its extrusion clipped by a
 ///   polygonal bounded half-space whose boundary has a point off its plane,
@@ -18720,8 +18721,12 @@ fn refused_spaces(
 ///   removes material, so the extrusion bounds it;
 /// - railing #80 in #26, with no body of its own, made of member #78, one
 ///   vertical face (x 21..22, y 2, z 0..1) whose boundary crosses itself
-///   (its first and third edges cross), which the mesh compiler refuses. Its authored
-///   corners bound the member, and the member bounds the railing.
+///   (its first and third edges cross), which the mesh compiler refuses.
+///   Its authored corners bound the member, and the member bounds the
+///   railing;
+/// - proxy #106 in #46, a vertical 1 x 1 m square (x 41..42, y 2, z 1..2)
+///   extruded 1 m along x, in its own plane, which the kernel refuses by
+///   name. The square swept along that segment bounds it.
 fn spaces_beside_unmeasured_obstacles() -> String {
     let space = |first: u32, x: f64| {
         body(
@@ -18742,7 +18747,7 @@ fn spaces_beside_unmeasured_obstacles() -> String {
          #3=IFCLOCALPLACEMENT($,#2);\n\
          #4=IFCDIRECTION((0.,0.,1.));\n\
          #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
-         {}{}{}\
+         {}{}{}{}\
          #50=IFCCARTESIANPOINT((1.5,1.5));\n\
          #51=IFCAXIS2PLACEMENT2D(#50,$);\n\
          #52=IFCRECTANGLEPROFILEDEF(.AREA.,$,#51,1.,1.);\n\
@@ -18768,10 +18773,22 @@ fn spaces_beside_unmeasured_obstacles() -> String {
          #78=IFCMEMBER('0000000000000000000078',$,$,$,$,#3,#74,$,.MEMBER.);\n\
          #80=IFCRAILING('0000000000000000000080',$,$,$,$,#3,$,$,.HANDRAIL.);\n\
          #81=IFCRELAGGREGATES('0000000000000000000081',$,$,$,#80,(#78));\n\
+         #100=IFCCARTESIANPOINT((41.5,1.5));\n\
+         #101=IFCAXIS2PLACEMENT2D(#100,$);\n\
+         #102=IFCRECTANGLEPROFILEDEF(.AREA.,$,#101,1.,1.);\n\
+         #103=IFCDIRECTION((1.,0.,0.));\n\
+         #108=IFCCARTESIANPOINT((0.,2.,0.));\n\
+         #109=IFCDIRECTION((0.,-1.,0.));\n\
+         #110=IFCAXIS2PLACEMENT3D(#108,#109,#103);\n\
+         #104=IFCEXTRUDEDAREASOLID(#102,#110,#103,1.);\n\
+         #105=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#104));\n\
+         #107=IFCPRODUCTDEFINITIONSHAPE($,$,(#105));\n\
+         #106=IFCBUILDINGELEMENTPROXY('0000000000000000000106',$,$,$,$,#3,#107,$,$);\n\
          ENDSEC;\nEND-ISO-10303-21;\n",
         space(10, 2.0),
         space(20, 22.0),
         space(40, 42.0),
+        space(90, 62.0),
     )
 }
 
@@ -18780,11 +18797,14 @@ fn spaces_beside_unmeasured_obstacles() -> String {
 /// warning `shape.invalid-geometry`, and railing #80 with its member's code,
 /// `shape.self-intersecting-face`, beside the member's own.
 ///
-/// Both stay unmeasured but are bounded soundly (#358): the wall by its
-/// clipped extrusion, the member by its authored corners and the railing by
-/// its member. So each refuses the free floor of the space it stands in
-/// and only that one, and the space apart from both decides.
+/// They stay unmeasured but are bounded soundly (#358): the wall by its
+/// clipped extrusion, the member by its authored corners, the railing by
+/// its member, and the proxy extruded in its profile's plane by its
+/// profile swept along the extrusion. So each refuses the free floor of
+/// the space it stands in and only that one, and the space apart from all
+/// of them decides.
 #[test]
+#[allow(clippy::too_many_lines)]
 fn with_geometry_unmeasured_obstacles_bounded_apart_leave_a_floor_search_decided() {
     let inventory = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../scripts/inventory");
     let case = Case::new("space-unmeasured-obstacles");
@@ -18883,11 +18903,14 @@ fn with_geometry_unmeasured_obstacles_bounded_apart_leave_a_floor_search_decided
     );
     let locators = result["integrity"].to_string();
     assert!(locators.contains(":invalid-geometry:#66\""), "{locators}");
-    assert!(locators.contains(":self-intersecting-face:#80\""), "{locators}");
+    assert!(
+        locators.contains(":self-intersecting-face:#80\""),
+        "{locators}"
+    );
 
     // Each space's free floor: refused by the obstacle it holds alone,
     // decided where none stands.
-    let floors: BTreeMap<String, String> = ["#16", "#26", "#46"]
+    let floors: BTreeMap<String, String> = ["#16", "#26", "#46", "#96"]
         .into_iter()
         .map(|space| {
             let refusal = result["report"]["not_evaluated"]
@@ -18902,7 +18925,7 @@ fn with_geometry_unmeasured_obstacles_bounded_apart_leave_a_floor_search_decided
                     || "decided".to_owned(),
                     |outcome| {
                         let message = outcome["message"].as_str().unwrap();
-                        ["#66", "#78", "#80"]
+                        ["#66", "#78", "#80", "#106"]
                             .into_iter()
                             .filter(|obstacle| message.contains(&format!("/{obstacle}")))
                             .collect::<Vec<_>>()
@@ -18917,7 +18940,8 @@ fn with_geometry_unmeasured_obstacles_bounded_apart_leave_a_floor_search_decided
         BTreeMap::from([
             ("#16".to_owned(), "#66".to_owned()),
             ("#26".to_owned(), "#78".to_owned()),
-            ("#46".to_owned(), "decided".to_owned()),
+            ("#46".to_owned(), "#106".to_owned()),
+            ("#96".to_owned(), "decided".to_owned()),
         ]),
         "{:#}",
         result["report"]["not_evaluated"]

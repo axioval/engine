@@ -12,6 +12,10 @@
 //! - a polygon mesh, a triangle mesh and a B-rep whose faces are planar and
 //!   whose edges are straight lie within the box of their authored
 //!   vertices, whatever face of them is refused;
+//! - a linear extrusion the kernel refuses (one along its profile's plane)
+//!   lies within its profile's region swept along the extrusion: the box
+//!   of the outer ring the kernel flattens the profile to, grown by the
+//!   deviation it certifies for that ring, at both ends of the sweep;
 //! - placements (instances, mapped items) carry the box's corners along.
 //!
 //! An item that lowers is bounded through its graph; one whose lowering is
@@ -20,7 +24,8 @@
 //! anything unreadable, gives no bound: the product may then be anywhere,
 //! and every measurement it could change stays refused.
 
-use axiolid_core::BooleanOperator;
+use axiolid_construct::profile::{ProfileDeviation, profile_deviation, profile_rings};
+use axiolid_core::{BooleanOperator, Point3};
 use axiolid_model::{GeometryGraph, GeometryNode, NodeId, SolidOperation};
 use ifc_geometry::lower::lower_representation_item;
 use ifc_geometry::resource::operator::operator_transform;
@@ -29,8 +34,8 @@ use ifc_geometry::{RepresentationPurpose, Transform};
 use ifc_model::{EntityId, Model};
 
 use super::{
-    CACHED_POSITIONS, Compiler, EVALUATOR, Extent, Fit, Linear, NODE_BUDGET, compile, mesh_box,
-    planar, session,
+    CACHED_POSITIONS, Compiler, EVALUATOR, Extent, Fit, Linear, NODE_BUDGET, TOLERANCE, compile,
+    mesh_box, planar, session,
 };
 
 /// Where an item's material can be: nowhere (it holds none) or within a
@@ -52,13 +57,13 @@ impl Reach {
         }
     }
 
-    /// The box around this one's corners, each mapped by `map`.
-    fn mapped(self, map: impl Fn([f64; 3]) -> [f64; 3]) -> Option<Self> {
+    /// The box around this one's corners, each moved by `place`.
+    fn mapped(self, place: impl Fn([f64; 3]) -> [f64; 3]) -> Option<Self> {
         let Self::Within((min, max)) = self else {
             return Some(self);
         };
         let corners = (0..8).map(|index: usize| {
-            map(std::array::from_fn(|axis| {
+            place(std::array::from_fn(|axis| {
                 if (index >> axis) & 1 == 1 {
                     max[axis]
                 } else {
@@ -169,10 +174,13 @@ impl Reader<'_> {
             }
             "IFCMAPPEDITEM" => {
                 let mapped = MappedItem::new(item, entity);
-                let (source, target) = (mapped.mapping_source().ok()?, mapped.mapping_target().ok()?);
+                let (source, target) =
+                    (mapped.mapping_source().ok()?, mapped.mapping_target().ok()?);
                 let map = RepresentationMap::new(source, self.model.get(source)?);
-                let (origin, representation) =
-                    (map.mapping_origin().ok()?, map.mapped_representation().ok()?);
+                let (origin, representation) = (
+                    map.mapping_origin().ok()?,
+                    map.mapped_representation().ok()?,
+                );
                 let target = operator_transform(self.model, target, self.model.get(target)?)
                     .ok()?
                     .to_metres(self.units);
@@ -199,17 +207,17 @@ impl Reader<'_> {
 }
 
 /// Where the solid of node `id` can be, in the graph's coordinates.
-fn graph(backend: &Compiler, graph_: &GeometryGraph, id: NodeId, budget: &mut usize) -> Option<Reach> {
+fn graph(
+    backend: &Compiler,
+    graph_: &GeometryGraph,
+    id: NodeId,
+    budget: &mut usize,
+) -> Option<Reach> {
     *budget = budget.checked_sub(1)?;
     let node = graph_.get(id)?;
     match node {
         GeometryNode::Instance(instance) => graph(backend, graph_, instance.source, budget)?
-            .mapped(|point| {
-                instance
-                    .transform
-                    .transform_point3(point.into())
-                    .to_array()
-            }),
+            .mapped(|point| instance.transform.transform_point3(point.into()).to_array()),
         GeometryNode::Collection(children) => {
             let mut reach = Reach::Empty;
             for child in children {
@@ -237,12 +245,30 @@ fn graph(backend: &Compiler, graph_: &GeometryGraph, id: NodeId, budget: &mut us
                     ),
                     _ => None,
                 },
+                // A linear extrusion is its profile's region swept along
+                // one segment, so it lies within the region's box swept
+                // along it: the box at both ends (the segment taken both as
+                // stated and normalised, as IFC reads it). An extrusion in
+                // its profile's plane, which the kernel refuses by name, is
+                // bounded so too.
+                GeometryNode::SolidOperation(SolidOperation::Extrusion {
+                    profile,
+                    direction,
+                    depth,
+                }) => {
+                    let region = profile_region(graph_, *profile)?;
+                    let mut reach = region;
+                    for sweep in [*direction * *depth, direction.normalize_or_zero() * *depth] {
+                        reach = reach.join(region.mapped(|point| {
+                            std::array::from_fn(|axis| point[axis] + sweep[axis])
+                        })?);
+                    }
+                    Some(reach)
+                }
                 GeometryNode::PolygonMesh(mesh) => {
-                    points(mesh.positions.iter().map(|point| point.to_array()))
+                    points(mesh.positions.iter().map(Point3::to_array))
                 }
-                GeometryNode::TriMesh(mesh) => {
-                    points(mesh.positions.iter().map(|point| point.to_array()))
-                }
+                GeometryNode::TriMesh(mesh) => points(mesh.positions.iter().map(Point3::to_array)),
                 // Planar faces with straight edges lie within the hull of
                 // their vertices.
                 GeometryNode::BRep(brep) if planar(graph_, id, &mut NODE_BUDGET.clone()) => points(
@@ -250,11 +276,41 @@ fn graph(backend: &Compiler, graph_: &GeometryGraph, id: NodeId, budget: &mut us
                         .iter()
                         .map(|vertex| vertex.position.to_array()),
                 ),
-                GeometryNode::BoundingBox(aabb) => points([aabb.min.to_array(), aabb.max.to_array()]),
+                GeometryNode::BoundingBox(aabb) => {
+                    points([aabb.min.to_array(), aabb.max.to_array()])
+                }
                 _ => None,
             }
         }
     }
+}
+
+/// The box, in its plane (`z = 0`), of the region of the profile node
+/// `id`: its outer ring as the kernel flattens it, grown by the deviation
+/// the kernel certifies for that flattening. `None` for anything but a
+/// profile, or a profile without a certified deviation.
+fn profile_region(graph: &GeometryGraph, id: NodeId) -> Option<Reach> {
+    let Some(GeometryNode::Profile(profile)) = graph.get(id) else {
+        return None;
+    };
+    let chord = TOLERANCE.linear();
+    let rings = profile_rings(profile, chord, TOLERANCE).ok()?;
+    let ProfileDeviation::Bounded(deviation) = profile_deviation(profile, chord, TOLERANCE).ok()?
+    else {
+        return None;
+    };
+    if !(deviation.is_finite() && deviation >= 0.0) {
+        return None;
+    }
+    let Reach::Within((min, max)) =
+        points(rings.outer.iter().map(|point| [point.x, point.y, 0.0]))?
+    else {
+        return None;
+    };
+    points([
+        [min[0] - deviation, min[1] - deviation, 0.0],
+        [max[0] + deviation, max[1] + deviation, 0.0],
+    ])
 }
 
 /// Node `id` compiled into a mesh, its box grown by its certified

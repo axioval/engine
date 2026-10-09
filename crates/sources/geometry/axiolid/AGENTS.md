@@ -638,9 +638,13 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   Contact measures only the request's candidates and refuses while one of
   them is unmeasured or undescribed; space refuses while a declared role,
   storey member or requested element that could reach the space is; free
-  space refuses it as an obstacle. A host-declared bound
-  (`with_unmeasured_bound`) only says where the body cannot be; an invalid
-  one is no bound. `parts_bound` encloses the parts of a whole that could
+  space refuses it as an obstacle, unless its host-declared bound lies
+  apart from the scope in plan or wholly at or below the band's bottom or
+  at or above its top (the band is open at both ends; pinned by
+  `tests/tessellated_placement.rs`
+  `an_unmeasured_obstacle_bounded_elsewhere_is_left_out`). A host-declared
+  bound (`with_unmeasured_bound`) only says where the body cannot be; an
+  invalid one is no bound. `parts_bound` encloses the parts of a whole that could
   not be composed (mesh boxes grown by deviation, declared bounds), and is
   `None` when any part is unbounded: never skip an unbounded part.
 - A geometry set may hold several sources. Evidence about one object (contact,

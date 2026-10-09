@@ -663,6 +663,7 @@ dependencies = [
 name = "axioval-cli"
 version = "0.4.0"
 dependencies = [
+ "axiolid-construct",
  "axiolid-contracts",
  "axiolid-core",
  "axiolid-curve",

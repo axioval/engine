@@ -1210,7 +1210,10 @@ compiles by its mesh grown by its certified deviation; a boolean difference
 or intersection, and a clip by a half-space, by its first operand, since
 it only removes material from it (a union by both operands); a polygon
 mesh, a triangle mesh or a B-rep with planar faces and straight edges by
-the box of its authored vertices, whatever face of it is refused; every
+the box of its authored vertices, whatever face of it is refused; a linear
+extrusion the kernel refuses (one along its profile's plane) by its
+profile's box (the kernel's flattened outer ring grown by the deviation it
+certifies) swept along the extrusion; every
 placement (instances, mapped items) applied to the box's corners. An item
 whose lowering is refused (a clip whose half-space boundary is invalid)
 is read through its IFC boolean or mapped item the same way. Any item

@@ -60,7 +60,8 @@ All notable changes are documented here. This project follows Semantic Versionin
 - **Geometry**: more unmeasured products are bounded for the space and
   free-floor searches, so a search apart from them decides: a boolean
   difference or half-space clip by its first operand, a faceted or
-  tessellated body refused for a face by its authored vertices, each item
+  tessellated body refused for a face by its authored vertices, an
+  extrusion along its profile's plane by its profile swept along it, each item
   by its own mesh where it compiles, placements applied; a whole is then
   bounded by its parts. Anything that cannot be bounded soundly stays
   unbounded and refuses every search it could reach

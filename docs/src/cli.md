@@ -1181,7 +1181,11 @@ bounds of the unmeasured ones, enclosed; one part with no bound leaves
 the whole without one. Otherwise a product that states a `Box`
 representation (`IfcBoundingBox` items) is bounded by that box: its eight
 corners are placed as the product's representations are (the context's
-world coordinate system above the placement chain) and enclosed. A whole
+world coordinate system above the placement chain) and enclosed. A
+product without one whose openings leave it unmeasured is bounded by its
+gross body, before the openings are subtracted, when that is measured:
+the net body is the gross body less its openings, so it lies inside the
+gross mesh's extent grown by the deviation certified for it (#301). A whole
 measured through its parts is measured and needs no bound. A space
 measurement no bound can reach is evaluated; one a bound reaches is not
 evaluated and names the product. Without a bound, or with one that cannot

@@ -18492,12 +18492,43 @@ fn spaces_beside_an_unmeasured_slab(bound: bool, roof: bool) -> String {
     )
 }
 
+/// The spaces of [`spaces_beside_an_unmeasured_slab`] with slab #36 given
+/// a body, 4 x 4 x 0.2 m over the first space's ceiling, and an opening
+/// #45 through it: a rounded square extruded obliquely, which leaves the
+/// slab's net body unmeasured (#317) while its gross body is measured.
+fn spaces_beside_a_slab_unmeasured_through_its_opening() -> String {
+    spaces_beside_an_unmeasured_slab(false, false).replace(
+        "#36=IFCSLAB('0000000000000000000036',$,$,$,$,#3,$,$,.FLOOR.);\n",
+        "#30=IFCCARTESIANPOINT((2.,2.));\n\
+         #31=IFCAXIS2PLACEMENT2D(#30,$);\n\
+         #32=IFCRECTANGLEPROFILEDEF(.AREA.,$,#31,4.,4.);\n\
+         #33=IFCCARTESIANPOINT((0.,0.,3.));\n\
+         #34=IFCAXIS2PLACEMENT3D(#33,$,$);\n\
+         #35=IFCEXTRUDEDAREASOLID(#32,#34,#4,0.2);\n\
+         #37=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#35));\n\
+         #38=IFCPRODUCTDEFINITIONSHAPE($,$,(#37));\n\
+         #36=IFCSLAB('0000000000000000000036',$,$,$,$,#3,#38,$,.FLOOR.);\n\
+         #39=IFCROUNDEDRECTANGLEPROFILEDEF(.AREA.,$,#31,1.,1.,0.1);\n\
+         #40=IFCCARTESIANPOINT((0.,0.,2.9));\n\
+         #41=IFCAXIS2PLACEMENT3D(#40,$,$);\n\
+         #42=IFCDIRECTION((0.1,0.,1.));\n\
+         #43=IFCEXTRUDEDAREASOLID(#39,#41,#42,0.4);\n\
+         #44=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#43));\n\
+         #46=IFCPRODUCTDEFINITIONSHAPE($,$,(#44));\n\
+         #45=IFCOPENINGELEMENT('0000000000000000000045',$,$,$,$,#3,#46,$,.OPENING.);\n\
+         #47=IFCRELVOIDSELEMENT('0000000000000000000047',$,$,$,#36,#45);\n",
+    )
+}
+
 /// An unmeasured slab refuses only the space measurements it could change
 /// (#212): with the box the file states, the far space is judged and the
 /// space under the box keeps only its top cap, overlaps and boundary gaps
 /// not evaluated; without one it may be anywhere and refuses them for both.
 /// Every refusal names the slab. A roof made of the slab is unmeasured
 /// through it and bounded by its box, so it blocks only where the slab does.
+/// A slab with a body, unmeasured once its opening is subtracted, is
+/// bounded by its gross body, which its net body lies inside, so it blocks
+/// only where the boxed slab does too (#301).
 #[test]
 fn with_geometry_an_unmeasured_slab_refuses_only_the_spaces_it_reaches() {
     let inventory = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../scripts/inventory");
@@ -18506,15 +18537,59 @@ fn with_geometry_an_unmeasured_slab_refuses_only_the_spaces_it_reaches() {
     let refused = |bound: bool, roof: bool| {
         let case = Case::new(&format!("space-unmeasured-slab-{bound}-{roof}"));
         let model = case.write("model.ifc", &spaces_beside_an_unmeasured_slab(bound, roof));
+        refused_spaces(&case, &model, &definitions, &ruleset, roof)
+    };
+    let near = |local: &str| {
+        [
+            "space boundary gaps",
+            "space overlaps",
+            "space top cap coverage",
+        ]
+        .map(|aspect| (local.to_owned(), aspect.to_owned()))
+    };
+    assert_eq!(refused(true, false), near("#16"));
+    assert_eq!(refused(true, true), near("#16"));
+    // Without a box the slab may be anywhere, the floors included.
+    let anywhere = |local: &str| {
+        let mut aspects = vec![(local.to_owned(), "space bottom cap coverage".to_owned())];
+        aspects.extend(near(local));
+        aspects
+    };
+    let mut everywhere = anywhere("#16");
+    everywhere.extend(anywhere("#26"));
+    assert_eq!(refused(false, false), everywhere);
+
+    let case = Case::new("space-unmeasured-slab-gross");
+    let model = case.write(
+        "model.ifc",
+        &spaces_beside_a_slab_unmeasured_through_its_opening(),
+    );
+    assert_eq!(
+        refused_spaces(&case, &model, &definitions, &ruleset, false),
+        near("#16")
+    );
+}
+
+/// The space-validation outcomes refused over `model` checked with the
+/// inventory's packages, as (space, aspect), each naming slab #36 (and
+/// roof #50 exactly when `roof`).
+fn refused_spaces(
+    case: &Case,
+    model: &Path,
+    definitions: &str,
+    ruleset: &str,
+    roof: bool,
+) -> Vec<(String, String)> {
+    {
         let saved = case.path("result.json");
         let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
             .args(["check", "--geometry", "--model"])
-            .arg(&model)
+            .arg(model)
             .args([
                 "--definitions",
-                &definitions,
+                definitions,
                 "--ruleset",
-                &ruleset,
+                ruleset,
                 "--report",
             ])
             .arg(&saved)
@@ -18543,24 +18618,5 @@ fn with_geometry_an_unmeasured_slab_refuses_only_the_spaces_it_reaches() {
             .collect();
         refused.sort();
         refused
-    };
-    let near = |local: &str| {
-        [
-            "space boundary gaps",
-            "space overlaps",
-            "space top cap coverage",
-        ]
-        .map(|aspect| (local.to_owned(), aspect.to_owned()))
-    };
-    assert_eq!(refused(true, false), near("#16"));
-    assert_eq!(refused(true, true), near("#16"));
-    // Without a box the slab may be anywhere, the floors included.
-    let anywhere = |local: &str| {
-        let mut aspects = vec![(local.to_owned(), "space bottom cap coverage".to_owned())];
-        aspects.extend(near(local));
-        aspects
-    };
-    let mut everywhere = anywhere("#16");
-    everywhere.extend(anywhere("#26"));
-    assert_eq!(refused(false, false), everywhere);
+    }
 }

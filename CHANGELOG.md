@@ -92,6 +92,12 @@ All notable changes are documented here. This project follows Semantic Versionin
   in its profile's plane leaves its object unmeasured as `extrusion
   direction in the profile plane: it sweeps no volume`, where the mesh
   compiler built a sliver (axiolid/kernel#281).
+- **Geometry**: a product without a `Box` representation whose openings
+  leave it unmeasured is bounded, for the space service, by its gross body
+  before the openings are subtracted, when that is measured: one such slab
+  refuses only the space measurements its gross body reaches, not every
+  space of the model
+  ([#301](https://github.com/axioval/engine/issues/301)).
 - **Clash**: a penetration is witnessed only at a point of the body it
   reaches from. A closed body's vertex centroid and the midpoints of the
   chords its largest triangle's normal cuts through it are taken only where

@@ -938,7 +938,9 @@ pub fn attach(
             Err(error) => {
                 report.unmeasured.push((id.clone(), error.clone()));
                 geometry = geometry.with_unmeasured(id.clone(), error);
-                if let Some((min, max)) = stated_box(model, units, linear, entity) {
+                if let Some((min, max)) = stated_box(model, units, linear, entity)
+                    .or_else(|| gross_bound(&backend, model, units, linear, entity, *net))
+                {
                     geometry = geometry.with_unmeasured_bound(id, min, max);
                 }
             }
@@ -3722,6 +3724,46 @@ fn gross_has_triangles(
         return false;
     };
     compile(backend, &lowered.graph, lowered.root).is_ok_and(|(mesh, _)| mesh.triangle_count() > 0)
+}
+
+/// The world box that `product`'s gross `Body`, before the openings voiding
+/// it are subtracted, lies within, for a product whose net body is
+/// unmeasured (#301). The net body is the gross body less its openings,
+/// so it lies inside the gross body's extent: the gross mesh's extent,
+/// grown by the deviation certified for it when it is tessellated.
+///
+/// `None` when the product has no opening to subtract (its gross body is
+/// the net one that failed) or its gross body is refused too.
+fn gross_bound(
+    backend: &Compiler,
+    model: &Model,
+    units: &ifc_geometry::units::UnitScale,
+    linear: &Linear,
+    product: EntityId,
+    net: NetOptions,
+) -> Option<([f64; 3], [f64; 3])> {
+    if linear.refusal(model, product).is_some() {
+        return None;
+    }
+    let mut session = session(model, units);
+    let net = lower_product_net_with(&mut session, product, net).ok()??;
+    if net.subtractions.is_empty() {
+        return None;
+    }
+    let lowered = session.finish(net.gross).ok()?;
+    let (mesh, fit) = compile(backend, &lowered.graph, lowered.root).ok()?;
+    let grown = match fit {
+        Fit::Exact => 0.0,
+        Fit::Within(deviation) => deviation,
+    };
+    let mut positions = mesh.positions.iter().copied();
+    let first = positions.next()?;
+    let (min, max) = positions.fold((first, first), |(min, max), p| (min.min(p), max.max(p)));
+    let (min, max) = ((min - grown).to_array(), (max + grown).to_array());
+    min.iter()
+        .chain(&max)
+        .all(|value| value.is_finite())
+        .then_some((min, max))
 }
 
 /// The void of an opening taken as already applied: its `Reference`

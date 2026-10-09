@@ -25,7 +25,10 @@ use axiolid_model::{
     SolidOperation, TrimSelector, TrimmingPreference,
 };
 use axiolid_profile::{CircleProfile, ContourProfile, EllipseProfile, Profile, RectangleProfile};
-use axioval_axiolid::{AxiolidGeometry, ExactBoundary, SHEARED_CURVED_EXTRUSION, exact_boundary};
+use axioval_axiolid::{
+    AxiolidGeometry, ExactBoundary, IN_PLANE_EXTRUSION, SHEARED_CURVED_EXTRUSION, exact_boundary,
+    untrusted_extrusion,
+};
 use axioval_ir::{ObjectId, SourceId};
 
 /// The chord deviation the mesh compiler keeps to, declared for its meshes.
@@ -620,4 +623,34 @@ fn an_oblique_extrusion_of_a_profile_with_arcs_is_refused_by_name() {
         let (body, root) = extrusion(rounded(), direction, 0.75, Transform3::IDENTITY);
         agreeing(&body, root);
     }
+}
+
+/// An extrusion is in its profile's plane when it runs along the plane and
+/// leaves it by no more than the tolerance; a plate 1 mm thin extruded
+/// along the normal, as symbol plates are authored, is a solid, even at a
+/// 1 mm tolerance.
+#[test]
+fn only_an_extrusion_along_its_profile_plane_is_in_it() {
+    let check = |direction: Vec3, depth: f64| {
+        let (body, root) = graph(|builder| {
+            let profile = push(builder, GeometryNode::Profile(rectangle(1.0, 1.0)));
+            push(
+                builder,
+                GeometryNode::SolidOperation(SolidOperation::Extrusion {
+                    profile,
+                    direction,
+                    depth,
+                }),
+            )
+        });
+        untrusted_extrusion(&body, root, Tolerance::MILLIMETRE, false)
+    };
+    assert_eq!(check(Vec3::Z, 0.001), None);
+    assert_eq!(check(-Vec3::Z, 0.0005), None);
+    assert_eq!(check(Vec3::X, 1.0), Some(IN_PLANE_EXTRUSION));
+    assert_eq!(
+        check(Vec3::new(1.0, 0.0, 0.0005), 1.0),
+        Some(IN_PLANE_EXTRUSION)
+    );
+    assert_eq!(check(Vec3::new(1.0, 0.0, 0.01), 1.0), None);
 }

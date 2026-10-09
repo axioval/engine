@@ -914,8 +914,8 @@ pub const SHEARED_CURVED_EXTRUSION: &str = "an extrusion oblique to its profile'
 const SHEAR: f64 = 1e-6;
 
 /// Why the extrusion at `node`, if it is one, is not handed to the
-/// kernel: a direction within `tolerance` of the profile plane
-/// ([`IN_PLANE_EXTRUSION`]), or, when its `exact` construction is to be
+/// kernel: a direction along the profile plane that leaves it by no more
+/// than `tolerance` over the depth ([`IN_PLANE_EXTRUSION`]), or, when its `exact` construction is to be
 /// built, a direction oblique to the profile normal with a profile that
 /// may hold arcs or curves ([`SHEARED_CURVED_EXTRUSION`]). `None` for any
 /// other node.
@@ -945,14 +945,18 @@ pub fn untrusted_extrusion(
         return None;
     }
     let offset = *direction / length * *depth;
-    if offset.z.abs() <= tolerance.linear() {
+    let shear = offset.x.hypot(offset.y);
+    // In the plane: it leaves the plane by no more than the tolerance and
+    // runs more along the plane than off it. A thin extrusion along the
+    // normal (a 1 mm symbol plate) is a solid and is not refused.
+    if offset.z.abs() <= tolerance.linear() && offset.z.abs() < shear {
         return Some(IN_PLANE_EXTRUSION);
     }
     let curved = match graph.get(*profile) {
         Some(GeometryNode::Profile(profile)) => may_hold_curves(profile),
         _ => true,
     };
-    (exact && curved && offset.x.hypot(offset.y) > SHEAR).then_some(SHEARED_CURVED_EXTRUSION)
+    (exact && curved && shear > SHEAR).then_some(SHEARED_CURVED_EXTRUSION)
 }
 
 /// Whether `profile` may hold an arc or other curve: anything but a sharp

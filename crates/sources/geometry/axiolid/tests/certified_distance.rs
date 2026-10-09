@@ -337,3 +337,78 @@ fn a_boundary_that_does_not_match_its_mesh_fails_the_check() {
             .is_err()
     );
 }
+
+/// An exact axis-aligned box, `x` and `y` in the given ranges, `z` in
+/// `[bottom, top]`.
+fn exact_box(x: [f64; 2], y: [f64; 2], bottom: f64, top: f64) -> axiolid_brep::ExactBRep {
+    let centre = (f64::midpoint(x[0], x[1]), f64::midpoint(y[0], y[1]));
+    let prism = |scale: f64| ArcPrism {
+        section: ArcRing::from_points(
+            &[(x[0], y[0]), (x[1], y[0]), (x[1], y[1]), (x[0], y[1])]
+                .iter()
+                .map(|(px, py)| {
+                    Point2::new(
+                        centre.0 + (px - centre.0) * scale,
+                        centre.1 + (py - centre.1) * scale,
+                    )
+                })
+                .collect::<Vec<_>>(),
+        ),
+        bottom,
+        top,
+    };
+    boolean_arc_prisms_exact(
+        &prism(1.0),
+        &prism(2.0),
+        BooleanOperator::Intersection,
+        Tolerance::METRE,
+    )
+    .expect("an exact box")
+}
+
+/// A wall standing on a slab touches it along its foot: the kernel shows
+/// the touch early (axiolid/kernel#273) and the proximity evidence names
+/// the point the two boundaries share, on the slab's top face under the
+/// wall. A pair apart names none.
+#[test]
+fn a_touching_pair_names_the_contact_the_kernel_witnesses() {
+    let geometry = AxiolidGeometry::new()
+        .with_tessellated_mesh(
+            id("wall"),
+            cuboid([1.0, -2.0, 0.0], [1.2, 2.0, HEIGHT]),
+            1e-3,
+        )
+        .with_mesh(id("slab"), cuboid([-1.0, -3.0, -0.2], [3.0, 3.0, 0.0]))
+        .with_exact_boundary(id("wall"), exact_wall())
+        .with_exact_boundary(id("slab"), exact_box([-1.0, 3.0], [-3.0, 3.0], -0.2, 0.0));
+    let request = ProximityRequest::try_new(id("wall"), id("slab")).unwrap();
+    let measured = AxiolidProximityService::new(geometry)
+        .measure_proximity(&request)
+        .unwrap();
+    let touch = measured.certified_separation().expect("certified");
+    assert!(touch.lower_metres() <= 0.0, "{touch:?}");
+    assert!(touch.upper_metres() <= CERTIFIED_ACCURACY_METRES);
+    let locator = &measured.evidence().locator;
+    let contact = locator
+        .split(":contact=(")
+        .nth(1)
+        .and_then(|rest| rest.strip_suffix(')'))
+        .unwrap_or_else(|| panic!("{locator}"));
+    let [x, y, z]: [f64; 3] = contact
+        .split(',')
+        .map(|value| value.parse().unwrap())
+        .collect::<Vec<_>>()
+        .try_into()
+        .unwrap();
+    assert!(
+        (1.0..=1.2).contains(&x) && (-2.0..=2.0).contains(&y),
+        "{locator}"
+    );
+    assert!(z.abs() <= 1e-6, "{locator}");
+
+    let request = ProximityRequest::try_new(id("column"), id("wall")).unwrap();
+    let apart = AxiolidProximityService::new(certified())
+        .measure_proximity(&request)
+        .unwrap();
+    assert!(!apart.evidence().locator.contains(":contact="));
+}

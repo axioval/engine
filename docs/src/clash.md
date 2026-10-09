@@ -425,7 +425,15 @@ containment is still the winding test's. A round column of radius 0.2 m
 whose axis stands 1 m from a wall is 0.8 m from it; its 16-chord mesh
 leaves that within about 4 mm, the certified distance within a
 micrometre, so a bound of 0.799 m or 0.8005 m is judged instead of left
-open. An exact pair is already a point and is not certified.
+open. An exact pair is already a point and is not certified. Boundaries
+that touch or cross are shown to meet early since axiolid-measure 0.3.10
+(axiolid/kernel#273): the search stops at a point of a line edge and a
+point of a line edge or planar face that the two share, `[0, d]` with `d`
+within rounding, where it refined round the contact before (a wall on a
+slab took about 0.3 s, now some 30 µs; contacts along curved faces or
+circle edges only are still refined). The proximity evidence's locator
+then names the contact as `:contact=(x,y,z)`, the midpoint of the two
+witness points.
 
 **Exact boundaries from IFC bodies.** A host that meshes an Axiolid
 geometry graph can have the same graph node's exact solid built with

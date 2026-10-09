@@ -79,7 +79,11 @@
 //! its witness points. Both intervals hold the true separation, so the
 //! evidence carries their intersection; an empty one refuses, since boundary
 //! and mesh then describe different bodies. A boundary the kernel cannot
-//! bound leaves the chord-widened interval, never a guess. Like the mesh
+//! bound leaves the chord-widened interval, never a guess. Two
+//! boundaries the kernel shows to touch or cross stop early with a point
+//! of each that they share (axiolid-measure 0.3.10, axiolid/kernel#273);
+//! the evidence locator then names their midpoint as
+//! `:contact=(x,y,z)`. Like the mesh
 //! separation it is the distance between the surfaces, so a body inside
 //! another is apart from it; containment stays the winding test's.
 //!
@@ -973,6 +977,17 @@ impl<'a> Boundaries<'a> {
     /// least over the items' boundaries for a body of several
     /// (`body_boundary_distance`, which needs no layout of the items).
     fn separation(self) -> Option<(f64, f64)> {
+        self.certified_separation().map(|(interval, _)| interval)
+    }
+
+    /// [`Self::separation`], with the kernel's contact witness where the
+    /// boundaries are shown to meet: since axiolid-measure 0.3.10 a pair
+    /// whose elements touch or cross stops early with a point of each that
+    /// they share (axiolid/kernel#273), `[0, d]` with `d` within rounding.
+    /// The witness is the midpoint of the two, given only when the
+    /// certified lower bound is zero and the points lie within
+    /// [`CERTIFIED_ACCURACY_METRES`] of each other.
+    fn certified_separation(self) -> Option<((f64, f64), Option<Point3>)> {
         let bounds = match self.single() {
             Some((subject, counterpart)) => boundary_distance(
                 subject,
@@ -992,7 +1007,11 @@ impl<'a> Boundaries<'a> {
                 .bounds
             }
         };
-        certified(&bounds, self.widening())
+        let interval = certified(&bounds, self.widening())?;
+        let contact = (bounds.lower <= 0.0 && bounds.upper <= CERTIFIED_ACCURACY_METRES)
+            .then(|| bounds.point_a.lerp(bounds.point_b, 0.5))
+            .filter(|point| point.is_finite());
+        Some((interval, contact))
     }
 
     /// The certified distance between the two boundaries' plan projections,
@@ -2247,6 +2266,16 @@ impl ProximityService for AxiolidProximityService {
         let (lower, upper) = hausdorff(&subject, &counterpart)?;
         let hausdorff = LengthInterval::try_new((lower - deviation).max(0.0), upper + deviation)
             .map_err(|_| ProximityError::InvalidMeasurement)?;
+        let certified = self
+            .boundaries(request.subject(), request.counterpart())?
+            .and_then(Boundaries::certified_separation);
+        // Where the exact boundaries are shown to meet, the evidence names
+        // the point they share (axiolid/kernel#273).
+        let contact = certified
+            .and_then(|(_, contact)| contact)
+            .map_or_else(String::new, |point| {
+                format!(":contact=({:.6},{:.6},{:.6})", point.x, point.y, point.z)
+            });
 
         let measured = ProximityEvidence::try_new(
             request.clone(),
@@ -2258,7 +2287,7 @@ impl ProximityService for AxiolidProximityService {
             Evidence {
                 source: request.subject().source.clone(),
                 locator: format!(
-                    "axiolid:proximity:{}:{}{}",
+                    "axiolid:proximity:{}:{}{}{contact}",
                     request.subject(),
                     request.counterpart(),
                     self.geometry
@@ -2267,10 +2296,7 @@ impl ProximityService for AxiolidProximityService {
                 exact: fidelity.is_exact(),
             },
         )?;
-        let measured = match self
-            .boundaries(request.subject(), request.counterpart())?
-            .and_then(Boundaries::separation)
-        {
+        let measured = match certified.map(|(interval, _)| interval) {
             Some((lower, upper)) => measured.with_certified_separation(
                 LengthInterval::try_new(lower, upper)
                     .map_err(|_| ProximityError::InvalidMeasurement)?,

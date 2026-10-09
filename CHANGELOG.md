@@ -67,6 +67,11 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **Clash**: a tessellated pair whose exact boundaries touch or cross is
+  certified in microseconds instead of refining round the contact
+  (axiolid-measure 0.3.10, axiolid/kernel#273), and the proximity
+  evidence names the contact the kernel witnesses (`:contact=(x,y,z)` in
+  its locator) ([#300](https://github.com/axioval/engine/issues/300)).
 - **Space**: plan rings far from the origin keep their area and winding:
   the adapter's shoelace is summed about a ring's first vertex, and
   axiolid-overlay 0.3.11 decides orientation and `ZeroArea` relative to a

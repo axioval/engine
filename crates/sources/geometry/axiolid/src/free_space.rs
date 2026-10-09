@@ -647,7 +647,16 @@ impl AxiolidFreeSpaceService {
                 continue;
             }
             // An obstacle without geometry could stand anywhere, so neither a
-            // witness nor a proof of absence would be complete.
+            // witness nor a proof of absence would be complete, unless the
+            // host bounds it (`with_unmeasured_bound`) apart from the scope.
+            if self.geometry.mesh(obstacle).is_none()
+                && self
+                    .geometry
+                    .unmeasured_bound(obstacle)
+                    .is_some_and(|bound| extent_gap(bound, &room_box, true) > 0.0)
+            {
+                continue;
+            }
             let mesh = self
                 .geometry
                 .mesh(obstacle)

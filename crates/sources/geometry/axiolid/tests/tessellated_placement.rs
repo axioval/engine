@@ -445,3 +445,26 @@ fn a_tessellated_body_elsewhere_is_left_out() {
         &["far"],
     ));
 }
+
+/// An unmeasured obstacle refuses a search it may reach, but one the host
+/// bounds apart from the room (`with_unmeasured_bound`) is left out.
+#[test]
+fn an_unmeasured_obstacle_bounded_elsewhere_is_left_out() {
+    let room = || {
+        AxiolidGeometry::new()
+            .with_mesh(id("room"), prisms(&[rect(0.0, 4.0, 0.0, 1.2)], 0.0, 3.0))
+            .with_unmeasured(id("lost"), "not meshed")
+    };
+    let shape = || rectangle(1.0, 1.0, Some((1.0, 0.0)));
+    assert!(matches!(
+        place(room(), "room", shape(), &["lost"]),
+        Err(FreeSpaceError::MissingGeometry(_))
+    ));
+    let far = room().with_unmeasured_bound(id("lost"), [10.0, 0.0, 0.0], [12.0, 1.2, 3.0]);
+    found(place(far, "room", shape(), &["lost"]));
+    let near = room().with_unmeasured_bound(id("lost"), [3.0, 0.0, 0.0], [5.0, 1.2, 3.0]);
+    assert!(matches!(
+        place(near, "room", shape(), &["lost"]),
+        Err(FreeSpaceError::MissingGeometry(_))
+    ));
+}

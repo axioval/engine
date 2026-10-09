@@ -14415,6 +14415,47 @@ fn with_geometry_flush_openings_in_a_georeferenced_wall_are_subtracted() {
     assert_eq!(finding_messages(&result).len(), 1, "{result:#}");
 }
 
+/// engine#356: the same openings placed 0.5 mm off the wall's face leave a
+/// skin 0.5 mm thin, which is authored geometry: the wall is measured with
+/// it, its volume the gross volume less openings 0.2495 m deep, under the
+/// origin and 5600 km out alike. Mesh-compile 0.3.16 and 0.3.17 snapped
+/// such skins away within the 1 mm tolerance (axiolid/kernel#276); since
+/// 0.3.18 the snap closes rounding residues only (axiolid/kernel#291).
+#[test]
+fn with_geometry_a_skin_a_fraction_of_a_millimetre_thin_is_kept() {
+    let case = Case::new("geometry-georeferenced-thin-skin");
+    let net = 3.65 * 0.25 * 3.67 - 2.0 * 1.01 * 2.26 * 0.2495;
+    let volume = json!({"kind": "property", "propertySet": "axioval:measured",
+                        "property": "volume"});
+    let cubic = |value: f64| json!({"kind": "literal", "value": {"type": "quantity", "value": value, "unit": "m3"}});
+    let turn = 0.039_608_610_093_419_1_f64.atan2(0.999_215_271_103_513);
+    for (site, turn) in [([0.0, 0.0], 0.0), ([600_000.0, 5_600_000.0], turn)] {
+        let model = georeferenced_wall_with_flush_openings(site, turn, 0.1245);
+        let label = format!("site {site:?} turned {turn} rad");
+        let (output, result) = case.geometry_rule(
+            &model,
+            &[("wall", "IfcWall")],
+            "axioval:capability.expression",
+            &registry_signature("axioval:capability.expression"),
+            entity("wall"),
+            json!({"requirement": {"type": "expression", "value":
+                {"kind": "between", "operand": volume,
+                 "low": cubic(net - 1e-6), "high": cubic(net + 1e-6)}}}),
+        );
+        assert_eq!(output.status.code(), Some(0), "{label}: {result:#}");
+        assert_eq!(
+            result["report"]["findings"],
+            json!([]),
+            "{label}: {result:#}"
+        );
+        assert_eq!(
+            result["report"]["not_evaluated"],
+            json!([]),
+            "{label}: {result:#}"
+        );
+    }
+}
+
 /// Room #19 (x 0..2.4, y 0..1.6, 3 m high) with door #50 in its north
 /// wall: hinged at (1.2, 1.7), its 0.9 m leaf closed westward and opening
 /// south over the quarter disc south-west of its hinge.

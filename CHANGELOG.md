@@ -6,6 +6,14 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **Geometry**: moved to `axiolid-mesh-compile` 0.3.18 and
+  `axiolid-brep-boolean` 0.1.8. The compiler's operand snap closes rounding
+  residues only, and a snapped boolean that is refused or pinches falls back
+  to the unsnapped operands. Hosts whose openings leave a skin of 1 µm to
+  1 mm are measured with that skin again, and a downward-extruded slab with
+  flush openings is no longer refused as touching itself
+  ([#356](https://github.com/axioval/engine/issues/356)).
+
 - **IFC**: moved to `openbim-ifc` 0.25, `ifc-geometry` 0.19 and
   `ifc-alignment` 0.8. A linear placement on a seam between two basis
   segments takes the incoming segment's tangent, and its cached position is

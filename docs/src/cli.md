@@ -1281,18 +1281,22 @@ radius (a horn torus), a corner beside an arc and a mitre reaching past
 its leg. Planar bodies, booleans of planar operands and clips by
 polygonally bounded half-spaces included, stay exact and are meshed
 without a deviation report. Since axiolid-mesh-compile 0.3.16 the
-compiler moves operand vertices within the 1 mm tolerance of the other
-operand's faces onto them before it cuts (axiolid/kernel#276), so an
-opening exported a rounding error short of its host's face leaves no skin
-that thin, which self-intersected once placed at georeferenced
-coordinates and left the host's volume unmeasured (32 of 40 such hosts on
-a 76 MB model, #306). Only the deviation report states the move
-(`operands snapped onto each other within tolerance`), and it measures
-every boolean against the exact compiler's result, which tripled that
-model's meshing time, so a planar boolean is not asked for it: a snap of
-up to 1 mm there is undeclared. Where a report is taken (a curved body, a
-planar one with warped faces), a move above 1e-9 m is declared, and a
-smaller one is rounding. Measuring a curved boolean costs about
+compiler snaps operand vertices onto the other operand's faces before it
+cuts (axiolid/kernel#276), so an opening exported a rounding error short of
+its host's face leaves no skin of rounding residue, which self-intersected
+once placed at georeferenced coordinates and left the host's volume
+unmeasured (32 of 40 such hosts on a 76 MB model, #306). Since 0.3.18 the
+snap closes rounding residues only, at most 16 ε times the operands'
+largest coordinate magnitude (about 2e-8 m at 6e6 m), and lands only on
+exactly axis-aligned faces; a snapped boolean that is refused or pinches
+falls back to the unsnapped operands (axiolid/kernel#291, #356). An
+authored skin of 1 µm to 1 mm stays geometry. Only the deviation report
+states a move (`operands snapped onto each other within tolerance`), and
+it measures every boolean against the exact compiler's result, which
+tripled that model's meshing time, so a planar boolean is not asked for
+it: its snap is undeclared, and at most rounding. Where a report is taken
+(a curved body, a planar one with warped faces), a move above 1e-9 m is
+declared, and a smaller one is rounding. Measuring a curved boolean costs about
 half a second per opening at 1 mm (release build), so a model with many
 round openings takes correspondingly longer to mesh. On a 29 MB model
 every one of its 56 curved bodies is certified and meshing takes as long

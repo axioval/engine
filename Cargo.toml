@@ -126,8 +126,11 @@ axiolid-evaluate = "0.3.9"
 # keeps planar face corners through the sliver split (#278) and bounds
 # half-spaces by profile contours with arcs (#277); 0.3.17 sews booleans
 # cut by a cylinder, sphere, cone or torus wall of a mirrored (downward)
-# construction (#288, through axiolid-brep-boolean 0.1.7).
-axiolid-mesh-compile = "0.3.17"
+# construction (#288, through axiolid-brep-boolean 0.1.7); 0.3.18 narrows
+# that snap to rounding residues and falls back to the unsnapped operands
+# when a snapped boolean is refused or pinches (#291, through
+# axiolid-brep-boolean 0.1.8), so skins of 1 µm to 1 mm stay geometry.
+axiolid-mesh-compile = "0.3.18"
 axiolid-exact-compile-contract = "0.3.1"
 # 0.3.3 adds `MeshClosure::OpenSolid` (#265).
 axiolid-mesh-compile-contract = "0.3.3"

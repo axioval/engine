@@ -1257,9 +1257,11 @@ circle), is built exactly since axiolid-construct 0.3.17, each arc's wall
 the elliptical cylinder it sweeps (axiolid/kernel#280), so an oblique round
 column is measured and has an exact boundary; an oblique ellipse is
 refused by the kernel by name (`oblique ellipse extrusion`). The kernel's
-exact boolean cannot yet cut an oblique round operand
-(axiolid/kernel#287): a slab less an oblique round opening is unmeasured
-by the kernel's named refusal. An extrusion whose direction lies within
+exact boolean cuts those elliptical-cylinder walls since
+axiolid-mesh-compile 0.3.19 (axiolid/kernel#287), so a slab less an
+oblique round shaft or rounded opening, cut up through it or down from
+above it, and an oblique rounded member clipped by a half-space are
+certified and measured. An extrusion whose direction lies within
 the tolerance of its profile's plane sweeps no volume and is refused by
 the kernel by name (`extrusion direction in the profile plane`,
 axiolid/kernel#281). A round hole touching a planar face (a web

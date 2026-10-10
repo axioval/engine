@@ -6,6 +6,20 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **Geometry**: moved to `axiolid-mesh-compile` 0.3.19 (through
+  `axiolid-brep-boolean` 0.1.9), `axiolid-overlay` 0.3.12,
+  `axiolid-evaluate` 0.3.10 and `axiolid-curve` 0.3.6. The exact boolean
+  cuts tilted elliptical-cylinder walls (axiolid/kernel#287), so a slab
+  less an oblique round shaft or rounded opening, cut up through it or
+  down from above it, and an oblique rounded member clipped by a
+  half-space are certified and measured, where they were unmeasured as
+  `exact boolean over a curve or surface it cannot evaluate`
+  ([#317](https://github.com/axioval/engine/issues/317)). An oblique
+  ellipse is still refused by the kernel by name. Minkowski sums and
+  erosions take memory linear in their pieces, with identical results
+  (axiolid/kernel#292); the free-space search keeps eroding the free part
+  of a scene with many obstacle corners
+  ([#359](https://github.com/axioval/engine/issues/359)).
 - **Free space**: a placement search whose obstacle footprints hold more
   than 500 corners erodes the scope less the obstacles by the shape
   instead of summing the obstacles with it, which on a large floor of one

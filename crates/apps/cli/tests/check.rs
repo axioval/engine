@@ -18182,24 +18182,34 @@ fn with_geometry_bodies_cut_down_against_their_profile_normal_are_certified() {
 /// The kernel builds oblique extrusions of profiles with arcs exactly
 /// (axiolid/kernel#280) and refuses by name what it cannot build; no
 /// engine guard asks first (#317). A sheared rounded member, round column
-/// or elliptic column alone (#359) is measured. Under the half-space clip
-/// (#356), and as a slab's sheared round opening (#306), the exact boolean
-/// the clip's deviation is certified against cannot cut the oblique wall
-/// yet (axiolid/kernel#287), so the host is unmeasured with the kernel's
-/// reason; an oblique ellipse under it is refused as a basis the kernel
-/// does not lower. A direction in the profile plane is refused by the
-/// mesh compiler by name (#281), alone and clipped. A sheared profile of
-/// straight edges is certified, clipped too.
+/// or elliptic column alone (#359) is measured. Since axiolid-mesh-compile
+/// 0.3.19 the exact boolean cuts the oblique elliptical-cylinder walls
+/// (axiolid/kernel#287), so the member under the half-space clip (#356)
+/// and the slab #306 less a sheared round opening, cut up through it or
+/// down from above it, are certified against it and measured. An oblique
+/// ellipse under the clip is refused as a basis the kernel does not lower.
+/// A direction in the profile plane is refused by the mesh compiler by
+/// name (#281), alone and clipped. A sheared profile of straight edges is
+/// certified, clipped too.
 #[test]
 fn with_geometry_oblique_extrusions_are_built_or_refused_by_the_kernel() {
-    const UNCUT: &str = "the mesh compiler certifies no bound on how far the curved surface \
-                         lies from its mesh (exact boolean over a curve or surface it cannot \
-                         evaluate), so it is not declared within the 0.001 m chord tolerance";
     let case = Case::new("geometry-sheared-extrusion");
-    let unmeasured = |model: &str| {
+    let measured = |model: &str| {
         let (output, result) = case.wall_clash(model, &json!({}));
         assert!(output.status.code().is_some(), "{}", stderr(&output));
-        unmeasured_reasons(&result)
+        result
+    };
+    let unmeasured = |model: &str| unmeasured_reasons(&measured(model));
+    // Everything is measured, `curved` bodies (of the slab, the clipped
+    // member and the plain one) certified as tessellated; the crossing
+    // walls are planar and exact.
+    let certified = |name: &str, model: &str, curved: u64| {
+        let result = measured(model);
+        assert_eq!(unmeasured_reasons(&result), BTreeMap::new(), "{name}");
+        assert_eq!(
+            result["geometry"]["tessellated"], curved,
+            "{name}: {result:#}"
+        );
     };
     let member = |profile: &str| {
         cut_down_bodies("(0.3,-0.2,-1.)").replace(
@@ -18208,15 +18218,12 @@ fn with_geometry_oblique_extrusions_are_built_or_refused_by_the_kernel() {
         )
     };
 
-    for profile in [
-        "IFCROUNDEDRECTANGLEPROFILEDEF(.AREA.,$,#342,1.,0.6,0.1)",
-        "IFCCIRCLEPROFILEDEF(.AREA.,$,#342,0.3)",
+    for (profile, curved) in [
+        ("IFCROUNDEDRECTANGLEPROFILEDEF(.AREA.,$,#342,1.,0.6,0.1)", 3),
+        ("IFCCIRCLEPROFILEDEF(.AREA.,$,#342,0.3)", 3),
+        ("IFCRECTANGLEPROFILEDEF(.AREA.,$,#342,1.,0.6)", 1),
     ] {
-        assert_eq!(
-            unmeasured(&member(profile)),
-            BTreeMap::from([("#356".to_owned(), UNCUT.to_owned())]),
-            "{profile}"
-        );
+        certified(profile, &member(profile), curved);
     }
     let ellipse = unmeasured(&member("IFCELLIPSEPROFILEDEF(.AREA.,$,#342,0.4,0.2)"));
     assert_eq!(
@@ -18228,12 +18235,8 @@ fn with_geometry_oblique_extrusions_are_built_or_refused_by_the_kernel() {
         ellipse["#356"].contains("derived profile over an unsupported basis"),
         "{ellipse:#?}"
     );
-    assert_eq!(
-        unmeasured(&member("IFCRECTANGLEPROFILEDEF(.AREA.,$,#342,1.,0.6)")),
-        BTreeMap::new()
-    );
 
-    let opening = cut_down_bodies("(0.,0.,-1.)")
+    let up = cut_down_bodies("(0.,0.,-1.)")
         .replace(
             "#312=IFCEXTRUDEDAREASOLID(#307,#311,#4,0.45)",
             "#312=IFCEXTRUDEDAREASOLID(#307,#311,#360,0.45)",
@@ -18242,10 +18245,17 @@ fn with_geometry_oblique_extrusions_are_built_or_refused_by_the_kernel() {
             "#359=IFCMEMBER",
             "#360=IFCDIRECTION((0.3,-0.2,1.));\n#359=IFCMEMBER",
         );
-    assert_eq!(
-        unmeasured(&opening),
-        BTreeMap::from([("#306".to_owned(), UNCUT.to_owned())])
-    );
+    let down = up
+        .replace(
+            "#310=IFCCARTESIANPOINT((0.,0.,-0.1));",
+            "#310=IFCCARTESIANPOINT((0.,0.,0.35));",
+        )
+        .replace(
+            "IFCDIRECTION((0.3,-0.2,1.))",
+            "IFCDIRECTION((0.3,-0.2,-1.))",
+        );
+    certified("opening up", &up, 3);
+    certified("opening down", &down, 3);
 
     let in_plane = unmeasured(&cut_down_bodies("(1.,0.,0.)"));
     let refused = "mesh compilation refused: backend `scalar-generate` cannot apply Sweep to \
@@ -18667,8 +18677,10 @@ fn spaces_beside_an_unmeasured_slab(bound: bool, roof: bool) -> String {
 
 /// The spaces of [`spaces_beside_an_unmeasured_slab`] with slab #36 given
 /// a body, 4 x 4 x 0.2 m over the first space's ceiling, and an opening
-/// #45 through it: a rounded square extruded obliquely, which leaves the
-/// slab's net body unmeasured (#317) while its gross body is measured.
+/// #45 through it: an ellipse extruded obliquely, which the kernel's exact
+/// boolean refuses, so the slab's net body is unmeasured while its gross
+/// body is measured. (An oblique rounded square served until the kernel
+/// cut those walls, axiolid/kernel#287, #317.)
 fn spaces_beside_a_slab_unmeasured_through_its_opening() -> String {
     spaces_beside_an_unmeasured_slab(false, false).replace(
         "#36=IFCSLAB('0000000000000000000036',$,$,$,$,#3,$,$,.FLOOR.);\n",
@@ -18681,7 +18693,7 @@ fn spaces_beside_a_slab_unmeasured_through_its_opening() -> String {
          #37=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#35));\n\
          #38=IFCPRODUCTDEFINITIONSHAPE($,$,(#37));\n\
          #36=IFCSLAB('0000000000000000000036',$,$,$,$,#3,#38,$,.FLOOR.);\n\
-         #39=IFCROUNDEDRECTANGLEPROFILEDEF(.AREA.,$,#31,1.,1.,0.1);\n\
+         #39=IFCELLIPSEPROFILEDEF(.AREA.,$,#31,0.5,0.4);\n\
          #40=IFCCARTESIANPOINT((0.,0.,2.9));\n\
          #41=IFCAXIS2PLACEMENT3D(#40,$,$);\n\
          #42=IFCDIRECTION((0.1,0.,1.));\n\

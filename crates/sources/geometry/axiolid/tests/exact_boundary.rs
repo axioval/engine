@@ -637,18 +637,27 @@ fn an_oblique_extrusion_of_a_profile_with_arcs_is_built_exact() {
     assert!(refused.contains("oblique ellipse extrusion"), "{refused}");
 }
 
-/// A difference with an oblique round opening is refused by the kernel's
-/// exact boolean by name (axiolid/kernel#287), never built wrong; the same
-/// opening of straight edges is subtracted.
+/// A difference with an oblique round opening is cut exactly by the
+/// kernel (axiolid/kernel#287): a block less an oblique round pocket from
+/// its mid-height through its top, or down through its bottom, agrees with
+/// its mesh and keeps the block's volume less the circle's area times the
+/// half height the pocket rises within it. The same opening of straight
+/// edges is subtracted too.
 #[test]
-fn a_difference_with_an_oblique_round_opening_is_refused_by_the_kernel() {
-    let direction = Vec3::new(0.3, -0.2, 1.0);
-    let (body, root) = block_less(circle(0.2), direction, 0.75);
-    let refused = exact_boundary(&body, root).unwrap_err();
-    assert!(!refused.is_empty());
+fn a_difference_with_an_oblique_round_opening_is_exact() {
+    for direction in [Vec3::new(0.3, -0.2, 1.0), Vec3::new(0.3, -0.2, -1.0)] {
+        let (body, root) = block_less(circle(0.2), direction, 0.75);
+        let boundary = agreeing(&body, root);
+        assert_close(
+            volume(boundary.brep().unwrap()),
+            4.0 - PI * 0.04 * 0.5,
+            1e-9,
+        );
 
-    let (body, root) = block_less(rectangle(0.6, 0.4), direction, 0.75);
-    agreeing(&body, root);
+        let (body, root) = block_less(rectangle(0.6, 0.4), direction, 0.75);
+        let boundary = agreeing(&body, root);
+        assert_close(volume(boundary.brep().unwrap()), 4.0 - 0.24 * 0.5, 1e-9);
+    }
 }
 
 /// An extrusion along its profile's plane sweeps no volume, and the kernel

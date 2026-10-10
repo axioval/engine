@@ -42,7 +42,11 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   An oblique extrusion of a profile with arcs is built by the kernel with
   exact elliptical-cylinder walls (axiolid-construct 0.3.17,
   axiolid/kernel#280); an oblique ellipse and a direction in the profile
-  plane are refused by the kernel by name (#281). Never guard extrusions
+  plane are refused by the kernel by name (#281). A difference with such
+  an oblique round operand is exact since axiolid-mesh-compile 0.3.19
+  (#287; `tests/exact_boundary.rs`
+  `a_difference_with_an_oblique_round_opening_is_exact`, upward and
+  downward, against the closed-form volume). Never guard extrusions
   here before the kernel is asked (#317).
   Every other node, a scale or shear, and every kernel refusal
   refuse with the reason; never approximate a placement, an ellipse or a

@@ -90,8 +90,10 @@ axiolid-measure = "0.3.10"
 # 0.3.5 to 0.3.9 regressed coverage through an opening and cut cost regions
 # with a sliver along a turned wall (axiolid/kernel#219, #222); 0.3.10 fixes
 # both; 0.3.11 decides ring orientation and `ZeroArea` exactly relative to
-# a vertex, so small rings far from the origin keep their winding (#274).
-axiolid-overlay = "0.3.11"
+# a vertex, so small rings far from the origin keep their winding (#274);
+# 0.3.12 keeps Minkowski sum and erosion memory linear in the subdivision's
+# pieces, with bit-identical results (#292).
+axiolid-overlay = "0.3.12"
 axiolid-ray-mesh = "0.4.0"
 axiolid-route = "0.3.7"
 axiolid-spatial = "0.3.0"
@@ -99,11 +101,14 @@ axiolid-spatial = "0.3.0"
 # no budget.
 axiolid-contracts = "0.3.3"
 # 0.3.3 and model 0.3.4 carry the exact alignment relations (CUBIC
-# transitions, vertical arcs and clothoids, cant) `ifc-geometry` 0.8 lowers to.
-axiolid-curve = "0.3.5"
+# transitions, vertical arcs and clothoids, cant) `ifc-geometry` 0.8 lowers to;
+# 0.3.6 adds curve paths (#289, #290), additively.
+axiolid-curve = "0.3.6"
 # The CLI derives IFC4X3 linear placements with its reference evaluator
-# (`ReferenceCurveEvaluator`, through `ifc-geometry` 0.10, engine#224).
-axiolid-evaluate = "0.3.9"
+# (`ReferenceCurveEvaluator`, through `ifc-geometry` 0.10, engine#224); 0.3.10
+# inverts points on an elliptical cylinder (axiolid/kernel#287) and reads
+# curve paths (#290); projecting onto one is still refused.
+axiolid-evaluate = "0.3.10"
 # 0.3.9 subtracts placed extrusions exactly (axiolid/kernel#228, through
 # axiolid-brep-boolean 0.1.2) and reports a certified deviation per mesh
 # (#232, with axiolid-reference 0.3.4); 0.3.10 clips by half-spaces (#234),
@@ -129,8 +134,11 @@ axiolid-evaluate = "0.3.9"
 # construction (#288, through axiolid-brep-boolean 0.1.7); 0.3.18 narrows
 # that snap to rounding residues and falls back to the unsnapped operands
 # when a snapped boolean is refused or pinches (#291, through
-# axiolid-brep-boolean 0.1.8), so skins of 1 µm to 1 mm stay geometry.
-axiolid-mesh-compile = "0.3.18"
+# axiolid-brep-boolean 0.1.8), so skins of 1 µm to 1 mm stay geometry;
+# 0.3.19 cuts tilted elliptical-cylinder walls exactly (#287, through
+# axiolid-brep-boolean 0.1.9), so a slab less an oblique round opening is
+# exact and its mesh certified.
+axiolid-mesh-compile = "0.3.19"
 axiolid-exact-compile-contract = "0.3.1"
 # 0.3.3 adds `MeshClosure::OpenSolid` (#265).
 axiolid-mesh-compile-contract = "0.3.3"

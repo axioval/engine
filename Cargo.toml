@@ -107,8 +107,9 @@ axiolid-curve = "0.3.6"
 # The CLI derives IFC4X3 linear placements with its reference evaluator
 # (`ReferenceCurveEvaluator`, through `ifc-geometry` 0.10, engine#224); 0.3.10
 # inverts points on an elliptical cylinder (axiolid/kernel#287) and reads
-# curve paths (#290); projecting onto one is still refused.
-axiolid-evaluate = "0.3.10"
+# curve paths (#290); projecting onto one is still refused. 0.3.11 certifies
+# piece lengths and seam-snapping windows (#294).
+axiolid-evaluate = "0.3.11"
 # 0.3.9 subtracts placed extrusions exactly (axiolid/kernel#228, through
 # axiolid-brep-boolean 0.1.2) and reports a certified deviation per mesh
 # (#232, with axiolid-reference 0.3.4); 0.3.10 clips by half-spaces (#234),
@@ -137,8 +138,9 @@ axiolid-evaluate = "0.3.10"
 # axiolid-brep-boolean 0.1.8), so skins of 1 µm to 1 mm stay geometry;
 # 0.3.19 cuts tilted elliptical-cylinder walls exactly (#287, through
 # axiolid-brep-boolean 0.1.9), so a slab less an oblique round opening is
-# exact and its mesh certified.
-axiolid-mesh-compile = "0.3.19"
+# exact and its mesh certified; 0.3.20 snaps oriented stations onto a seam
+# within their window (#294).
+axiolid-mesh-compile = "0.3.20"
 axiolid-exact-compile-contract = "0.3.1"
 # 0.3.3 adds `MeshClosure::OpenSolid` (#265).
 axiolid-mesh-compile-contract = "0.3.3"
@@ -158,7 +160,7 @@ openbim-ids = { version = "0.2.2", features = ["audit-schema"] }
 # only in the IFC facade, which joins `ifc-geometry` and `ifc-properties`; `geometry-select`
 # compiles no geometry kernel.
 # 0.24 re-exports `ifc-geometry` 0.18; its `authoring` feature stays off.
-openbim_ifc = { package = "openbim-ifc", version = "0.27.0", default-features = false, features = ["geometry-select", "properties", "ifc2x3", "ifc4", "ifc4x3"] }
+openbim_ifc = { package = "openbim-ifc", version = "0.28.0", default-features = false, features = ["geometry-select", "properties", "ifc2x3", "ifc4", "ifc4x3"] }
 ifc-classification = "0.4.0"
 # The CLI reads each `IfcAlignment`'s centreline, stationing and cant to
 # locate products along it (engine#252). 0.7 evaluates Viennese bends for
@@ -194,8 +196,11 @@ ifc-alignment = "0.8.1"
 # linear placement on a composite, trimmed or offset basis through the
 # evaluator's curve paths (#418) and lowers stations on offset bases beside
 # lines, polylines and in-plane circles (#414). 0.21 adds the opt-in
-# Axiolid wire format (#367), which the engine leaves off.
-ifc-geometry = { version = "0.21.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
+# Axiolid wire format (#367), which the engine leaves off; 0.22 lowers single
+# stations on offsets of gradient, spiral, B-spline and elliptical bases
+# through Axiolid's seam window (#423); runs along such bases stay refused by
+# name (#429).
+ifc-geometry = { version = "0.22.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
 # Map conversions only: without the default `transform` feature it links no
 # geometry crate (never Axiolid).
 ifc-georef = { version = "0.6.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }

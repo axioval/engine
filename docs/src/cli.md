@@ -1385,10 +1385,15 @@ placement at a station (openbimrs/ifc#311). Since `ifc-geometry` 0.20
 stations also lower on an offset basis (`IfcOffsetCurve2D`,
 `IfcOffsetCurve3D` and `IfcOffsetCurveByDistances` beside lines, polylines
 and in-plane circles, openbimrs/ifc#414; `tests/check.rs`
-`with_geometry_stations_on_an_offset_basis_lower`). Still refused by name: a
-station given as `IfcParameterValue`, an offset of a gradient, spiral or
-B-spline basis (openbimrs/ifc#423), a relation mixing plan-measured and
-arc-length pieces, and an `IfcSegmentedReferenceCurve`. A product placed by an
+`with_geometry_stations_on_an_offset_basis_lower`). Since `ifc-geometry`
+0.22 a single station on an offset of a gradient, spiral, B-spline or ellipse
+basis lowers too, with Axiolid's seam window, so the kernel snaps it onto
+its certified joint (openbimrs/ifc#423). Still refused by name: a station
+given as `IfcParameterValue`, a run of sections or offsets along such a basis
+(openbimrs/ifc#429; `tests/check.rs`
+`with_geometry_a_run_along_an_offset_ellipse_stays_refused`), a linear
+placement derived on one (openbimrs/ifc#427), a relation mixing
+plan-measured and arc-length pieces, and an `IfcSegmentedReferenceCurve`. A product placed by an
 `IfcLinearPlacement` is placed where its linear expression puts it: every
 lowering derives the frame from the basis curve with the Axiolid reference
 curve evaluator (`ifc-geometry` 0.10, `LoweringSession::with_curve_evaluator`

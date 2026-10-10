@@ -19185,6 +19185,43 @@ fn with_geometry_stations_on_an_offset_basis_lower() {
     );
 }
 
+/// A deck sectioned along an `IfcOffsetCurve2D` beside an `IfcEllipse`.
+/// Since ifc-geometry 0.22 a single station on such a basis lowers through
+/// Axiolid's seam window (openbimrs/ifc#423), but a run of sections along it
+/// stays refused by name (openbimrs/ifc#429), so the deck is unmeasured
+/// with that reason and never bounded.
+#[test]
+fn with_geometry_a_run_along_an_offset_ellipse_stays_refused() {
+    let deck = "#86=IFCCARTESIANPOINT((30.,0.));\n\
+                #87=IFCAXIS2PLACEMENT2D(#86,$);\n\
+                #84=IFCELLIPSE(#87,10.,6.);\n\
+                #90=IFCOFFSETCURVE2D(#84,1.5,.F.);\n\
+                #93=IFCRECTANGLEPROFILEDEF(.AREA.,'narrow',#95,2.,1.);\n\
+                #94=IFCRECTANGLEPROFILEDEF(.AREA.,'wide',#95,4.,1.);\n\
+                #95=IFCAXIS2PLACEMENT2D(#96,$);\n\
+                #96=IFCCARTESIANPOINT((0.,0.));\n\
+                #97=IFCAXIS2PLACEMENTLINEAR(#98,$,$);\n\
+                #98=IFCPOINTBYDISTANCEEXPRESSION(IFCLENGTHMEASURE(0.),$,$,$,#90);\n\
+                #99=IFCAXIS2PLACEMENTLINEAR(#100,$,$);\n\
+                #100=IFCPOINTBYDISTANCEEXPRESSION(IFCLENGTHMEASURE(5.),$,$,$,#90);\n\
+                #50=IFCSECTIONEDSOLIDHORIZONTAL(#90,(#93,#94),(#97,#99));\n\
+                #51=IFCSHAPEREPRESENTATION(#5,'Body','AdvancedSweptSolid',(#50));\n\
+                #52=IFCPRODUCTDEFINITIONSHAPE($,$,(#51));\n\
+                #53=IFCBUILDINGELEMENTPROXY('0000000000000000000053',$,$,$,$,#3,#52,$,$);\n";
+    let case = Case::new("geometry-offset-ellipse-run");
+    let model =
+        crossing_walls_with(deck).replace("FILE_SCHEMA(('IFC4'))", "FILE_SCHEMA(('IFC4X3_ADD2'))");
+    let (output, result) = case.wall_clash(&model, &json!({}));
+    assert!(output.status.code().is_some(), "{}", stderr(&output));
+    let reason = unmeasured_reasons(&result)
+        .remove("#53")
+        .unwrap_or_else(|| panic!("{result:#}"));
+    assert!(
+        reason.contains("not yet interpreted") && reason.contains("seam-snapping window"),
+        "{reason}"
+    );
+}
+
 /// A deck sectioned along a plain `IfcCompositeCurve` (#90 of two
 /// polylines meeting at x = 25 m), with a third station on that joint, and
 /// the same with the second polyline turned 90 degrees so the joint is a

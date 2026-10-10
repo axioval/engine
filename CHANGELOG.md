@@ -6,6 +6,11 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **IFC**: moved to `openbim-ifc` 0.28, `ifc-geometry` 0.22, `axiolid-evaluate`
+  0.3.11 and `axiolid-mesh-compile` 0.3.20. A single station on an offset of
+  a gradient, spiral, B-spline or ellipse basis lowers, snapped onto the
+  kernel's certified joint; runs of sections along such bases and linear
+  placements derived on them stay refused by name.
 - **IFC**: moved to `openbim-ifc` 0.27 and `ifc-geometry` 0.21. Lowering is
   unchanged; the new opt-in Axiolid wire format (openbimrs/ifc#367) stays off.
 - **IFC**: moved to `openbim-ifc` 0.26, `ifc-geometry` 0.20 and

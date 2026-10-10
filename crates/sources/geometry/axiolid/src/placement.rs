@@ -250,25 +250,92 @@ impl Scene {
     /// A witness is sought among the centres clear of every possible
     /// obstacle; an absence (`absence`) is proven among those clear of the
     /// sure ones.
+    ///
+    /// The centres are the scope eroded by the shape less the obstacles
+    /// summed with it. An obstacle region of more than
+    /// [`OBSTACLE_SUM_POINTS`] corners (a floor's walls united into one
+    /// polygon with a hole per room) is not summed: that one arrangement
+    /// outgrew 12 GB on a large floor of m14 (#359). The scope less the
+    /// obstacles is eroded by the shape instead, the same centres but for
+    /// those where the shape only touches an obstacle, which it admits: a
+    /// witness from them is still verified by direct overlap
+    /// ([`Self::fits`]), and an absence proven where they are empty holds
+    /// all the more.
     fn free_for(&self, shape: &Ring, absence: bool) -> Result<Region, FreeSpaceError> {
         let (scope, obstacles) = if absence {
             (&self.room, &self.sure)
         } else {
             (&self.scope, &self.obstacles)
         };
+        if region_points(obstacles) > OBSTACLE_SUM_POINTS {
+            return eroded_free(scope, obstacles, shape, self.tolerance);
+        }
+        summed_free(scope, obstacles, shape, self.tolerance)
+    }
+}
+
+/// Obstacle regions with more corners than this are not summed with the
+/// shape ([`Scene::free_for`]).
+const OBSTACLE_SUM_POINTS: usize = 500;
+
+/// The corners of every ring of `region`.
+fn region_points(region: &Region) -> usize {
+    region
+        .polygons()
+        .iter()
+        .map(|polygon| {
+            polygon.outer.points.len()
+                + polygon
+                    .holes
+                    .iter()
+                    .map(|hole| hole.points.len())
+                    .sum::<usize>()
+        })
+        .sum()
+}
+
+/// `scope` eroded by `shape`, less `obstacles` summed with it.
+fn summed_free(
+    scope: &Region,
+    obstacles: &Region,
+    shape: &Ring,
+    tolerance: Tolerance,
+) -> Result<Region, FreeSpaceError> {
+    {
         let room = scope
-            .minkowski_erosion(shape, self.tolerance)
+            .minkowski_erosion(shape, tolerance)
             .map_err(|e| unavailable("erosion", e))?;
         if room.is_empty() || obstacles.is_empty() {
             return Ok(room);
         }
         let blocked = obstacles
-            .minkowski_sum(shape, self.tolerance)
+            .minkowski_sum(shape, tolerance)
             .map_err(|e| unavailable("dilation", e))?;
-        room.difference(&blocked, self.tolerance)
+        room.difference(&blocked, tolerance)
             .map_err(|e| unavailable("difference", e))
     }
+}
 
+/// `scope` less `obstacles`, eroded by `shape`: [`summed_free`]'s centres
+/// and those where the shape only touches an obstacle.
+fn eroded_free(
+    scope: &Region,
+    obstacles: &Region,
+    shape: &Ring,
+    tolerance: Tolerance,
+) -> Result<Region, FreeSpaceError> {
+    let free = if obstacles.is_empty() {
+        scope.clone()
+    } else {
+        scope
+            .difference(obstacles, tolerance)
+            .map_err(|e| unavailable("difference", e))?
+    };
+    free.minkowski_erosion(shape, tolerance)
+        .map_err(|e| unavailable("erosion", e))
+}
+
+impl Scene {
     /// The part of `free` a witness may come from: inside the offset box as
     /// computed. A box without area keeps `free`; its candidates are clamped
     /// onto the box instead.
@@ -667,4 +734,76 @@ pub(crate) fn circle(scene: &Scene, radius: f64) -> Result<Search, FreeSpaceErro
     Ok(Search::Undecided(
         "the circle's fit lies within the disc approximation band",
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn square(x: f64, y: f64, side: f64) -> Polygon {
+        Polygon {
+            outer: Ring {
+                points: vec![
+                    Point2::new(x, y),
+                    Point2::new(x + side, y),
+                    Point2::new(x + side, y + side),
+                    Point2::new(x, y + side),
+                ],
+            },
+            holes: Vec::new(),
+        }
+    }
+
+    /// A floor's walls as one region with a hole per room: a frame round a
+    /// square of `rooms` x `rooms` rooms of 2.9 m behind 0.1 m
+    /// walls, each room's corners cut so the region has many corners.
+    fn walls(rooms: u32, tolerance: Tolerance) -> Region {
+        let side = 3.0 * f64::from(rooms) + 0.1;
+        let mut holes = Vec::new();
+        for i in 0..rooms {
+            for j in 0..rooms {
+                let (x, y) = (0.1 + 3.0 * f64::from(i), 0.1 + 3.0 * f64::from(j));
+                // A room with each corner cut: eight corners.
+                let c = 0.2;
+                holes.push(Ring {
+                    points: vec![
+                        Point2::new(x + c, y),
+                        Point2::new(x, y + c),
+                        Point2::new(x, y + 2.9 - c),
+                        Point2::new(x + c, y + 2.9),
+                        Point2::new(x + 2.9 - c, y + 2.9),
+                        Point2::new(x + 2.9, y + 2.9 - c),
+                        Point2::new(x + 2.9, y + c),
+                        Point2::new(x + 2.9 - c, y),
+                    ],
+                });
+            }
+        }
+        let outer = square(-0.0, -0.0, side).outer;
+        Region::new(vec![Polygon { outer, holes }], tolerance).unwrap()
+    }
+
+    /// Eroding the scope less the obstacles (#359) gives the centres the
+    /// sum gives, up to the overlay's snapping: on a floor of walls, for a
+    /// room and a hall-sized scope, for a rectangle turned and not.
+    #[test]
+    fn eroding_the_free_part_matches_summing_the_obstacles() {
+        let tolerance = Tolerance::new(1.0e-9, 1.0e-9).unwrap();
+        let obstacles = walls(6, tolerance);
+        for scope in [square(3.05, 3.05, 3.0), square(-1.0, -1.0, 20.0)] {
+            let scope = Region::new(vec![scope], tolerance).unwrap();
+            for turn in [0.0, 0.3] {
+                let shape = rectangle(Point2::new(0.0, 0.0), 0.9, 1.2, Axis::at(turn));
+                let summed = summed_free(&scope, &obstacles, &shape, tolerance).unwrap();
+                let eroded = eroded_free(&scope, &obstacles, &shape, tolerance).unwrap();
+                assert!(!summed.is_empty());
+                let gap = summed.difference(&eroded, tolerance).unwrap().area()
+                    + eroded.difference(&summed, tolerance).unwrap().area();
+                assert!(gap < 1.0e-9, "{gap}");
+            }
+        }
+        // A region of more corners than are summed: the floor of m14 that
+        // outgrew memory had about 3,200.
+        assert!(region_points(&walls(18, tolerance)) > OBSTACLE_SUM_POINTS);
+    }
 }

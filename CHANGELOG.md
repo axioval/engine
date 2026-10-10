@@ -6,6 +6,13 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **Free space**: a placement search whose obstacle footprints hold more
+  than 500 corners erodes the scope less the obstacles by the shape
+  instead of summing the obstacles with it, which on a large floor of one
+  model built an arrangement of more than 12 GB. Results agree up to
+  centres at which the shape only touches an obstacle; every witness is
+  still verified by overlap
+  ([#359](https://github.com/axioval/engine/issues/359)).
 - **Geometry**: moved to `axiolid-mesh-compile` 0.3.18 and
   `axiolid-brep-boolean` 0.1.8. The compiler's operand snap closes rounding
   residues only, and a snapped boolean that is refused or pinches falls back

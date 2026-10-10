@@ -112,7 +112,13 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   can take the overlay minutes) and hands it to
   `src/placement.rs`: the configuration space by Minkowski erosion and sum
   with the convex rectangle, one-sided disc morphology for circles, angle
-  interval search for `Any`. Witnesses are re-verified by direct overlap;
+  interval search for `Any` (`Scene::free_for`: the scope eroded less the
+  obstacles summed, or, past `OBSTACLE_SUM_POINTS` corners, the scope less
+  the obstacles eroded, #359: summing a floor's wall network outgrew 12 GB
+  on m14; keep the threshold so smaller scenes stay bit-identical. The
+  eroded path also admits centres where the shape only touches an
+  obstacle, so it only widens what an absence must rule out, and its
+  witnesses rely on the overlap check below). Witnesses are re-verified by direct overlap;
   `NoPlacement` needs the shape shrunk by `KNIFE_EDGE_METRES` (plus the
   rotation margin) to fit nowhere, so a fit by contact refuses. Never drop a
   margin or return `NoPlacement` from an undecided interval. Only the scope's

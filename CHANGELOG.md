@@ -6,6 +6,13 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **IFC**: moved to `openbim-ifc` 0.26, `ifc-geometry` 0.20 and
+  `ifc-alignment` 0.8.1. Stations lower on offset bases beside lines,
+  polylines and in-plane circles, which were refused by name, and a linear
+  placement on a composite, trimmed or offset basis derives its frame
+  through the curve evaluator's paths. Offsets of gradient, spiral or
+  B-spline bases stay refused by name.
+
 - **Geometry**: moved to `axiolid-mesh-compile` 0.3.19 (through
   `axiolid-brep-boolean` 0.1.9), `axiolid-overlay` 0.3.12,
   `axiolid-evaluate` 0.3.10 and `axiolid-curve` 0.3.6. The exact boolean

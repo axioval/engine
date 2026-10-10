@@ -1381,10 +1381,14 @@ says; a run of sections or offsets across a joint lowers too (`tests/check.rs`
 composite of two polylines, straight or turned at the joint, with a station
 on it, reaches the mesh compiler, where it was refused by name). An
 `IfcCurveSegment` placed by an `IfcAxis2PlacementLinear` lowers to a
-placement at a station (openbimrs/ifc#311). Still refused by name: a
-station given as `IfcParameterValue`, an offset-curve basis
-(openbimrs/ifc#414), a relation mixing plan-measured and arc-length pieces,
-and an `IfcSegmentedReferenceCurve`. A product placed by an
+placement at a station (openbimrs/ifc#311). Since `ifc-geometry` 0.20
+stations also lower on an offset basis (`IfcOffsetCurve2D`,
+`IfcOffsetCurve3D` and `IfcOffsetCurveByDistances` beside lines, polylines
+and in-plane circles, openbimrs/ifc#414; `tests/check.rs`
+`with_geometry_stations_on_an_offset_basis_lower`). Still refused by name: a
+station given as `IfcParameterValue`, an offset of a gradient, spiral or
+B-spline basis (openbimrs/ifc#423), a relation mixing plan-measured and
+arc-length pieces, and an `IfcSegmentedReferenceCurve`. A product placed by an
 `IfcLinearPlacement` is placed where its linear expression puts it: every
 lowering derives the frame from the basis curve with the Axiolid reference
 curve evaluator (`ifc-geometry` 0.10, `LoweringSession::with_curve_evaluator`
@@ -1392,7 +1396,9 @@ and `product_world_transform_with_evaluator`, openbimrs/ifc#353), in IFC4.3's
 (tangent, left, up) frame, so a positive `OffsetLateral` lies to the left of
 the curve's direction and the product's Z is up (#355). On a seam between
 two segments the frame takes the incoming segment's tangent (`ifc-geometry`
-0.19, openbimrs/ifc#409). A cached
+0.19, openbimrs/ifc#409), and on a composite, trimmed or offset basis it
+is derived through the evaluator's curve paths (`ifc-geometry` 0.20,
+openbimrs/ifc#418). A cached
 `CartesianPosition` is checked against the derived position
 (`CachedPositionPolicy::Verify`, #354): within the model's precision the
 derived frame is used, and farther apart the product is unmeasured with

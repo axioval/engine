@@ -6,6 +6,8 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **IFC**: moved to `openbim-ifc` 0.27 and `ifc-geometry` 0.21. Lowering is
+  unchanged; the new opt-in Axiolid wire format (openbimrs/ifc#367) stays off.
 - **IFC**: moved to `openbim-ifc` 0.26, `ifc-geometry` 0.20 and
   `ifc-alignment` 0.8.1. Stations lower on offset bases beside lines,
   polylines and in-plane circles, which were refused by name, and a linear

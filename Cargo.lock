@@ -172,18 +172,18 @@ dependencies = [
 
 [[package]]
 name = "axiolid-core"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38efd47bdcfb9f91d40a912ddb3ea7fb0fe98c3fbaab7d5f14df86c5f5f48a63"
+checksum = "d84fc33132cc908e42e764b9e84bf4b0dd54ff68247be11675b2db1b8980639f"
 dependencies = [
  "glam 0.29.3",
 ]
 
 [[package]]
 name = "axiolid-curve"
-version = "0.3.6"
+version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c72f2a70540a753a6b96194eda72f1463a7894bd0a1a46b9384fefefa4794b2e"
+checksum = "a9d29c45b2b2846a0d8cf8584aa6518e67771230b7abe91e3a2e5b140257ed33"
 dependencies = [
  "axiolid-core",
  "axiolid-linear",
@@ -275,9 +275,9 @@ dependencies = [
 
 [[package]]
 name = "axiolid-linear"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "726a518640be01722ca6f077919f6df0278a7034a275172db24743949ab97916"
+checksum = "e3be5de71d301b242999859c1090501e64fa85f7d2b5021ae35875441b8a3809"
 dependencies = [
  "axiolid-core",
 ]
@@ -300,9 +300,9 @@ dependencies = [
 
 [[package]]
 name = "axiolid-mesh"
-version = "0.3.2"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fdf82c2493422c4deb9324588b07547bfeec69d6f46d3518b23d9db37091fdde"
+checksum = "5e10882d936b137a58a0472e9f707037a7e6ccce5e19d7d171e7eb2d65bd2d5d"
 dependencies = [
  "axiolid-core",
 ]
@@ -395,9 +395,9 @@ dependencies = [
 
 [[package]]
 name = "axiolid-model"
-version = "0.3.7"
+version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "816cfbe8a6d0ffc82571e1a05cc408bc5896786c6196ddada89e6fb47c55b937"
+checksum = "1d633efa5dbc8010539a1989fdb6df35ed75cf463fbf8ba0df65bf6aea0f01b4"
 dependencies = [
  "axiolid-core",
  "axiolid-curve",
@@ -455,18 +455,18 @@ dependencies = [
 
 [[package]]
 name = "axiolid-primitive"
-version = "0.3.2"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2853f08edff3bc85d619d9ce4953288af84a0c298ad826adda5e75f2a4603f2"
+checksum = "ef86c0e85123e130a25c4542be3736ba971d85b805107c7d9ec20c037dedbf19"
 dependencies = [
  "axiolid-core",
 ]
 
 [[package]]
 name = "axiolid-profile"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5afa5dce441e7eb5164dae1732dddaec9e732a396201dfc10b5e78d86b83f2bd"
+checksum = "4653d013b80645c75d9664a0cb9ef60747b6b5869ca8251a1bb712cc8c214440"
 dependencies = [
  "axiolid-core",
  "axiolid-curve",
@@ -531,9 +531,9 @@ dependencies = [
 
 [[package]]
 name = "axiolid-surface"
-version = "0.3.2"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8434c5ac021e9aee7e4cde9a445e6d61f3b8ae51e73259dd1fc0c92820585522"
+checksum = "0f369381aedb51ac5d6b676f60c273173211ecc1fcb4a2956d0c47ce8bab91a6"
 dependencies = [
  "axiolid-core",
  "axiolid-curve",
@@ -553,9 +553,9 @@ dependencies = [
 
 [[package]]
 name = "axiolid-topology"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "177870bc0246c5e076392bf04593f29c919bbdd06918ed981c9cbd686d60707a"
+checksum = "4dd8c4ad527ee759f5e727ff0ec866f573f6aa37a491a341169f23d4921a8d2d"
 dependencies = [
  "axiolid-core",
 ]
@@ -1540,9 +1540,9 @@ dependencies = [
 
 [[package]]
 name = "ifc-geometry"
-version = "0.20.0"
+version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13cc3668c8b6623f7db735ccc4109f6c116e04501fb9f6c5f30bc457b22cc0d9"
+checksum = "002f7d708a9828961471968679cba8f042be1fea404cb56e8eb6dec6bae3d8f3"
 dependencies = [
  "axiolid-construct",
  "axiolid-contracts",
@@ -2001,9 +2001,9 @@ dependencies = [
 
 [[package]]
 name = "openbim-ifc"
-version = "0.26.0"
+version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd23266ead399c73a0a27b748c067cd57dfb492d544249041e1ea2607567c1fd"
+checksum = "a0ebe0d11c8b243055d36aed0e6544523e5a7643aafdffbb7283e0a4a43e14d6"
 dependencies = [
  "ifc-classification",
  "ifc-cost",

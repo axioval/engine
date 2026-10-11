@@ -1576,3 +1576,218 @@ fn generated_declarations_hold_distance_parity() {
     }
     assert!(judged > 0);
 }
+
+/// A point (the pipe) with extinguishers around it, each stating `Units`:
+/// `(local, units, distance interval)`. `None` units states none.
+fn extinguishers(
+    around: &[(&str, Option<i64>, (f64, f64))],
+) -> (axioval_ir::Project, axioval_engine::ServiceRegistry) {
+    let mut model = Model::default().object("pipe", "pipe");
+    let mut stub = Stub::default().at("pipe", 0.0, 0.0);
+    for (local, units, distance) in around {
+        model = model.object(local, "extinguisher");
+        if let Some(units) = units {
+            model = model.value(
+                local,
+                "Pset_Extinguisher",
+                "Units",
+                axioval_ir::PropertyValue::Integer(*units),
+            );
+        }
+        // Only a tessellation measures an interval.
+        stub = if distance.0 < distance.1 {
+            stub.curved(local, distance.0, 0.0)
+        } else {
+            stub.at(local, distance.0, 0.0)
+        }
+        .distance("pipe", local, "Minimum3d", *distance);
+    }
+    let (project, mut services) = model.services();
+    services
+        .register(ProximityServiceHandle::new(Arc::new(stub)))
+        .unwrap();
+    (project, services)
+}
+
+/// The floor of #351: 2 units at 5 m, 6 at `ten`, 2 at 20 m and 6 at 30 m.
+fn floor(ten: (f64, f64)) -> (axioval_ir::Project, axioval_engine::ServiceRegistry) {
+    extinguishers(&[
+        ("near", Some(2), (5.0, 5.0)),
+        ("ten", Some(6), ten),
+        ("far", Some(2), (20.0, 20.0)),
+        ("farthest", Some(6), (30.0, 30.0)),
+    ])
+}
+
+fn within(aggregate: &str, radius: f64) -> String {
+    format!("{aggregate}_within;to=extinguisher;value=Pset_Extinguisher/Units;radius={radius}")
+}
+
+/// #351: the extinguisher units within 15 m of a point that reaches two of
+/// the four sum to 8; the least, greatest and mean follow the same two.
+#[test]
+fn values_within_a_radius_sum_the_counterparts_it_reaches() {
+    let (project, services) = floor((10.0, 10.0));
+    let measured = |name: &str| common::measured_cited(&services, &project, &id("pipe"), name);
+    assert_eq!(measured(&within("sum", 15.0)), Ok(Some(((8.0, 8.0), true))));
+    assert_eq!(measured(&within("min", 15.0)), Ok(Some(((2.0, 2.0), true))));
+    assert_eq!(measured(&within("max", 15.0)), Ok(Some(((6.0, 6.0), true))));
+    assert_eq!(
+        measured(&within("mean", 15.0)),
+        Ok(Some(((4.0, 4.0), true)))
+    );
+    // Every one within 40 m, none within 1 m: a sum of none is zero, the
+    // others have no value.
+    assert_eq!(
+        measured(&within("sum", 40.0)),
+        Ok(Some(((16.0, 16.0), true)))
+    );
+    assert_eq!(measured(&within("sum", 1.0)), Ok(Some(((0.0, 0.0), true))));
+    for aggregate in ["min", "max", "mean"] {
+        assert_eq!(measured(&within(aggregate, 1.0)), Ok(None), "{aggregate}");
+    }
+    // `from` leaves the nearer ones out.
+    assert_eq!(
+        measured(&format!("{};from=7", within("sum", 15.0))),
+        Ok(Some(((6.0, 6.0), true)))
+    );
+}
+
+/// A counterpart whose distance straddles the radius adds its value or
+/// nothing: the sum is an interval, never the one or the other; the least
+/// and greatest move only where it may; the mean is not evaluated.
+#[test]
+fn a_counterpart_straddling_the_radius_widens_the_value() {
+    let (project, services) = floor((14.5, 15.5));
+    let measured = |name: &str| common::measured(&services, &project, &id("pipe"), name);
+    assert_eq!(measured(&within("sum", 15.0)), Ok(Some((2.0, 8.0))));
+    assert_eq!(measured(&within("min", 15.0)), Ok(Some((2.0, 2.0))));
+    assert_eq!(measured(&within("max", 15.0)), Ok(Some((2.0, 6.0))));
+    let mean = measured(&within("mean", 15.0)).unwrap_err();
+    assert!(mean.contains("may or may not be within"), "{mean}");
+    // Wholly beyond or within, it decides again.
+    assert_eq!(measured(&within("sum", 16.0)), Ok(Some((8.0, 8.0))));
+    // Measured against a tessellation, the sum is never exact.
+    assert_eq!(
+        common::measured_cited(&services, &project, &id("pipe"), &within("sum", 16.0)),
+        Ok(Some(((8.0, 8.0), false)))
+    );
+    assert_eq!(measured(&within("sum", 14.0)), Ok(Some((2.0, 2.0))));
+}
+
+/// A counterpart within stating no value makes the value `null`, one only
+/// possibly within leaves it not evaluated, and one stating no plain number
+/// leaves it not evaluated: never a value that skips it.
+#[test]
+fn a_counterpart_without_a_value_is_never_skipped() {
+    use axioval_ir::PropertyValue;
+    let sum = |ten: (f64, f64), value: Option<PropertyValue>| {
+        let (project, mut services) = {
+            let mut model = Model::default()
+                .object("pipe", "pipe")
+                .object("near", "extinguisher")
+                .object("ten", "extinguisher")
+                .value(
+                    "near",
+                    "Pset_Extinguisher",
+                    "Units",
+                    PropertyValue::Integer(2),
+                );
+            if let Some(value) = value {
+                model = model.value("ten", "Pset_Extinguisher", "Units", value);
+            }
+            model.services()
+        };
+        let stub = Stub::default()
+            .at("pipe", 0.0, 0.0)
+            .at("near", 5.0, 0.0)
+            .curved("ten", 10.0, 0.0)
+            .distance("pipe", "near", "Minimum3d", (5.0, 5.0))
+            .distance("pipe", "ten", "Minimum3d", ten);
+        services
+            .register(ProximityServiceHandle::new(Arc::new(stub)))
+            .unwrap();
+        common::measured(&services, &project, &id("pipe"), &within("sum", 15.0))
+    };
+    // Stated absent, or stated `null`, surely within: no value.
+    assert_eq!(sum((10.0, 10.0), None), Ok(None));
+    assert_eq!(sum((10.0, 10.0), Some(PropertyValue::Null)), Ok(None));
+    // Only possibly within: the sum may or may not have a value.
+    let open = sum((14.5, 15.5), None).unwrap_err();
+    assert!(open.contains("states no"), "{open}");
+    // Text or a quantity is no plain number.
+    for value in [
+        PropertyValue::String("six".into()),
+        PropertyValue::Quantity {
+            value: 6.0,
+            dimension: axioval_ir::QuantityDimension::Length,
+        },
+    ] {
+        let open = sum((10.0, 10.0), Some(value)).unwrap_err();
+        assert!(open.contains("not a plain number"), "{open}");
+    }
+}
+
+/// Rewritten as an expression rule, the sum within 15 m holds against 8
+/// units and fails against 9, and a straddling counterpart decides only
+/// the bounds it cannot change.
+#[test]
+fn an_expression_rule_judges_the_sum_within_a_radius() {
+    use axioval_ir::PropertyValue;
+    let judge = |ten: (f64, f64), required: f64| {
+        let model = Model::default()
+            .object("pipe", "pipe")
+            .object("near", "extinguisher")
+            .object("ten", "extinguisher")
+            .object("far", "extinguisher")
+            .value(
+                "near",
+                "Pset_Extinguisher",
+                "Units",
+                PropertyValue::Integer(2),
+            )
+            .value(
+                "ten",
+                "Pset_Extinguisher",
+                "Units",
+                PropertyValue::Integer(6),
+            )
+            .value(
+                "far",
+                "Pset_Extinguisher",
+                "Units",
+                PropertyValue::Integer(2),
+            );
+        let stub = Arc::new(
+            Stub::default()
+                .at("pipe", 0.0, 0.0)
+                .at("near", 5.0, 0.0)
+                .curved("ten", 10.0, 0.0)
+                .at("far", 20.0, 0.0)
+                .distance("pipe", "near", "Minimum3d", (5.0, 5.0))
+                .distance("pipe", "ten", "Minimum3d", ten)
+                .distance("pipe", "far", "Minimum3d", (20.0, 20.0)),
+        );
+        let requirement = serde_json::json!({"kind": "compare", "operator": "greaterThanOrEquals",
+            "left": {"kind": "property", "propertySet": "axioval:measured",
+                "property": within("sum", 15.0)},
+            "right": {"kind": "literal", "value": {"type": "number", "value": required}}});
+        let rule = rule(
+            "axioval:capability.expression",
+            kind("pipe"),
+            vec![("requirement", common::expression(requirement))],
+        );
+        let outcome =
+            model.evaluate_measured(&axioval_rules::ExpressionRequirement, &rule, |services| {
+                services
+                    .register(ProximityServiceHandle::new(stub.clone()))
+                    .unwrap();
+            });
+        capability_verdict(&outcome)
+    };
+    assert_eq!(judge((10.0, 10.0), 8.0), Tri::Holds);
+    assert_eq!(judge((10.0, 10.0), 9.0), Tri::Fails);
+    assert_eq!(judge((14.5, 15.5), 8.0), Tri::Open);
+    assert_eq!(judge((14.5, 15.5), 2.0), Tri::Holds);
+    assert_eq!(judge((14.5, 15.5), 9.0), Tri::Fails);
+}

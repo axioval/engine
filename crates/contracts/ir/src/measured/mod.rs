@@ -37,6 +37,14 @@ pub use members::{
 pub const DISTANCE: &str = "distance";
 /// How many counterparts lie within a radius.
 pub const COUNT_WITHIN: &str = "count_within";
+/// The sum of a value the counterparts within a radius state.
+pub const SUM_WITHIN: &str = "sum_within";
+/// The least value a counterpart within a radius states.
+pub const MIN_WITHIN: &str = "min_within";
+/// The greatest value a counterpart within a radius states.
+pub const MAX_WITHIN: &str = "max_within";
+/// The mean of a value the counterparts within a radius state.
+pub const MEAN_WITHIN: &str = "mean_within";
 /// The least vertical clearance above a walking surface.
 pub const HEADROOM: &str = "headroom";
 /// The least clearance below a flight or ramp over the floors beneath.

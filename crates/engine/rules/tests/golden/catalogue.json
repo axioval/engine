@@ -77822,6 +77822,330 @@
       "available": true
     },
     {
+      "name": "max_within",
+      "parameters": [
+        {
+          "key": "to",
+          "kind": {
+            "type": "sourceKind"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The source kinds of the counterparts, `,`-separated, subtypes included."
+            },
+            {
+              "language": "de",
+              "text": "Die Quellarten der Gegenstücke, durch `,` getrennt, Untertypen eingeschlossen."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "value",
+          "kind": {
+            "type": "property"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The plain number each counterpart states, such as `Pset_Extinguisher/Units`."
+            },
+            {
+              "language": "de",
+              "text": "Die reine Zahl, die jedes Gegenstück angibt, etwa `Pset_Extinguisher/Units`."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "radius",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The greatest distance a counterpart counts at, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Der größte Abstand, in dem ein Gegenstück zählt, in Metern."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "from",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "default": "0",
+          "help": [
+            {
+              "language": "en",
+              "text": "The least distance a counterpart counts at, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Der kleinste Abstand, in dem ein Gegenstück zählt, in Metern."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "projection",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "minimum_3d",
+              "horizontal",
+              "vertical",
+              "plan_overlap"
+            ]
+          },
+          "required": false,
+          "default": "minimum_3d",
+          "help": [
+            {
+              "language": "en",
+              "text": "Surface to surface in space, in plan, vertically, or as overlap in plan."
+            },
+            {
+              "language": "de",
+              "text": "Oberfläche zu Oberfläche im Raum, im Grundriss, vertikal oder als Überlappung im Grundriss."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "direction",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "either",
+              "above",
+              "below"
+            ]
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `vertical`: counterparts above, below, or either."
+            },
+            {
+              "language": "de",
+              "text": "Mit `vertical`: Gegenstücke darüber, darunter oder beides."
+            }
+          ],
+          "references": "string"
+        }
+      ],
+      "services": [
+        "proximity",
+        "type-hierarchy",
+        "property-resolution"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "an object's kind cannot be decided",
+        "a counterpart that is or may be within cannot be read, or states no plain number",
+        "a counterpart that may or may not be within states no value"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Greatest within"
+        },
+        {
+          "language": "de",
+          "text": "Größter im Umkreis"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The greatest value a counterpart within a radius states: a counterpart whose distance straddles the radius may raise it; null where a counterpart surely within states none, or none is within."
+        },
+        {
+          "language": "de",
+          "text": "Der größte Wert, den ein Gegenstück im Umkreis angibt: ein Gegenstück, dessen Abstand den Radius überdeckt, kann ihn anheben; null, wo ein sicher darin liegendes Gegenstück keinen angibt oder keines darin liegt."
+        }
+      ],
+      "unit": "1",
+      "available": true
+    },
+    {
+      "name": "mean_within",
+      "parameters": [
+        {
+          "key": "to",
+          "kind": {
+            "type": "sourceKind"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The source kinds of the counterparts, `,`-separated, subtypes included."
+            },
+            {
+              "language": "de",
+              "text": "Die Quellarten der Gegenstücke, durch `,` getrennt, Untertypen eingeschlossen."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "value",
+          "kind": {
+            "type": "property"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The plain number each counterpart states, such as `Pset_Extinguisher/Units`."
+            },
+            {
+              "language": "de",
+              "text": "Die reine Zahl, die jedes Gegenstück angibt, etwa `Pset_Extinguisher/Units`."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "radius",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The greatest distance a counterpart counts at, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Der größte Abstand, in dem ein Gegenstück zählt, in Metern."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "from",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "default": "0",
+          "help": [
+            {
+              "language": "en",
+              "text": "The least distance a counterpart counts at, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Der kleinste Abstand, in dem ein Gegenstück zählt, in Metern."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "projection",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "minimum_3d",
+              "horizontal",
+              "vertical",
+              "plan_overlap"
+            ]
+          },
+          "required": false,
+          "default": "minimum_3d",
+          "help": [
+            {
+              "language": "en",
+              "text": "Surface to surface in space, in plan, vertically, or as overlap in plan."
+            },
+            {
+              "language": "de",
+              "text": "Oberfläche zu Oberfläche im Raum, im Grundriss, vertikal oder als Überlappung im Grundriss."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "direction",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "either",
+              "above",
+              "below"
+            ]
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `vertical`: counterparts above, below, or either."
+            },
+            {
+              "language": "de",
+              "text": "Mit `vertical`: Gegenstücke darüber, darunter oder beides."
+            }
+          ],
+          "references": "string"
+        }
+      ],
+      "services": [
+        "proximity",
+        "type-hierarchy",
+        "property-resolution"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "an object's kind cannot be decided",
+        "a counterpart that is or may be within cannot be read, or states no plain number",
+        "a counterpart that may or may not be within states no value"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Mean within"
+        },
+        {
+          "language": "de",
+          "text": "Mittelwert im Umkreis"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The mean of the values the counterparts within a radius state; not evaluated while a counterpart may or may not be within, null where one surely within states none, or none is within."
+        },
+        {
+          "language": "de",
+          "text": "Der Mittelwert der Werte, die die Gegenstücke im Umkreis angeben; ungeprüft, solange ein Gegenstück darin liegen kann oder nicht, null, wo ein sicher darin liegendes keinen angibt oder keines darin liegt."
+        }
+      ],
+      "unit": "1",
+      "available": true
+    },
+    {
       "name": "middle_face_area",
       "parameters": [
         {
@@ -77903,6 +78227,168 @@
         }
       ],
       "unit": "m2",
+      "available": true
+    },
+    {
+      "name": "min_within",
+      "parameters": [
+        {
+          "key": "to",
+          "kind": {
+            "type": "sourceKind"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The source kinds of the counterparts, `,`-separated, subtypes included."
+            },
+            {
+              "language": "de",
+              "text": "Die Quellarten der Gegenstücke, durch `,` getrennt, Untertypen eingeschlossen."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "value",
+          "kind": {
+            "type": "property"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The plain number each counterpart states, such as `Pset_Extinguisher/Units`."
+            },
+            {
+              "language": "de",
+              "text": "Die reine Zahl, die jedes Gegenstück angibt, etwa `Pset_Extinguisher/Units`."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "radius",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The greatest distance a counterpart counts at, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Der größte Abstand, in dem ein Gegenstück zählt, in Metern."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "from",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "default": "0",
+          "help": [
+            {
+              "language": "en",
+              "text": "The least distance a counterpart counts at, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Der kleinste Abstand, in dem ein Gegenstück zählt, in Metern."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "projection",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "minimum_3d",
+              "horizontal",
+              "vertical",
+              "plan_overlap"
+            ]
+          },
+          "required": false,
+          "default": "minimum_3d",
+          "help": [
+            {
+              "language": "en",
+              "text": "Surface to surface in space, in plan, vertically, or as overlap in plan."
+            },
+            {
+              "language": "de",
+              "text": "Oberfläche zu Oberfläche im Raum, im Grundriss, vertikal oder als Überlappung im Grundriss."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "direction",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "either",
+              "above",
+              "below"
+            ]
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `vertical`: counterparts above, below, or either."
+            },
+            {
+              "language": "de",
+              "text": "Mit `vertical`: Gegenstücke darüber, darunter oder beides."
+            }
+          ],
+          "references": "string"
+        }
+      ],
+      "services": [
+        "proximity",
+        "type-hierarchy",
+        "property-resolution"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "an object's kind cannot be decided",
+        "a counterpart that is or may be within cannot be read, or states no plain number",
+        "a counterpart that may or may not be within states no value"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Least within"
+        },
+        {
+          "language": "de",
+          "text": "Kleinster im Umkreis"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The least value a counterpart within a radius states: a counterpart whose distance straddles the radius may lower it; null where a counterpart surely within states none, or none is within."
+        },
+        {
+          "language": "de",
+          "text": "Der kleinste Wert, den ein Gegenstück im Umkreis angibt: ein Gegenstück, dessen Abstand den Radius überdeckt, kann ihn senken; null, wo ein sicher darin liegendes Gegenstück keinen angibt oder keines darin liegt."
+        }
+      ],
+      "unit": "1",
       "available": true
     },
     {
@@ -82219,6 +82705,168 @@
         {
           "language": "de",
           "text": "1, wo das eine Geschoss, das die Traversierung vom Objekt aus erreicht, nach dem Attribut `Elevation` der Geschosse das höchste (`top`) oder niedrigste (`bottom`) seiner Quelle ist, 0, wo nicht: das Geschoss, das `slab-contact` auslässt."
+        }
+      ],
+      "unit": "1",
+      "available": true
+    },
+    {
+      "name": "sum_within",
+      "parameters": [
+        {
+          "key": "to",
+          "kind": {
+            "type": "sourceKind"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The source kinds of the counterparts, `,`-separated, subtypes included."
+            },
+            {
+              "language": "de",
+              "text": "Die Quellarten der Gegenstücke, durch `,` getrennt, Untertypen eingeschlossen."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "value",
+          "kind": {
+            "type": "property"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The plain number each counterpart states, such as `Pset_Extinguisher/Units`."
+            },
+            {
+              "language": "de",
+              "text": "Die reine Zahl, die jedes Gegenstück angibt, etwa `Pset_Extinguisher/Units`."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "radius",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The greatest distance a counterpart counts at, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Der größte Abstand, in dem ein Gegenstück zählt, in Metern."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "from",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "default": "0",
+          "help": [
+            {
+              "language": "en",
+              "text": "The least distance a counterpart counts at, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Der kleinste Abstand, in dem ein Gegenstück zählt, in Metern."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "projection",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "minimum_3d",
+              "horizontal",
+              "vertical",
+              "plan_overlap"
+            ]
+          },
+          "required": false,
+          "default": "minimum_3d",
+          "help": [
+            {
+              "language": "en",
+              "text": "Surface to surface in space, in plan, vertically, or as overlap in plan."
+            },
+            {
+              "language": "de",
+              "text": "Oberfläche zu Oberfläche im Raum, im Grundriss, vertikal oder als Überlappung im Grundriss."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "direction",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "either",
+              "above",
+              "below"
+            ]
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `vertical`: counterparts above, below, or either."
+            },
+            {
+              "language": "de",
+              "text": "Mit `vertical`: Gegenstücke darüber, darunter oder beides."
+            }
+          ],
+          "references": "string"
+        }
+      ],
+      "services": [
+        "proximity",
+        "type-hierarchy",
+        "property-resolution"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "an object's kind cannot be decided",
+        "a counterpart that is or may be within cannot be read, or states no plain number",
+        "a counterpart that may or may not be within states no value"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Sum within"
+        },
+        {
+          "language": "de",
+          "text": "Summe im Umkreis"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The sum of the values the counterparts within a radius state: an interval where a counterpart's distance straddles the radius, since it adds its value or nothing; zero where none is within, null where one surely within states none."
+        },
+        {
+          "language": "de",
+          "text": "Die Summe der Werte, die die Gegenstücke im Umkreis angeben: ein Intervall, wo der Abstand eines Gegenstücks den Radius überdeckt, da es seinen Wert oder nichts beiträgt; null, wo keines darin liegt, kein Wert, wo ein sicher darin liegendes keinen angibt."
         }
       ],
       "unit": "1",

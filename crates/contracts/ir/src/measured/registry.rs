@@ -2,9 +2,10 @@
 
 use super::{
     ANGLE_TO, BEARING, CLEAR_HEIGHT, CLEAR_WIDTH, CLEARANCE_BELOW, COUNT_WITHIN, CROSS_FALL,
-    DISTANCE, EXTENT, GRADIENT_DIRECTION, HEADROOM, INCLINATION, LENGTH, LocalizedText,
-    MeasuredDescriptor, MeasuredExactness, MeasuredParameter, MeasuredParameterKind,
-    MeasuredSubject, PERIMETER, SKEW, SLOPE, SLOPE_ALONG, THICKNESS,
+    DISTANCE, EXTENT, GRADIENT_DIRECTION, HEADROOM, INCLINATION, LENGTH, LocalizedText, MAX_WITHIN,
+    MEAN_WITHIN, MIN_WITHIN, MeasuredDescriptor, MeasuredExactness, MeasuredParameter,
+    MeasuredParameterKind, MeasuredSubject, PERIMETER, SKEW, SLOPE, SLOPE_ALONG, SUM_WITHIN,
+    THICKNESS,
 };
 use crate::{
     MEASURED_AREA, MEASURED_BOTTOM, MEASURED_BOTTOM_ABOVE_LEVEL, MEASURED_BOUNDARY_AREA,
@@ -323,6 +324,72 @@ const VERTICAL_DIRECTION: MeasuredParameter = MeasuredParameter {
 };
 
 const NO_DISTANCE: &str = "a counterpart's distance could not be read or straddles";
+
+/// The parameters of a value aggregated over the counterparts within a
+/// radius (`sum_within`, `min_within`, `max_within`, `mean_within`).
+const WITHIN: &[MeasuredParameter] = &[
+    COUNTERPARTS,
+    MeasuredParameter {
+        key: "value",
+        kind: MeasuredParameterKind::Property,
+        required: true,
+        default: None,
+        help: &en_de(
+            "The plain number each counterpart states, such as `Pset_Extinguisher/Units`.",
+            "Die reine Zahl, die jedes Gegenstück angibt, etwa `Pset_Extinguisher/Units`.",
+        ),
+    },
+    MeasuredParameter {
+        key: "radius",
+        kind: MeasuredParameterKind::Length { minimum: 0.0 },
+        required: true,
+        default: None,
+        help: &en_de(
+            "The greatest distance a counterpart counts at, in metres.",
+            "Der größte Abstand, in dem ein Gegenstück zählt, in Metern.",
+        ),
+    },
+    MeasuredParameter {
+        key: "from",
+        kind: MeasuredParameterKind::Length { minimum: 0.0 },
+        required: false,
+        default: Some("0"),
+        help: &en_de(
+            "The least distance a counterpart counts at, in metres.",
+            "Der kleinste Abstand, in dem ein Gegenstück zählt, in Metern.",
+        ),
+    },
+    PROJECTION,
+    VERTICAL_DIRECTION,
+];
+
+/// What leaves a value over the counterparts within a radius not
+/// evaluated.
+const WITHIN_NOT_EVALUATED: &[&str] = &[
+    NO_GEOMETRY,
+    UNDECIDED_KIND,
+    "a counterpart that is or may be within cannot be read, or states no plain number",
+    "a counterpart that may or may not be within states no value",
+];
+
+/// A value aggregated over the counterparts within a radius.
+const fn within(
+    name: &'static str,
+    label: &'static [LocalizedText],
+    help: &'static [LocalizedText],
+) -> MeasuredDescriptor {
+    MeasuredDescriptor {
+        name,
+        parameters: WITHIN,
+        dimension: None,
+        services: &["proximity", "type-hierarchy", "property-resolution"],
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: WITHIN_NOT_EVALUATED,
+        label,
+        help,
+    }
+}
 
 pub(super) const SPACE: &[&str] = &["space"];
 pub(super) const SPACE_UNMEASURED: &str =
@@ -4686,6 +4753,30 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              als die der Referenzquelle, 0, wo beide dasselbe nennen.",
         ),
     },
+    within(
+        MAX_WITHIN,
+        &en_de("Greatest within", "Größter im Umkreis"),
+        &en_de(
+            "The greatest value a counterpart within a radius states: a counterpart whose \
+             distance straddles the radius may raise it; null where a counterpart surely \
+             within states none, or none is within.",
+            "Der größte Wert, den ein Gegenstück im Umkreis angibt: ein Gegenstück, dessen \
+             Abstand den Radius überdeckt, kann ihn anheben; null, wo ein sicher darin \
+             liegendes Gegenstück keinen angibt oder keines darin liegt.",
+        ),
+    ),
+    within(
+        MEAN_WITHIN,
+        &en_de("Mean within", "Mittelwert im Umkreis"),
+        &en_de(
+            "The mean of the values the counterparts within a radius state; not evaluated \
+             while a counterpart may or may not be within, null where one surely within \
+             states none, or none is within.",
+            "Der Mittelwert der Werte, die die Gegenstücke im Umkreis angeben; ungeprüft, \
+             solange ein Gegenstück darin liegen kann oder nicht, null, wo ein sicher darin \
+             liegendes keinen angibt oder keines darin liegt.",
+        ),
+    ),
     MeasuredDescriptor {
         name: "middle_face_area",
         parameters: &FACE_AXES,
@@ -4707,6 +4798,18 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              des Umrisses oder seine Sehne entlang der Ansicht mal der Höhe.",
         ),
     },
+    within(
+        MIN_WITHIN,
+        &en_de("Least within", "Kleinster im Umkreis"),
+        &en_de(
+            "The least value a counterpart within a radius states: a counterpart whose \
+             distance straddles the radius may lower it; null where a counterpart surely \
+             within states none, or none is within.",
+            "Der kleinste Wert, den ein Gegenstück im Umkreis angibt: ein Gegenstück, dessen \
+             Abstand den Radius überdeckt, kann ihn senken; null, wo ein sicher darin \
+             liegendes Gegenstück keinen angibt oder keines darin liegt.",
+        ),
+    ),
     MeasuredDescriptor {
         name: "missing_tactile_strips",
         parameters: &[
@@ -6093,6 +6196,20 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              auslässt.",
         ),
     },
+    within(
+        SUM_WITHIN,
+        &en_de("Sum within", "Summe im Umkreis"),
+        &en_de(
+            "The sum of the values the counterparts within a radius state: an interval \
+             where a counterpart's distance straddles the radius, since it adds its value \
+             or nothing; zero where none is within, null where one surely within states \
+             none.",
+            "Die Summe der Werte, die die Gegenstücke im Umkreis angeben: ein Intervall, \
+             wo der Abstand eines Gegenstücks den Radius überdeckt, da es seinen Wert oder \
+             nichts beiträgt; null, wo keines darin liegt, kein Wert, wo ein sicher darin \
+             liegendes keinen angibt.",
+        ),
+    ),
     MeasuredDescriptor {
         name: "support_count",
         parameters: &[MeasuredParameter {

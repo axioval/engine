@@ -382,6 +382,7 @@ ignoring ASCII case):
 | `clear_height` | a space's clear height | `SpaceService::measure_clear_height` |
 | `distance;to=<kinds>[;mode=nearest\|farthest][;projection=…][;direction=…][;subject_surface=…;counterpart_surface=…][;within=<m>]` | the nearest or farthest counterpart's distance, as `distance` measures it | built in, over `ProximityService` |
 | `count_within;to=<kinds>;radius=<m>[;from=<m>][;projection=…][;direction=…]` | how many counterparts lie within a radius, a plain number | built in, over `ProximityService` |
+| `sum_within`, `min_within`, `max_within`, `mean_within` `;to=<kinds>;value=<property>;radius=<m>[;from=<m>][;projection=…][;direction=…]` | the sum, least, greatest or mean of a plain number the counterparts within a radius state | built in, over `ProximityService` and the counterparts' properties |
 | `duplicate_count`, `boundary_gap[;at_least=<m>][;measure=total\|longest][;elements=<kinds>]`, `intersection_count[;tolerance=<m>][;elements=<kinds>]`, `cap_coverage;cap=top\|bottom[;elements=<kinds>]`, `support_count[;of=slabs\|roofs]` | a space's `space-validation` aspects | `SpaceService` |
 | `largest_unallocated_region`, `unallocated_share` | a storey's floor no space covers | `SpaceService::measure_unallocated_regions` |
 | `facade_area`, `face_area` | the facade area, or the largest plane face's area | `FacadeAreaService` |
@@ -886,7 +887,8 @@ model's slabs or roofs.
 
 ### Distances
 
-`distance` and `count_within` are measured by the built-in code of the
+`distance`, `count_within` and the values within a radius below are
+measured by the built-in code of the
 `distance` capability: its broad phase, projections, surfaces and
 counting of undecided counterparts. A comparison of the value therefore
 reaches the capability's verdicts:
@@ -908,6 +910,31 @@ counted. `count_within` runs from those surely within to those possibly
 within, and a decided count is an integer; it is cited exact when every
 counterpart that may count was measured exactly, as `distance` cites a
 shortfall.
+
+`sum_within`, `min_within`, `max_within` and `mean_within` aggregate the
+plain number `value` (a property, `set/name` or `name`) over the same
+counterparts `count_within` counts, so fire extinguisher units within
+15 m of a point are
+`sum_within;to=IfcFireSuppressionTerminal;value=Pset_Extinguisher/Units;radius=15`.
+A counterpart surely within adds its value; one that only may be within
+(its distance straddles `radius` or `from`, or its distance or scope is
+undecided) adds its value or nothing, never the one or the other:
+
+- `sum_within` is an interval holding both, and zero where none is within;
+- `min_within` and `max_within` move only where such a counterpart may
+  lower (raise) them, and are not evaluated while every counterpart only
+  may be within, since there may be none;
+- `mean_within` is not evaluated while any counterpart only may be within.
+
+A counterpart surely within that states no value (absent or `null`) makes
+the value `null`, as a member stating none makes an aggregate `null`; one
+that only may be within and states none leaves it not evaluated, never
+skipped. A value that is not a plain number (text, or a quantity of a
+unit) or cannot be read leaves it not evaluated. `min_within`,
+`max_within` and `mean_within` over no counterpart within are `null`.
+Each is cited exact when every counterpart that may count was measured
+exactly and every value read is stated exactly. Route distances, derived
+groups and context zones are not yet a reach of these values.
 
 A measured value without a dimension, such as a count, is a plain
 number. Known only to an interval, it is a `measured` value without a
@@ -943,6 +970,7 @@ sites that cite a value exact:
 | Provider | Exact when | The interval holds |
 | --- | --- | --- |
 | `distance`, `count_within` | every counterpart that may be the nearest (farthest) or may count was measured exactly | the undecided counterparts, as `distance` cites them (`Cited`) |
+| `sum_within`, `min_within`, `max_within`, `mean_within` | every counterpart that may count was measured exactly and states its value exactly | the undecided counterparts' values or nothing, summed and divided outward |
 | `door_clear_width`, `door_clear_height`, `sill_height`, `threshold_step` | every extent, leaf and stated value read is exact | rounding of the differences, widened outward |
 | `leaf_count`, `leaf_width`, `swings_into`, `hinged_leaves` | the leaves (stated, exact by contract) and every probe are exact | a total width summed outward |
 | `swing_spaces` (members) | the leaves and every containment probe are exact (both exact by contract) | nothing |

@@ -270,6 +270,69 @@ impl Interval {
         Self { lower, upper }.times(step)
     }
 
+    /// The greatest multiple of `step` not above, bound by bound.
+    ///
+    /// A decimal step stands for its decimal as in [`Self::round_to`], and
+    /// a bound that is the literal of a decimal multiple is that multiple,
+    /// so `floor_to(0.98, 0.01)` is `0.98`. Any other bound counts its
+    /// steps over its widened quotient, outward: the lower bound from the
+    /// quotient's lower end, the upper from its upper end.
+    ///
+    /// # Errors
+    ///
+    /// [`IntervalFailure::Domain`] unless `step` is one positive value,
+    /// [`IntervalFailure::Overflow`] when a bound is not finite.
+    pub fn floor_to(self, step: Self) -> IntervalResult {
+        self.directed_to(step, f64::floor)
+    }
+
+    /// The least multiple of `step` not below, bound by bound, as
+    /// [`Self::floor_to`] counts steps.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::floor_to`].
+    pub fn ceil_to(self, step: Self) -> IntervalResult {
+        self.directed_to(step, f64::ceil)
+    }
+
+    /// The multiple of `step` that `direction` (`floor` or `ceil`) counts
+    /// to, bound by bound, carried outward. Both are monotone, so the
+    /// bounds go to the bounds.
+    fn directed_to(self, step: Self, direction: fn(f64) -> f64) -> IntervalResult {
+        if !step.is_point() || step.lower <= 0.0 {
+            return Err(IntervalFailure::Domain);
+        }
+        let decimal = decimal(step.lower);
+        // `count * digits` is an exact integer, divided by an exact power
+        // of ten, which rounds correctly.
+        let multiple = |count: f64| {
+            decimal.and_then(|(digits, scale)| {
+                let product = count * digits;
+                (product.abs() < 9.0e15).then(|| product / scale)
+            })
+        };
+        let count = |bound: f64, upper: bool| -> Result<f64, IntervalFailure> {
+            let quotient = Self::point(bound).divided_by(step)?;
+            for nearest in [quotient.lower.round(), quotient.upper.round()] {
+                if multiple(nearest) == Some(bound) {
+                    return Ok(nearest);
+                }
+            }
+            Ok(direction(if upper {
+                quotient.upper
+            } else {
+                quotient.lower
+            }))
+        };
+        let lower = count(self.lower, false)?;
+        let upper = count(self.upper, true)?;
+        if let (Some(lower), Some(upper)) = (multiple(lower), multiple(upper)) {
+            return Ok(Self { lower, upper });
+        }
+        Self { lower, upper }.times(step)
+    }
+
     /// The greatest integer not above, bound by bound.
     #[must_use]
     pub fn floor(self) -> Self {
@@ -496,6 +559,43 @@ mod tests {
             Interval::point(1.0).round_to(Interval::point(0.0)),
             Err(IntervalFailure::Domain)
         );
+    }
+
+    #[test]
+    fn rounding_down_and_up_to_a_step_carries_the_bounds_outward() {
+        let one = Interval::point(1.0);
+        assert_eq!(Interval::point(4.2).ceil_to(one), Ok(Interval::point(5.0)));
+        assert_eq!(Interval::point(4.2).floor_to(one), Ok(Interval::point(4.0)));
+        let centimetre = Interval::point(0.01);
+        assert_eq!(
+            Interval::point(0.987).floor_to(centimetre),
+            Ok(Interval::point(0.98))
+        );
+        assert_eq!(
+            Interval::point(0.981).ceil_to(centimetre),
+            Ok(Interval::point(0.99))
+        );
+        // A bound on a multiple's literal is that multiple, either way.
+        assert_eq!(
+            Interval::point(0.98).floor_to(centimetre),
+            Ok(Interval::point(0.98))
+        );
+        assert_eq!(
+            Interval::point(0.98).ceil_to(centimetre),
+            Ok(Interval::point(0.98))
+        );
+        assert_eq!(interval(4.0, 4.2).ceil_to(one), Ok(interval(4.0, 5.0)));
+        assert_eq!(interval(4.0, 4.2).floor_to(one), Ok(interval(4.0, 4.0)));
+        assert_eq!(interval(-1.5, -0.5).floor_to(one), Ok(interval(-2.0, -1.0)));
+        // A step no decimal is nearest to counts over exact products.
+        let third = Interval::point(1.0)
+            .ceil_to(Interval::point(1.0 / 3.0))
+            .unwrap();
+        assert!(third.lower <= 1.0 && 1.0 <= third.upper);
+        for step in [Interval::point(0.0), interval(1.0, 2.0)] {
+            assert_eq!(one.ceil_to(step), Err(IntervalFailure::Domain));
+            assert_eq!(one.floor_to(step), Err(IntervalFailure::Domain));
+        }
     }
 
     #[test]

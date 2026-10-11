@@ -643,10 +643,23 @@ impl Checker<'_> {
             Expression::Negate { operand, .. } | Expression::Abs { operand, .. } => {
                 self.numeric(operand, &child("operand"))?
             }
-            Expression::Floor { operand, .. } | Expression::Ceil { operand, .. } => {
-                match self.numeric(operand, &child("operand"))? {
-                    Type::Number(unit) if unit.is_plain() => Type::Integer,
-                    other => other,
+            Expression::Floor { operand, step, .. } | Expression::Ceil { operand, step, .. } => {
+                let value = self.numeric(operand, &child("operand"))?;
+                match step {
+                    None => match value {
+                        Type::Number(unit) if unit.is_plain() => Type::Integer,
+                        other => other,
+                    },
+                    // A whole step's multiples are whole.
+                    Some(step) => {
+                        let step = self.numeric(step, &child("step"))?;
+                        match same_unit("rounds", &value, &step).map_err(here)? {
+                            Type::Number(unit) if unit.is_plain() && step == Type::Integer => {
+                                Type::Integer
+                            }
+                            other => other,
+                        }
+                    }
                 }
             }
             Expression::Min { operands, .. } | Expression::Max { operands, .. } => {

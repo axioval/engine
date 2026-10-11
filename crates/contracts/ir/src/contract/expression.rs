@@ -252,13 +252,21 @@ pub enum Expression {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         label: Option<String>,
     },
+    /// `operand` rounded down: to the greatest whole number not above it,
+    /// or with a `step` to the greatest multiple of `step` not above it.
     Floor {
         operand: Box<Expression>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
+        step: Option<Box<Expression>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         label: Option<String>,
     },
+    /// `operand` rounded up: to the least whole number not below it, or
+    /// with a `step` to the least multiple of `step` not below it.
     Ceil {
         operand: Box<Expression>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        step: Option<Box<Expression>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         label: Option<String>,
     },
@@ -741,8 +749,6 @@ impl Expression {
             | Self::IsUndefined { operand, .. }
             | Self::Negate { operand, .. }
             | Self::Abs { operand, .. }
-            | Self::Floor { operand, .. }
-            | Self::Ceil { operand, .. }
             | Self::Sqrt { operand, .. }
             | Self::Sin { operand, .. }
             | Self::Cos { operand, .. }
@@ -753,6 +759,11 @@ impl Expression {
             | Self::Lower { operand, .. }
             | Self::Upper { operand, .. }
             | Self::Trim { operand, .. } => vec![operand],
+            Self::Floor { operand, step, .. } | Self::Ceil { operand, step, .. } => {
+                std::iter::once(operand.as_ref())
+                    .chain(step.as_deref())
+                    .collect()
+            }
             Self::And { operands, .. }
             | Self::Or { operands, .. }
             | Self::Coalesce { operands, .. }
@@ -822,6 +833,7 @@ impl Expression {
 
     /// Renames every rule the tree reads, as [`Expression::rule_references`]
     /// lists them.
+    #[allow(clippy::too_many_lines)] // One arm per node kind, kept exhaustive.
     pub fn rename_rules(&mut self, rename: &dyn Fn(&str) -> String) {
         match self {
             Self::RuleOutcome { rule, .. }
@@ -874,8 +886,6 @@ impl Expression {
             | Self::IsUndefined { operand, .. }
             | Self::Negate { operand, .. }
             | Self::Abs { operand, .. }
-            | Self::Floor { operand, .. }
-            | Self::Ceil { operand, .. }
             | Self::Sqrt { operand, .. }
             | Self::Sin { operand, .. }
             | Self::Cos { operand, .. }
@@ -886,6 +896,10 @@ impl Expression {
             | Self::Lower { operand, .. }
             | Self::Upper { operand, .. }
             | Self::Trim { operand, .. } => operand.rename_rules(rename),
+            Self::Floor { operand, step, .. } | Self::Ceil { operand, step, .. } => {
+                operand.rename_rules(rename);
+                step.iter_mut().for_each(|step| step.rename_rules(rename));
+            }
             Self::Implies {
                 antecedent: left,
                 consequent: right,

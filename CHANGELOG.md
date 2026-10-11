@@ -4,6 +4,18 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+### Added
+
+- **Expressions**: `floor` and `ceil` take an optional `step`, of the
+  operand's unit, and round down or up to its multiples as norms prescribe
+  the direction: `ceil(4.2, 1)` is 5, `floor(0.987 m, 0.01 m)` is
+  `0.98 m`, and an interval's bounds go outward, `[4.0, 4.2]` rounded up
+  being `[4, 5]`. A decimal step stands for its decimal as in `round`. The
+  text form takes `floor(value, step)` and `ceil(value, step)`. Without a
+  step, documents serialize and evaluate as before; the catalogue's schema
+  version is 1.3.0
+  ([#349](https://github.com/axioval/engine/issues/349)).
+
 ### Changed
 
 - **IFC**: moved to `openbim-ifc` 0.28, `ifc-geometry` 0.22, `axiolid-evaluate`

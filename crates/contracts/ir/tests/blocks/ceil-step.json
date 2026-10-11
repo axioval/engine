@@ -1,0 +1,40 @@
+{
+  "expression": {
+    "kind": "ceil",
+    "operand": {
+      "kind": "parameter",
+      "name": "occupants"
+    },
+    "step": {
+      "kind": "literal",
+      "value": {
+        "type": "integer",
+        "value": 1
+      }
+    }
+  },
+  "blocks": {
+    "type": "expression.ceil",
+    "inputs": {
+      "operand": {
+        "block": {
+          "type": "expression.parameter",
+          "fields": {
+            "name": "occupants"
+          }
+        }
+      },
+      "step": {
+        "block": {
+          "type": "expression.literal",
+          "fields": {
+            "value": {
+              "type": "integer",
+              "value": 1
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -17,7 +17,7 @@ use crate::measured::{LocalizedText, en_de};
 /// A consumer reads any catalogue of its own major version: a minor
 /// version only adds entries or optional fields, a patch only changes
 /// texts. Removing or renaming anything raises the major version.
-pub const CATALOGUE_SCHEMA_VERSION: &str = "1.2.0";
+pub const CATALOGUE_SCHEMA_VERSION: &str = "1.3.0";
 
 /// A value type an expression field takes or a node yields.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -216,6 +216,8 @@ pub enum ResultRule {
     /// The square root of the field's unit.
     UnitRoot,
     /// A plain number rounds to a whole number; a quantity keeps its unit.
+    /// With a `step`, the unit operand and step share; a whole number when
+    /// both are whole.
     Rounded,
     /// By the aggregate's function: see [`AGGREGATE_FUNCTIONS`].
     Aggregate,
@@ -356,6 +358,15 @@ const fn choice(name: &'static str, options: &'static [&'static str], required: 
 }
 
 const OPERAND_NUMBER: &[Field] = &[one("operand", NUMERIC)];
+/// `floor` and `ceil`: an operand, and the step it rounds to if any.
+const OPERAND_STEP: &[Field] = &[
+    one("operand", NUMERIC),
+    Field {
+        name: "step",
+        kind: FieldKind::Expression { accepts: NUMERIC },
+        required: false,
+    },
+];
 const OPERAND_ANGLE: &[Field] = &[one("operand", ANGLE)];
 const OPERAND_TEXT: &[Field] = &[one("operand", TEXTUAL)];
 const LEFT_RIGHT_NUMBER: &[Field] = &[one("left", NUMERIC), one("right", NUMERIC)];
@@ -750,23 +761,28 @@ pub const EXPRESSION_KINDS: &[NodeKind] = &[
     NodeKind {
         kind: "floor",
         category: "arithmetic",
-        fields: OPERAND_NUMBER,
+        fields: OPERAND_STEP,
         result: ResultRule::Rounded,
         label: &en_de("Round down", "Abrunden"),
         help: &en_de(
-            "The greatest whole number not above the operand.",
-            "Die größte ganze Zahl, die den Operanden nicht übersteigt.",
+            "The greatest whole number not above the operand or, with a step, the greatest \
+             multiple of the step of its unit not above it.",
+            "Die größte ganze Zahl, die den Operanden nicht übersteigt, oder mit Schrittweite \
+             das größte Vielfache der Schrittweite derselben Einheit, das ihn nicht übersteigt.",
         ),
     },
     NodeKind {
         kind: "ceil",
         category: "arithmetic",
-        fields: OPERAND_NUMBER,
+        fields: OPERAND_STEP,
         result: ResultRule::Rounded,
         label: &en_de("Round up", "Aufrunden"),
         help: &en_de(
-            "The least whole number not below the operand.",
-            "Die kleinste ganze Zahl, die den Operanden nicht unterschreitet.",
+            "The least whole number not below the operand or, with a step, the least multiple \
+             of the step of its unit not below it.",
+            "Die kleinste ganze Zahl, die den Operanden nicht unterschreitet, oder mit \
+             Schrittweite das kleinste Vielfache der Schrittweite derselben Einheit, das ihn \
+             nicht unterschreitet.",
         ),
     },
     NodeKind {

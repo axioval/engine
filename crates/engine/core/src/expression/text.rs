@@ -19,8 +19,8 @@
 //! A number takes the unit written right after it (`42.5 EUR/m²`, `10 m2`).
 //! A name (`area`, `profile_width`) reads the column or parameter of that
 //! name. The functions are `min`, `max` (two values or more), `abs`,
-//! `sqrt`, `floor`, `ceil`, `round(value, step)`, `if(condition, then,
-//! else)` and `coalesce(...)`. Text parses into the expression tree; it
+//! `sqrt`, `floor` and `ceil` (with an optional step), `round(value,
+//! step)`, `if(condition, then, else)` and `coalesce(...)`. Text parses into the expression tree; it
 //! never runs as code.
 
 use axioval_ir::contract::{
@@ -441,14 +441,33 @@ impl Parser<'_> {
                 operands: arguments,
                 label,
             },
-            "abs" | "sqrt" | "floor" | "ceil" => {
+            "abs" | "sqrt" => {
                 count(1)?;
                 let operand = boxed(arguments.remove(0));
-                match name {
-                    "abs" => Expression::Abs { operand, label },
-                    "sqrt" => Expression::Sqrt { operand, label },
-                    "floor" => Expression::Floor { operand, label },
-                    _ => Expression::Ceil { operand, label },
+                if name == "abs" {
+                    Expression::Abs { operand, label }
+                } else {
+                    Expression::Sqrt { operand, label }
+                }
+            }
+            "floor" | "ceil" => {
+                if !(1..=2).contains(&arguments.len()) {
+                    return Err(format!("`{name}` takes a value and an optional step"));
+                }
+                let step = (arguments.len() == 2).then(|| boxed(arguments.remove(1)));
+                let operand = boxed(arguments.remove(0));
+                if name == "floor" {
+                    Expression::Floor {
+                        operand,
+                        step,
+                        label,
+                    }
+                } else {
+                    Expression::Ceil {
+                        operand,
+                        step,
+                        label,
+                    }
                 }
             }
             "round" => {

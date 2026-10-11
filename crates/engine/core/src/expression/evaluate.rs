@@ -947,10 +947,41 @@ impl Evaluator<'_> {
                     .map_err(|failure| here(interval_reason(failure)))?;
                 Ok(Value::Number { value, unit })
             }
+            Expression::Floor { operand, step, .. } | Expression::Ceil { operand, step, .. } => {
+                let upward = matches!(expression, Expression::Ceil { .. });
+                let value = self.eval(operand, &child("operand"));
+                let Some(step) = step else {
+                    let value = value?;
+                    if value == Value::Null {
+                        return Ok(Value::Null);
+                    }
+                    let (value, unit) = number(&value).map_err(here)?;
+                    let value = if upward { value.ceil() } else { value.floor() };
+                    return Ok(Value::Number { value, unit });
+                };
+                let step = self.eval(step, &child("step"));
+                let (value, step) = match (value, step) {
+                    (Ok(Value::Null), _) | (_, Ok(Value::Null)) => return Ok(Value::Null),
+                    (value, step) => (value?, step?),
+                };
+                let (value, unit) = number(&value).map_err(here)?;
+                let (step, step_unit) = number(&step).map_err(here)?;
+                if unit != step_unit {
+                    let direction = if upward { "up" } else { "down" };
+                    return Err(here(Reason::Mismatch(format!(
+                        "it rounds {unit} {direction} to a step of {step_unit}, which differ"
+                    ))));
+                }
+                let value = if upward {
+                    value.ceil_to(step)
+                } else {
+                    value.floor_to(step)
+                }
+                .map_err(|failure| here(interval_reason(failure)))?;
+                Ok(Value::Number { value, unit })
+            }
             Expression::Negate { operand, .. }
             | Expression::Abs { operand, .. }
-            | Expression::Floor { operand, .. }
-            | Expression::Ceil { operand, .. }
             | Expression::Sqrt { operand, .. }
             | Expression::Sin { operand, .. }
             | Expression::Cos { operand, .. }
@@ -1294,8 +1325,6 @@ fn unary(expression: &Expression, value: Interval, unit: &Unit) -> Result<Value,
     Ok(match expression {
         Expression::Negate { .. } => same(value.negate()),
         Expression::Abs { .. } => same(value.abs()),
-        Expression::Floor { .. } => same(value.floor()),
-        Expression::Ceil { .. } => same(value.ceil()),
         Expression::Sqrt { .. } => Value::Number {
             value: value.sqrt().map_err(interval_reason)?,
             unit: unit

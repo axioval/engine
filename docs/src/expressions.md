@@ -31,9 +31,9 @@ factor     := ("-" | "−") factor
 A number takes the unit written right after it (`42.5 EUR/m²`, `10 m2`);
 a word that is no unit (`3 or …`) is read as what follows the number. A
 name reads the parameter (in a takeoff, the column) of that name. The
-functions are `min` and `max` (two values or more), `abs`, `sqrt`, `floor`,
-`ceil`, `round(value, step)`, `if(condition, then, else)` and
-`coalesce(…)`. Properties, aggregates and rule outcomes are written in the
+functions are `min` and `max` (two values or more), `abs`, `sqrt`,
+`floor(value[, step])`, `ceil(value[, step])`, `round(value, step)`,
+`if(condition, then, else)` and `coalesce(…)`. Properties, aggregates and rule outcomes are written in the
 tree. Text is at most `MAX_TEXT_LENGTH` (1000) characters and nests at most
 as deeply as the tree.
 
@@ -53,6 +53,19 @@ its literal is, so a riser measured within a few units in the last place of
 fail on binary rounding compares rounded values, as a standard states its
 bounds to a precision.
 
+`floor(value, step)` and `ceil(value, step)` round down or up to a multiple
+of `step`, as a norm prescribes the direction: a required number of parking
+spaces up (`ceil(4.2, 1)` is 5), a dimension down to whole centimetres
+(`floor(0.987 m, 0.01 m)` is `0.98 m`). The step is one positive value of
+the operand's unit. Both are monotone, so each bound of an interval goes
+outward on its own: `[4.0, 4.2]` rounded up is `[4, 5]`, every value the
+operand allows rounded into it. A decimal step stands for its decimal as
+in `round`, and a bound that is the literal of a multiple is that multiple
+(`floor(0.98 m, 0.01 m)` is `0.98 m`, not `0.97 m`); any other bound counts
+its steps over the widened quotient, so a bound within rounding of a
+multiple rounds to both neighbours. Without a step, `floor` and `ceil`
+round to whole numbers as before.
+
 Arithmetic is sound: every result holds every value its operands allow.
 Where a floating-point operation rounds, the bound moves one step outward;
 an exact operation on points stays a point. Division by an interval holding
@@ -62,7 +75,7 @@ evaluated, each with its own reason.
 
 | Operation | Units |
 | --- | --- |
-| `add`, `subtract`, `min`, `max`, `round` | one unit for all operands |
+| `add`, `subtract`, `min`, `max`, `round`, `floor` and `ceil` with a step | one unit for all operands |
 | `multiply`, `divide` | units multiply or divide (`m × m = m²`, `m ÷ m = 1`) |
 | `sqrt` | halves every exponent; `m³` has no square root |
 | `sin`, `cos`, `tan` | a plane angle in, a plain number out |
@@ -317,7 +330,8 @@ values where known), a date or a date-time. A measured value's type comes
 from its descriptor in the registry ([Measured values](./derived.md#the-registry));
 a property whose type is known only when read is checked when evaluated,
 where a mismatch is not evaluated. `+`, `−`, comparisons, `min`, `max`,
-`round` and the branches of `if` and `coalesce` need one unit, and a
+`round`, `floor` and `ceil` with a step and the branches of `if` and
+`coalesce` need one unit, and a
 quantity never meets a plain number. `check_as` also requires a type: a
 requirement must be a truth.
 

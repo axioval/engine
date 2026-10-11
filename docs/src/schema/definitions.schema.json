@@ -1044,6 +1044,7 @@
         },
         {
           "additionalProperties": false,
+          "description": "`operand` rounded down: to the greatest whole number not above it,\nor with a `step` to the greatest multiple of `step` not above it.",
           "properties": {
             "kind": {
               "const": "floor",
@@ -1057,6 +1058,16 @@
             },
             "operand": {
               "$ref": "#/$defs/Expression"
+            },
+            "step": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Expression"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           },
           "required": [
@@ -1067,6 +1078,7 @@
         },
         {
           "additionalProperties": false,
+          "description": "`operand` rounded up: to the least whole number not below it, or\nwith a `step` to the least multiple of `step` not below it.",
           "properties": {
             "kind": {
               "const": "ceil",
@@ -1080,6 +1092,16 @@
             },
             "operand": {
               "$ref": "#/$defs/Expression"
+            },
+            "step": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Expression"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           },
           "required": [

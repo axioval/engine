@@ -223,7 +223,8 @@ Every node may carry a `label`, which findings name in place of the node's rende
 | `if` | `branches` (`when`, `then`), `else` | the `then` of the first branch whose `when` holds; a ternary is one branch |
 | `coalesce` | `operands` | the first operand that is not `null` |
 | `add`, `subtract`, `multiply`, `divide` | `left`, `right` | arithmetic |
-| `negate`, `abs`, `floor`, `ceil`, `sqrt` | `operand` | unary arithmetic |
+| `negate`, `abs`, `sqrt` | `operand` | unary arithmetic |
+| `floor`, `ceil` | `operand`, `step`? | rounded down or up: to a whole number, or to a multiple of `step` of the operand's unit, interval bounds outward |
 | `min`, `max` | `operands` | the least or greatest operand |
 | `round` | `operand`, `step` | the nearest multiple of `step` |
 | `sin`, `cos`, `tan` | `operand` | trigonometry of a plane angle |

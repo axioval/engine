@@ -1,0 +1,40 @@
+{
+  "expression": {
+    "kind": "floor",
+    "operand": {
+      "kind": "property",
+      "propertySet": "axioval:measured",
+      "property": "extent_z"
+    },
+    "step": {
+      "kind": "literal",
+      "value": {
+        "type": "quantity",
+        "value": 1.0,
+        "unit": "cm"
+      }
+    }
+  },
+  "blocks": {
+    "type": "expression.floor",
+    "inputs": {
+      "operand": {
+        "block": {
+          "type": "measured.extent_z"
+        }
+      },
+      "step": {
+        "block": {
+          "type": "expression.literal",
+          "fields": {
+            "value": {
+              "type": "quantity",
+              "unit": "cm",
+              "value": 1.0
+            }
+          }
+        }
+      }
+    }
+  }
+}

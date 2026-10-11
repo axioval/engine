@@ -187,8 +187,6 @@ fn operands<'e>(node: &'e Expression, path: &str) -> Vec<(String, &'e Expression
         | Expression::IsUndefined { operand, .. }
         | Expression::Negate { operand, .. }
         | Expression::Abs { operand, .. }
-        | Expression::Floor { operand, .. }
-        | Expression::Ceil { operand, .. }
         | Expression::Sqrt { operand, .. }
         | Expression::Sin { operand, .. }
         | Expression::Cos { operand, .. }
@@ -264,6 +262,11 @@ fn operands<'e>(node: &'e Expression, path: &str) -> Vec<(String, &'e Expression
                 otherwise.as_ref(),
             )))
             .collect(),
+        Expression::Floor { operand, step, .. } | Expression::Ceil { operand, step, .. } => {
+            std::iter::once((field("operand"), operand.as_ref()))
+                .chain(step.iter().map(|step| (field("step"), step.as_ref())))
+                .collect()
+        }
         Expression::Round { operand, step, .. } => vec![
             (field("operand"), operand.as_ref()),
             (field("step"), step.as_ref()),

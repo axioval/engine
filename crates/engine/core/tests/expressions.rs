@@ -551,6 +551,180 @@ fn units_combine_and_slopes_convert() {
     assert!(matches!(why.reason, Reason::Mismatch(_)), "{why}");
 }
 
+#[test]
+fn floor_and_ceil_round_to_a_step_of_the_operands_unit_outward() {
+    let number =
+        |value: f64| json!({"kind": "literal", "value": {"type": "number", "value": value}});
+    let integer =
+        |value: i64| json!({"kind": "literal", "value": {"type": "integer", "value": value}});
+    let metres = |value: f64| json!({"kind": "literal", "value": {"type": "quantity", "value": value, "unit": "m"}});
+    let run = |value: serde_json::Value, context: &mut Context| {
+        evaluate(&expression(value), "v", context).outcome
+    };
+    let mut context = Context::default();
+
+    // `ceil(4.2, 1)` is 5, typed a whole number.
+    let ceil = json!({"kind": "ceil", "operand": number(4.2), "step": integer(1)});
+    assert_eq!(run(ceil.clone(), &mut context), Ok(Value::number(5.0)));
+    assert_eq!(
+        check(&expression(ceil), "v", &Environment),
+        Ok(Type::Integer)
+    );
+
+    // `floor(0.987 m, 0.01 m)` is 0.98 m, the literal's double.
+    let floor = json!({"kind": "floor", "operand": metres(0.987), "step": metres(0.01)});
+    let length = Unit::of(Some(QuantityDimension::Length));
+    assert_eq!(
+        run(floor.clone(), &mut context),
+        Ok(Value::quantity(
+            Interval::point(0.98),
+            QuantityDimension::Length
+        ))
+    );
+    assert_eq!(
+        check(&expression(floor), "v", &Environment),
+        Ok(Type::Number(length.clone()))
+    );
+    // A step in another written unit of the same dimension is the same.
+    let millimetres =
+        json!({"kind": "literal", "value": {"type": "quantity", "value": 10.0, "unit": "mm"}});
+    assert_eq!(
+        run(
+            json!({"kind": "floor", "operand": metres(0.987), "step": millimetres}),
+            &mut context
+        ),
+        Ok(Value::quantity(
+            Interval::point(0.98),
+            QuantityDimension::Length
+        ))
+    );
+
+    // An interval [4.0, 4.2] rounded up is [4, 5]: each bound outward.
+    context.parameters.insert(
+        "spread".into(),
+        Value::Number {
+            value: Interval::new(4.0, 4.2).unwrap(),
+            unit: Unit::NONE,
+        },
+    );
+    assert_eq!(
+        run(
+            json!({"kind": "ceil", "operand": parameter("spread"), "step": integer(1)}),
+            &mut context
+        ),
+        Ok(Value::Number {
+            value: Interval::new(4.0, 5.0).unwrap(),
+            unit: Unit::NONE
+        })
+    );
+    assert_eq!(
+        run(
+            json!({"kind": "floor", "operand": parameter("spread"), "step": number(0.5)}),
+            &mut context
+        ),
+        Ok(Value::Number {
+            value: Interval::new(4.0, 4.0).unwrap(),
+            unit: Unit::NONE
+        })
+    );
+
+    // Without a step, whole numbers as before.
+    assert_eq!(
+        run(
+            json!({"kind": "floor", "operand": number(2.7)}),
+            &mut context
+        ),
+        Ok(Value::number(2.0))
+    );
+}
+
+#[test]
+fn floor_and_ceil_to_a_step_keep_null_and_refuse_other_units() {
+    let number =
+        |value: f64| json!({"kind": "literal", "value": {"type": "number", "value": value}});
+    let integer =
+        |value: i64| json!({"kind": "literal", "value": {"type": "integer", "value": value}});
+    let metres = |value: f64| json!({"kind": "literal", "value": {"type": "quantity", "value": value, "unit": "m"}});
+    let run = |value: serde_json::Value, context: &mut Context| {
+        evaluate(&expression(value), "v", context).outcome
+    };
+    let mut context = Context::default();
+
+    // `null` stays `null`; units must agree; a step must be one positive
+    // value.
+    assert_eq!(
+        run(
+            json!({"kind": "ceil", "operand": {"kind": "null"}, "step": integer(1)}),
+            &mut context
+        ),
+        Ok(Value::Null)
+    );
+    let why = run(
+        json!({"kind": "ceil", "operand": metres(1.2), "step": integer(1)}),
+        &mut context,
+    )
+    .unwrap_err();
+    assert_eq!(why.path, "v");
+    assert!(
+        why.to_string().contains("rounds m up to a step of 1"),
+        "{why}"
+    );
+    let (path, kind) =
+        type_error(json!({"kind": "floor", "operand": metres(1.2), "step": number(0.5)}));
+    assert_eq!(path, "requirement");
+    assert!(
+        matches!(kind, TypeErrorKind::UnitMismatch { .. }),
+        "{kind:?}"
+    );
+    let why = run(
+        json!({"kind": "floor", "operand": number(1.2), "step": number(0.0)}),
+        &mut context,
+    )
+    .unwrap_err();
+    assert_eq!(why.reason, Reason::Domain);
+
+    // The text form takes the step as a second value.
+    let parsed = axioval_engine::expression::parse_text("ceil(4.2, 1)").unwrap();
+    assert_eq!(
+        run(serde_json::to_value(&parsed).unwrap(), &mut context),
+        Ok(Value::number(5.0))
+    );
+    assert!(axioval_engine::expression::parse_text("floor(1, 2, 3)").is_err());
+}
+
+#[test]
+fn floor_and_ceil_to_a_step_hold_every_point_they_allow() {
+    let mut random = Random(0x57E9);
+    for _ in 0..2000 {
+        let lower = random.unit() * 20.0 - 10.0;
+        let upper = lower + random.unit() * 3.0;
+        let point = lower + (upper - lower) * random.unit();
+        let step = [0.25, 0.5, 1.0, 2.0][usize::try_from(random.below(4)).unwrap()];
+        let mut context = Context::default();
+        context.parameters.insert(
+            "x".into(),
+            Value::Number {
+                value: Interval::new(lower, upper).unwrap(),
+                unit: Unit::NONE,
+            },
+        );
+        for (kind, exact) in [
+            ("floor", (point / step).floor() * step),
+            ("ceil", (point / step).ceil() * step),
+        ] {
+            let tree = expression(json!({"kind": kind, "operand": parameter("x"),
+                "step": {"kind": "literal", "value": {"type": "number", "value": step}}}));
+            let Ok(Value::Number { value, .. }) = evaluate(&tree, "v", &mut context).outcome else {
+                panic!("{kind} of [{lower}, {upper}] by {step} is not evaluated");
+            };
+            assert!(
+                value.contains(exact),
+                "{kind}({point}, {step}) = {exact} lies outside {value:?}"
+            );
+        }
+    }
+}
+
 /// Declared types: `Height` a length, `Class` text, `Load` unknown until read.
 struct Environment;
 

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.2.0",
+  "schemaVersion": "1.3.0",
   "languages": [
     "en",
     "de"
@@ -113308,6 +113308,18 @@
             ]
           },
           "required": true
+        },
+        {
+          "name": "step",
+          "kind": {
+            "type": "expression",
+            "accepts": [
+              "integer",
+              "number",
+              "angle"
+            ]
+          },
+          "required": false
         }
       ],
       "result": {
@@ -113326,11 +113338,11 @@
       "help": [
         {
           "language": "en",
-          "text": "The greatest whole number not above the operand."
+          "text": "The greatest whole number not above the operand or, with a step, the greatest multiple of the step of its unit not above it."
         },
         {
           "language": "de",
-          "text": "Die größte ganze Zahl, die den Operanden nicht übersteigt."
+          "text": "Die größte ganze Zahl, die den Operanden nicht übersteigt, oder mit Schrittweite das größte Vielfache der Schrittweite derselben Einheit, das ihn nicht übersteigt."
         }
       ]
     },
@@ -113349,6 +113361,18 @@
             ]
           },
           "required": true
+        },
+        {
+          "name": "step",
+          "kind": {
+            "type": "expression",
+            "accepts": [
+              "integer",
+              "number",
+              "angle"
+            ]
+          },
+          "required": false
         }
       ],
       "result": {
@@ -113367,11 +113391,11 @@
       "help": [
         {
           "language": "en",
-          "text": "The least whole number not below the operand."
+          "text": "The least whole number not below the operand or, with a step, the least multiple of the step of its unit not below it."
         },
         {
           "language": "de",
-          "text": "Die kleinste ganze Zahl, die den Operanden nicht unterschreitet."
+          "text": "Die kleinste ganze Zahl, die den Operanden nicht unterschreitet, oder mit Schrittweite das kleinste Vielfache der Schrittweite derselben Einheit, das ihn nicht unterschreitet."
         }
       ]
     },

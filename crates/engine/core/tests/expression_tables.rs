@@ -1,4 +1,5 @@
-//! Reading table parameters between their rows: `interpolate`.
+//! Reading table parameters between their rows: `interpolate` and
+//! `lookup2`.
 #![allow(missing_docs, clippy::float_cmp)]
 use std::collections::BTreeMap;
 
@@ -338,4 +339,215 @@ fn interpolation_is_typed_by_its_columns_and_key() {
     assert!(matches!(error.kind, TypeErrorKind::NotNumeric(Type::Text)));
     let error = typed(node("width", "span", "value")).unwrap_err();
     assert!(matches!(error.kind, TypeErrorKind::Unknown(_)));
+}
+
+/// A synthetic 3 × 3 grid: `row` 1, 2, 3 by `col` 10, 20, 30, each cell
+/// `100 × row + col`, so bilinear interpolation is exact; `missing` leaves
+/// out the cell at (`row`, `col`).
+fn grid(missing: Option<(f64, f64)>) -> Vec<TableRow> {
+    let mut rows = Vec::new();
+    for row_key in [1.0, 2.0, 3.0] {
+        for column_key in [10.0, 20.0, 30.0] {
+            if missing == Some((row_key, column_key)) {
+                continue;
+            }
+            rows.push(row(&[
+                ("row", number(row_key)),
+                ("col", number(column_key)),
+                ("value", number(100.0 * row_key + column_key)),
+            ]));
+        }
+    }
+    rows
+}
+
+/// Reads `grid` at (`row`, `col`), interpolating as the flags say.
+fn two_keys(
+    rows: Vec<TableRow>,
+    (row_key, column_key): (Value, Value),
+    (rows_between, columns_between): (bool, bool),
+) -> Result<Value, (Reason, String)> {
+    let mut context = Context::default();
+    context.tables.insert("t".into(), rows);
+    context.parameters.insert("r".into(), row_key);
+    context.parameters.insert("c".into(), column_key);
+    let mut node = json!({"kind": "lookup2", "table": "t",
+        "rowKeyColumn": "row", "rowKey": {"kind": "parameter", "name": "r"},
+        "columnKeyColumn": "col", "columnKey": {"kind": "parameter", "name": "c"},
+        "column": "value"});
+    if rows_between {
+        node["interpolateRow"] = json!(true);
+    }
+    if columns_between {
+        node["interpolateColumn"] = json!(true);
+    }
+    evaluate(&expression(node), "v", &mut context)
+        .outcome
+        .map_err(|why| (why.reason.clone(), why.to_string()))
+}
+
+#[test]
+fn a_two_key_table_gives_a_cell_or_interpolates_in_one_key_or_both() {
+    let point = |row: f64, column: f64| (Value::number(row), Value::number(column));
+    // An exact cell, matched or on the grid lines of interpolated keys.
+    for flags in [(false, false), (true, false), (false, true), (true, true)] {
+        assert_eq!(
+            two_keys(grid(None), point(2.0, 20.0), flags),
+            Ok(Value::number(220.0)),
+            "{flags:?}"
+        );
+    }
+    // Interpolated in one key: between rows 1 and 2, or columns 20 and 30.
+    let value = two_keys(grid(None), point(1.5, 20.0), (true, false)).unwrap();
+    assert!(about(&value, 170.0, 170.0), "{value}");
+    let value = two_keys(grid(None), point(3.0, 25.0), (false, true)).unwrap();
+    assert!(about(&value, 325.0, 325.0), "{value}");
+    // Interpolated in both keys.
+    let value = two_keys(grid(None), point(1.5, 25.0), (true, true)).unwrap();
+    assert!(about(&value, 175.0, 175.0), "{value}");
+    // Interval keys give every value they allow, across grid lines.
+    let value = two_keys(
+        grid(None),
+        (plain(1.5, 2.5), plain(15.0, 25.0)),
+        (true, true),
+    )
+    .unwrap();
+    assert!(about(&value, 165.0, 275.0), "{value}");
+    // A key between rows that is matched exactly matches no row.
+    let (_, message) = two_keys(grid(None), point(1.5, 20.0), (false, false)).unwrap_err();
+    assert!(
+        message.contains("table `t` has no row for `row` = 1.5 and `col` = 20"),
+        "{message}"
+    );
+}
+
+#[test]
+fn a_missing_cell_is_not_evaluated_naming_its_keys() {
+    let rows = || grid(Some((3.0, 30.0)));
+    let (reason, message) = two_keys(
+        rows(),
+        (Value::number(3.0), Value::number(30.0)),
+        (false, false),
+    )
+    .unwrap_err();
+    assert!(matches!(reason, Reason::Unreadable(_)), "{reason:?}");
+    assert!(
+        message.contains("table `t` has no row for `row` = 3 and `col` = 30"),
+        "{message}"
+    );
+    // Interpolating towards it needs it too, and names it the same way.
+    let (_, message) = two_keys(
+        rows(),
+        (Value::number(2.5), Value::number(25.0)),
+        (true, true),
+    )
+    .unwrap_err();
+    assert!(
+        message.contains("table `t` has no row for `row` = 3 and `col` = 30"),
+        "{message}"
+    );
+    // Cells away from the gap still read.
+    let value = two_keys(
+        rows(),
+        (Value::number(1.5), Value::number(15.0)),
+        (true, true),
+    )
+    .unwrap();
+    assert!(about(&value, 165.0, 165.0), "{value}");
+}
+
+#[test]
+fn two_keys_clamp_null_and_text_keys_behave_as_one_key_does() {
+    // Beyond an interpolated key column: not evaluated unless clamped.
+    let beyond = (Value::number(2.0), Value::number(40.0));
+    let (_, message) = two_keys(grid(None), beyond.clone(), (false, true)).unwrap_err();
+    assert!(
+        message.contains("`col` 40 lies beyond its last row's, 30"),
+        "{message}"
+    );
+    let mut context = Context::default();
+    context.tables.insert("t".into(), grid(None));
+    let clamped = expression(json!({"kind": "lookup2", "table": "t",
+        "rowKeyColumn": "row", "rowKey": {"kind": "literal", "value": {"type": "number", "value": 2.0}},
+        "columnKeyColumn": "col", "columnKey": {"kind": "literal", "value": {"type": "number", "value": 40.0}},
+        "column": "value", "interpolateColumn": true, "clamp": true}));
+    assert_eq!(
+        evaluate(&clamped, "v", &mut context).outcome,
+        Ok(Value::number(230.0))
+    );
+    // `null` either key is `null`.
+    assert_eq!(
+        two_keys(grid(None), (Value::Null, Value::number(20.0)), (true, true)),
+        Ok(Value::Null)
+    );
+    // A text row key matched exactly beside an interpolated length.
+    let rows = vec![
+        row(&[
+            ("row", text("XC1")),
+            ("col", metres(0.1)),
+            ("value", metres(0.02)),
+        ]),
+        row(&[
+            ("row", text("XC1")),
+            ("col", metres(0.3)),
+            ("value", metres(0.03)),
+        ]),
+        row(&[
+            ("row", text("XC4")),
+            ("col", metres(0.1)),
+            ("value", metres(0.04)),
+        ]),
+        row(&[
+            ("row", text("XC4")),
+            ("col", metres(0.3)),
+            ("value", metres(0.05)),
+        ]),
+    ];
+    let thickness = Value::quantity(Interval::point(0.2), QuantityDimension::Length);
+    let value = two_keys(
+        rows.clone(),
+        (Value::Text("XC4".into()), thickness.clone()),
+        (false, true),
+    )
+    .unwrap();
+    assert!(about(&value, 0.045, 0.045), "{value}");
+    let (_, message) =
+        two_keys(rows, (Value::Text("XC2".into()), thickness), (false, true)).unwrap_err();
+    assert!(
+        message.contains("table `t` has no row for `row` = `XC2` and `col` = 0.1 m"),
+        "{message}"
+    );
+}
+
+fn text(value: &str) -> ParameterValue {
+    ParameterValue::String {
+        value: value.into(),
+    }
+}
+
+#[test]
+fn two_key_lookups_are_typed_by_their_columns_and_keys() {
+    let typed = |node: serde_json::Value| check(&expression(node), "v", &Environment);
+    let node = |row_key: serde_json::Value, interpolate_row: bool, column: &str| {
+        json!({"kind": "lookup2", "table": "t",
+            "rowKeyColumn": "class", "rowKey": row_key, "interpolateRow": interpolate_row,
+            "columnKeyColumn": "key", "columnKey": {"kind": "parameter", "name": "span"},
+            "interpolateColumn": true, "column": column})
+    };
+    let class = json!({"kind": "literal", "value": {"type": "string", "value": "XC1"}});
+    assert_eq!(typed(node(class.clone(), false, "value")), Ok(Type::NUMBER));
+    // A text column is never interpolated, and a text key never either.
+    let error = typed(node(class.clone(), false, "class")).unwrap_err();
+    assert!(matches!(error.kind, TypeErrorKind::NotNumeric(Type::Text)));
+    let error = typed(node(class, true, "value")).unwrap_err();
+    assert_eq!(error.path, "v.lookup2.rowKey");
+    // A key of another type than its column is refused at its path.
+    let error = typed(node(
+        json!({"kind": "parameter", "name": "count"}),
+        false,
+        "value",
+    ))
+    .unwrap_err();
+    assert_eq!(error.path, "v.lookup2.rowKey");
+    assert!(matches!(error.kind, TypeErrorKind::Expected { .. }));
 }

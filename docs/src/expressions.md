@@ -284,7 +284,8 @@ An object the other rule left open, or whose selection it could not decide, leav
 
 ## Tables
 
-A rule's table parameters are read three ways. `lookup` selects the most
+A rule's table parameters are read three ways, `lookup`, `interpolate`
+and `lookup2`. `lookup` selects the most
 specific row whose key cells match its keys, as `keyed-limit` does
 ([Expression requirements](./capabilities.md#expression-requirements)).
 `interpolate` reads a value between a table's rows, as norm tables state
@@ -314,6 +315,35 @@ linearly (a clear width by occupant count, a cover by span):
   mismatch). The type checker refuses a key column that holds no numbers,
   a key of another unit than its cells and a `column` that is not numeric;
   whole-number cells interpolate to a number.
+
+`lookup2` reads a two-key table, such as a minimum value by exposure class
+and component thickness or a gradient by speed and terrain category. The
+table states one cell per row: a row key, a column key and the value.
+
+```json
+{"kind": "lookup2", "table": "cover_by_class_and_span",
+ "rowKeyColumn": "class", "rowKey": {"kind": "property", "propertySet": "Pset_SlabCommon", "property": "ExposureClass"},
+ "columnKeyColumn": "span", "columnKey": {"kind": "property", "propertySet": "Pset_SlabCommon", "property": "Span"},
+ "interpolateColumn": true, "column": "cover"}
+```
+
+- Each key is matched exactly (text, an enumeration value, a truth or a
+  number equal to a row's), or with `interpolateRow` or
+  `interpolateColumn` interpolated linearly as `interpolate` does, between
+  the bracketing keys of its numeric key column. Interpolated in both, the
+  value is bilinear in the four surrounding cells.
+- The grid lines of an interpolated key are every key its column states,
+  so the grid is whole: a cell no row states is not evaluated, and the
+  reason names its keys ("table `cover_by_class_and_span` has no row for
+  `class` = `XC4` and `span` = 4 m"), whether it is read or needed to
+  interpolate. A cell is never borrowed from a farther row.
+- Interval keys give every value they allow: bilinear interpolation is
+  linear in each key, so the result is the hull of the values at the
+  corners the key intervals and the grid lines within them make. A key
+  beyond an interpolated column's keys, a `null` key and repeated cells
+  behave as for `interpolate`, and `clamp` applies to both keys. A key
+  matched exactly that is an interval holding a row's key is not
+  evaluated: it may or may not be that row's.
 
 ## Paths
 

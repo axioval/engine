@@ -1,0 +1,46 @@
+{
+  "expression": {
+    "kind": "lookup2",
+    "table": "minimum_cover",
+    "rowKeyColumn": "class",
+    "rowKey": {
+      "kind": "property",
+      "propertySet": "Pset_SlabCommon",
+      "property": "ExposureClass"
+    },
+    "columnKeyColumn": "thickness",
+    "columnKey": {
+      "kind": "property",
+      "propertySet": "axioval:measured",
+      "property": "extent_z"
+    },
+    "column": "cover",
+    "interpolateColumn": true
+  },
+  "blocks": {
+    "type": "expression.lookup2",
+    "fields": {
+      "column": "cover",
+      "columnKeyColumn": "thickness",
+      "interpolateColumn": true,
+      "rowKeyColumn": "class",
+      "table": "minimum_cover"
+    },
+    "inputs": {
+      "columnKey": {
+        "block": {
+          "type": "measured.extent_z"
+        }
+      },
+      "rowKey": {
+        "block": {
+          "type": "expression.property",
+          "fields": {
+            "property": "ExposureClass",
+            "propertySet": "Pset_SlabCommon"
+          }
+        }
+      }
+    }
+  }
+}

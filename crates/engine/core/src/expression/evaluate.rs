@@ -468,7 +468,8 @@ pub trait ExpressionContext {
     }
 
     /// The rows of the table parameter `table`, handed to `read`, whose
-    /// answer is the leaf's: `interpolate` reads a table through it.
+    /// answer is the leaf's: `interpolate` and `lookup2` read a table
+    /// through it.
     fn table(&mut self, table: &str, read: &mut dyn FnMut(&[TableRow]) -> Leaf) -> Leaf {
         let _ = read;
         Leaf::unreadable(format!("table `{table}` cannot be read here"))
@@ -780,6 +781,38 @@ impl Evaluator<'_> {
                     key: &key,
                     interpolate: true,
                 }];
+                self.read_table(expression, path, table, &axes, column, *clamp)
+            }
+            Expression::Lookup2 {
+                table,
+                row_key_column,
+                row_key,
+                column_key_column,
+                column_key,
+                column,
+                interpolate_row,
+                interpolate_column,
+                clamp,
+                ..
+            } => {
+                let row_key = self.eval(row_key, &child("rowKey"));
+                let column_key = self.eval(column_key, &child("columnKey"));
+                let (row_key, column_key) = match (row_key, column_key) {
+                    (Ok(Value::Null), _) | (_, Ok(Value::Null)) => return Ok(Value::Null),
+                    (row_key, column_key) => (row_key?, column_key?),
+                };
+                let axes = [
+                    super::table::Axis {
+                        column: row_key_column,
+                        key: &row_key,
+                        interpolate: *interpolate_row,
+                    },
+                    super::table::Axis {
+                        column: column_key_column,
+                        key: &column_key,
+                        interpolate: *interpolate_column,
+                    },
+                ];
                 self.read_table(expression, path, table, &axes, column, *clamp)
             }
             Expression::Not { operand, .. } => {

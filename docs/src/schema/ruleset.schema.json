@@ -638,6 +638,59 @@
         },
         {
           "additionalProperties": false,
+          "description": "The `column` cell of the `table` parameter at two keys, `rowKey` in\nthe key column `rowKeyColumn` and `columnKey` in `columnKeyColumn`:\neach matched exactly, or with `interpolateRow` or\n`interpolateColumn` interpolated linearly between the bracketing\nkeys of a numeric key column. Each row states one cell of the grid.\nA grid point no row states is not evaluated, and so is a key beyond\nan interpolated key column's rows unless `clamp` holds.",
+          "properties": {
+            "clamp": {
+              "type": "boolean"
+            },
+            "column": {
+              "type": "string"
+            },
+            "columnKey": {
+              "$ref": "#/$defs/Expression"
+            },
+            "columnKeyColumn": {
+              "type": "string"
+            },
+            "interpolateColumn": {
+              "type": "boolean"
+            },
+            "interpolateRow": {
+              "type": "boolean"
+            },
+            "kind": {
+              "const": "lookup2",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "rowKey": {
+              "$ref": "#/$defs/Expression"
+            },
+            "rowKeyColumn": {
+              "type": "string"
+            },
+            "table": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "table",
+            "rowKeyColumn",
+            "rowKey",
+            "columnKeyColumn",
+            "columnKey",
+            "column"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
           "properties": {
             "kind": {
               "const": "not",

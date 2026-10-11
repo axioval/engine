@@ -112200,6 +112200,122 @@
       ]
     },
     {
+      "kind": "lookup2",
+      "category": "value",
+      "fields": [
+        {
+          "name": "table",
+          "kind": {
+            "type": "name",
+            "refers": "table"
+          },
+          "required": true
+        },
+        {
+          "name": "rowKeyColumn",
+          "kind": {
+            "type": "name",
+            "refers": "tableColumn"
+          },
+          "required": true
+        },
+        {
+          "name": "rowKey",
+          "kind": {
+            "type": "expression",
+            "accepts": [
+              "boolean",
+              "integer",
+              "number",
+              "angle",
+              "text",
+              "enum",
+              "date",
+              "dateTime"
+            ]
+          },
+          "required": true
+        },
+        {
+          "name": "columnKeyColumn",
+          "kind": {
+            "type": "name",
+            "refers": "tableColumn"
+          },
+          "required": true
+        },
+        {
+          "name": "columnKey",
+          "kind": {
+            "type": "expression",
+            "accepts": [
+              "boolean",
+              "integer",
+              "number",
+              "angle",
+              "text",
+              "enum",
+              "date",
+              "dateTime"
+            ]
+          },
+          "required": true
+        },
+        {
+          "name": "column",
+          "kind": {
+            "type": "name",
+            "refers": "tableColumn"
+          },
+          "required": true
+        },
+        {
+          "name": "interpolateRow",
+          "kind": {
+            "type": "flag"
+          },
+          "required": false
+        },
+        {
+          "name": "interpolateColumn",
+          "kind": {
+            "type": "flag"
+          },
+          "required": false
+        },
+        {
+          "name": "clamp",
+          "kind": {
+            "type": "flag"
+          },
+          "required": false
+        }
+      ],
+      "result": {
+        "type": "declared"
+      },
+      "label": [
+        {
+          "language": "en",
+          "text": "Two-key table value"
+        },
+        {
+          "language": "de",
+          "text": "Tabellenwert mit zwei Schlüsseln"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "A column of a table parameter at a row key and a column key, each matched exactly or interpolated linearly between the bracketing keys of a numeric key column. A grid point no row states is not evaluated."
+        },
+        {
+          "language": "de",
+          "text": "Eine Spalte eines Tabellenparameters an einem Zeilen- und einem Spaltenschlüssel, jeweils genau zugeordnet oder linear zwischen den einschließenden Schlüsseln einer numerischen Schlüsselspalte interpoliert. Ein Rasterpunkt ohne Zeile wird nicht ausgewertet."
+        }
+      ]
+    },
+    {
       "kind": "not",
       "category": "logic",
       "fields": [

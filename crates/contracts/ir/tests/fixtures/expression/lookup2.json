@@ -1,0 +1,18 @@
+{
+  "kind": "lookup2",
+  "table": "minimum_cover",
+  "rowKeyColumn": "class",
+  "rowKey": {
+    "kind": "property",
+    "propertySet": "Pset_SlabCommon",
+    "property": "ExposureClass"
+  },
+  "columnKeyColumn": "thickness",
+  "columnKey": {
+    "kind": "property",
+    "propertySet": "axioval:measured",
+    "property": "extent_z"
+  },
+  "column": "cover",
+  "interpolateColumn": true
+}

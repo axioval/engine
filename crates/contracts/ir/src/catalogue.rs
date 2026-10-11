@@ -493,6 +493,32 @@ pub const EXPRESSION_KINDS: &[NodeKind] = &[
         ),
     },
     NodeKind {
+        kind: "lookup2",
+        category: "value",
+        fields: &[
+            named("table", Refers::Table, true),
+            named("rowKeyColumn", Refers::TableColumn, true),
+            one("rowKey", EQUATABLE),
+            named("columnKeyColumn", Refers::TableColumn, true),
+            one("columnKey", EQUATABLE),
+            named("column", Refers::TableColumn, true),
+            flag("interpolateRow"),
+            flag("interpolateColumn"),
+            flag("clamp"),
+        ],
+        result: ResultRule::Declared,
+        label: &en_de("Two-key table value", "Tabellenwert mit zwei Schlüsseln"),
+        help: &en_de(
+            "A column of a table parameter at a row key and a column key, each matched exactly \
+             or interpolated linearly between the bracketing keys of a numeric key column. A \
+             grid point no row states is not evaluated.",
+            "Eine Spalte eines Tabellenparameters an einem Zeilen- und einem Spaltenschlüssel, \
+             jeweils genau zugeordnet oder linear zwischen den einschließenden Schlüsseln einer \
+             numerischen Schlüsselspalte interpoliert. Ein Rasterpunkt ohne Zeile wird nicht \
+             ausgewertet.",
+        ),
+    },
+    NodeKind {
         kind: "not",
         category: "logic",
         fields: &[one("operand", BOOLEAN)],
@@ -1729,7 +1755,7 @@ mod tests {
             E::Literal { .. } => "literal", E::Null { .. } => "null",
             E::Property { .. } => "property", E::Parameter { .. } => "parameter",
             E::Derived { .. } => "derived", E::Lookup { .. } => "lookup",
-            E::Interpolate { .. } => "interpolate",
+            E::Interpolate { .. } => "interpolate", E::Lookup2 { .. } => "lookup2",
             E::Not { .. } => "not", E::And { .. } => "and", E::Or { .. } => "or",
             E::Implies { .. } => "implies", E::Xor { .. } => "xor",
             E::Compare { .. } => "compare", E::Between { .. } => "between",

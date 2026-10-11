@@ -213,6 +213,7 @@ Every node may carry a `label`, which findings name in place of the node's rende
 | `derived` | `name` | a derived value the ruleset names |
 | `lookup` | `table`, `keys`, `column` | the `column` cell of the most specific row of the `table` parameter whose key columns match `keys` (column ID → expression), as `keyed-limit` selects a row |
 | `interpolate` | `table`, `keyColumn`, `key`, `column`, `clamp`? | the `column` cell of the `table` parameter at `key` of its numeric `keyColumn`, interpolated linearly between the bracketing rows; a key beyond the rows is not evaluated unless `clamp`; see [Tables](./expressions.md#tables) |
+| `lookup2` | `table`, `rowKeyColumn`, `rowKey`, `columnKeyColumn`, `columnKey`, `column`, `interpolateRow`?, `interpolateColumn`?, `clamp`? | the `column` cell of a two-key `table` parameter, each key matched exactly or interpolated linearly in its numeric key column; a missing cell is not evaluated, naming its keys; see [Tables](./expressions.md#tables) |
 | `not` | `operand` | negation |
 | `and`, `or` | `operands` | conjunction, disjunction |
 | `implies` | `antecedent`, `consequent` | implication |

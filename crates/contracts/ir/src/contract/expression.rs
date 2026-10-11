@@ -99,6 +99,37 @@ pub enum Expression {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         label: Option<String>,
     },
+    /// The `column` cell of the `table` parameter at two keys, `rowKey` in
+    /// the key column `rowKeyColumn` and `columnKey` in `columnKeyColumn`:
+    /// each matched exactly, or with `interpolateRow` or
+    /// `interpolateColumn` interpolated linearly between the bracketing
+    /// keys of a numeric key column. Each row states one cell of the grid.
+    /// A grid point no row states is not evaluated, and so is a key beyond
+    /// an interpolated key column's rows unless `clamp` holds.
+    Lookup2 {
+        table: String,
+        #[serde(rename = "rowKeyColumn")]
+        row_key_column: String,
+        #[serde(rename = "rowKey")]
+        row_key: Box<Expression>,
+        #[serde(rename = "columnKeyColumn")]
+        column_key_column: String,
+        #[serde(rename = "columnKey")]
+        column_key: Box<Expression>,
+        column: String,
+        #[serde(rename = "interpolateRow", default, skip_serializing_if = "is_false")]
+        interpolate_row: bool,
+        #[serde(
+            rename = "interpolateColumn",
+            default,
+            skip_serializing_if = "is_false"
+        )]
+        interpolate_column: bool,
+        #[serde(default, skip_serializing_if = "is_false")]
+        clamp: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        label: Option<String>,
+    },
     Not {
         operand: Box<Expression>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -587,7 +618,7 @@ pub enum ExpressionError {
 
 impl Expression {
     /// Every node `kind`, in declaration order.
-    pub const KINDS: [&'static str; 48] = [
+    pub const KINDS: [&'static str; 49] = [
         "literal",
         "null",
         "property",
@@ -595,6 +626,7 @@ impl Expression {
         "derived",
         "lookup",
         "interpolate",
+        "lookup2",
         "not",
         "and",
         "or",
@@ -649,6 +681,7 @@ impl Expression {
             Self::Derived { .. } => "derived",
             Self::Lookup { .. } => "lookup",
             Self::Interpolate { .. } => "interpolate",
+            Self::Lookup2 { .. } => "lookup2",
             Self::Not { .. } => "not",
             Self::And { .. } => "and",
             Self::Or { .. } => "or",
@@ -704,6 +737,7 @@ impl Expression {
             | Self::Derived { label, .. }
             | Self::Lookup { label, .. }
             | Self::Interpolate { label, .. }
+            | Self::Lookup2 { label, .. }
             | Self::Not { label, .. }
             | Self::And { label, .. }
             | Self::Or { label, .. }
@@ -764,6 +798,11 @@ impl Expression {
             | Self::Deviation { .. } => Vec::new(),
             Self::Lookup { keys, .. } => keys.values().collect(),
             Self::Interpolate { key, .. } => vec![key],
+            Self::Lookup2 {
+                row_key,
+                column_key,
+                ..
+            } => vec![row_key, column_key],
             Self::Not { operand, .. }
             | Self::IsDefined { operand, .. }
             | Self::IsUndefined { operand, .. }
@@ -870,6 +909,14 @@ impl Expression {
             }
             Self::Lookup { keys, .. } => keys.values_mut().for_each(|key| key.rename_rules(rename)),
             Self::Interpolate { key, .. } => key.rename_rules(rename),
+            Self::Lookup2 {
+                row_key,
+                column_key,
+                ..
+            } => {
+                row_key.rename_rules(rename);
+                column_key.rename_rules(rename);
+            }
             Self::If {
                 branches,
                 otherwise,
@@ -1022,6 +1069,36 @@ impl Expression {
         (nodes, nesting)
     }
 
+    /// The table and columns an `interpolate` or `lookup2` node names, by
+    /// field; none for any other node.
+    fn table_names(&self) -> Vec<(&'static str, &str)> {
+        match self {
+            Self::Interpolate {
+                table,
+                key_column,
+                column,
+                ..
+            } => vec![
+                ("table", table),
+                ("key column", key_column),
+                ("column", column),
+            ],
+            Self::Lookup2 {
+                table,
+                row_key_column,
+                column_key_column,
+                column,
+                ..
+            } => vec![
+                ("table", table),
+                ("row key column", row_key_column),
+                ("column key column", column_key_column),
+                ("column", column),
+            ],
+            _ => Vec::new(),
+        }
+    }
+
     fn validate_at(&self, depth: usize) -> Result<(), ExpressionError> {
         if depth > MAX_EXPRESSION_DEPTH {
             return Err(ExpressionError::TooDeep);
@@ -1068,15 +1145,10 @@ impl Expression {
                     blank(kind, "key column", key)?;
                 }
             }
-            Self::Interpolate {
-                table,
-                key_column,
-                column,
-                ..
-            } => {
-                blank(kind, "table", table)?;
-                blank(kind, "key column", key_column)?;
-                blank(kind, "column", column)?;
+            Self::Interpolate { .. } | Self::Lookup2 { .. } => {
+                for (field, name) in self.table_names() {
+                    blank(kind, field, name)?;
+                }
             }
             Self::And { operands, .. }
             | Self::Or { operands, .. }

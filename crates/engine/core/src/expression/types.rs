@@ -525,6 +525,63 @@ impl Checker<'_> {
                 })?;
                 interpolated(result).map_err(here)?
             }
+            Expression::Lookup2 {
+                table,
+                row_key_column,
+                row_key,
+                column_key_column,
+                column_key,
+                column,
+                interpolate_row,
+                interpolate_column,
+                ..
+            } => {
+                let (columns, result) = self
+                    .environment
+                    .lookup(table, column)
+                    .map_err(|why| here(TypeErrorKind::Unknown(why)))?;
+                for (key_column, key, interpolate, field) in [
+                    (row_key_column, row_key, *interpolate_row, "rowKey"),
+                    (
+                        column_key_column,
+                        column_key,
+                        *interpolate_column,
+                        "columnKey",
+                    ),
+                ] {
+                    let key_path = child(field);
+                    if interpolate {
+                        let found = self.numeric(key, &key_path)?;
+                        let declared =
+                            interpolated_key(&columns, table, key_column).map_err(here)?;
+                        same_unit("interpolates", declared, &found).map_err(|kind| TypeError {
+                            path: key_path,
+                            kind,
+                        })?;
+                    } else {
+                        let found = self.check(key, &key_path)?;
+                        let expected = columns.get(key_column.as_str()).ok_or_else(|| {
+                            here(TypeErrorKind::Unknown(format!(
+                                "table `{table}` has no column `{key_column}`"
+                            )))
+                        })?;
+                        if join(expected, &found).is_none() {
+                            return Err(TypeError {
+                                path: key_path,
+                                kind: TypeErrorKind::Expected {
+                                    expected: expected.clone(),
+                                    found,
+                                },
+                            });
+                        }
+                    }
+                }
+                if *interpolate_row || *interpolate_column {
+                    interpolated(result).map_err(here)?
+                } else {
+                    result
+                }
+            }
             Expression::Not { operand, .. } => {
                 self.boolean(operand, &child("operand"))?;
                 Type::Boolean

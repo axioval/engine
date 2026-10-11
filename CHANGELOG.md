@@ -26,6 +26,14 @@ All notable changes are documented here. This project follows Semantic Versionin
   arithmetic, and a missing cell, repeated keys or a keyless row leave
   the object not evaluated with their own reason
   ([#347](https://github.com/axioval/engine/issues/347)).
+- **Expressions**: `lookup2` reads a two-key table parameter, one cell
+  per row, at a row key and a column key, each matched exactly or, with
+  `interpolateRow` or `interpolateColumn`, interpolated linearly in its
+  numeric key column with the interval semantics of `interpolate`
+  (bilinear in both). The grid lines are every key a column states, so a
+  cell no row states is not evaluated, its reason naming the keys, and is
+  never borrowed from a farther row
+  ([#348](https://github.com/axioval/engine/issues/348)).
 
 ### Changed
 

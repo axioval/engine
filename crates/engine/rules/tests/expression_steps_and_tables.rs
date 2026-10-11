@@ -235,3 +235,55 @@ fn a_cover_is_judged_against_a_requirement_interpolated_by_span() {
         "{error}"
     );
 }
+
+/// The minimum cover by exposure class and span: XC1 20 mm at 2 m and
+/// 30 mm at 4 m, XC4 40 mm at 2 m only (its 4 m cell is missing).
+fn cover_by_class_and_span() -> (Value, Value) {
+    let declared = json!({"id": "cover_by_class_and_span", "name": text("cover"), "kind": "table",
+        "required": true, "columns": [
+            {"id": "class", "name": text("class"), "kind": "string", "required": false},
+            length_column("span"), length_column("cover")]});
+    let row = |class: &str, span: f64, cover: f64| {
+        json!({"class": {"type": "string", "value": class},
+            "span": {"type": "quantity", "value": span, "unit": "m"},
+            "cover": {"type": "quantity", "value": cover, "unit": "mm"}})
+    };
+    let rows = json!({"cover_by_class_and_span": {"type": "table",
+        "value": [row("XC1", 2.0, 20.0), row("XC1", 4.0, 30.0), row("XC4", 2.0, 40.0)]}});
+    (declared, rows)
+}
+
+#[test]
+fn a_cover_is_judged_against_a_two_key_table_naming_a_missing_cell() {
+    let registry = registry();
+    let (declared, rows) = cover_by_class_and_span();
+    let package = vocabulary(&registry, &[declared]);
+    let required = json!({"kind": "lookup2", "label": "required cover",
+        "table": "cover_by_class_and_span",
+        "rowKeyColumn": "class", "rowKey": property("Class"),
+        "columnKeyColumn": "span", "columnKey": property("Span"), "interpolateColumn": true,
+        "column": "cover"});
+    let requirement = json!({"kind": "compare", "operator": "greaterThanOrEquals",
+        "left": property("Cover"), "right": required});
+    // XC1 at 3 m needs 25 mm; XC4 at 2 m 40 mm; XC4 at 3 m needs the
+    // missing 4 m cell.
+    let model = slabs(&[
+        ("enough", 0.026, 3.0, "XC1"),
+        ("thin", 0.024, 3.0, "XC1"),
+        ("exposed", 0.035, 2.0, "XC4"),
+        ("gap", 0.050, 3.0, "XC4"),
+    ]);
+    let report = check(&package, requirement_rule(&requirement, rows), model);
+    assert_eq!(subjects(&report), ["exposed", "thin"]);
+    let open = open(&report);
+    assert_eq!(open.len(), 1, "{open:?}");
+    let (object, reason, message) = &open[0];
+    assert_eq!(object, "gap");
+    assert_eq!(*reason, NotEvaluatedReason::IncompleteEvidence);
+    assert!(
+        message.contains(
+            "table `cover_by_class_and_span` has no row for `class` = `XC4` and `span` = 4 m"
+        ),
+        "{message}"
+    );
+}

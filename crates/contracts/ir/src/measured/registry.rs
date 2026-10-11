@@ -361,6 +361,63 @@ const WITHIN: &[MeasuredParameter] = &[
     },
     PROJECTION,
     VERTICAL_DIRECTION,
+    MeasuredParameter {
+        key: "measure",
+        kind: MeasuredParameterKind::Choice {
+            options: &["closest", "walking"],
+        },
+        required: false,
+        default: Some("closest"),
+        help: &en_de(
+            "How the distance is measured: between the bodies under `projection`, or the \
+             shortest walk between the representative points, with the `walking_` profile.",
+            "Wie der Abstand gemessen wird: zwischen den Körpern unter `projection` oder als \
+             kürzester Weg zwischen den repräsentativen Punkten, mit dem `walking_`-Profil.",
+        ),
+    },
+    MeasuredParameter {
+        key: "walking_radius",
+        kind: MeasuredParameterKind::Length { minimum: 0.0 },
+        required: false,
+        default: None,
+        help: &en_de(
+            "With `measure=walking`: the walking body's radius.",
+            "Mit `measure=walking`: der Radius des gehenden Körpers.",
+        ),
+    },
+    MeasuredParameter {
+        key: "walking_height",
+        kind: MeasuredParameterKind::Length { minimum: 0.0 },
+        required: false,
+        default: None,
+        help: &en_de(
+            "With `measure=walking`: the walking body's height.",
+            "Mit `measure=walking`: die Höhe des gehenden Körpers.",
+        ),
+    },
+    MeasuredParameter {
+        key: "walking_step",
+        kind: MeasuredParameterKind::Length { minimum: 0.0 },
+        required: false,
+        default: None,
+        help: &en_de(
+            "With `measure=walking`: the step the walking body takes over.",
+            "Mit `measure=walking`: die Stufe, die der gehende Körper überwindet.",
+        ),
+    },
+    MeasuredParameter {
+        key: "walking_slope",
+        kind: MeasuredParameterKind::Number {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "With `measure=walking`: the slope the walking body climbs; level by default.",
+            "Mit `measure=walking`: die Neigung, die der gehende Körper steigt; \
+             standardmäßig eben.",
+        ),
+    },
 ];
 
 /// What leaves a value over the counterparts within a radius not
@@ -370,6 +427,7 @@ const WITHIN_NOT_EVALUATED: &[&str] = &[
     UNDECIDED_KIND,
     "a counterpart that is or may be within cannot be read, or states no plain number",
     "a counterpart that may or may not be within states no value",
+    "walking, the object has no representative point or the route service refuses its walks",
 ];
 
 /// A value aggregated over the counterparts within a radius.
@@ -382,7 +440,14 @@ const fn within(
         name,
         parameters: WITHIN,
         dimension: None,
-        services: &["proximity", "type-hierarchy", "property-resolution"],
+        services: &[
+            "proximity",
+            "type-hierarchy",
+            "property-resolution",
+            "metric-routing",
+            "plan-span",
+            "vertical-extent",
+        ],
         exactness: MeasuredExactness::Measured,
         subject: MeasuredSubject::Object,
         not_evaluated: WITHIN_NOT_EVALUATED,

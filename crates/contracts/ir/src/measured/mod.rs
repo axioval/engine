@@ -706,6 +706,7 @@ fn parse_in(
         arguments.insert(parameter.key, argument);
     }
     facing(descriptor, &arguments)?;
+    reach(descriptor, &stated, &arguments)?;
     Ok(MeasuredCall {
         descriptor,
         arguments,
@@ -757,6 +758,55 @@ fn facing(
             key: "tolerance".into(),
             detail: format!("{degrees} degrees is more than 180"),
         });
+    }
+    Ok(())
+}
+
+/// Where a value reaches its counterparts by a walking profile
+/// (`walking_radius`), `measure=walking` states the profile's radius,
+/// height and step and no `projection` or `direction`, and no other
+/// measure states any of the profile. A measure a rule parameter names is
+/// checked once bound, by the code measuring it.
+fn reach(
+    descriptor: &MeasuredDescriptor,
+    stated: &BTreeMap<&'static str, &str>,
+    arguments: &BTreeMap<&'static str, MeasuredArgument>,
+) -> Result<(), MeasuredError> {
+    if descriptor.parameter("walking_radius").is_none() {
+        return Ok(());
+    }
+    let name = || descriptor.name.to_owned();
+    let walking = match arguments.get("measure") {
+        Some(MeasuredArgument::Choice(measure)) => *measure == "walking",
+        _ => return Ok(()),
+    };
+    let only = |key: &str, detail: &str| MeasuredError::Invalid {
+        name: name(),
+        key: key.to_owned(),
+        detail: detail.to_owned(),
+    };
+    for key in ["walking_radius", "walking_height", "walking_step"] {
+        if walking && !stated.contains_key(key) {
+            return Err(MeasuredError::Missing {
+                name: name(),
+                key: key.to_owned(),
+            });
+        }
+    }
+    for key in [
+        "walking_radius",
+        "walking_height",
+        "walking_step",
+        "walking_slope",
+    ] {
+        if !walking && stated.contains_key(key) {
+            return Err(only(key, "only `measure=walking` takes it"));
+        }
+    }
+    for key in ["projection", "direction"] {
+        if walking && stated.contains_key(key) {
+            return Err(only(key, "a walk is measured in plan, never projected"));
+        }
     }
     Ok(())
 }

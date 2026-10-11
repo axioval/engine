@@ -56,6 +56,15 @@ All notable changes are documented here. This project follows Semantic Versionin
   is not evaluated; one surely within stating no value makes the value
   `null`, one only possibly within leaves it not evaluated
   ([#351](https://github.com/axioval/engine/issues/351)).
+- **Measured values**: with `measure=walking` and a walking profile
+  (`walking_radius`, `walking_height`, `walking_step`, `walking_slope`),
+  `sum_within`, `min_within`, `max_within` and `mean_within` reach the
+  counterparts within a walk of `radius` instead: the shortest route
+  between the representative points, as `space-distance` walks it. A walk
+  straddling the radius, or one the route service cannot bound, adds its
+  value or nothing; a counterpart is surely beyond only where its plan
+  distance exceeds the radius or the route service proves it unreachable
+  ([#351](https://github.com/axioval/engine/issues/351)).
 
 ### Changed
 

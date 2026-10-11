@@ -383,6 +383,7 @@ ignoring ASCII case):
 | `distance;to=<kinds>[;mode=nearest\|farthest][;projection=…][;direction=…][;subject_surface=…;counterpart_surface=…][;within=<m>]` | the nearest or farthest counterpart's distance, as `distance` measures it | built in, over `ProximityService` |
 | `count_within;to=<kinds>;radius=<m>[;from=<m>][;projection=…][;direction=…]` | how many counterparts lie within a radius, a plain number | built in, over `ProximityService` |
 | `sum_within`, `min_within`, `max_within`, `mean_within` `;to=<kinds>;value=<property>;radius=<m>[;from=<m>][;projection=…][;direction=…]` | the sum, least, greatest or mean of a plain number the counterparts within a radius state | built in, over `ProximityService` and the counterparts' properties |
+| the same `;to=<kinds>;value=<property>;radius=<m>[;from=<m>];measure=walking;walking_radius=<m>;walking_height=<m>;walking_step=<m>[;walking_slope=…]` | the same over the counterparts within a walk of `radius` | built in, over `ProximityService` (plan), `PlanSpanService`, `VerticalExtentService` and `MetricRoutingService::route` |
 | `duplicate_count`, `boundary_gap[;at_least=<m>][;measure=total\|longest][;elements=<kinds>]`, `intersection_count[;tolerance=<m>][;elements=<kinds>]`, `cap_coverage;cap=top\|bottom[;elements=<kinds>]`, `support_count[;of=slabs\|roofs]` | a space's `space-validation` aspects | `SpaceService` |
 | `largest_unallocated_region`, `unallocated_share` | a storey's floor no space covers | `SpaceService::measure_unallocated_regions` |
 | `facade_area`, `face_area` | the facade area, or the largest plane face's area | `FacadeAreaService` |
@@ -933,8 +934,38 @@ skipped. A value that is not a plain number (text, or a quantity of a
 unit) or cannot be read leaves it not evaluated. `min_within`,
 `max_within` and `mean_within` over no counterpart within are `null`.
 Each is cited exact when every counterpart that may count was measured
-exactly and every value read is stated exactly. Route distances, derived
-groups and context zones are not yet a reach of these values.
+exactly and every value read is stated exactly.
+
+With `measure=walking` (the default `closest` measures between the bodies
+under `projection`), the reach is a walk: the shortest route the
+metric-routing service finds from the object's representative point to
+each counterpart's, as `space-distance` walks between spaces (the centre
+of the footprint, which must lie inside it, on the bottom of the vertical
+extent), for the body `walking_radius`, `walking_height`, `walking_step`
+and `walking_slope` (level by default) state. Walking takes no
+`projection` or `direction`, and no other measure takes the profile. So
+the toilets the sanitary rooms within a 50 m walk of each room state are
+`sum_within;to=SanitaryRoom;value=Toilets;radius=50;measure=walking;walking_radius=0.3;walking_height=2;walking_step=0.02`.
+
+- No walk is shorter than the plan distance between the bodies its ends
+  stand in, so only the counterparts the plan broad phase proposes within
+  `radius` are walked to; one surely farther in plan is surely beyond.
+- A walk the service bounds counts as a measured distance does: surely
+  within where its whole interval lies in `[from, radius]`, possibly where
+  it straddles either.
+- A walk the service proves blocked is surely beyond. One it refuses (an
+  end on no walkable surface, or inside a body in the way, as a wall-hung
+  extinguisher's centre lies inside its own body), and a counterpart
+  without a representative point (its centre outside its footprint), may
+  or may not be within: it adds its value or nothing, as a straddling
+  distance does, never skipped. So walking reaches spaces, doors and
+  other counterparts whose centre is free floor; an object standing on
+  its own centre stays undecided.
+- An object without a representative point, or a missing route, plan-span
+  or vertical-extent service, leaves the value not evaluated.
+
+A walk stays on the object's level; it climbs no stairs or lifts.
+Derived groups and context zones are not yet a reach of these values.
 
 A measured value without a dimension, such as a count, is a plain
 number. Known only to an interval, it is a `measured` value without a
@@ -970,7 +1001,7 @@ sites that cite a value exact:
 | Provider | Exact when | The interval holds |
 | --- | --- | --- |
 | `distance`, `count_within` | every counterpart that may be the nearest (farthest) or may count was measured exactly | the undecided counterparts, as `distance` cites them (`Cited`) |
-| `sum_within`, `min_within`, `max_within`, `mean_within` | every counterpart that may count was measured exactly and states its value exactly | the undecided counterparts' values or nothing, summed and divided outward |
+| `sum_within`, `min_within`, `max_within`, `mean_within` | every counterpart that may count was measured (walking: walked, and both ends placed) exactly and states its value exactly | the undecided counterparts' values or nothing, summed and divided outward |
 | `door_clear_width`, `door_clear_height`, `sill_height`, `threshold_step` | every extent, leaf and stated value read is exact | rounding of the differences, widened outward |
 | `leaf_count`, `leaf_width`, `swings_into`, `hinged_leaves` | the leaves (stated, exact by contract) and every probe are exact | a total width summed outward |
 | `swing_spaces` (members) | the leaves and every containment probe are exact (both exact by contract) | nothing |

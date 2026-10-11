@@ -77946,19 +77946,122 @@
             }
           ],
           "references": "string"
+        },
+        {
+          "key": "measure",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "closest",
+              "walking"
+            ]
+          },
+          "required": false,
+          "default": "closest",
+          "help": [
+            {
+              "language": "en",
+              "text": "How the distance is measured: between the bodies under `projection`, or the shortest walk between the representative points, with the `walking_` profile."
+            },
+            {
+              "language": "de",
+              "text": "Wie der Abstand gemessen wird: zwischen den Körpern unter `projection` oder als kürzester Weg zwischen den repräsentativen Punkten, mit dem `walking_`-Profil."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "walking_radius",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `measure=walking`: the walking body's radius."
+            },
+            {
+              "language": "de",
+              "text": "Mit `measure=walking`: der Radius des gehenden Körpers."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "walking_height",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `measure=walking`: the walking body's height."
+            },
+            {
+              "language": "de",
+              "text": "Mit `measure=walking`: die Höhe des gehenden Körpers."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "walking_step",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `measure=walking`: the step the walking body takes over."
+            },
+            {
+              "language": "de",
+              "text": "Mit `measure=walking`: die Stufe, die der gehende Körper überwindet."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "walking_slope",
+          "kind": {
+            "type": "number",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `measure=walking`: the slope the walking body climbs; level by default."
+            },
+            {
+              "language": "de",
+              "text": "Mit `measure=walking`: die Neigung, die der gehende Körper steigt; standardmäßig eben."
+            }
+          ],
+          "references": "number"
         }
       ],
       "services": [
         "proximity",
         "type-hierarchy",
-        "property-resolution"
+        "property-resolution",
+        "metric-routing",
+        "plan-span",
+        "vertical-extent"
       ],
       "exactness": "measured",
       "notEvaluated": [
         "the object has no body the service can measure",
         "an object's kind cannot be decided",
         "a counterpart that is or may be within cannot be read, or states no plain number",
-        "a counterpart that may or may not be within states no value"
+        "a counterpart that may or may not be within states no value",
+        "walking, the object has no representative point or the route service refuses its walks"
       ],
       "label": [
         {
@@ -78108,19 +78211,122 @@
             }
           ],
           "references": "string"
+        },
+        {
+          "key": "measure",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "closest",
+              "walking"
+            ]
+          },
+          "required": false,
+          "default": "closest",
+          "help": [
+            {
+              "language": "en",
+              "text": "How the distance is measured: between the bodies under `projection`, or the shortest walk between the representative points, with the `walking_` profile."
+            },
+            {
+              "language": "de",
+              "text": "Wie der Abstand gemessen wird: zwischen den Körpern unter `projection` oder als kürzester Weg zwischen den repräsentativen Punkten, mit dem `walking_`-Profil."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "walking_radius",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `measure=walking`: the walking body's radius."
+            },
+            {
+              "language": "de",
+              "text": "Mit `measure=walking`: der Radius des gehenden Körpers."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "walking_height",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `measure=walking`: the walking body's height."
+            },
+            {
+              "language": "de",
+              "text": "Mit `measure=walking`: die Höhe des gehenden Körpers."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "walking_step",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `measure=walking`: the step the walking body takes over."
+            },
+            {
+              "language": "de",
+              "text": "Mit `measure=walking`: die Stufe, die der gehende Körper überwindet."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "walking_slope",
+          "kind": {
+            "type": "number",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `measure=walking`: the slope the walking body climbs; level by default."
+            },
+            {
+              "language": "de",
+              "text": "Mit `measure=walking`: die Neigung, die der gehende Körper steigt; standardmäßig eben."
+            }
+          ],
+          "references": "number"
         }
       ],
       "services": [
         "proximity",
         "type-hierarchy",
-        "property-resolution"
+        "property-resolution",
+        "metric-routing",
+        "plan-span",
+        "vertical-extent"
       ],
       "exactness": "measured",
       "notEvaluated": [
         "the object has no body the service can measure",
         "an object's kind cannot be decided",
         "a counterpart that is or may be within cannot be read, or states no plain number",
-        "a counterpart that may or may not be within states no value"
+        "a counterpart that may or may not be within states no value",
+        "walking, the object has no representative point or the route service refuses its walks"
       ],
       "label": [
         {
@@ -78354,19 +78560,122 @@
             }
           ],
           "references": "string"
+        },
+        {
+          "key": "measure",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "closest",
+              "walking"
+            ]
+          },
+          "required": false,
+          "default": "closest",
+          "help": [
+            {
+              "language": "en",
+              "text": "How the distance is measured: between the bodies under `projection`, or the shortest walk between the representative points, with the `walking_` profile."
+            },
+            {
+              "language": "de",
+              "text": "Wie der Abstand gemessen wird: zwischen den Körpern unter `projection` oder als kürzester Weg zwischen den repräsentativen Punkten, mit dem `walking_`-Profil."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "walking_radius",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `measure=walking`: the walking body's radius."
+            },
+            {
+              "language": "de",
+              "text": "Mit `measure=walking`: der Radius des gehenden Körpers."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "walking_height",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `measure=walking`: the walking body's height."
+            },
+            {
+              "language": "de",
+              "text": "Mit `measure=walking`: die Höhe des gehenden Körpers."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "walking_step",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `measure=walking`: the step the walking body takes over."
+            },
+            {
+              "language": "de",
+              "text": "Mit `measure=walking`: die Stufe, die der gehende Körper überwindet."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "walking_slope",
+          "kind": {
+            "type": "number",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `measure=walking`: the slope the walking body climbs; level by default."
+            },
+            {
+              "language": "de",
+              "text": "Mit `measure=walking`: die Neigung, die der gehende Körper steigt; standardmäßig eben."
+            }
+          ],
+          "references": "number"
         }
       ],
       "services": [
         "proximity",
         "type-hierarchy",
-        "property-resolution"
+        "property-resolution",
+        "metric-routing",
+        "plan-span",
+        "vertical-extent"
       ],
       "exactness": "measured",
       "notEvaluated": [
         "the object has no body the service can measure",
         "an object's kind cannot be decided",
         "a counterpart that is or may be within cannot be read, or states no plain number",
-        "a counterpart that may or may not be within states no value"
+        "a counterpart that may or may not be within states no value",
+        "walking, the object has no representative point or the route service refuses its walks"
       ],
       "label": [
         {
@@ -82835,19 +83144,122 @@
             }
           ],
           "references": "string"
+        },
+        {
+          "key": "measure",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "closest",
+              "walking"
+            ]
+          },
+          "required": false,
+          "default": "closest",
+          "help": [
+            {
+              "language": "en",
+              "text": "How the distance is measured: between the bodies under `projection`, or the shortest walk between the representative points, with the `walking_` profile."
+            },
+            {
+              "language": "de",
+              "text": "Wie der Abstand gemessen wird: zwischen den Körpern unter `projection` oder als kürzester Weg zwischen den repräsentativen Punkten, mit dem `walking_`-Profil."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "walking_radius",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `measure=walking`: the walking body's radius."
+            },
+            {
+              "language": "de",
+              "text": "Mit `measure=walking`: der Radius des gehenden Körpers."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "walking_height",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `measure=walking`: the walking body's height."
+            },
+            {
+              "language": "de",
+              "text": "Mit `measure=walking`: die Höhe des gehenden Körpers."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "walking_step",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `measure=walking`: the step the walking body takes over."
+            },
+            {
+              "language": "de",
+              "text": "Mit `measure=walking`: die Stufe, die der gehende Körper überwindet."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "walking_slope",
+          "kind": {
+            "type": "number",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `measure=walking`: the slope the walking body climbs; level by default."
+            },
+            {
+              "language": "de",
+              "text": "Mit `measure=walking`: die Neigung, die der gehende Körper steigt; standardmäßig eben."
+            }
+          ],
+          "references": "number"
         }
       ],
       "services": [
         "proximity",
         "type-hierarchy",
-        "property-resolution"
+        "property-resolution",
+        "metric-routing",
+        "plan-span",
+        "vertical-extent"
       ],
       "exactness": "measured",
       "notEvaluated": [
         "the object has no body the service can measure",
         "an object's kind cannot be decided",
         "a counterpart that is or may be within cannot be read, or states no plain number",
-        "a counterpart that may or may not be within states no value"
+        "a counterpart that may or may not be within states no value",
+        "walking, the object has no representative point or the route service refuses its walks"
       ],
       "label": [
         {

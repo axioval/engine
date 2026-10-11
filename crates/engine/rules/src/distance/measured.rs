@@ -8,12 +8,18 @@
 //! counterpart, one whose distance could not be read or whose interval
 //! straddles, widens the value towards the bound it could move, as
 //! `distance` counts it as unknown.
+//!
+//! A value over the counterparts within a walk (`measure=walking`) walks
+//! to those the plan broad phase proposes within the radius, through the
+//! metric-routing service, between the representative points
+//! `space-distance` walks between.
 
 use std::collections::BTreeMap;
 
 use axioval_engine::expression::{Interval, Value};
 use axioval_engine::{
-    CompiledRule, MeasuredProvider, Measurement, NotEvaluatedReason, PropertyResolutionError,
+    CompiledRule, MeasuredProvider, Measurement, MetricRouteOutcome, MetricRouteRequest,
+    MetricRoutingServiceHandle, MobilityProfile, NotEvaluatedReason, PropertyResolutionError,
     RuleContext,
 };
 use axioval_ir::contract::{ParameterValue, Selector, Severity};
@@ -36,7 +42,7 @@ fn rule(
     call: &MeasuredCall,
     object: &ObjectId,
     counterparts: std::collections::BTreeSet<ObjectId>,
-    reach: f64,
+    (reach, walking): (f64, bool),
 ) -> CompiledRule {
     let text = |value: &str| ParameterValue::String {
         value: value.to_owned(),
@@ -55,13 +61,21 @@ fn rule(
             ParameterValue::Number { value: reach },
         ),
     ]);
+    // A walk is never shorter than the plan distance between the bodies
+    // its ends stand in: the plan broad phase proposes every counterpart
+    // that may be walked to within the reach.
+    if walking {
+        parameters.insert("projection".to_owned(), text("horizontal"));
+    }
     for (key, parameter) in [
         ("projection", "projection"),
         ("direction", "vertical_direction"),
         ("subject_surface", "subject_surface"),
         ("counterpart_surface", "counterpart_surface"),
     ] {
-        if let Some(choice) = call.choice(key) {
+        if let Some(choice) = call.choice(key)
+            && !walking
+        {
             parameters.insert(parameter.to_owned(), text(choice));
         }
     }
@@ -197,6 +211,110 @@ fn within<'c>(all: &[&'c Candidate], from: f64, radius: f64) -> Vec<(&'c Candida
     reached
 }
 
+/// The counterparts that may count towards a `*_within`, each with whether
+/// it surely does, and whether everything that placed them is exact.
+struct Reached<'c> {
+    counterparts: Vec<(&'c ObjectId, bool)>,
+    exact: bool,
+}
+
+impl<'c> Reached<'c> {
+    /// Those within `[from, radius]` of their measured distances.
+    fn measured(all: &[&'c Candidate], from: f64, radius: f64) -> Self {
+        let reached = within(all, from, radius);
+        Self {
+            exact: measured_exactly(reached.iter().map(|(candidate, _)| *candidate)),
+            counterparts: reached
+                .into_iter()
+                .map(|(candidate, surely)| (&candidate.counterpart, surely))
+                .collect(),
+        }
+    }
+
+    /// Those within `[from, radius]` walking from the object's
+    /// representative point to each counterpart's, among the candidates
+    /// the plan broad phase proposes within `radius`: no walk is shorter
+    /// than the plan distance between the bodies its ends stand in, so one
+    /// it does not propose is surely beyond.
+    ///
+    /// A walk the route service proves blocked is surely beyond; one it
+    /// bounds counts as a measured distance does, surely where its whole
+    /// interval lies within; one it refuses, or whose end has no
+    /// representative point, may or may not count.
+    fn walked(
+        context: &RuleContext<'_>,
+        call: &MeasuredCall,
+        object: &ObjectId,
+        (all, from, radius): (&[&'c Candidate], f64, f64),
+    ) -> Result<Self, Unavailable> {
+        let profile = profile(call)?;
+        let routes = context
+            .services
+            .get::<MetricRoutingServiceHandle>()
+            .ok_or_else(|| crate::space_distance::missing("metric-routing"))?;
+        let (origin, cited) = crate::space_distance::representative_point(context, object)?;
+        let mut reached = Self {
+            counterparts: Vec::new(),
+            exact: cited.iter().all(|evidence| evidence.exact),
+        };
+        for (candidate, _) in within(all, 0.0, radius) {
+            let counterpart = &candidate.counterpart;
+            let walked = crate::space_distance::representative_point(context, counterpart)
+                .and_then(|(end, cited)| {
+                    routes
+                        .route(&MetricRouteRequest::new(origin.clone(), end, profile))
+                        .map(|outcome| (outcome, cited))
+                        .map_err(|error| {
+                            crate::space_distance::incomplete(format!(
+                                "walking from {object} to {counterpart}: {error}"
+                            ))
+                        })
+                });
+            match walked {
+                // Proven unreachable: surely beyond any radius.
+                Ok((MetricRouteOutcome::Blocked(_), _)) => {}
+                Ok((MetricRouteOutcome::Reachable(route), cited)) => {
+                    let length = route.shortest_distance();
+                    let (lower, upper) = (length.lower_metres(), length.upper_metres());
+                    if upper < from || lower > radius {
+                        continue;
+                    }
+                    reached.exact &= route.evidence().exact && cited.iter().all(|e| e.exact);
+                    let surely = candidate.certainly_in_scope() && from <= lower && upper <= radius;
+                    reached.counterparts.push((counterpart, surely));
+                }
+                Err(_) => reached.counterparts.push((counterpart, false)),
+            }
+        }
+        Ok(reached)
+    }
+}
+
+/// The walking body `measure=walking` states.
+fn profile(call: &MeasuredCall) -> Result<MobilityProfile, Unavailable> {
+    let needed = |key: &str| {
+        length(call, key).ok_or_else(|| {
+            crate::support::invalid(format!("`{}` walking needs `{key}`", call.name()))
+        })
+    };
+    let slope = match call.argument("walking_slope") {
+        None => 0.0,
+        Some(MeasuredArgument::Number(slope)) => *slope,
+        Some(_) => {
+            return Err(crate::support::invalid(
+                "`walking_slope` is not a plain number",
+            ));
+        }
+    };
+    MobilityProfile::try_new(
+        needed("walking_radius")?,
+        needed("walking_height")?,
+        needed("walking_step")?,
+        slope,
+    )
+    .map_err(|error| crate::support::invalid(error.to_string()))
+}
+
 /// How many counterparts surely and possibly lie within `[from, radius]`.
 /// Cited as exact where every possible one measured was measured exactly,
 /// as `distance` cites a shortfall: an unmeasurable counterpart widens the
@@ -268,17 +386,18 @@ fn stated(
 fn aggregate_within(
     name: &str,
     context: &RuleContext<'_>,
-    reached: &[(&Candidate, bool)],
+    reached: &Reached<'_>,
     property: PropertyRef<'_>,
 ) -> Result<Measurement, Unavailable> {
     let unreadable = |why: String| (NotEvaluatedReason::IncompleteEvidence, why);
     let read: Vec<_> = reached
+        .counterparts
         .iter()
-        .map(|(candidate, surely)| {
+        .map(|(counterpart, surely)| {
             (
-                &candidate.counterpart,
+                *counterpart,
                 *surely,
-                stated(context, &candidate.counterpart, property),
+                stated(context, counterpart, property),
             )
         })
         .collect();
@@ -294,7 +413,7 @@ fn aggregate_within(
     }
     let mut sure = Vec::new();
     let mut possible = Vec::new();
-    let mut exact = measured_exactly(reached.iter().map(|(candidate, _)| *candidate));
+    let mut exact = reached.exact;
     for (counterpart, surely, value) in read {
         let (value, value_exact) = value?;
         exact &= value_exact;
@@ -437,7 +556,8 @@ impl MeasuredProvider for DistanceMeasures {
             length(call, "radius")
         }
         .ok_or(PropertyResolutionError::InvalidRequest)?;
-        let rule = rule(call, object, counterparts, reach);
+        let walking = name != DISTANCE && call.choice("measure") == Some("walking");
+        let rule = rule(call, object, counterparts, (reach, walking));
         let declared = declaration(&rule).map_err(|(reason, why)| {
             crate::measured_kinds::resolution_error((
                 reason,
@@ -476,14 +596,18 @@ impl MeasuredProvider for DistanceMeasures {
             _ => {
                 let property =
                     value_property(call).ok_or(PropertyResolutionError::InvalidRequest)?;
-                aggregate_within(name, context, &within(&all, from, reach), property).map_err(
-                    |(reason, why)| {
-                        crate::measured_kinds::resolution_error((
-                            reason,
-                            format!("`{name}` of {object}: {why}"),
-                        ))
-                    },
-                )?
+                let refused = |(reason, why): Unavailable| {
+                    crate::measured_kinds::resolution_error((
+                        reason,
+                        format!("`{name}` of {object}: {why}"),
+                    ))
+                };
+                let reached = if walking {
+                    Reached::walked(context, call, object, (&all, from, reach)).map_err(refused)?
+                } else {
+                    Reached::measured(&all, from, reach)
+                };
+                aggregate_within(name, context, &reached, property).map_err(refused)?
             }
         };
         let (Measurement::Value { locator: cited, .. }

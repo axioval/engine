@@ -1603,6 +1603,90 @@
         },
         {
           "additionalProperties": false,
+          "description": "The `value` of the member whose `by` is least, among the objects\n`over` reaches that `filter` (`where`) selects; `by` and `value` are\nevaluated with each member in scope, so `value` reads the chosen\nmember's other values. Where intervals overlap, every member that\nmay be the least is chosen: the value is the one they agree on (an\ninterval holding each of their numbers), otherwise not evaluated,\nand a finding names them.",
+          "properties": {
+            "by": {
+              "$ref": "#/$defs/Expression"
+            },
+            "kind": {
+              "const": "argmin",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "over": {
+              "$ref": "#/$defs/AggregateSource"
+            },
+            "value": {
+              "$ref": "#/$defs/Expression"
+            },
+            "where": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Selector"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "over",
+            "by",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "[`Expression::Argmin`] for the member whose `by` is greatest.",
+          "properties": {
+            "by": {
+              "$ref": "#/$defs/Expression"
+            },
+            "kind": {
+              "const": "argmax",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "over": {
+              "$ref": "#/$defs/AggregateSource"
+            },
+            "value": {
+              "$ref": "#/$defs/Expression"
+            },
+            "where": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Selector"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "over",
+            "by",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
           "description": "How the rule `rule` of the same ruleset judged the object in scope:\ntrue when it passed it, false when it reported a finding about it,\n`null` when it did not select it, and not evaluated when it left it\nopen or could not decide whether it selected it. `null` decides no\nrequirement: guard a reading with [`Expression::Selected`].",
           "properties": {
             "kind": {

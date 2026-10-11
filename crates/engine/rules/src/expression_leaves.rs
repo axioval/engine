@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use axioval_engine::expression::{
-    EvaluationBudget, ExpressionContext, Interval, Leaf, Member, RuleRead, Unit, Value,
+    EvaluationBudget, ExpressionContext, Interval, Leaf, Member, Ranked, RuleRead, Unit, Value,
     derived_value, evaluate, evaluate_untraced,
 };
 use axioval_engine::{
@@ -112,6 +112,10 @@ pub(crate) struct ObjectLeaves<'a> {
     /// Measured values naming the rule's parameters read for an object,
     /// each measured once however often the object's values read it.
     measured: RefCell<Vec<(ObjectId, Arc<str>, BoundPrefetched)>>,
+    /// The members of the `argmin` or `argmax` listed last, in order: the
+    /// objects a finding naming each relates, and why its value was not
+    /// evaluated, taken over only where it is chosen.
+    ranked: Vec<(Vec<ObjectId>, Option<NotEvaluatedReason>)>,
 }
 
 /// A property resolved for an object (the object in scope, or the subject
@@ -157,6 +161,7 @@ impl<'a> ObjectLeaves<'a> {
             notes: RefCell::new(Vec::new()),
             sources: RefCell::new(Vec::new()),
             lists: RefCell::new(Vec::new()),
+            ranked: Vec::new(),
         }
     }
 
@@ -192,6 +197,7 @@ impl<'a> ObjectLeaves<'a> {
             notes: RefCell::new(Vec::new()),
             sources: RefCell::new(Vec::new()),
             lists: RefCell::new(Vec::new()),
+            ranked: Vec::new(),
         }
     }
 
@@ -219,6 +225,7 @@ impl<'a> ObjectLeaves<'a> {
             notes: RefCell::new(Vec::new()),
             sources: RefCell::new(Vec::new()),
             lists: RefCell::new(Vec::new()),
+            ranked: Vec::new(),
         }
     }
 
@@ -758,6 +765,37 @@ impl<'a> ObjectLeaves<'a> {
         value: Option<&Expression>,
         path: &str,
     ) -> Result<Vec<Member>, String> {
+        let measured = self.measured_listing(list)?;
+        let mut members = Vec::new();
+        for member in &measured {
+            let (value, evidence) = match value {
+                None => (Ok(Value::Null), Vec::new()),
+                Some(value) => {
+                    let mut leaves = self.measured_member(member);
+                    let evaluation = evaluate_untraced(value, path, &mut leaves);
+                    self.adopt_reason(&leaves, &evaluation.outcome);
+                    (
+                        evaluation.outcome,
+                        evaluation
+                            .reads
+                            .iter()
+                            .flat_map(|read| read.leaf.evidence.iter().cloned())
+                            .collect(),
+                    )
+                }
+            };
+            members.push(Member {
+                certain: member.certain,
+                value,
+                evidence,
+            });
+        }
+        Ok(members)
+    }
+
+    /// The members of `list` measured of the object in scope, the
+    /// listing's own evidence kept for [`ExpressionContext::listing_evidence`].
+    fn measured_listing(&mut self, list: &str) -> Result<Vec<MeasuredMember>, String> {
         // Parsed and its parameters bound once per rule where it can be.
         let anchored = self.anchored(list, true);
         let mut call = match anchored {
@@ -794,31 +832,7 @@ impl<'a> ObjectLeaves<'a> {
                 format!("`{list}` of {}: {error}", self.object.id)
             })?;
         self.listed = listed;
-        let mut members = Vec::new();
-        for member in &measured {
-            let (value, evidence) = match value {
-                None => (Ok(Value::Null), Vec::new()),
-                Some(value) => {
-                    let mut leaves = self.measured_member(member);
-                    let evaluation = evaluate_untraced(value, path, &mut leaves);
-                    self.adopt_reason(&leaves, &evaluation.outcome);
-                    (
-                        evaluation.outcome,
-                        evaluation
-                            .reads
-                            .iter()
-                            .flat_map(|read| read.leaf.evidence.iter().cloned())
-                            .collect(),
-                    )
-                }
-            };
-            members.push(Member {
-                certain: member.certain,
-                value,
-                evidence,
-            });
-        }
-        Ok(members)
+        Ok(measured)
     }
 
     /// The candidate members `over` reaches from the object in scope, each
@@ -1196,6 +1210,87 @@ impl ExpressionContext for ObjectLeaves<'_> {
         self.listed_members(over, filter, value, path, true)
     }
 
+    fn ranked_members(
+        &mut self,
+        over: &AggregateSource,
+        filter: Option<&Selector>,
+        by: (&Expression, &str),
+        value: (&Expression, &str),
+    ) -> Result<Vec<Ranked>, String> {
+        self.ranked.clear();
+        if let AggregateSource::Measured { name } = over {
+            let measured = self.measured_listing(name)?;
+            let count = measured.len();
+            let mut ranked = Vec::with_capacity(count);
+            for (index, member) in measured.iter().enumerate() {
+                let mut by_leaves = self.measured_member(member);
+                let mut value_leaves = self.measured_member(member);
+                // A measured member is named by its words, else its place.
+                let words = member.fields.values().find_map(|field| match field {
+                    MemberValue::Text { text } => Some(text.clone()),
+                    _ => None,
+                });
+                let name = words.unwrap_or_else(|| format!("member {} of {count}", index + 1));
+                let objects = member
+                    .fields
+                    .values()
+                    .filter_map(|field| match field {
+                        MemberValue::Objects { objects } => Some(objects.iter().cloned()),
+                        _ => None,
+                    })
+                    .flatten()
+                    .collect();
+                let (member, kept) = self.rank(
+                    (&mut by_leaves, &mut value_leaves),
+                    (member.certain, Vec::new(), name, objects),
+                    by,
+                    value,
+                );
+                ranked.push(member);
+                self.ranked.push(kept);
+            }
+            return Ok(ranked);
+        }
+        let mut ranked = Vec::new();
+        for (object, mut certain, mut evidence) in self.candidates(over)? {
+            if let Some(filter) = filter {
+                match selector_matches(self.context, filter, object, &mut evidence) {
+                    Selection::Match => {}
+                    Selection::NoMatch => continue,
+                    Selection::NotEvaluated(..) => certain = false,
+                }
+            }
+            let mut by_leaves = self.member(object);
+            let mut value_leaves = self.member(object);
+            let (member, kept) = self.rank(
+                (&mut by_leaves, &mut value_leaves),
+                (
+                    certain,
+                    evidence,
+                    object.id.to_string(),
+                    vec![object.id.clone()],
+                ),
+                by,
+                value,
+            );
+            ranked.push(member);
+            self.ranked.push(kept);
+        }
+        Ok(ranked)
+    }
+
+    fn chosen(&mut self, chosen: &[usize]) {
+        for index in chosen {
+            let Some((objects, reason)) = self.ranked.get(*index) else {
+                continue;
+            };
+            self.related.borrow_mut().extend(objects.iter().cloned());
+            if let Some(reason) = reason {
+                self.reasons.borrow_mut().push(reason.clone());
+            }
+        }
+    }
+
     fn declared_types(&self) -> Option<&axioval_engine::expression::DeclaredTypes> {
         self.context
             .services
@@ -1227,6 +1322,48 @@ impl ExpressionContext for ObjectLeaves<'_> {
 }
 
 impl ObjectLeaves<'_> {
+    /// One member of an `argmin` or `argmax`, its `by` read through
+    /// `leaves`' first and its `value` through their second, each with the
+    /// member in scope: `(certain, evidence reaching it, name, objects a
+    /// finding naming it relates)`. Why its `by` was not evaluated is taken
+    /// over now; the objects, and why its value was not evaluated, are
+    /// returned beside it, kept until it is chosen.
+    fn rank(
+        &self,
+        (by_leaves, value_leaves): (&mut Self, &mut Self),
+        (certain, mut evidence, name, objects): (bool, Vec<Evidence>, String, Vec<ObjectId>),
+        (by, by_path): (&Expression, &str),
+        (value, value_path): (&Expression, &str),
+    ) -> (Ranked, (Vec<ObjectId>, Option<NotEvaluatedReason>)) {
+        let cited = |evaluation: &axioval_engine::expression::Evaluation| -> Vec<Evidence> {
+            evaluation
+                .reads
+                .iter()
+                .flat_map(|read| read.leaf.evidence.iter().cloned())
+                .collect()
+        };
+        let ranked = evaluate_untraced(by, by_path, by_leaves);
+        self.adopt_reason(by_leaves, &ranked.outcome);
+        evidence.extend(cited(&ranked));
+        let read = evaluate_untraced(value, value_path, value_leaves);
+        let reason = read
+            .outcome
+            .is_err()
+            .then(|| value_leaves.first_reason())
+            .flatten();
+        (
+            Ranked {
+                certain,
+                by: ranked.outcome,
+                value_evidence: cited(&read),
+                value: read.outcome,
+                evidence,
+                name,
+            },
+            (objects, reason),
+        )
+    }
+
     /// The members `over` lists, each with `value` evaluated with it in
     /// scope; with `until_unreadable`, none after the first whose value
     /// cannot be read.

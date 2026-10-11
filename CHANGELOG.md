@@ -34,6 +34,28 @@ All notable changes are documented here. This project follows Semantic Versionin
   cell no row states is not evaluated, its reason naming the keys, and is
   never borrowed from a farther row
   ([#348](https://github.com/axioval/engine/issues/348)).
+- **Expressions**: `argmin` and `argmax` read a `value` of the member whose
+  `by` is least or greatest, among the members an aggregate would range
+  over (`over`, `where`), so a rule refers to the decisive member: the
+  steepest roof face, the longest route. Where intervals overlap every
+  member that may be the extreme is chosen (faces of 20°, 35° and
+  [34°, 36°] choose the second and the third), their values must agree
+  (numbers of one unit give the interval holding each), and a finding
+  names and relates them. An undecided member may be chosen but bounds no
+  other, a `by` not evaluated is always possible, and a sure member's
+  `null` `by` makes the value `null`. `ExpressionContext` gains
+  `ranked_members` and `chosen`, both defaulted, and `Reason` gains
+  `UndecidedExtreme`
+  ([#352](https://github.com/axioval/engine/issues/352)).
+- **Measured values**: `sum_within`, `min_within`, `max_within` and
+  `mean_within` aggregate a plain number the counterparts within a radius
+  state (`value=<property>`), over the counterparts `count_within` counts:
+  four extinguishers of 2, 2, 6 and 6 units, two of them within 15 m of a
+  point, sum 8 units there. A counterpart whose distance straddles the
+  radius adds its value or nothing, so the sum is an interval and the mean
+  is not evaluated; one surely within stating no value makes the value
+  `null`, one only possibly within leaves it not evaluated
+  ([#351](https://github.com/axioval/engine/issues/351)).
 
 ### Changed
 

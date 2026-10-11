@@ -1,0 +1,25 @@
+{
+  "kind": "argmax",
+  "over": {
+    "kind": "path",
+    "path": [
+      "IfcRelAggregates:forward"
+    ]
+  },
+  "where": {
+    "kind": "entityType",
+    "objectType": "ex:roof",
+    "includeSubtypes": true
+  },
+  "by": {
+    "kind": "property",
+    "propertySet": "axioval:measured",
+    "property": "slope"
+  },
+  "value": {
+    "kind": "property",
+    "propertySet": "ex:pset-roof-common",
+    "property": "ex:covering"
+  },
+  "label": "covering of the steepest face"
+}

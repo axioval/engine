@@ -371,6 +371,22 @@ const OPERAND_ANGLE: &[Field] = &[one("operand", ANGLE)];
 const OPERAND_TEXT: &[Field] = &[one("operand", TEXTUAL)];
 const LEFT_RIGHT_NUMBER: &[Field] = &[one("left", NUMERIC), one("right", NUMERIC)];
 const RULE: &[Field] = &[named("rule", Refers::Rule, true)];
+/// The members of an `argmin` or `argmax`, what ranks them and what is
+/// read of the chosen one.
+const RANKED: &[Field] = &[
+    Field {
+        name: "over",
+        kind: FieldKind::AggregateSource,
+        required: true,
+    },
+    Field {
+        name: "where",
+        kind: FieldKind::Selector,
+        required: false,
+    },
+    one("by", NUMERIC),
+    one("value", ANY),
+];
 const CASE: Field = flag("caseSensitive");
 const SLOPE_FORMS: &[&str] = &["ratio", "percent", "angle"];
 
@@ -952,6 +968,36 @@ pub const EXPRESSION_KINDS: &[NodeKind] = &[
             "Anzahl, Summe, Extremwert, Mittelwert oder quantifizierte Aussage über verbundene \
              Objekte, eine Gruppe, eine Auswahl oder gemessene Glieder; ein Glied mit \
              unentschiedener Zugehörigkeit weitet das Ergebnis oder lässt es ungeprüft.",
+        ),
+    },
+    NodeKind {
+        kind: "argmin",
+        category: "aggregate",
+        fields: RANKED,
+        result: ResultRule::Joined { fields: &["value"] },
+        label: &en_de("Value of the least", "Wert des Kleinsten"),
+        help: &en_de(
+            "A value of the member whose `by` is least, such as the name of the shortest \
+             route; where intervals overlap, every member that may be the least, whose values \
+             must agree, and a finding names them.",
+            "Ein Wert des Glieds mit dem kleinsten `by`, etwa der Name des kürzesten Wegs; \
+             wo sich Intervalle überschneiden, jedes Glied, das das kleinste sein kann, deren \
+             Werte übereinstimmen müssen, und ein Befund nennt sie.",
+        ),
+    },
+    NodeKind {
+        kind: "argmax",
+        category: "aggregate",
+        fields: RANKED,
+        result: ResultRule::Joined { fields: &["value"] },
+        label: &en_de("Value of the greatest", "Wert des Größten"),
+        help: &en_de(
+            "A value of the member whose `by` is greatest, such as the name of the steepest \
+             face; where intervals overlap, every member that may be the greatest, whose \
+             values must agree, and a finding names them.",
+            "Ein Wert des Glieds mit dem größten `by`, etwa der Name der steilsten Fläche; wo \
+             sich Intervalle überschneiden, jedes Glied, das das größte sein kann, deren Werte \
+             übereinstimmen müssen, und ein Befund nennt sie.",
         ),
     },
     NodeKind {
@@ -1770,7 +1816,8 @@ mod tests {
             E::Sin { .. } => "sin", E::Cos { .. } => "cos", E::Tan { .. } => "tan",
             E::Atan2 { .. } => "atan2", E::ConvertSlope { .. } => "convertSlope",
             E::InUnit { .. } => "inUnit",
-            E::Aggregate { .. } => "aggregate", E::RuleOutcome { .. } => "ruleOutcome",
+            E::Aggregate { .. } => "aggregate", E::Argmin { .. } => "argmin",
+            E::Argmax { .. } => "argmax", E::RuleOutcome { .. } => "ruleOutcome",
             E::Selected { .. } => "selected",
             E::FindingCount { .. } => "findingCount", E::Deviation { .. } => "deviation",
             E::Concat { .. } => "concat", E::Length { .. } => "length",

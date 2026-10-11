@@ -121,6 +121,11 @@ member in scope:
   reads the member fields of `measuredMembers` as `property` blocks of
   `axioval:member`.
 
+`expression.argmin` and `expression.argmax` take the same `over` and
+optional `where` inputs, a `by` input ranking the members (a number) and a
+`value` input read of the chosen member, both evaluated with each member
+in scope.
+
 ## Measured values
 
 A `property` read of `axioval:measured` is shown as a `measured.<name>`

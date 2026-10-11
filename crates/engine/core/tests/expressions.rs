@@ -1412,3 +1412,254 @@ fn a_sum_over_no_member_is_zero_in_its_members_unit() {
         Err(Reason::Mismatch(_))
     ));
 }
+
+/// Members handed to an `argmin` or `argmax` as stated: membership, `by`,
+/// `value` and name, [`not_evaluated`] standing for a value not evaluated;
+/// and the members it chose.
+struct Ranking(Vec<(bool, Value, Value, &'static str)>, Vec<usize>);
+
+impl ExpressionContext for Ranking {
+    fn property(&mut self, _: Option<&str>, name: &str) -> Leaf {
+        Leaf::unreadable(format!("`{name}` is not read here"))
+    }
+
+    fn parameter(&mut self, name: &str) -> Leaf {
+        Leaf::unreadable(format!("`{name}` is unknown"))
+    }
+
+    fn ranked_members(
+        &mut self,
+        _: &axioval_ir::contract::AggregateSource,
+        _: Option<&axioval_ir::contract::Selector>,
+        (_, by_path): (&Expression, &str),
+        (_, value_path): (&Expression, &str),
+    ) -> Result<Vec<axioval_engine::expression::Ranked>, String> {
+        let read = |value: &Value, path: &str| {
+            if *value == not_evaluated() {
+                Err(axioval_engine::expression::NotEvaluated {
+                    path: path.into(),
+                    label: None,
+                    reason: Reason::Unreadable(format!("{path} cannot be read")),
+                })
+            } else {
+                Ok(value.clone())
+            }
+        };
+        Ok(self
+            .0
+            .iter()
+            .map(
+                |(certain, by, value, name)| axioval_engine::expression::Ranked {
+                    certain: *certain,
+                    by: read(by, by_path),
+                    value: read(value, value_path),
+                    evidence: Vec::new(),
+                    value_evidence: Vec::new(),
+                    name: (*name).to_owned(),
+                },
+            )
+            .collect())
+    }
+
+    fn chosen(&mut self, chosen: &[usize]) {
+        self.1 = chosen.to_vec();
+    }
+}
+
+/// `kind` (`argmin`, `argmax`) over `members`: its outcome, the members it
+/// chose and how it names them.
+fn extreme(
+    kind: &str,
+    members: Vec<(bool, Value, Value, &'static str)>,
+) -> (Result<Value, Reason>, Vec<usize>, Vec<String>) {
+    let node = json!({"kind": kind, "over": {"kind": "path", "path": ["Faces"]},
+        "by": {"kind": "null"}, "value": {"kind": "null"}});
+    let mut context = Ranking(members, vec![usize::MAX]);
+    let evaluation = evaluate(&expression(node), "e", &mut context);
+    let named = evaluation
+        .reads
+        .iter()
+        .find_map(|read| match &read.source {
+            axioval_engine::expression::Source::Extreme { chosen, .. } => Some(chosen.clone()),
+            _ => None,
+        })
+        .unwrap();
+    (
+        evaluation.outcome.map_err(|why| why.reason),
+        context.1,
+        named,
+    )
+}
+
+fn degrees(lower: f64, upper: f64) -> Value {
+    Value::Number {
+        value: Interval::new(lower.to_radians(), upper.to_radians()).unwrap(),
+        unit: Unit::RADIAN,
+    }
+}
+
+/// #352: three faces of slopes 20°, 35° and [34°, 36°]: both the second and
+/// the third may be the steepest, and are chosen and named; read of them,
+/// their slopes give the interval holding both, and texts they do not
+/// share leave the value not evaluated. The least is the first alone.
+#[test]
+fn argmax_chooses_every_member_that_may_be_the_greatest() {
+    let text = |text: &str| Value::Text(text.into());
+    let faces = |value: &dyn Fn(usize) -> Value| {
+        vec![
+            (true, degrees(20.0, 20.0), value(0), "face a"),
+            (true, degrees(35.0, 35.0), value(1), "face b"),
+            (true, degrees(34.0, 36.0), value(2), "face c"),
+        ]
+    };
+    let slopes = [
+        degrees(20.0, 20.0),
+        degrees(35.0, 35.0),
+        degrees(34.0, 36.0),
+    ];
+    let (outcome, chosen, named) = extreme("argmax", faces(&|index| slopes[index].clone()));
+    assert_eq!(chosen, vec![1, 2]);
+    assert_eq!(named, vec!["face b", "face c"]);
+    let Ok(Value::Number { value, unit }) = outcome else {
+        panic!("{outcome:?}");
+    };
+    assert_eq!(unit, Unit::RADIAN);
+    assert!(value.lower <= 34f64.to_radians() && value.upper >= 36f64.to_radians());
+    assert!(value.lower > 33.9f64.to_radians() && value.upper < 36.1f64.to_radians());
+    // Their names differ: either may be the steepest.
+    let faces_named = ["a", "b", "c"];
+    let (outcome, chosen, named) = extreme("argmax", faces(&|index| text(faces_named[index])));
+    assert_eq!(outcome, Err(Reason::UndecidedExtreme(2)));
+    assert_eq!(chosen, Vec::<usize>::new());
+    assert_eq!(named, Vec::<String>::new());
+    // A value both state decides.
+    let coverings = ["tiles", "slate", "slate"];
+    let (outcome, chosen, _) = extreme("argmax", faces(&|index| text(coverings[index])));
+    assert_eq!((outcome, chosen), (Ok(text("slate")), vec![1, 2]));
+    // The least slope is the first face's alone.
+    let (outcome, chosen, named) = extreme("argmin", faces(&|index| text(coverings[index])));
+    assert_eq!((outcome, chosen), (Ok(text("tiles")), vec![0]));
+    assert_eq!(named, vec!["face a"]);
+}
+
+/// Undecided membership, `by` not evaluated and `null` follow the
+/// aggregates: an undecided member may be chosen but bounds none, a `by`
+/// not evaluated may be the extreme and decides only where values agree,
+/// and `null` never mixes with not evaluated.
+#[test]
+fn argmax_over_undecided_unread_and_null_members() {
+    let text = |text: &str| Value::Text(text.into());
+    let sure = |by: Value, value: Value| (true, by, value, "sure");
+    let maybe = |by: Value, value: Value| (false, by, value, "maybe");
+    let slope = |value: f64| degrees(value, value);
+    // An undecided member steeper than the sure ones may be the steepest;
+    // a flatter one cannot be.
+    let (outcome, chosen, _) = extreme(
+        "argmax",
+        vec![sure(slope(30.0), text("x")), maybe(slope(40.0), text("x"))],
+    );
+    assert_eq!((outcome, chosen), (Ok(text("x")), vec![0, 1]));
+    let (outcome, chosen, _) = extreme(
+        "argmax",
+        vec![sure(slope(30.0), text("x")), maybe(slope(10.0), text("y"))],
+    );
+    assert_eq!((outcome, chosen), (Ok(text("x")), vec![0]));
+    let (outcome, _, _) = extreme(
+        "argmax",
+        vec![sure(slope(30.0), text("x")), maybe(slope(40.0), text("y"))],
+    );
+    assert_eq!(outcome, Err(Reason::UndecidedExtreme(2)));
+    // Only undecided members: there may be none.
+    let (outcome, _, _) = extreme("argmax", vec![maybe(slope(40.0), text("x"))]);
+    assert_eq!(outcome, Err(Reason::UndecidedMembers(1)));
+    // No member at all is `null`.
+    assert_eq!(extreme("argmax", Vec::new()).0, Ok(Value::Null));
+    // A `by` not evaluated may be the steepest: the value stands where it
+    // agrees, otherwise its own reason leaves it open.
+    let (outcome, chosen, _) = extreme(
+        "argmax",
+        vec![
+            sure(slope(30.0), text("x")),
+            sure(not_evaluated(), text("x")),
+        ],
+    );
+    assert_eq!((outcome, chosen), (Ok(text("x")), vec![0, 1]));
+    let (outcome, _, _) = extreme(
+        "argmax",
+        vec![
+            sure(slope(30.0), text("x")),
+            sure(not_evaluated(), text("y")),
+        ],
+    );
+    assert!(
+        matches!(&outcome, Err(Reason::Unreadable(why)) if why.contains("e.argmax.by")),
+        "{outcome:?}"
+    );
+    // A chosen member's value not evaluated leaves it open; an unchosen
+    // one's does not.
+    let (outcome, _, _) = extreme(
+        "argmax",
+        vec![
+            sure(slope(30.0), not_evaluated()),
+            sure(slope(10.0), text("x")),
+        ],
+    );
+    assert!(matches!(outcome, Err(Reason::Unreadable(_))), "{outcome:?}");
+    let (outcome, _, _) = extreme(
+        "argmax",
+        vec![
+            sure(slope(30.0), text("x")),
+            sure(slope(10.0), not_evaluated()),
+        ],
+    );
+    assert_eq!(outcome, Ok(text("x")));
+    // A sure member stating no `by` makes it `null`, whatever the others;
+    // an undecided one leaves it open.
+    let (outcome, chosen, _) = extreme(
+        "argmax",
+        vec![sure(slope(30.0), text("x")), sure(Value::Null, text("y"))],
+    );
+    assert_eq!((outcome, chosen), (Ok(Value::Null), vec![]));
+    let (outcome, _, _) = extreme(
+        "argmax",
+        vec![sure(slope(30.0), text("x")), maybe(Value::Null, text("y"))],
+    );
+    assert_eq!(outcome, Err(Reason::UndecidedMembers(1)));
+    // Chosen values `null` beside a value disagree; all `null` is `null`.
+    let (outcome, _, _) = extreme(
+        "argmax",
+        vec![sure(slope(30.0), Value::Null), sure(slope(30.0), text("x"))],
+    );
+    assert_eq!(outcome, Err(Reason::UndecidedExtreme(2)));
+    let (outcome, _, _) = extreme(
+        "argmax",
+        vec![
+            sure(slope(30.0), Value::Null),
+            sure(slope(30.0), Value::Null),
+        ],
+    );
+    assert_eq!(outcome, Ok(Value::Null));
+    // A `by` that is no number.
+    let (outcome, _, _) = extreme("argmax", vec![sure(text("steep"), text("x"))]);
+    assert!(matches!(outcome, Err(Reason::Mismatch(_))), "{outcome:?}");
+}
+
+#[test]
+fn argmax_is_typed_by_its_value_and_ranks_by_a_number() {
+    let node = |by: serde_json::Value| {
+        json!({"kind": "argmax", "over": {"kind": "path", "path": ["Faces"]},
+            "by": by, "value": property("Class")})
+    };
+    assert_eq!(
+        check(&expression(node(property("Height"))), "v", &Environment).unwrap(),
+        Type::Text
+    );
+    let error = check(&expression(node(property("Class"))), "v", &Environment).unwrap_err();
+    assert_eq!(error.path, "v.argmax.by");
+    // A filter is checked in the outer scope, at its own path.
+    let filtered = json!({"kind": "argmin", "over": {"kind": "path", "path": ["Faces"]},
+        "where": {"kind": "expression", "expression": property("Class")},
+        "by": property("Height"), "value": property("Class")});
+    let error = check(&expression(filtered), "v", &Environment).unwrap_err();
+    assert_eq!(error.path, "v.argmin.where");
+}

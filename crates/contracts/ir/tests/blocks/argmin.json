@@ -1,0 +1,50 @@
+{
+  "expression": {
+    "kind": "argmin",
+    "over": {
+      "kind": "group",
+      "grouping": "routes-of-storey"
+    },
+    "by": {
+      "kind": "property",
+      "propertySet": "ex:pset-route",
+      "property": "ex:length"
+    },
+    "value": {
+      "kind": "property",
+      "propertySet": "ex:pset-route",
+      "property": "ex:width"
+    }
+  },
+  "blocks": {
+    "type": "expression.argmin",
+    "inputs": {
+      "by": {
+        "block": {
+          "type": "expression.property",
+          "fields": {
+            "property": "ex:length",
+            "propertySet": "ex:pset-route"
+          }
+        }
+      },
+      "over": {
+        "block": {
+          "type": "source.group",
+          "fields": {
+            "grouping": "routes-of-storey"
+          }
+        }
+      },
+      "value": {
+        "block": {
+          "type": "expression.property",
+          "fields": {
+            "property": "ex:width",
+            "propertySet": "ex:pset-route"
+          }
+        }
+      }
+    }
+  }
+}

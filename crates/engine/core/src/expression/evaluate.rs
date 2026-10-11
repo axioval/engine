@@ -250,6 +250,9 @@ pub enum Reason {
     /// An aggregate's result depends on members whose membership cannot
     /// be decided, this many.
     UndecidedMembers(usize),
+    /// This many members of an `argmin` or `argmax` may be the extreme,
+    /// and their values differ.
+    UndecidedExtreme(usize),
 }
 
 impl fmt::Display for Reason {
@@ -271,6 +274,10 @@ impl fmt::Display for Reason {
             Self::UndecidedMembers(count) => write!(
                 f,
                 "it depends on {count} member(s) whose membership cannot be decided"
+            ),
+            Self::UndecidedExtreme(count) => write!(
+                f,
+                "{count} members may be the extreme, and their values differ"
             ),
         }
     }
@@ -312,6 +319,14 @@ pub enum Source {
     Derived(String),
     /// The members of an aggregate.
     Aggregate(AggregateFunction),
+    /// The members of an `argmin` (`greatest` false) or `argmax`, and how
+    /// each it chose is named: every member that may be the extreme.
+    Extreme {
+        /// Whether the greatest `by` was sought.
+        greatest: bool,
+        /// The members chosen, named.
+        chosen: Vec<String>,
+    },
     /// Another rule's outcome about the object in scope.
     Rule {
         /// The rule.
@@ -395,6 +410,26 @@ pub struct Member {
     pub value: Result<Value, NotEvaluated>,
     /// The evidence of its membership and its value.
     pub evidence: Vec<Evidence>,
+}
+
+/// One member of an `argmin` or `argmax`: whether it surely is one, its
+/// `by` and its `value` with it in scope, and how a finding names it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Ranked {
+    /// Whether the member surely belongs; `false` when its path or filter
+    /// could not decide it.
+    pub certain: bool,
+    /// What ranks it.
+    pub by: Result<Value, NotEvaluated>,
+    /// What is read of it where it is chosen.
+    pub value: Result<Value, NotEvaluated>,
+    /// The evidence of its membership and its `by`, cited whether or not
+    /// it is chosen: it decides which members are.
+    pub evidence: Vec<Evidence>,
+    /// The evidence of its `value`, cited only where it is chosen.
+    pub value_evidence: Vec<Evidence>,
+    /// Words naming it: its identity, or a measured member's words.
+    pub name: String,
 }
 
 /// The default number of expression nodes one run may evaluate.
@@ -519,6 +554,33 @@ pub trait ExpressionContext {
         path: &str,
     ) -> Result<Vec<Member>, String> {
         self.members(over, filter, value, path)
+    }
+
+    /// The members `over` reaches from the object in scope that `filter`
+    /// selects, for an `argmin` or `argmax`: each with `by` and `value`
+    /// evaluated with it in scope, at the paths given beside them.
+    ///
+    /// # Errors
+    ///
+    /// Why the members cannot be listed: a path the source cannot answer.
+    fn ranked_members(
+        &mut self,
+        over: &AggregateSource,
+        filter: Option<&Selector>,
+        by: (&Expression, &str),
+        value: (&Expression, &str),
+    ) -> Result<Vec<Ranked>, String> {
+        let _ = (over, filter, by, value);
+        Err("`argmin` and `argmax` cannot list members here".into())
+    }
+
+    /// The members of the listing [`Self::ranked_members`] last answered
+    /// that an `argmin` or `argmax` chose, by their index in it: a context
+    /// relates them to a finding, and takes over why their values were
+    /// not evaluated. Called for every evaluation, with none chosen where
+    /// the result is `null` or not evaluated.
+    fn chosen(&mut self, chosen: &[usize]) {
+        let _ = chosen;
     }
 
     /// The types the compiled ruleset declares, which type a sum over no
@@ -1141,6 +1203,72 @@ impl Evaluator<'_> {
                     super::aggregate::Failure::Member(inner) => inner,
                     super::aggregate::Failure::Here(reason) => here(reason),
                 })
+            }
+            Expression::Argmin {
+                over,
+                filter,
+                by,
+                value,
+                ..
+            }
+            | Expression::Argmax {
+                over,
+                filter,
+                by,
+                value,
+                ..
+            } => {
+                let greatest = matches!(expression, Expression::Argmax { .. });
+                let members = self.context.ranked_members(
+                    over,
+                    filter.as_deref(),
+                    (by, &child("by")),
+                    (value, &child("value")),
+                );
+                let mut evidence = self.context.listing_evidence();
+                let outcome = members
+                    .as_ref()
+                    .map_err(|why| here(Reason::Unreadable(why.clone())))
+                    .and_then(|members| {
+                        super::extreme::extreme(greatest, members).map_err(|why| match why {
+                            super::aggregate::Failure::Member(inner) => inner,
+                            super::aggregate::Failure::Here(reason) => here(reason),
+                        })
+                    });
+                let chosen = outcome
+                    .as_ref()
+                    .map(|(_, chosen)| chosen.clone())
+                    .unwrap_or_default();
+                self.context.chosen(&chosen);
+                let members = members.unwrap_or_default();
+                // Every member's rank decides which are chosen; only the
+                // chosen ones' values are read.
+                evidence.extend(
+                    members
+                        .iter()
+                        .flat_map(|member| member.evidence.iter().cloned()),
+                );
+                evidence.extend(
+                    chosen
+                        .iter()
+                        .flat_map(|index| members[*index].value_evidence.iter().cloned()),
+                );
+                let outcome = outcome.map(|(value, _)| value);
+                self.reads.push(Read {
+                    path: path.to_owned(),
+                    source: Source::Extreme {
+                        greatest,
+                        chosen: chosen
+                            .iter()
+                            .map(|index| members[*index].name.clone())
+                            .collect(),
+                    },
+                    leaf: Leaf {
+                        value: outcome.clone().map_err(|why| why.reason.to_string()),
+                        evidence,
+                    },
+                });
+                outcome
             }
             Expression::RuleOutcome { rule, .. }
             | Expression::Selected { rule, .. }

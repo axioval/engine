@@ -289,6 +289,17 @@ fn operands<'e>(node: &'e Expression, path: &str) -> Vec<(String, &'e Expression
             .map(|nested| (field("where"), nested))
             .chain(value.iter().map(|value| (field("value"), value.as_ref())))
             .collect(),
+        Expression::Argmin {
+            filter, by, value, ..
+        }
+        | Expression::Argmax {
+            filter, by, value, ..
+        } => filter
+            .iter()
+            .flat_map(|filter| filter.expressions())
+            .map(|nested| (field("where"), nested))
+            .chain([(field("by"), by.as_ref()), (field("value"), value.as_ref())])
+            .collect(),
     }
 }
 

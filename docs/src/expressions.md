@@ -267,6 +267,56 @@ a wall without openings, never a unit mismatch. Only a value whose unit no
 declaration tells (a property declared without a dimension, a parameter)
 sums to a plain 0 over no member; `inUnit` states its unit.
 
+## The least and the greatest member
+
+`argmin` and `argmax` choose the member whose `by` is least (greatest)
+and read its `value`, so a rule refers to the decisive member: the
+longest escape route of a storey, the steepest roof face, the widest
+opening. They range over members as an aggregate does (`over`, `where`),
+and `by` (a number) and `value` (any value) are evaluated with each member
+in scope. "The steepest face of a roof is covered with slate":
+
+```json
+{"kind": "compare", "operator": "equals",
+ "left": {"kind": "argmax",
+          "over": {"kind": "path", "path": ["IfcRelAggregates:forward"]},
+          "by": {"kind": "property", "propertySet": "axioval:measured", "property": "slope"},
+          "value": {"kind": "property", "propertySet": "Pset_RoofCommon", "property": "Covering"}},
+ "right": {"kind": "literal", "value": {"type": "string", "value": "slate"}}}
+```
+
+Where intervals overlap, every member that may be the extreme is chosen:
+a member may be the greatest when the upper bound of its `by` reaches the
+greatest lower bound among the members surely belonging (`argmin`: its
+lower bound reaches their least upper bound). Faces of slopes 20°, 35°
+and [34°, 36°] choose the second and the third. The value is the one the
+chosen members agree on: equal values, or numbers of one unit, whose
+interval then holds each (35° and [34°, 36°] read as their slopes give
+[34°, 36°]). Chosen members whose values differ (texts, truths, `null`
+beside a value) leave the value not evaluated, never one of them picked.
+A finding the requirement reports names the chosen members (`argmax
+chose …` among the values read) and relates them, so a viewer shows the
+faces, not only the roof.
+
+- A member whose membership is undecided may be chosen, but bounds no
+  other, since it may not belong. With no member surely belonging there
+  may be none, which is not evaluated; no member at all is `null`.
+- A member whose `by` is not evaluated may be the extreme whatever the
+  others are: it is chosen and bounds no other, so the value stands only
+  where every chosen member's value agrees, and otherwise is not
+  evaluated for that member's reason.
+- A member surely belonging whose `by` is `null` makes the value `null`,
+  as it makes `max` `null`; an undecided member's `null` leaves it not
+  evaluated. `null` and not evaluated never mix.
+- A chosen member's `value` not evaluated leaves the value not evaluated;
+  the value of a member that cannot be chosen is never read into it, nor
+  cited.
+
+Every member's membership and `by` evidence is cited, since it decides
+which are chosen, and the chosen members' `value` evidence. A measured
+member list names its members by their words (a text field), else their
+place (`member 2 of 3`), and relates the objects its fields name.
+
 ## Other rules' outcomes
 
 Composite checks read how other rules of the same ruleset judged the object in scope:
@@ -367,7 +417,7 @@ are bounded:
 | --- | --- | --- |
 | nesting depth | `MAX_EXPRESSION_DEPTH` (64) | `Expression::validate`, the text parser |
 | nodes, aggregate filters included | `MAX_EXPRESSION_NODES` (2048) | `Expression::validate` |
-| aggregates within one another's `value` or `where` | `MAX_AGGREGATE_NESTING` (2) | `Expression::validate` |
+| aggregates, `argmin` and `argmax` within one another's `value`, `by` or `where` | `MAX_AGGREGATE_NESTING` (2) | `Expression::validate` |
 | text | `MAX_TEXT_LENGTH` (1000 characters) | the text parser |
 | nodes evaluated per run, every rule, value and aggregate member together | `DEFAULT_EVALUATION_BUDGET` (100 000 000) | `Runtime::with_evaluation_budget` |
 

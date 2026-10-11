@@ -425,7 +425,45 @@ struct Checker<'e> {
     member: Option<&'static axioval_ir::measured::MemberDescriptor>,
 }
 
-impl Checker<'_> {
+impl<'e> Checker<'e> {
+    /// Checks the member filter of `node` at `path` (an aggregate, `argmin`
+    /// or `argmax` ranging over `over`) in the outer scope, and returns the
+    /// checker of its member scope: a measured list's fields readable there.
+    fn members(
+        &self,
+        node: &Expression,
+        over: &AggregateSource,
+        path: &str,
+    ) -> Result<Checker<'e>, TypeError> {
+        let outer = Checker {
+            environment: self.environment,
+            member: None,
+        };
+        if let Some(filter) = node.member_filter() {
+            let at = format!("{path}.{}.where", node.kind());
+            for nested in filter.expressions() {
+                outer.boolean(nested, &at)?;
+            }
+        }
+        Ok(Checker {
+            environment: self.environment,
+            member: match over {
+                AggregateSource::Measured { name } => Some(
+                    axioval_ir::measured::parse_members(name)
+                        .ok()
+                        .and_then(|call| axioval_ir::measured::members_of(&call))
+                        .ok_or_else(|| TypeError {
+                            path: path.to_owned(),
+                            kind: TypeErrorKind::Unknown(format!(
+                                "`{name}` is no measured member list"
+                            )),
+                        })?,
+                ),
+                _ => None,
+            },
+        })
+    }
+
     #[allow(clippy::too_many_lines)]
     fn check(&self, expression: &Expression, path: &str) -> Result<Type, TypeError> {
         let kind = expression.kind();
@@ -816,36 +854,11 @@ impl Checker<'_> {
             Expression::Aggregate {
                 function,
                 over,
-                filter,
                 value,
                 ..
             } => {
                 use axioval_ir::contract::AggregateFunction as F;
-                let outer = Checker {
-                    environment: self.environment,
-                    member: None,
-                };
-                if let Some(filter) = filter {
-                    for nested in filter.expressions() {
-                        outer.boolean(nested, &child("where"))?;
-                    }
-                }
-                let scoped = Checker {
-                    environment: self.environment,
-                    member: match over {
-                        axioval_ir::contract::AggregateSource::Measured { name } => Some(
-                            axioval_ir::measured::parse_members(name)
-                                .ok()
-                                .and_then(|call| axioval_ir::measured::members_of(&call))
-                                .ok_or_else(|| {
-                                    here(TypeErrorKind::Unknown(format!(
-                                        "`{name}` is no measured member list"
-                                    )))
-                                })?,
-                        ),
-                        _ => None,
-                    },
-                };
+                let scoped = self.members(expression, over, path)?;
                 let this = &scoped;
                 let value_path = child("value");
                 match (function, value) {
@@ -872,6 +885,16 @@ impl Checker<'_> {
                     },
                     (_, None) => Type::Any,
                 }
+            }
+            Expression::Argmin {
+                over, by, value, ..
+            }
+            | Expression::Argmax {
+                over, by, value, ..
+            } => {
+                let scoped = self.members(expression, over, path)?;
+                scoped.numeric(by, &child("by"))?;
+                scoped.check(value, &child("value"))?
             }
             Expression::RuleOutcome { .. } | Expression::Selected { .. } => Type::Boolean,
             Expression::FindingCount { .. } => Type::Integer,

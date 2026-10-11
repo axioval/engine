@@ -1,0 +1,17 @@
+{
+  "kind": "argmin",
+  "over": {
+    "kind": "group",
+    "grouping": "routes-of-storey"
+  },
+  "by": {
+    "kind": "property",
+    "propertySet": "ex:pset-route",
+    "property": "ex:length"
+  },
+  "value": {
+    "kind": "property",
+    "propertySet": "ex:pset-route",
+    "property": "ex:width"
+  }
+}

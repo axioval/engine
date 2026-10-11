@@ -1394,3 +1394,109 @@ fn a_measured_value_reads_the_rules_parameters() {
         report.not_evaluated
     );
 }
+
+/// #352: a roof `r1` hosting three faces of slopes 20°, 35° and [34°, 36°]
+/// (`Cover`, a plane angle) and coverings (`Class`). The steepest may be
+/// the second or the third: a rule reading its slope or covering names
+/// both, and relates both, never the first.
+#[test]
+fn argmax_names_every_face_that_may_be_the_steepest() {
+    let registry = registry();
+    let mut package = vocabulary(&registry, &[]);
+    package
+        .properties
+        .get_mut("t.Cover")
+        .unwrap()
+        .unit_dimension = Some("plane_angle".into());
+    let angle = |degrees: f64| PropertyValue::Quantity {
+        value: degrees.to_radians(),
+        dimension: QuantityDimension::PlaneAngle,
+    };
+    let mut model = Model::default().object("r1", "slab");
+    for (face, slope, covering) in [
+        ("f1", angle(20.0), "tiles"),
+        ("f2", angle(35.0), "slate"),
+        (
+            "f3",
+            PropertyValue::Measured {
+                lower: 34f64.to_radians(),
+                upper: 36f64.to_radians(),
+                dimension: Some(QuantityDimension::PlaneAngle),
+            },
+            "slate",
+        ),
+    ] {
+        model = model
+            .object(face, "pipe")
+            .value(face, "Pset", "Cover", slope)
+            .text(face, "Pset", "Class", covering)
+            .edge("Hosts", "r1", face);
+    }
+    let steepest = |value: Value| {
+        json!({"kind": "argmax", "label": "steepest",
+            "over": {"kind": "path", "path": ["Hosts"]}, "where": class_is_selector_any(),
+            "by": property("Cover"), "value": value})
+    };
+    let degrees = |value: f64| json!({"kind": "literal", "value": {"type": "quantity", "value": value, "unit": "deg"}});
+    let rules = vec![
+        // The steepest face's slope at most 30°: it is 35° or [34°, 36°].
+        rule(
+            "slope",
+            EXPRESSION,
+            "error",
+            entity("slab"),
+            json!({"requirement": {"type": "expression", "value": {"kind": "compare",
+                "operator": "lessThanOrEquals", "left": steepest(property("Cover")),
+                "right": degrees(30.0)}}}),
+            json!({}),
+        ),
+        // Its covering is tiles: both may-be-steepest faces are slate.
+        rule(
+            "tiles",
+            EXPRESSION,
+            "error",
+            entity("slab"),
+            json!({"requirement": {"type": "expression", "value": {"kind": "compare",
+                "operator": "equals", "left": steepest(property("Class")),
+                "right": {"kind": "literal", "value": {"type": "string", "value": "tiles"}}}}}),
+            json!({}),
+        ),
+        // Slate passes, since both agree.
+        rule(
+            "slate",
+            EXPRESSION,
+            "error",
+            entity("slab"),
+            json!({"requirement": {"type": "expression", "value": {"kind": "compare",
+                "operator": "equals", "left": steepest(property("Class")),
+                "right": {"kind": "literal", "value": {"type": "string", "value": "slate"}}}}}),
+            json!({}),
+        ),
+    ];
+    let report = check(&package, rules, &session(model));
+    assert!(
+        report.not_evaluated.is_empty(),
+        "{:?}",
+        report.not_evaluated
+    );
+    assert_eq!(subjects(&report, "slope"), ["r1"]);
+    assert_eq!(subjects(&report, "tiles"), ["r1"]);
+    assert!(subjects(&report, "slate").is_empty());
+    for finding in report.findings() {
+        assert_eq!(finding.related, [id("f2"), id("f3")], "{}", finding.message);
+        assert!(
+            finding.message.contains("argmax chose")
+                && finding.message.contains(&id("f2").to_string())
+                && finding.message.contains(&id("f3").to_string())
+                && !finding.message.contains(&id("f1").to_string()),
+            "{}",
+            finding.message
+        );
+    }
+}
+
+/// A selector every face of the roof fixture meets.
+fn class_is_selector_any() -> Value {
+    json!({"kind": "property", "propertySet": "t.Pset", "property": "t.Class",
+        "operator": "exists"})
+}

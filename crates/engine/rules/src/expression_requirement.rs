@@ -190,7 +190,8 @@ pub(crate) fn reason_of(why: &NotEvaluated) -> NotEvaluatedReason {
         Reason::Straddles { .. }
         | Reason::UndecidedCondition(_)
         | Reason::Unreadable(_)
-        | Reason::UndecidedMembers(_) => NotEvaluatedReason::IncompleteEvidence,
+        | Reason::UndecidedMembers(_)
+        | Reason::UndecidedExtreme(_) => NotEvaluatedReason::IncompleteEvidence,
         Reason::Mismatch(_) | Reason::Domain | Reason::ZeroDivisor | Reason::Overflow => {
             NotEvaluatedReason::InvalidEvidence
         }
@@ -272,6 +273,21 @@ fn read_values(evaluation: &Evaluation) -> String {
             }
             // Its members' values are cited, not listed.
             axioval_engine::expression::Source::Aggregate(_) => continue,
+            // The members it chose are named, its value is shown.
+            axioval_engine::expression::Source::Extreme { greatest, chosen } => {
+                if chosen.is_empty() {
+                    continue;
+                }
+                let entry = format!(
+                    "{} chose {}",
+                    if *greatest { "argmax" } else { "argmin" },
+                    chosen.join(", ")
+                );
+                if !values.contains(&entry) {
+                    values.push(entry);
+                }
+                continue;
+            }
             axioval_engine::expression::Source::Rule { rule, read } => format!(
                 "{rule}.{}",
                 match read {

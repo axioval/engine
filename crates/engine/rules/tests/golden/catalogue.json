@@ -113989,6 +113989,142 @@
       ]
     },
     {
+      "kind": "argmin",
+      "category": "aggregate",
+      "fields": [
+        {
+          "name": "over",
+          "kind": {
+            "type": "aggregateSource"
+          },
+          "required": true
+        },
+        {
+          "name": "where",
+          "kind": {
+            "type": "selector"
+          },
+          "required": false
+        },
+        {
+          "name": "by",
+          "kind": {
+            "type": "expression",
+            "accepts": [
+              "integer",
+              "number",
+              "angle"
+            ]
+          },
+          "required": true
+        },
+        {
+          "name": "value",
+          "kind": {
+            "type": "expression",
+            "accepts": [
+              "any"
+            ]
+          },
+          "required": true
+        }
+      ],
+      "result": {
+        "type": "joined",
+        "fields": [
+          "value"
+        ]
+      },
+      "label": [
+        {
+          "language": "en",
+          "text": "Value of the least"
+        },
+        {
+          "language": "de",
+          "text": "Wert des Kleinsten"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "A value of the member whose `by` is least, such as the name of the shortest route; where intervals overlap, every member that may be the least, whose values must agree, and a finding names them."
+        },
+        {
+          "language": "de",
+          "text": "Ein Wert des Glieds mit dem kleinsten `by`, etwa der Name des kürzesten Wegs; wo sich Intervalle überschneiden, jedes Glied, das das kleinste sein kann, deren Werte übereinstimmen müssen, und ein Befund nennt sie."
+        }
+      ]
+    },
+    {
+      "kind": "argmax",
+      "category": "aggregate",
+      "fields": [
+        {
+          "name": "over",
+          "kind": {
+            "type": "aggregateSource"
+          },
+          "required": true
+        },
+        {
+          "name": "where",
+          "kind": {
+            "type": "selector"
+          },
+          "required": false
+        },
+        {
+          "name": "by",
+          "kind": {
+            "type": "expression",
+            "accepts": [
+              "integer",
+              "number",
+              "angle"
+            ]
+          },
+          "required": true
+        },
+        {
+          "name": "value",
+          "kind": {
+            "type": "expression",
+            "accepts": [
+              "any"
+            ]
+          },
+          "required": true
+        }
+      ],
+      "result": {
+        "type": "joined",
+        "fields": [
+          "value"
+        ]
+      },
+      "label": [
+        {
+          "language": "en",
+          "text": "Value of the greatest"
+        },
+        {
+          "language": "de",
+          "text": "Wert des Größten"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "A value of the member whose `by` is greatest, such as the name of the steepest face; where intervals overlap, every member that may be the greatest, whose values must agree, and a finding names them."
+        },
+        {
+          "language": "de",
+          "text": "Ein Wert des Glieds mit dem größten `by`, etwa der Name der steilsten Fläche; wo sich Intervalle überschneiden, jedes Glied, das das größte sein kann, deren Werte übereinstimmen müssen, und ein Befund nennt sie."
+        }
+      ]
+    },
+    {
       "kind": "ruleOutcome",
       "category": "ruleOutcome",
       "fields": [

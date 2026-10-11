@@ -378,6 +378,32 @@ pub enum Expression {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         label: Option<String>,
     },
+    /// The `value` of the member whose `by` is least, among the objects
+    /// `over` reaches that `filter` (`where`) selects; `by` and `value` are
+    /// evaluated with each member in scope, so `value` reads the chosen
+    /// member's other values. Where intervals overlap, every member that
+    /// may be the least is chosen: the value is the one they agree on (an
+    /// interval holding each of their numbers), otherwise not evaluated,
+    /// and a finding names them.
+    Argmin {
+        over: AggregateSource,
+        #[serde(rename = "where", default, skip_serializing_if = "Option::is_none")]
+        filter: Option<Box<Selector>>,
+        by: Box<Expression>,
+        value: Box<Expression>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        label: Option<String>,
+    },
+    /// [`Expression::Argmin`] for the member whose `by` is greatest.
+    Argmax {
+        over: AggregateSource,
+        #[serde(rename = "where", default, skip_serializing_if = "Option::is_none")]
+        filter: Option<Box<Selector>>,
+        by: Box<Expression>,
+        value: Box<Expression>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        label: Option<String>,
+    },
     /// How the rule `rule` of the same ruleset judged the object in scope:
     /// true when it passed it, false when it reported a finding about it,
     /// `null` when it did not select it, and not evaluated when it left it
@@ -618,7 +644,7 @@ pub enum ExpressionError {
 
 impl Expression {
     /// Every node `kind`, in declaration order.
-    pub const KINDS: [&'static str; 49] = [
+    pub const KINDS: [&'static str; 51] = [
         "literal",
         "null",
         "property",
@@ -659,6 +685,8 @@ impl Expression {
         "convertSlope",
         "inUnit",
         "aggregate",
+        "argmin",
+        "argmax",
         "ruleOutcome",
         "selected",
         "findingCount",
@@ -714,6 +742,8 @@ impl Expression {
             Self::ConvertSlope { .. } => "convertSlope",
             Self::InUnit { .. } => "inUnit",
             Self::Aggregate { .. } => "aggregate",
+            Self::Argmin { .. } => "argmin",
+            Self::Argmax { .. } => "argmax",
             Self::RuleOutcome { .. } => "ruleOutcome",
             Self::Selected { .. } => "selected",
             Self::FindingCount { .. } => "findingCount",
@@ -770,6 +800,8 @@ impl Expression {
             | Self::ConvertSlope { label, .. }
             | Self::InUnit { label, .. }
             | Self::Aggregate { label, .. }
+            | Self::Argmin { label, .. }
+            | Self::Argmax { label, .. }
             | Self::RuleOutcome { label, .. }
             | Self::Selected { label, .. }
             | Self::FindingCount { label, .. }
@@ -860,8 +892,31 @@ impl Expression {
                 .collect(),
             Self::Round { operand, step, .. } => vec![operand, step],
             Self::Aggregate { value, .. } => value.iter().map(AsRef::as_ref).collect(),
+            Self::Argmin { by, value, .. } | Self::Argmax { by, value, .. } => vec![by, value],
             Self::Atan2 { y, x, .. } => vec![y, x],
         }
+    }
+
+    /// The member filter (`where`) of an aggregate, `argmin` or `argmax`;
+    /// `None` for any other node, or one without a filter.
+    #[must_use]
+    pub fn member_filter(&self) -> Option<&Selector> {
+        match self {
+            Self::Aggregate { filter, .. }
+            | Self::Argmin { filter, .. }
+            | Self::Argmax { filter, .. } => filter.as_deref(),
+            _ => None,
+        }
+    }
+
+    /// Whether the node ranges over members: an aggregate, `argmin` or
+    /// `argmax`.
+    #[must_use]
+    pub const fn ranges_over_members(&self) -> bool {
+        matches!(
+            self,
+            Self::Aggregate { .. } | Self::Argmin { .. } | Self::Argmax { .. }
+        )
     }
 
     /// Every rule whose outcomes the tree reads, in its own nodes and in
@@ -876,14 +931,12 @@ impl Expression {
                 | Self::Selected { rule, .. }
                 | Self::FindingCount { rule, .. }
                 | Self::Deviation { rule, .. } => rules.push(rule.as_str()),
-                Self::Aggregate {
-                    filter: Some(filter),
-                    ..
-                } => {
-                    rules.extend(filter.rule_references());
-                    pending.extend(filter.expressions());
+                _ => {
+                    if let Some(filter) = node.member_filter() {
+                        rules.extend(filter.rule_references());
+                        pending.extend(filter.expressions());
+                    }
                 }
-                _ => {}
             }
             pending.extend(node.children());
         }
@@ -906,6 +959,18 @@ impl Expression {
                 if let Some(value) = value {
                     value.rename_rules(rename);
                 }
+            }
+            Self::Argmin {
+                filter, by, value, ..
+            }
+            | Self::Argmax {
+                filter, by, value, ..
+            } => {
+                if let Some(filter) = filter {
+                    filter.rename_rules(rename);
+                }
+                by.rename_rules(rename);
+                value.rename_rules(rename);
             }
             Self::Lookup { keys, .. } => keys.values_mut().for_each(|key| key.rename_rules(rename)),
             Self::Interpolate { key, .. } => key.rename_rules(rename),
@@ -1011,12 +1076,8 @@ impl Expression {
         let mut filters = Vec::new();
         let mut pending = vec![self];
         while let Some(node) = pending.pop() {
-            if let Self::Aggregate {
-                filter: Some(filter),
-                ..
-            } = node
-            {
-                filters.push(filter.as_ref());
+            if let Some(filter) = node.member_filter() {
+                filters.push(filter);
                 pending.extend(filter.expressions());
             }
             pending.extend(node.children());
@@ -1058,12 +1119,12 @@ impl Expression {
         for child in self.children() {
             nested(child);
         }
-        if let Self::Aggregate { filter, .. } = self {
-            if let Some(filter) = filter {
-                for inner in filter.expressions() {
-                    nested(inner);
-                }
+        if let Some(filter) = self.member_filter() {
+            for inner in filter.expressions() {
+                nested(inner);
             }
+        }
+        if self.ranges_over_members() {
             nesting += 1;
         }
         (nodes, nesting)
@@ -1172,13 +1233,12 @@ impl Expression {
                 value,
                 ..
             } => validate_aggregate(*function, over, filter.is_some(), value.is_some())?,
+            Self::Argmin { over, filter, .. } | Self::Argmax { over, filter, .. } => {
+                validate_source(kind, over, filter.is_some())?;
+            }
             _ => {}
         }
-        if let Self::Aggregate {
-            filter: Some(filter),
-            ..
-        } = self
-        {
+        if let Some(filter) = self.member_filter() {
             filter
                 .expressions()
                 .into_iter()
@@ -1190,18 +1250,27 @@ impl Expression {
     }
 }
 
-/// An aggregate takes a `value` unless it counts, and its source names a
-/// path of steps or a grouping.
+/// An aggregate takes a `value` unless it counts, and its source is valid.
 fn validate_aggregate(
     function: AggregateFunction,
     over: &AggregateSource,
     has_filter: bool,
     has_value: bool,
 ) -> Result<(), ExpressionError> {
-    let kind = "aggregate";
     if !matches!(function, AggregateFunction::Count) != has_value {
         return Err(ExpressionError::AggregateValue { function });
     }
+    validate_source("aggregate", over, has_filter)
+}
+
+/// The source of an aggregate, `argmin` or `argmax` (`kind`) names a path
+/// of steps, a grouping, a selector or a measured member list, which takes
+/// no filter.
+fn validate_source(
+    kind: &'static str,
+    over: &AggregateSource,
+    has_filter: bool,
+) -> Result<(), ExpressionError> {
     match over {
         AggregateSource::Path { path } if path.is_empty() => Err(ExpressionError::Blank {
             kind,

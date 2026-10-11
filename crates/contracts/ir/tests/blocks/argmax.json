@@ -1,0 +1,66 @@
+{
+  "expression": {
+    "kind": "argmax",
+    "over": {
+      "kind": "path",
+      "path": [
+        "IfcRelAggregates:forward"
+      ]
+    },
+    "where": {
+      "kind": "entityType",
+      "objectType": "ex:roof",
+      "includeSubtypes": true
+    },
+    "by": {
+      "kind": "property",
+      "propertySet": "axioval:measured",
+      "property": "slope"
+    },
+    "value": {
+      "kind": "property",
+      "propertySet": "ex:pset-roof-common",
+      "property": "ex:covering"
+    },
+    "label": "covering of the steepest face"
+  },
+  "blocks": {
+    "type": "expression.argmax",
+    "label": "covering of the steepest face",
+    "inputs": {
+      "by": {
+        "block": {
+          "type": "measured.slope"
+        }
+      },
+      "over": {
+        "block": {
+          "type": "source.path",
+          "fields": {
+            "path": [
+              "IfcRelAggregates:forward"
+            ]
+          }
+        }
+      },
+      "value": {
+        "block": {
+          "type": "expression.property",
+          "fields": {
+            "property": "ex:covering",
+            "propertySet": "ex:pset-roof-common"
+          }
+        }
+      },
+      "where": {
+        "block": {
+          "type": "selector.entityType",
+          "fields": {
+            "includeSubtypes": true,
+            "objectType": "ex:roof"
+          }
+        }
+      }
+    }
+  }
+}

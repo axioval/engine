@@ -65,6 +65,14 @@ All notable changes are documented here. This project follows Semantic Versionin
   value or nothing; a counterpart is surely beyond only where its plan
   distance exceeds the radius or the route service proves it unreachable
   ([#351](https://github.com/axioval/engine/issues/351)).
+- **Measured values**: with `group=<grouping>` in place of `radius`,
+  `sum_within`, `min_within`, `max_within` and `mean_within` reach the
+  counterparts sharing the object's derived group, or the members of the
+  group it is: the extinguisher units per fire compartment. Where a
+  group's members are not all known, a counterpart whose membership is
+  undecided, or which belongs to another group not known completely, adds
+  its value or nothing
+  ([#351](https://github.com/axioval/engine/issues/351)).
 
 ### Changed
 

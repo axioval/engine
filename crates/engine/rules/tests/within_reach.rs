@@ -1,5 +1,5 @@
 //! `sum_within`, `min_within`, `max_within` and `mean_within` over the
-//! counterparts within a walking distance.
+//! counterparts within a walking distance, or sharing a derived group.
 //!
 //! The stubs answer only what a test declares and panic on any other
 //! distance or route, which also proves the plan broad phase keeps the
@@ -354,4 +354,211 @@ fn an_expression_rule_judges_the_sum_within_a_walk() {
     assert_eq!(judge(straddling, 8.0), "open");
     assert_eq!(judge(straddling, 2.0), "holds");
     assert_eq!(judge(straddling, 9.0), "fails");
+}
+
+/// Fire compartments keyed by their least room: `r1` holds the room `r1`
+/// and the extinguishers `e1` (2 units) and `e2` (6), `r2` the room `r2`
+/// and `e3` (2), `r3` the room `r3` and `e5` (6); the room `r4` is in none.
+/// With `merging`, `r1` and `r2` may be one compartment; with `undecided`,
+/// whether `r5` is in one is.
+fn compartments(merging: bool, undecided: bool) -> axioval_engine::DerivedGroups {
+    use axioval_engine::{Grouping, Membership, group_id};
+    let group = |key: &str| group_id(&source(), "compartments", key).unwrap();
+    let grouped = |key: &str| Membership::Grouped(group(key), vec![]);
+    let mut members = vec![
+        (id("r1"), grouped("r1")),
+        (id("e1"), grouped("r1")),
+        (id("e2"), grouped("r1")),
+        (id("r2"), grouped("r2")),
+        (id("e3"), grouped("r2")),
+        (id("r3"), grouped("r3")),
+        (id("e5"), grouped("r3")),
+        (id("r4"), Membership::Ungrouped(vec![])),
+    ];
+    if undecided {
+        members.push((
+            id("r5"),
+            Membership::Undecided(
+                axioval_ir::NotEvaluatedReason::IncompleteEvidence,
+                "its extent cannot be read".into(),
+            ),
+        ));
+    }
+    let keys = ["r1", "r2", "r3"]
+        .into_iter()
+        .map(|key| (group(key), key.to_owned()))
+        .collect();
+    let mut grouping = Grouping::of("compartments", members, &keys);
+    if merging {
+        let why = "a wall's fire rating is unreadable";
+        grouping.undecide(&group("r1"), why);
+        grouping.undecide(&group("r2"), why);
+    }
+    axioval_engine::DerivedGroups::default().with_grouping("compartments", grouping)
+}
+
+fn compartment_model() -> Model {
+    let mut model = Model::default();
+    for room in ["r1", "r2", "r3", "r4", "r5"] {
+        model = model.object(room, "space");
+    }
+    for (local, units) in [("e1", 2), ("e2", 6), ("e3", 2), ("e5", 6)] {
+        model = model.object(local, "extinguisher").value(
+            local,
+            "Pset_Extinguisher",
+            "Units",
+            PropertyValue::Integer(units),
+        );
+    }
+    model
+}
+
+fn grouped(aggregate: &str) -> String {
+    format!("{aggregate}_within;to=extinguisher;value=Pset_Extinguisher/Units;group=compartments")
+}
+
+fn in_compartment(
+    (merging, undecided): (bool, bool),
+    object: &ObjectId,
+    name: &str,
+) -> Result<Option<common::Cited>, String> {
+    let (project, mut services) = compartment_model().services();
+    services
+        .register(Arc::new(compartments(merging, undecided)))
+        .unwrap();
+    common::measured_cited(&services, &project, object, name)
+}
+
+/// The extinguisher units per fire compartment: those sharing a room's
+/// compartment, or the members of the compartment itself.
+#[test]
+fn values_within_a_group_sum_the_counterparts_sharing_it() {
+    let decided = (false, false);
+    assert_eq!(
+        in_compartment(decided, &id("r1"), &grouped("sum")),
+        Ok(Some(((8.0, 8.0), true)))
+    );
+    assert_eq!(
+        in_compartment(decided, &id("r1"), &grouped("min")),
+        Ok(Some(((2.0, 2.0), true)))
+    );
+    assert_eq!(
+        in_compartment(decided, &id("r1"), &grouped("mean")),
+        Ok(Some(((4.0, 4.0), true)))
+    );
+    assert_eq!(
+        in_compartment(decided, &id("r2"), &grouped("max")),
+        Ok(Some(((2.0, 2.0), true)))
+    );
+    // The compartment itself sums its members.
+    let first = axioval_engine::group_id(&source(), "compartments", "r1").unwrap();
+    assert_eq!(
+        in_compartment(decided, &first, &grouped("sum")),
+        Ok(Some(((8.0, 8.0), true)))
+    );
+    // A room in no compartment shares none: a sum of none is zero.
+    assert_eq!(
+        in_compartment(decided, &id("r4"), &grouped("sum")),
+        Ok(Some(((0.0, 0.0), true)))
+    );
+    assert_eq!(
+        in_compartment(decided, &id("r4"), &grouped("max")),
+        Ok(None)
+    );
+}
+
+/// Where two compartments may be one, an extinguisher of the other may or
+/// may not share the room's: it adds its value or nothing. One of a
+/// compartment surely apart never counts.
+#[test]
+fn a_counterpart_whose_membership_is_undecided_widens_the_value() {
+    let merging = (true, false);
+    assert_eq!(
+        in_compartment(merging, &id("r1"), &grouped("sum")),
+        Ok(Some(((8.0, 10.0), true)))
+    );
+    assert_eq!(
+        in_compartment(merging, &id("r2"), &grouped("sum")),
+        Ok(Some(((2.0, 10.0), true)))
+    );
+    assert_eq!(
+        in_compartment(merging, &id("r2"), &grouped("max")),
+        Ok(Some(((2.0, 6.0), true)))
+    );
+    let mean = in_compartment(merging, &id("r1"), &grouped("mean")).unwrap_err();
+    assert!(mean.contains("may or may not be within"), "{mean}");
+    // The third stays apart.
+    assert_eq!(
+        in_compartment(merging, &id("r3"), &grouped("sum")),
+        Ok(Some(((6.0, 6.0), true)))
+    );
+    // A room whose own compartment is undecided is not evaluated.
+    let open = in_compartment((false, true), &id("r5"), &grouped("sum")).unwrap_err();
+    assert!(open.contains("is undecided"), "{open}");
+}
+
+/// A group reaches the counterparts at no distance: either `radius` or
+/// `group`, and nothing of a distance beside `group`.
+#[test]
+fn a_group_reach_states_no_distance() {
+    use axioval_ir::measured::parse;
+    let base = "sum_within;to=extinguisher;value=Pset_Extinguisher/Units";
+    for (written, expected) in [
+        (base.to_owned(), "`sum_within` needs `radius`"),
+        (
+            format!("{base};radius=15;group=compartments"),
+            "`sum_within` parameter `group`: either `radius` or `group` reaches the \
+             counterparts",
+        ),
+        (
+            format!("{base};group=compartments;from=2"),
+            "`sum_within` parameter `from`: a shared `group` reaches the counterparts at no \
+             distance",
+        ),
+        (
+            format!("{base};group=compartments;measure=walking"),
+            "`sum_within` parameter `measure`: a shared `group` reaches the counterparts at \
+             no distance",
+        ),
+    ] {
+        assert_eq!(parse(&written).unwrap_err().to_string(), expected);
+    }
+    assert!(parse(&grouped("mean")).is_ok());
+}
+
+/// Rewritten as an expression rule, a room's compartment holds at least 8
+/// units only where it decidedly does: `r1`'s holds, `r2`'s fails, and
+/// with the two possibly one compartment, `r2`'s is open.
+#[test]
+fn an_expression_rule_judges_the_sum_within_a_group() {
+    let judge = |merging: bool, room: &str| {
+        let groups = Arc::new(compartments(merging, false));
+        let requirement = serde_json::json!({"kind": "compare", "operator": "greaterThanOrEquals",
+            "left": {"kind": "property", "propertySet": "axioval:measured",
+                "property": grouped("sum")},
+            "right": {"kind": "literal", "value": {"type": "number", "value": 8}}});
+        let rule = rule(
+            "axioval:capability.expression",
+            axioval_ir::contract::Selector::Objects {
+                objects: std::collections::BTreeSet::from([id(room)]),
+            },
+            vec![("requirement", common::expression(requirement))],
+        );
+        let outcome = compartment_model().evaluate_measured(
+            &axioval_rules::ExpressionRequirement,
+            &rule,
+            |services| services.register(groups.clone()).unwrap(),
+        );
+        if !outcome.findings().is_empty() {
+            "fails"
+        } else if outcome.not_evaluated_outcomes().is_empty() {
+            "holds"
+        } else {
+            "open"
+        }
+    };
+    assert_eq!(judge(false, "r1"), "holds");
+    assert_eq!(judge(false, "r2"), "fails");
+    assert_eq!(judge(true, "r2"), "open");
+    assert_eq!(judge(true, "r1"), "holds");
 }

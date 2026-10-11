@@ -384,6 +384,7 @@ ignoring ASCII case):
 | `count_within;to=<kinds>;radius=<m>[;from=<m>][;projection=…][;direction=…]` | how many counterparts lie within a radius, a plain number | built in, over `ProximityService` |
 | `sum_within`, `min_within`, `max_within`, `mean_within` `;to=<kinds>;value=<property>;radius=<m>[;from=<m>][;projection=…][;direction=…]` | the sum, least, greatest or mean of a plain number the counterparts within a radius state | built in, over `ProximityService` and the counterparts' properties |
 | the same `;to=<kinds>;value=<property>;radius=<m>[;from=<m>];measure=walking;walking_radius=<m>;walking_height=<m>;walking_step=<m>[;walking_slope=…]` | the same over the counterparts within a walk of `radius` | built in, over `ProximityService` (plan), `PlanSpanService`, `VerticalExtentService` and `MetricRoutingService::route` |
+| the same `;to=<kinds>;value=<property>;group=<grouping>` | the same over the counterparts sharing the object's derived group, or the members of the group it is | built in, over the run's [derived groups](#derived-groups) |
 | `duplicate_count`, `boundary_gap[;at_least=<m>][;measure=total\|longest][;elements=<kinds>]`, `intersection_count[;tolerance=<m>][;elements=<kinds>]`, `cap_coverage;cap=top\|bottom[;elements=<kinds>]`, `support_count[;of=slabs\|roofs]` | a space's `space-validation` aspects | `SpaceService` |
 | `largest_unallocated_region`, `unallocated_share` | a storey's floor no space covers | `SpaceService::measure_unallocated_regions` |
 | `facade_area`, `face_area` | the facade area, or the largest plane face's area | `FacadeAreaService` |
@@ -965,7 +966,30 @@ the toilets the sanitary rooms within a 50 m walk of each room state are
   or vertical-extent service, leaves the value not evaluated.
 
 A walk stays on the object's level; it climbs no stairs or lifts.
-Derived groups and context zones are not yet a reach of these values.
+
+With `group=<grouping>` in place of `radius`, the reach is a derived
+group: the counterparts sharing the object's group of that grouping, or,
+where the object is a group of it, its members. So the extinguisher units
+per fire compartment are
+`sum_within;to=IfcFireSuppressionTerminal;value=Pset_Extinguisher/Units;group=compartments`,
+read of each room, or of each compartment (a `derivedGroup` selector),
+where the grouping's members hold the extinguishers too. A group reaches
+at no distance: it takes no `from`, `projection`, `direction`, `measure`
+or walking profile, and either `radius` or `group` is stated.
+
+- A member of the group surely shares it.
+- Where the group's members are not all known (a member's key cannot be
+  read, or a join may make it one compartment with another), a
+  counterpart of its source whose own membership is undecided, or which
+  belongs to another group not known completely, may or may not share it:
+  it adds its value or nothing, as a straddling distance does. One of a
+  group known completely never counts.
+- An object of no group shares none (a sum of zero, no least, greatest or
+  mean). One whose own membership is undecided, a grouping the run does
+  not derive, and a value read outside a run leave the value not
+  evaluated.
+
+Context zones are not yet a reach of these values.
 
 A measured value without a dimension, such as a count, is a plain
 number. Known only to an interval, it is a `measured` value without a
@@ -1001,7 +1025,7 @@ sites that cite a value exact:
 | Provider | Exact when | The interval holds |
 | --- | --- | --- |
 | `distance`, `count_within` | every counterpart that may be the nearest (farthest) or may count was measured exactly | the undecided counterparts, as `distance` cites them (`Cited`) |
-| `sum_within`, `min_within`, `max_within`, `mean_within` | every counterpart that may count was measured (walking: walked, and both ends placed) exactly and states its value exactly | the undecided counterparts' values or nothing, summed and divided outward |
+| `sum_within`, `min_within`, `max_within`, `mean_within` | every counterpart that may count was measured (walking: walked, and both ends placed; by group: its membership cited) exactly and states its value exactly | the undecided counterparts' values or nothing, summed and divided outward |
 | `door_clear_width`, `door_clear_height`, `sill_height`, `threshold_step` | every extent, leaf and stated value read is exact | rounding of the differences, widened outward |
 | `leaf_count`, `leaf_width`, `swings_into`, `hinged_leaves` | the leaves (stated, exact by contract) and every probe are exact | a total width summed outward |
 | `swing_spaces` (members) | the leaves and every containment probe are exact (both exact by contract) | nothing |

@@ -12,22 +12,23 @@
 //! A value over the counterparts within a walk (`measure=walking`) walks
 //! to those the plan broad phase proposes within the radius, through the
 //! metric-routing service, between the representative points
-//! `space-distance` walks between.
+//! `space-distance` walks between. One over a shared derived group
+//! (`group=`) reads the run's groups and measures nothing.
 
 use std::collections::BTreeMap;
 
 use axioval_engine::expression::{Interval, Value};
 use axioval_engine::{
-    CompiledRule, MeasuredProvider, Measurement, MetricRouteOutcome, MetricRouteRequest,
-    MetricRoutingServiceHandle, MobilityProfile, NotEvaluatedReason, PropertyResolutionError,
-    RuleContext,
+    CompiledRule, DerivedGroups, MeasuredProvider, Measurement, Membership, MetricRouteOutcome,
+    MetricRouteRequest, MetricRoutingServiceHandle, MobilityProfile, NotEvaluatedReason,
+    PropertyResolutionError, RuleContext,
 };
 use axioval_ir::contract::{ParameterValue, Selector, Severity};
 use axioval_ir::measured::{
     COUNT_WITHIN, DISTANCE, MAX_WITHIN, MEAN_WITHIN, MIN_WITHIN, MeasuredArgument, MeasuredCall,
     SUM_WITHIN,
 };
-use axioval_ir::{ObjectId, QuantityDimension, RuleId};
+use axioval_ir::{Evidence, ObjectId, QuantityDimension, RuleId};
 
 use super::{Bodies, Caches, Candidate, Scope, declaration};
 use crate::pairs::prepare;
@@ -284,6 +285,88 @@ impl<'c> Reached<'c> {
                     reached.counterparts.push((counterpart, surely));
                 }
                 Err(_) => reached.counterparts.push((counterpart, false)),
+            }
+        }
+        Ok(reached)
+    }
+}
+
+impl<'c> Reached<'c> {
+    /// Those sharing the object's group of `grouping`, or, where the
+    /// object is a group of it, its members.
+    ///
+    /// A member of the group surely shares it. Where the group's members
+    /// are not all known (a member's key is unreadable, or it may be one
+    /// compartment with another), a counterpart of its source whose own
+    /// membership is undecided, or which belongs to another group not
+    /// known completely, may or may not share it. An object of no group
+    /// shares none; one whose membership is undecided leaves the value
+    /// not evaluated.
+    fn grouped(
+        context: &RuleContext<'_>,
+        grouping: &str,
+        object: &ObjectId,
+        counterparts: &'c std::collections::BTreeSet<ObjectId>,
+    ) -> Result<Self, Unavailable> {
+        let groups = context
+            .services
+            .get::<std::sync::Arc<DerivedGroups>>()
+            .ok_or_else(|| {
+                (
+                    NotEvaluatedReason::MissingService,
+                    "no derived groups are available outside a run".to_owned(),
+                )
+            })?;
+        let derived = groups.grouping(grouping).ok_or_else(|| {
+            crate::support::invalid(format!("the run derives no grouping `{grouping}`"))
+        })?;
+        let exact = |cited: &[Evidence]| cited.iter().all(|evidence| evidence.exact);
+        let mut reached = Self {
+            counterparts: Vec::new(),
+            exact: true,
+        };
+        let (id, group) = match derived.group(object) {
+            Some(group) => (object, group),
+            None => match derived.membership(object) {
+                Some(Membership::Grouped(id, cited)) => {
+                    reached.exact &= exact(cited);
+                    let group = derived.group(id).ok_or_else(|| {
+                        crate::space_distance::incomplete(format!("group {id} is not derived"))
+                    })?;
+                    (id, group)
+                }
+                Some(Membership::Undecided(reason, why)) => {
+                    return Err((
+                        reason.clone(),
+                        format!(
+                            "whether {object} belongs to a group of `{grouping}` is undecided: \
+                             {why}"
+                        ),
+                    ));
+                }
+                Some(Membership::Ungrouped(_)) | None => return Ok(reached),
+            },
+        };
+        for counterpart in counterparts {
+            if group.members().binary_search(counterpart).is_ok() {
+                if let Some(Membership::Grouped(_, cited)) = derived.membership(counterpart) {
+                    reached.exact &= exact(cited);
+                }
+                reached.counterparts.push((counterpart, true));
+                continue;
+            }
+            if group.undecided().is_none() || counterpart.source != id.source {
+                continue;
+            }
+            let possible = match derived.membership(counterpart) {
+                Some(Membership::Undecided(..)) => true,
+                Some(Membership::Grouped(other, _)) => derived
+                    .group(other)
+                    .is_some_and(|other| other.undecided().is_some()),
+                Some(Membership::Ungrouped(_)) | None => false,
+            };
+            if possible {
+                reached.counterparts.push((counterpart, false));
             }
         }
         Ok(reached)
@@ -550,6 +633,24 @@ impl MeasuredProvider for DistanceMeasures {
             PropertyResolutionError::Unavailable(format!("`{name}` of {object}: {why}"))
         };
         let counterparts = crate::measured_kinds::objects_of_kinds(context, call, "to", object)?;
+        let refused = |(reason, why): Unavailable| {
+            crate::measured_kinds::resolution_error((
+                reason,
+                format!("`{name}` of {object}: {why}"),
+            ))
+        };
+        if let Some(group) = call.argument("group") {
+            let (MeasuredArgument::Text(grouping), Some(property)) = (group, value_property(call))
+            else {
+                return Err(PropertyResolutionError::InvalidRequest);
+            };
+            let reached =
+                Reached::grouped(context, grouping, object, &counterparts).map_err(refused)?;
+            let locator = format!("{name}:{object}:{grouping}:{}", reached.counterparts.len());
+            let measurement =
+                aggregate_within(name, context, &reached, property).map_err(refused)?;
+            return Ok(located(measurement, locator));
+        }
         let reach = if name == DISTANCE {
             length(call, "within")
         } else {
@@ -588,7 +689,7 @@ impl MeasuredProvider for DistanceMeasures {
         let all: Vec<&Candidate> = measured.iter().chain(&unmeasurable).collect();
         let locator = format!("{name}:{object}:{}", all.len());
         let from = length(call, "from").unwrap_or(0.0);
-        let mut measurement = match name {
+        let measurement = match name {
             COUNT_WITHIN => count(&all, from, reach),
             DISTANCE => {
                 extreme(&all, call.choice("mode") == Some("farthest")).map_err(unavailable)?
@@ -596,12 +697,6 @@ impl MeasuredProvider for DistanceMeasures {
             _ => {
                 let property =
                     value_property(call).ok_or(PropertyResolutionError::InvalidRequest)?;
-                let refused = |(reason, why): Unavailable| {
-                    crate::measured_kinds::resolution_error((
-                        reason,
-                        format!("`{name}` of {object}: {why}"),
-                    ))
-                };
                 let reached = if walking {
                     Reached::walked(context, call, object, (&all, from, reach)).map_err(refused)?
                 } else {
@@ -610,15 +705,20 @@ impl MeasuredProvider for DistanceMeasures {
                 aggregate_within(name, context, &reached, property).map_err(refused)?
             }
         };
-        let (Measurement::Value { locator: cited, .. }
-        | Measurement::Rounded { locator: cited, .. }
-        | Measurement::Cited { locator: cited, .. }
-        | Measurement::Absent { locator: cited }) = &mut measurement;
-        *cited = if cited.is_empty() {
-            locator
-        } else {
-            format!("{locator}: {cited}")
-        };
-        Ok(measurement)
+        Ok(located(measurement, locator))
     }
+}
+
+/// `measurement`, its locator led by `locator`.
+fn located(mut measurement: Measurement, locator: String) -> Measurement {
+    let (Measurement::Value { locator: cited, .. }
+    | Measurement::Rounded { locator: cited, .. }
+    | Measurement::Cited { locator: cited, .. }
+    | Measurement::Absent { locator: cited }) = &mut measurement;
+    *cited = if cited.is_empty() {
+        locator
+    } else {
+        format!("{locator}: {cited}")
+    };
+    measurement
 }

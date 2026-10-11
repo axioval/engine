@@ -767,6 +767,9 @@ fn facing(
 /// height and step and no `projection` or `direction`, and no other
 /// measure states any of the profile. A measure a rule parameter names is
 /// checked once bound, by the code measuring it.
+///
+/// Where it reaches them by a shared `group` instead, it states either
+/// `radius` or `group`, and with `group` nothing of a distance.
 fn reach(
     descriptor: &MeasuredDescriptor,
     stated: &BTreeMap<&'static str, &str>,
@@ -776,6 +779,46 @@ fn reach(
         return Ok(());
     }
     let name = || descriptor.name.to_owned();
+    if descriptor.parameter("group").is_some() {
+        match (stated.contains_key("radius"), stated.contains_key("group")) {
+            (false, false) => {
+                return Err(MeasuredError::Missing {
+                    name: name(),
+                    key: "radius".to_owned(),
+                });
+            }
+            (true, true) => {
+                return Err(MeasuredError::Invalid {
+                    name: name(),
+                    key: "group".to_owned(),
+                    detail: "either `radius` or `group` reaches the counterparts".into(),
+                });
+            }
+            (true, false) => {}
+            (false, true) => {
+                let distance = [
+                    "from",
+                    "projection",
+                    "direction",
+                    "measure",
+                    "walking_radius",
+                    "walking_height",
+                    "walking_step",
+                    "walking_slope",
+                ]
+                .into_iter()
+                .find(|key| stated.contains_key(key));
+                if let Some(key) = distance {
+                    return Err(MeasuredError::Invalid {
+                        name: name(),
+                        key: key.to_owned(),
+                        detail: "a shared `group` reaches the counterparts at no distance".into(),
+                    });
+                }
+                return Ok(());
+            }
+        }
+    }
     let walking = match arguments.get("measure") {
         Some(MeasuredArgument::Choice(measure)) => *measure == "walking",
         _ => return Ok(()),

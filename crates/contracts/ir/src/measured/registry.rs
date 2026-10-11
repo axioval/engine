@@ -342,11 +342,12 @@ const WITHIN: &[MeasuredParameter] = &[
     MeasuredParameter {
         key: "radius",
         kind: MeasuredParameterKind::Length { minimum: 0.0 },
-        required: true,
+        required: false,
         default: None,
         help: &en_de(
-            "The greatest distance a counterpart counts at, in metres.",
-            "Der größte Abstand, in dem ein Gegenstück zählt, in Metern.",
+            "The greatest distance a counterpart counts at, in metres; either it or `group`.",
+            "Der größte Abstand, in dem ein Gegenstück zählt, in Metern; entweder er oder \
+             `group`.",
         ),
     },
     MeasuredParameter {
@@ -418,6 +419,18 @@ const WITHIN: &[MeasuredParameter] = &[
              standardmäßig eben.",
         ),
     },
+    MeasuredParameter {
+        key: "group",
+        kind: MeasuredParameterKind::Text,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The grouping whose group the counterparts share with the object (or which the \
+             object is), in place of `radius`, such as `compartments`.",
+            "Die Gruppierung, deren Gruppe die Gegenstücke mit dem Objekt teilen (oder die \
+             das Objekt ist), anstelle von `radius`, etwa `compartments`.",
+        ),
+    },
 ];
 
 /// What leaves a value over the counterparts within a radius not
@@ -427,7 +440,9 @@ const WITHIN_NOT_EVALUATED: &[&str] = &[
     UNDECIDED_KIND,
     "a counterpart that is or may be within cannot be read, or states no plain number",
     "a counterpart that may or may not be within states no value",
-    "walking, the object has no representative point or the route service refuses its walks",
+    "walking, the object has no representative point, or a route, plan-span or vertical-extent \
+     service is missing",
+    "by group, the object's membership is undecided, or the run derives no groups",
 ];
 
 /// A value aggregated over the counterparts within a radius.

@@ -14,8 +14,8 @@
     },
     "by": {
       "kind": "property",
-      "propertySet": "axioval:measured",
-      "property": "slope"
+      "propertySet": "ex:pset-roof-common",
+      "property": "ex:slope"
     },
     "value": {
       "kind": "property",
@@ -30,7 +30,11 @@
     "inputs": {
       "by": {
         "block": {
-          "type": "measured.slope"
+          "type": "expression.property",
+          "fields": {
+            "property": "ex:slope",
+            "propertySet": "ex:pset-roof-common"
+          }
         }
       },
       "over": {

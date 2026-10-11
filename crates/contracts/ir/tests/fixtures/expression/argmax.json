@@ -13,8 +13,8 @@
   },
   "by": {
     "kind": "property",
-    "propertySet": "axioval:measured",
-    "property": "slope"
+    "propertySet": "ex:pset-roof-common",
+    "property": "ex:slope"
   },
   "value": {
     "kind": "property",

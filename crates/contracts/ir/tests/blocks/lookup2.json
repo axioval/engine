@@ -5,8 +5,8 @@
     "rowKeyColumn": "class",
     "rowKey": {
       "kind": "property",
-      "propertySet": "Pset_SlabCommon",
-      "property": "ExposureClass"
+      "propertySet": "ex:pset-slab-common",
+      "property": "ex:exposure-class"
     },
     "columnKeyColumn": "thickness",
     "columnKey": {
@@ -36,8 +36,8 @@
         "block": {
           "type": "expression.property",
           "fields": {
-            "property": "ExposureClass",
-            "propertySet": "Pset_SlabCommon"
+            "property": "ex:exposure-class",
+            "propertySet": "ex:pset-slab-common"
           }
         }
       }

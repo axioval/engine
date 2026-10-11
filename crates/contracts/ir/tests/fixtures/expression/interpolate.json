@@ -4,8 +4,8 @@
   "keyColumn": "span",
   "key": {
     "kind": "property",
-    "propertySet": "Pset_SlabCommon",
-    "property": "Span"
+    "propertySet": "ex:pset-slab-common",
+    "property": "ex:span"
   },
   "column": "cover",
   "clamp": true

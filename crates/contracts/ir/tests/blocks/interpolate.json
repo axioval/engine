@@ -5,8 +5,8 @@
     "keyColumn": "span",
     "key": {
       "kind": "property",
-      "propertySet": "Pset_SlabCommon",
-      "property": "Span"
+      "propertySet": "ex:pset-slab-common",
+      "property": "ex:span"
     },
     "column": "cover",
     "clamp": true
@@ -24,8 +24,8 @@
         "block": {
           "type": "expression.property",
           "fields": {
-            "property": "Span",
-            "propertySet": "Pset_SlabCommon"
+            "property": "ex:span",
+            "propertySet": "ex:pset-slab-common"
           }
         }
       }

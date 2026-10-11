@@ -4,8 +4,8 @@
   "rowKeyColumn": "class",
   "rowKey": {
     "kind": "property",
-    "propertySet": "Pset_SlabCommon",
-    "property": "ExposureClass"
+    "propertySet": "ex:pset-slab-common",
+    "property": "ex:exposure-class"
   },
   "columnKeyColumn": "thickness",
   "columnKey": {

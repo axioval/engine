@@ -83,6 +83,22 @@ pub enum Expression {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         label: Option<String>,
     },
+    /// The `column` cell of the `table` parameter at `key` of its numeric
+    /// key column `keyColumn`, interpolated linearly between the two rows
+    /// whose keys bracket it. A key interval gives every value its keys
+    /// allow. A key beyond the rows' keys is not evaluated unless `clamp`
+    /// holds, which takes the nearest end row's value.
+    Interpolate {
+        table: String,
+        #[serde(rename = "keyColumn")]
+        key_column: String,
+        key: Box<Expression>,
+        column: String,
+        #[serde(default, skip_serializing_if = "is_false")]
+        clamp: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        label: Option<String>,
+    },
     Not {
         operand: Box<Expression>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -571,13 +587,14 @@ pub enum ExpressionError {
 
 impl Expression {
     /// Every node `kind`, in declaration order.
-    pub const KINDS: [&'static str; 47] = [
+    pub const KINDS: [&'static str; 48] = [
         "literal",
         "null",
         "property",
         "parameter",
         "derived",
         "lookup",
+        "interpolate",
         "not",
         "and",
         "or",
@@ -631,6 +648,7 @@ impl Expression {
             Self::Parameter { .. } => "parameter",
             Self::Derived { .. } => "derived",
             Self::Lookup { .. } => "lookup",
+            Self::Interpolate { .. } => "interpolate",
             Self::Not { .. } => "not",
             Self::And { .. } => "and",
             Self::Or { .. } => "or",
@@ -685,6 +703,7 @@ impl Expression {
             | Self::Parameter { label, .. }
             | Self::Derived { label, .. }
             | Self::Lookup { label, .. }
+            | Self::Interpolate { label, .. }
             | Self::Not { label, .. }
             | Self::And { label, .. }
             | Self::Or { label, .. }
@@ -744,6 +763,7 @@ impl Expression {
             | Self::FindingCount { .. }
             | Self::Deviation { .. } => Vec::new(),
             Self::Lookup { keys, .. } => keys.values().collect(),
+            Self::Interpolate { key, .. } => vec![key],
             Self::Not { operand, .. }
             | Self::IsDefined { operand, .. }
             | Self::IsUndefined { operand, .. }
@@ -849,6 +869,7 @@ impl Expression {
                 }
             }
             Self::Lookup { keys, .. } => keys.values_mut().for_each(|key| key.rename_rules(rename)),
+            Self::Interpolate { key, .. } => key.rename_rules(rename),
             Self::If {
                 branches,
                 otherwise,
@@ -1047,6 +1068,16 @@ impl Expression {
                     blank(kind, "key column", key)?;
                 }
             }
+            Self::Interpolate {
+                table,
+                key_column,
+                column,
+                ..
+            } => {
+                blank(kind, "table", table)?;
+                blank(kind, "key column", key_column)?;
+                blank(kind, "column", column)?;
+            }
             Self::And { operands, .. }
             | Self::Or { operands, .. }
             | Self::Coalesce { operands, .. }
@@ -1134,4 +1165,8 @@ const fn yes() -> bool {
 #[allow(clippy::trivially_copy_pass_by_ref)]
 const fn is_true(value: &bool) -> bool {
     *value
+}
+#[allow(clippy::trivially_copy_pass_by_ref)]
+const fn is_false(value: &bool) -> bool {
+    !*value
 }

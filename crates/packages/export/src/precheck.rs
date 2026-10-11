@@ -182,6 +182,7 @@ fn operands<'e>(node: &'e Expression, path: &str) -> Vec<(String, &'e Expression
             .iter()
             .map(|(key, value)| (format!("{path}.lookup.keys[{key}]"), value))
             .collect(),
+        Expression::Interpolate { key, .. } => vec![(field("key"), key.as_ref())],
         Expression::Not { operand, .. }
         | Expression::IsDefined { operand, .. }
         | Expression::IsUndefined { operand, .. }

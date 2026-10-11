@@ -599,6 +599,45 @@
         },
         {
           "additionalProperties": false,
+          "description": "The `column` cell of the `table` parameter at `key` of its numeric\nkey column `keyColumn`, interpolated linearly between the two rows\nwhose keys bracket it. A key interval gives every value its keys\nallow. A key beyond the rows' keys is not evaluated unless `clamp`\nholds, which takes the nearest end row's value.",
+          "properties": {
+            "clamp": {
+              "type": "boolean"
+            },
+            "column": {
+              "type": "string"
+            },
+            "key": {
+              "$ref": "#/$defs/Expression"
+            },
+            "keyColumn": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "interpolate",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "table": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "table",
+            "keyColumn",
+            "key",
+            "column"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
           "properties": {
             "kind": {
               "const": "not",

@@ -15,6 +15,17 @@ All notable changes are documented here. This project follows Semantic Versionin
   step, documents serialize and evaluate as before; the catalogue's schema
   version is 1.3.0
   ([#349](https://github.com/axioval/engine/issues/349)).
+- **Expressions**: `interpolate` reads a table parameter between its rows:
+  the `column` cell at a key of a numeric `keyColumn`, interpolated
+  linearly between the two rows whose keys bracket it, as norm tables
+  state values at grid points (rows 2.0 → 10 and 3.0 → 20 give 14 at
+  2.4). A key interval gives every value its keys allow, `[2.4, 2.6]`
+  giving `[14, 16]`, and the hull holds any row value it crosses. A key
+  beyond the rows is not evaluated, never extrapolated, unless `clamp`
+  declares that the nearest end row applies. Units are checked as in
+  arithmetic, and a missing cell, repeated keys or a keyless row leave
+  the object not evaluated with their own reason
+  ([#347](https://github.com/axioval/engine/issues/347)).
 
 ### Changed
 

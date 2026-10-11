@@ -505,6 +505,26 @@ impl Checker<'_> {
                 }
                 result
             }
+            Expression::Interpolate {
+                table,
+                key_column,
+                key,
+                column,
+                ..
+            } => {
+                let (columns, result) = self
+                    .environment
+                    .lookup(table, column)
+                    .map_err(|why| here(TypeErrorKind::Unknown(why)))?;
+                let key_path = child("key");
+                let found = self.numeric(key, &key_path)?;
+                let declared = interpolated_key(&columns, table, key_column).map_err(here)?;
+                same_unit("interpolates", declared, &found).map_err(|kind| TypeError {
+                    path: key_path,
+                    kind,
+                })?;
+                interpolated(result).map_err(here)?
+            }
             Expression::Not { operand, .. } => {
                 self.boolean(operand, &child("operand"))?;
                 Type::Boolean
@@ -883,6 +903,32 @@ fn joined(left: &Type, right: Type, path: &str) -> Result<Type, TypeError> {
 
 /// The type of `+`, `−`, `min`, `max` or `round` over two numeric types,
 /// `operation` naming it in an error.
+/// The declared type of the key column `key_column` of `table` that a key
+/// is interpolated along: a number.
+fn interpolated_key<'t>(
+    columns: &'t BTreeMap<String, Type>,
+    table: &str,
+    key_column: &str,
+) -> Result<&'t Type, TypeErrorKind> {
+    match columns.get(key_column) {
+        None => Err(TypeErrorKind::Unknown(format!(
+            "table `{table}` has no column `{key_column}`"
+        ))),
+        Some(found @ (Type::Integer | Type::Number(_) | Type::Any)) => Ok(found),
+        Some(other) => Err(TypeErrorKind::NotNumeric(other.clone())),
+    }
+}
+
+/// The type of a value interpolated in a column of `declared` type: a
+/// number of its unit, whole numbers included.
+fn interpolated(declared: Type) -> Result<Type, TypeErrorKind> {
+    match declared {
+        Type::Integer => Ok(Type::NUMBER),
+        Type::Number(_) | Type::Any => Ok(declared),
+        other => Err(TypeErrorKind::NotNumeric(other)),
+    }
+}
+
 fn same_unit(operation: &'static str, left: &Type, right: &Type) -> Result<Type, TypeErrorKind> {
     match (left.unit(), right.unit()) {
         (Some(left_unit), Some(right_unit)) if left_unit != right_unit => {

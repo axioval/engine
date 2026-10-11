@@ -187,6 +187,14 @@ impl ExpressionContext for ColumnLeaves<'_> {
         self.leaves.lookup(table, keys, column)
     }
 
+    fn table(
+        &mut self,
+        table: &str,
+        read: &mut dyn FnMut(&[axioval_ir::contract::TableRow]) -> Leaf,
+    ) -> Leaf {
+        self.leaves.table(table, read)
+    }
+
     fn rule(&mut self, rule: &str, read: RuleRead) -> Leaf {
         self.leaves.rule(rule, read)
     }

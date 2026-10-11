@@ -1,0 +1,12 @@
+{
+  "kind": "interpolate",
+  "table": "minimum_cover",
+  "keyColumn": "span",
+  "key": {
+    "kind": "property",
+    "propertySet": "Pset_SlabCommon",
+    "property": "Span"
+  },
+  "column": "cover",
+  "clamp": true
+}

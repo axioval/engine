@@ -21,7 +21,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use axioval_ir::contract::{
     AggregateFunction, AggregateSource, Branch, Expression, ExpressionComparison, PropertyScope,
-    ScalarValue, Selector, SlopeForm,
+    ScalarValue, Selector, SlopeForm, TableRow,
 };
 use axioval_ir::{
     Date, DateTime, Evidence, Explanation, ExplanationEntry, MAX_EXPLANATION_ENTRIES,
@@ -467,6 +467,13 @@ pub trait ExpressionContext {
         Leaf::unreadable(format!("table `{table}` cannot be looked up here"))
     }
 
+    /// The rows of the table parameter `table`, handed to `read`, whose
+    /// answer is the leaf's: `interpolate` reads a table through it.
+    fn table(&mut self, table: &str, read: &mut dyn FnMut(&[TableRow]) -> Leaf) -> Leaf {
+        let _ = read;
+        Leaf::unreadable(format!("table `{table}` cannot be read here"))
+    }
+
     /// What the rule `rule` of the ruleset concluded about the object in
     /// scope, as `read` asks.
     fn rule(&mut self, rule: &str, read: RuleRead) -> Leaf {
@@ -647,7 +654,7 @@ fn fail(expression: &Expression, path: &str, reason: Reason) -> NotEvaluated {
     }
 }
 
-fn interval_reason(failure: IntervalFailure) -> Reason {
+pub(super) fn interval_reason(failure: IntervalFailure) -> Reason {
     match failure {
         IntervalFailure::ZeroDivisor => Reason::ZeroDivisor,
         IntervalFailure::Overflow => Reason::Overflow,
@@ -755,6 +762,25 @@ impl Evaluator<'_> {
                     },
                     leaf,
                 )
+            }
+            Expression::Interpolate {
+                table,
+                key_column,
+                key,
+                column,
+                clamp,
+                ..
+            } => {
+                let key = self.eval(key, &child("key"))?;
+                if key == Value::Null {
+                    return Ok(Value::Null);
+                }
+                let axes = [super::table::Axis {
+                    column: key_column,
+                    key: &key,
+                    interpolate: true,
+                }];
+                self.read_table(expression, path, table, &axes, column, *clamp)
             }
             Expression::Not { operand, .. } => {
                 let truth = self.truth(operand, &child("operand"))?;
@@ -1158,6 +1184,44 @@ impl Evaluator<'_> {
             leaf,
         });
         outcome
+    }
+
+    /// The `column` cell of the table parameter `table` at `axes`, read
+    /// as a lookup is: an unreadable table or grid point is a read that
+    /// failed, and a key or cell of the wrong kind or unit a mismatch.
+    fn read_table(
+        &mut self,
+        expression: &Expression,
+        path: &str,
+        table: &str,
+        axes: &[super::table::Axis<'_>],
+        column: &str,
+        clamp: bool,
+    ) -> Outcome {
+        let mut mismatch = None;
+        let leaf = self
+            .context
+            .table(
+                table,
+                &mut |rows| match super::table::read(rows, table, axes, column, clamp) {
+                    Ok(value) => Leaf::stated(value),
+                    Err(Reason::Unreadable(why)) => Leaf::unreadable(why),
+                    Err(other) => {
+                        let leaf = Leaf::unreadable(other.to_string());
+                        mismatch = Some(other);
+                        leaf
+                    }
+                },
+            );
+        let source = Source::Lookup {
+            table: table.to_owned(),
+            column: column.to_owned(),
+        };
+        let outcome = self.read(expression, path, source, leaf);
+        match mismatch {
+            Some(reason) => Err(fail(expression, path, reason)),
+            None => outcome,
+        }
     }
 
     /// The truth of `operand`; `null` stays `null` (`None`).

@@ -471,6 +471,28 @@ pub const EXPRESSION_KINDS: &[NodeKind] = &[
         ),
     },
     NodeKind {
+        kind: "interpolate",
+        category: "value",
+        fields: &[
+            named("table", Refers::Table, true),
+            named("keyColumn", Refers::TableColumn, true),
+            one("key", NUMERIC),
+            named("column", Refers::TableColumn, true),
+            flag("clamp"),
+        ],
+        result: ResultRule::Declared,
+        label: &en_de("Interpolated table value", "Interpolierter Tabellenwert"),
+        help: &en_de(
+            "A column of a table parameter at a key of its numeric key column, interpolated \
+             linearly between the rows whose keys bracket it. A key beyond the rows is not \
+             evaluated unless clamped to the nearest end row.",
+            "Eine Spalte eines Tabellenparameters an einem Schlüssel seiner numerischen \
+             Schlüsselspalte, linear interpoliert zwischen den Zeilen, deren Schlüssel ihn \
+             einschließen. Ein Schlüssel außerhalb der Zeilen wird nicht ausgewertet, es sei \
+             denn, er wird auf die nächste Randzeile begrenzt.",
+        ),
+    },
+    NodeKind {
         kind: "not",
         category: "logic",
         fields: &[one("operand", BOOLEAN)],
@@ -1707,6 +1729,7 @@ mod tests {
             E::Literal { .. } => "literal", E::Null { .. } => "null",
             E::Property { .. } => "property", E::Parameter { .. } => "parameter",
             E::Derived { .. } => "derived", E::Lookup { .. } => "lookup",
+            E::Interpolate { .. } => "interpolate",
             E::Not { .. } => "not", E::And { .. } => "and", E::Or { .. } => "or",
             E::Implies { .. } => "implies", E::Xor { .. } => "xor",
             E::Compare { .. } => "compare", E::Between { .. } => "between",

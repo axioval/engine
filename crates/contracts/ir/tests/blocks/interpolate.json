@@ -1,0 +1,34 @@
+{
+  "expression": {
+    "kind": "interpolate",
+    "table": "minimum_cover",
+    "keyColumn": "span",
+    "key": {
+      "kind": "property",
+      "propertySet": "Pset_SlabCommon",
+      "property": "Span"
+    },
+    "column": "cover",
+    "clamp": true
+  },
+  "blocks": {
+    "type": "expression.interpolate",
+    "fields": {
+      "clamp": true,
+      "column": "cover",
+      "keyColumn": "span",
+      "table": "minimum_cover"
+    },
+    "inputs": {
+      "key": {
+        "block": {
+          "type": "expression.property",
+          "fields": {
+            "property": "Span",
+            "propertySet": "Pset_SlabCommon"
+          }
+        }
+      }
+    }
+  }
+}

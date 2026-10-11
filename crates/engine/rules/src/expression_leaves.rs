@@ -1215,6 +1215,15 @@ impl ExpressionContext for ObjectLeaves<'_> {
         };
         lookup(rows, keys, column).map_or_else(Leaf::unreadable, Leaf::stated)
     }
+
+    fn table(&mut self, table: &str, read: &mut dyn FnMut(&[TableRow]) -> Leaf) -> Leaf {
+        let Some(ParameterValue::Table { value: rows }) =
+            self.parameters.and_then(|parameters| parameters.get(table))
+        else {
+            return Leaf::unreadable(format!("the rule has no table `{table}`"));
+        };
+        read(rows)
+    }
 }
 
 impl ObjectLeaves<'_> {

@@ -112128,6 +112128,78 @@
       ]
     },
     {
+      "kind": "interpolate",
+      "category": "value",
+      "fields": [
+        {
+          "name": "table",
+          "kind": {
+            "type": "name",
+            "refers": "table"
+          },
+          "required": true
+        },
+        {
+          "name": "keyColumn",
+          "kind": {
+            "type": "name",
+            "refers": "tableColumn"
+          },
+          "required": true
+        },
+        {
+          "name": "key",
+          "kind": {
+            "type": "expression",
+            "accepts": [
+              "integer",
+              "number",
+              "angle"
+            ]
+          },
+          "required": true
+        },
+        {
+          "name": "column",
+          "kind": {
+            "type": "name",
+            "refers": "tableColumn"
+          },
+          "required": true
+        },
+        {
+          "name": "clamp",
+          "kind": {
+            "type": "flag"
+          },
+          "required": false
+        }
+      ],
+      "result": {
+        "type": "declared"
+      },
+      "label": [
+        {
+          "language": "en",
+          "text": "Interpolated table value"
+        },
+        {
+          "language": "de",
+          "text": "Interpolierter Tabellenwert"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "A column of a table parameter at a key of its numeric key column, interpolated linearly between the rows whose keys bracket it. A key beyond the rows is not evaluated unless clamped to the nearest end row."
+        },
+        {
+          "language": "de",
+          "text": "Eine Spalte eines Tabellenparameters an einem Schlüssel seiner numerischen Schlüsselspalte, linear interpoliert zwischen den Zeilen, deren Schlüssel ihn einschließen. Ein Schlüssel außerhalb der Zeilen wird nicht ausgewertet, es sei denn, er wird auf die nächste Randzeile begrenzt."
+        }
+      ]
+    },
+    {
       "kind": "not",
       "category": "logic",
       "fields": [

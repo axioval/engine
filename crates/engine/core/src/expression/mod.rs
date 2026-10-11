@@ -6,6 +6,7 @@
 mod aggregate;
 mod evaluate;
 mod interval;
+mod table;
 mod text;
 mod types;
 mod unit;

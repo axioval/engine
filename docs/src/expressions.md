@@ -282,6 +282,39 @@ An object the other rule left open, or whose selection it could not decide, leav
 
 `ruleOutcome` of an object the other rule did not select is `null`, and `null` decides nothing: `implies(ruleOutcome(fire), …)` over such an object is a missing-information finding, never a vacuous pass. Where the other rule's selection matters, the expression states it with `selected`: `implies(selected(fire), ruleOutcome(fire))` passes the objects the fire rule did not select, `and(selected(fire), ruleOutcome(fire))` fails them. The plan runs every rule a rule's expressions read first, as for `ruleOutcome` selectors (in its requirement, its computed parameters, its expression selectors and their aggregate filters); a cycle, a rule reading itself or a rule the ruleset does not define fails compilation, and combined rulesets rename the rules read as they rename the rules. A derived value reads no rule outcome: values are derived before any rule runs.
 
+## Tables
+
+A rule's table parameters are read three ways. `lookup` selects the most
+specific row whose key cells match its keys, as `keyed-limit` does
+([Expression requirements](./capabilities.md#expression-requirements)).
+`interpolate` reads a value between a table's rows, as norm tables state
+values at grid points and say intermediate values are interpolated
+linearly (a clear width by occupant count, a cover by span):
+
+```json
+{"kind": "interpolate", "table": "cover_by_span", "keyColumn": "span",
+ "key": {"kind": "property", "propertySet": "Pset_SlabCommon", "property": "Span"},
+ "column": "cover"}
+```
+
+- The key is read in `keyColumn`, whose cells are numbers of the key's
+  unit, one per row; between the two rows whose keys bracket it, the
+  `column` cell is interpolated linearly. Rows 2.0 → 10 and 3.0 → 20 give
+  14 at 2.4 (within rounding), and a key on a row gives its cell exactly.
+- A key interval gives every value its keys allow: linear interpolation
+  is monotone between two rows, so the result is the hull of the values at
+  the interval's ends and at every row key within. `[2.4, 2.6]` gives
+  `[14, 16]`, and an interval across a peak row holds the peak.
+- A key beyond the first or last row is not evaluated ("`span` 5 m lies
+  beyond its last row's, 4 m, …"), never extrapolated. `"clamp": true`
+  declares that the nearest end row's value applies there instead.
+- A key of `null` is `null`. Not evaluated, each with its reason: a
+  bracketing row stating no `column` cell (naming its key), two rows at
+  one key, a row stating no key, and a key or cell of another unit (a
+  mismatch). The type checker refuses a key column that holds no numbers,
+  a key of another unit than its cells and a `column` that is not numeric;
+  whole-number cells interpolate to a number.
+
 ## Paths
 
 Every not-evaluated outcome and type error names its subexpression by a

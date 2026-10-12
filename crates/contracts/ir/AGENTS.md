@@ -113,6 +113,12 @@ Keep this crate serializable and deterministic. It must not depend on a source f
   description, expression) is omitted when empty so rulesets serialize as
   before; `VALUE_SET` is a derived set. The MCS ruleset schema must mirror
   it.
+- `RuleSetPackage::catalogues` (`CatalogueDefinition`: localized name,
+  optional description, the text `key` column and the file's
+  `TableFileColumn`s) is omitted when empty so rulesets serialize as
+  before; the entries are never in the package, the host supplies them.
+  `Expression::Catalogue` (`catalogue`, `key`, `column`) reads one entry's
+  value. The MCS ruleset and expression schemas must mirror both.
 - `Finding::explanation` and `NotEvaluated::explanation` (`explanation.rs`)
   are absent on the wire unless an expression rule set them, so reports
   serialize as before. An explanation keeps its deciding path whole and at

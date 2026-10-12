@@ -1,0 +1,11 @@
+{
+  "kind": "catalogue",
+  "catalogue": "materials",
+  "key": {
+    "kind": "property",
+    "propertySet": "ex:material",
+    "property": "ex:name"
+  },
+  "column": "lambda",
+  "label": "thermal conductivity"
+}

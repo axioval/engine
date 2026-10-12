@@ -8773,6 +8773,117 @@ fn walls_with_layers() -> String {
     )
 }
 
+/// engine#322 end to end: a catalogue of three invented materials,
+/// supplied with `--catalogue`, gives each wall the thermal conductivity
+/// of its material, joined by the material's name. #19 is of a brick too
+/// conductive for the rule, #29 of a foam board meeting it, and #49 of a
+/// material the catalogue has no entry for: not evaluated, naming it.
+#[test]
+fn a_catalogue_supplied_beside_the_model_gives_walls_their_materials_lambda() {
+    let case = Case::new("catalogue-lambda");
+    let layered = walls_with_layers();
+    let (walls, _) = layered.split_once("#300=").unwrap();
+    let model = format!(
+        "{walls}#300=IFCMATERIAL('ex-clay-brick',$,$);\n\
+         #301=IFCRELASSOCIATESMATERIAL('0000000000000000000301',$,$,$,(#19),#300);\n\
+         #302=IFCMATERIAL('ex-foam-board',$,$);\n\
+         #303=IFCRELASSOCIATESMATERIAL('0000000000000000000303',$,$,$,(#29),#302);\n\
+         #304=IFCMATERIAL('ex-mystery-board',$,$);\n\
+         #305=IFCRELASSOCIATESMATERIAL('0000000000000000000305',$,$,$,(#49),#304);\n\
+         ENDSEC;\nEND-ISO-10303-21;\n"
+    );
+    case.write("model.ifc", &model);
+    case.write(
+        "materials.csv",
+        "material,lambda,density\n\
+         ex-clay-brick,0.81,1800\n\
+         ex-foam-board,0.035,30\n\
+         ex-wood-fibre,,160\n",
+    );
+    let catalogues = json!({"materials": {
+        "id": "materials",
+        "name": {"default": "Materials", "translations": {}},
+        "key": "name",
+        "columns": [
+            {"id": "name", "header": "material", "kind": "string"},
+            {"id": "lambda", "kind": "quantity", "unit": "W/m·K"},
+            {"id": "density", "kind": "quantity", "unit": "kg/m³"},
+        ],
+    }});
+    let requirement = json!({"kind": "compare", "operator": "lessThanOrEquals",
+        "left": {"kind": "catalogue", "catalogue": "materials", "column": "lambda",
+                 "key": {"kind": "property", "propertySet": "axioval:material",
+                         "property": "axioval:example.ifc.name"}},
+        "right": {"kind": "literal",
+                  "value": {"type": "quantity", "value": 0.04, "unit": "W/m·K"}}});
+    let run = |args: &[&str]| {
+        case.geometry_rule_with(
+            &["model.ifc"],
+            &[("wall", "IfcWall")],
+            (
+                "axioval:capability.expression",
+                &registry_signature("axioval:capability.expression"),
+            ),
+            entity("wall"),
+            json!({"requirement": {"type": "expression", "value": requirement}}),
+            &json!({"ruleset:catalogues": catalogues}),
+            args,
+        )
+    };
+    let (output, result) = run(&["--catalogue", "materials@2026-1=materials.csv"]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = finding_messages(&result);
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert_eq!(findings[0].0, "#19", "{result:#}");
+    assert!(
+        findings[0]
+            .1
+            .contains("catalogue materials[ex-clay-brick].lambda = 0.81"),
+        "{result:#}"
+    );
+    let cited = result["report"]["findings"][0]["evidence"].to_string();
+    assert!(
+        cited.contains("axioval:catalogue;id=materials;version=2026-1;sha256=")
+            && cited.contains("#entry=ex-clay-brick"),
+        "{cited}"
+    );
+    let open = result["report"]["not_evaluated"].as_array().unwrap();
+    assert_eq!(open.len(), 1, "{result:#}");
+    assert_eq!(open[0]["object_id"]["local_id"], "#49", "{result:#}");
+    let reason = open[0]["message"].as_str().unwrap();
+    assert!(
+        reason.contains("has no entry whose `name` is `ex-mystery-board`"),
+        "{reason}"
+    );
+    assert_eq!(result["catalogue_files"][0]["catalogue"], "materials");
+    assert_eq!(result["catalogue_files"][0]["version"], "2026-1");
+    assert_eq!(result["catalogue_files"][0]["entries"], 3);
+
+    // Without the file every wall is open, and the result says why.
+    let (output, result) = run(&[]);
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    assert_eq!(
+        result["report"]["not_evaluated"].as_array().unwrap().len(),
+        3,
+        "{result:#}"
+    );
+    assert!(
+        result["integrity"]
+            .to_string()
+            .contains("catalogue-not-supplied"),
+        "{result:#}"
+    );
+
+    // A catalogue no ruleset declares stops the check.
+    let (output, _) = run(&["--catalogue", "products=materials.csv"]);
+    assert_eq!(output.status.code(), Some(1), "{}", stderr(&output));
+    assert!(
+        stderr(&output).contains("no ruleset declares the catalogue `products`"),
+        "{}",
+        stderr(&output)
+    );
+}
+
 #[test]
 fn with_geometry_a_wall_body_is_measured_against_its_layer_thickness() {
     let case = Case::new("geometry-layer-thickness");

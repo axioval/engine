@@ -523,6 +523,38 @@
         },
         {
           "additionalProperties": false,
+          "description": "The `column` value of the entry of the ruleset's catalogue\n`catalogue` whose key equals `key` exactly (a material name, a\nclassification code or a product id), as the catalogue states it:\ncited with its id, version and entry, never as the model's. An\nempty cell is `null`, and so is a `null` key; a key no entry has,\nand a catalogue the host did not supply, are not evaluated.",
+          "properties": {
+            "catalogue": {
+              "type": "string"
+            },
+            "column": {
+              "type": "string"
+            },
+            "key": {
+              "$ref": "#/$defs/Expression"
+            },
+            "kind": {
+              "const": "catalogue",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "catalogue",
+            "key",
+            "column"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
           "properties": {
             "kind": {
               "const": "not",

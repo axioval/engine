@@ -6,10 +6,10 @@ use std::{
 };
 
 use axioval_ir::contract::{
-    ClassTree, ClassificationDefinition, ClassificationProperty, ColumnKind, GateCondition,
-    GroupingDefinition, GroupingKey, ParameterKind, ParameterValue, RelationDefinition,
-    RelationKey, RuleApplicability, RuleDefinition, RuleFolder, RuleGate, RuleInstance, Selector,
-    TableColumnDefinition, TableFileColumn, TableRow,
+    CatalogueDefinition, ClassTree, ClassificationDefinition, ClassificationProperty, ColumnKind,
+    GateCondition, GroupingDefinition, GroupingKey, ParameterKind, ParameterValue,
+    RelationDefinition, RelationKey, RuleApplicability, RuleDefinition, RuleFolder, RuleGate,
+    RuleInstance, Selector, TableColumnDefinition, TableFileColumn, TableRow,
 };
 use axioval_ir::{DefinitionPackage, RuleId, RuleSetPackage};
 
@@ -42,8 +42,9 @@ pub fn compile(
     let concepts = declared_concepts(ruleset, &packages)?;
     let (classifications, groupings, relations) = derivations(registry, &concepts, ruleset)?;
     let properties = vocabulary_properties(ruleset, &packages);
+    let catalogues = catalogues(ruleset)?;
     let (vocabulary, values) =
-        crate::expression_binding::check_values(&concepts, &properties, ruleset)?;
+        crate::expression_binding::check_values(&concepts, &properties, &catalogues, ruleset)?;
     let mut authored = Vec::new();
     flatten(&ruleset.root, &[], &mut authored);
     authored.sort_by(|(left, _), (right, _)| left.id.cmp(&right.id));
@@ -132,8 +133,26 @@ pub fn compile(
         groupings,
         relations,
         supplied: BTreeMap::new(),
+        catalogues: crate::Catalogues::declared(&catalogues),
         values: Arc::new(values),
     })
+}
+
+/// The ruleset's catalogues, each checked
+/// ([`crate::catalogues::check_definition`]), in id order.
+fn catalogues(ruleset: &RuleSetPackage) -> Result<Vec<CatalogueDefinition>, EngineError> {
+    ruleset
+        .catalogues
+        .iter()
+        .map(|(id, definition)| {
+            crate::catalogues::check_definition(id, definition)
+                .map(|()| definition.clone())
+                .map_err(|detail| EngineError::InvalidCatalogue {
+                    catalogue: id.clone(),
+                    detail,
+                })
+        })
+        .collect()
 }
 
 /// The ruleset's classifications, groupings and relations, each checked.
@@ -821,6 +840,7 @@ pub const QUALIFIED_RULE_SEPARATOR: char = '/';
 /// Returns every error [`compile`] returns for any ruleset, and an error
 /// when no ruleset is given, two rulesets share a package ID, or two
 /// declared definition packages declare one concept.
+#[allow(clippy::too_many_lines)] // One pass merging each ruleset's plan, part by part.
 pub fn compile_rulesets(
     registry: &CapabilityRegistry,
     definitions: &[DefinitionPackage],
@@ -843,6 +863,7 @@ pub fn compile_rulesets(
     let mut derived: Derived = (Vec::new(), Vec::new(), Vec::new());
     let mut values: BTreeMap<String, axioval_ir::contract::Expression> = BTreeMap::new();
     let mut types = crate::expression::DeclaredTypes::default();
+    let mut catalogues: Vec<CatalogueDefinition> = Vec::new();
     for ruleset in rulesets {
         let package = &ruleset.package.id;
         if !packages_seen.insert(package.as_str()) {
@@ -893,6 +914,7 @@ pub fn compile_rulesets(
             (plan.classifications, plan.groupings, plan.relations),
         )?;
         merge_values(&mut values, &plan.values)?;
+        merge_catalogues(&mut catalogues, &plan.catalogues)?;
         types.extend(&plan.types);
         for mut rule in plan.deferred {
             rule.id = qualify(&rule.id)?;
@@ -925,6 +947,7 @@ pub fn compile_rulesets(
         groupings,
         relations,
         supplied: BTreeMap::new(),
+        catalogues: crate::Catalogues::declared(&catalogues),
         values: Arc::new(values),
         types: Arc::new(types),
     })
@@ -960,6 +983,22 @@ fn merge_derived(
     })?;
     merge(relations, more_relations, |known| &known.id).map_err(|id| EngineError::InvalidRelation {
         relation: id,
+        detail: "two rulesets declare it differently".into(),
+    })
+}
+
+/// Adds one ruleset's catalogues to those of the rulesets before it: one
+/// run reads one catalogue per id, so rulesets share it only when they
+/// declare it alike.
+fn merge_catalogues(
+    catalogues: &mut Vec<CatalogueDefinition>,
+    more: &crate::Catalogues,
+) -> Result<(), EngineError> {
+    merge(catalogues, more.definitions().cloned().collect(), |known| {
+        &known.id
+    })
+    .map_err(|id| EngineError::InvalidCatalogue {
+        catalogue: id,
         detail: "two rulesets declare it differently".into(),
     })
 }

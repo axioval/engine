@@ -198,6 +198,40 @@ pub trait TypeEnvironment {
         let _ = column;
         Err(format!("no table `{table}` is declared"))
     }
+
+    /// The type of the column `column` of the catalogue `catalogue`.
+    ///
+    /// # Errors
+    ///
+    /// The catalogue or the column is not declared, or the column is the
+    /// key.
+    fn catalogue(&self, catalogue: &str, column: &str) -> Result<Type, String> {
+        let _ = column;
+        Err(format!("no catalogue `{catalogue}` is declared"))
+    }
+}
+
+/// The types of a catalogue's value columns, by column id, the key
+/// column's excluded: what a `catalogue` node reads of it.
+pub type CatalogueTypes = BTreeMap<String, Type>;
+
+/// The type of a `catalogue` node reading `column` of `catalogue` among
+/// `catalogues`.
+///
+/// # Errors
+///
+/// The catalogue or the value column is not declared.
+pub fn catalogue_column(
+    catalogues: &BTreeMap<String, CatalogueTypes>,
+    catalogue: &str,
+    column: &str,
+) -> Result<Type, String> {
+    catalogues
+        .get(catalogue)
+        .ok_or_else(|| format!("the ruleset declares no catalogue `{catalogue}`"))?
+        .get(column)
+        .cloned()
+        .ok_or_else(|| format!("catalogue `{catalogue}` has no value column `{column}`"))
 }
 
 /// The type of a measured value of `axioval:measured`, from the registry.
@@ -250,13 +284,32 @@ fn member_type(
 pub struct DeclaredTypes {
     properties: BTreeMap<String, Type>,
     values: BTreeMap<String, Type>,
+    catalogues: BTreeMap<String, CatalogueTypes>,
 }
 
 impl DeclaredTypes {
     /// The declared types of `properties` and derived `values`.
     #[must_use]
     pub fn new(properties: BTreeMap<String, Type>, values: BTreeMap<String, Type>) -> Self {
-        Self { properties, values }
+        Self {
+            properties,
+            values,
+            catalogues: BTreeMap::new(),
+        }
+    }
+
+    /// These types, and the value columns' of `catalogues`, by id.
+    #[must_use]
+    pub fn with_catalogues(mut self, catalogues: BTreeMap<String, CatalogueTypes>) -> Self {
+        self.catalogues = catalogues;
+        self
+    }
+
+    /// The type of the value column `column` of `catalogue`;
+    /// [`Type::Any`] when unknown.
+    #[must_use]
+    pub fn catalogue(&self, catalogue: &str, column: &str) -> Type {
+        catalogue_column(&self.catalogues, catalogue, column).unwrap_or(Type::Any)
     }
 
     /// Adds another ruleset's declarations.
@@ -272,6 +325,12 @@ impl DeclaredTypes {
                 .values
                 .iter()
                 .map(|(name, found)| (name.clone(), found.clone())),
+        );
+        self.catalogues.extend(
+            other
+                .catalogues
+                .iter()
+                .map(|(id, columns)| (id.clone(), columns.clone())),
         );
     }
 
@@ -329,6 +388,12 @@ pub(super) fn member_value_unit(
 
         fn derived(&self, name: &str) -> Result<Type, String> {
             Ok(self.0.map_or(Type::Any, |declared| declared.derived(name)))
+        }
+
+        fn catalogue(&self, catalogue: &str, column: &str) -> Result<Type, String> {
+            Ok(self
+                .0
+                .map_or(Type::Any, |declared| declared.catalogue(catalogue, column)))
         }
     }
     let unread = Declared(declared);
@@ -652,6 +717,26 @@ impl<'e> Checker<'e> {
                 } else {
                     result
                 }
+            }
+            Expression::Catalogue {
+                catalogue,
+                key,
+                column,
+                ..
+            } => {
+                let result = self
+                    .environment
+                    .catalogue(catalogue, column)
+                    .map_err(|why| here(TypeErrorKind::Unknown(why)))?;
+                let key_path = child("key");
+                let found = self.check(key, &key_path)?;
+                if !found.is_textual() {
+                    return Err(TypeError {
+                        path: key_path,
+                        kind: TypeErrorKind::NotText(found),
+                    });
+                }
+                result
             }
             Expression::Not { operand, .. } => {
                 self.boolean(operand, &child("operand"))?;

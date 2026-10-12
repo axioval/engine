@@ -35,8 +35,8 @@ use axioval::{
     engine::{
         DisciplineMap, DisciplineOrigin, DisciplineRule, EvidenceSession, ExecutionPlan,
         IntegritySeverity, LocationMethod, LocationPolicy, QUALIFIED_RULE_SEPARATOR, Runtime,
-        SourceIntegrityServiceHandle, SourceMetadata, SuppliedPairs, UnmappedReason,
-        compile_rulesets,
+        SourceIntegrityServiceHandle, SourceMetadata, SuppliedCatalogue, SuppliedPairs,
+        UnmappedReason, compile_rulesets,
     },
     html, ifc,
     ir::{
@@ -187,6 +187,23 @@ struct CheckArgs {
     /// evaluated. The result records each file's SHA-256.
     #[arg(long = "relations", value_name = "RELATION=FILE[#SHEET]", value_parser = relation_arg)]
     relations: Vec<RelationArg>,
+    /// Supply the entries of a catalogue the rulesets declare (material or
+    /// product data, such as each material's thermal conductivity, kept
+    /// beside the model, not in the rule package): a CSV file, or one sheet
+    /// of an xlsx workbook (`FILE.xlsx#SHEET`), read by the columns the
+    /// catalogue declares, with the catalogue's version after an `@`.
+    /// Repeat for several catalogues. A file for a catalogue no ruleset
+    /// declares, or one that cannot be read, stops the check before
+    /// anything runs; a catalogue given no file leaves every object whose
+    /// expression reads it not evaluated. Every value read cites the
+    /// catalogue, its version and the entry, and the result records each
+    /// file's SHA-256.
+    #[arg(
+        long = "catalogue",
+        value_name = "CATALOGUE[@VERSION]=FILE[#SHEET]",
+        value_parser = catalogue_arg
+    )]
+    catalogues: Vec<CatalogueArg>,
     /// Mesh the model's bodies so geometric rules can run. Off by default:
     /// meshing costs time and purely semantic rulesets do not need it.
     #[arg(long)]
@@ -536,6 +553,41 @@ fn relation_arg(value: &str) -> Result<RelationArg, String> {
     Ok(RelationArg {
         relation: relation.to_owned(),
         path: PathBuf::from(path),
+        sheet,
+    })
+}
+
+/// One `--catalogue` argument: a catalogue's id, the version the host
+/// states for it, and the file holding its entries, with the workbook sheet
+/// to read.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct CatalogueArg {
+    catalogue: String,
+    version: Option<String>,
+    path: PathBuf,
+    sheet: Option<String>,
+}
+
+/// Parses `CATALOGUE[@VERSION]=FILE[#SHEET]`: as a `--relations` argument,
+/// the version, if any, after the first `@` of the part before the `=`.
+fn catalogue_arg(value: &str) -> Result<CatalogueArg, String> {
+    let refused = || "expected CATALOGUE[@VERSION]=FILE, each non-empty".to_owned();
+    let RelationArg {
+        relation,
+        path,
+        sheet,
+    } = relation_arg(value).map_err(|_| refused())?;
+    let (catalogue, version) = match relation.split_once('@') {
+        Some((catalogue, version)) => (catalogue, Some(version)),
+        None => (relation.as_str(), None),
+    };
+    if catalogue.is_empty() || version.is_some_and(|version| version.trim().is_empty()) {
+        return Err(refused());
+    }
+    Ok(CatalogueArg {
+        catalogue: catalogue.to_owned(),
+        version: version.map(str::to_owned),
+        path,
         sheet,
     })
 }
@@ -921,6 +973,7 @@ fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     let registry = axioval::default_registry()?;
     let mut plan = compile_rulesets(&registry, &definitions, &rulesets)?;
     let relation_files = supply_relations(&mut plan, &args.relations)?;
+    let catalogue_files = supply_catalogues(&mut plan, &args.catalogues)?;
     if args.locate == Locate::Geometry && !args.geometry {
         return Err("`--locate geometry` needs `--geometry` to derive spaces from bodies".into());
     }
@@ -955,7 +1008,8 @@ fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     };
     let runtime = check_runtime(registry, &args, &clock);
     let unknown_pairs = axioval::engine::unknown_relation_objects(&plan, session.project());
-    let unsupplied = unsupplied_relations(&plan);
+    let mut unsupplied = unsupplied_relations(&plan);
+    unsupplied.extend(unsupplied_catalogues(&plan));
     let mut result = runtime.run_session(&session, plan)?;
     clock.lap("run (all rules)");
     // Keyed as the BCF sink keys its topics, so a decision recorded against
@@ -987,6 +1041,7 @@ fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     let mut output = CheckOutput::new(result, integrity, geometry, session.project())
         .with_sources(source_infos(&session))
         .with_relation_files(relation_files)
+        .with_catalogue_files(catalogue_files)
         .with_unmatched_topics(unmatched);
     let complete = translated.as_ref().is_none_or(ids::Translated::is_complete);
     if let Some(translated) = translated {
@@ -1085,6 +1140,95 @@ fn supply_relations(
             .map_err(|error| refuse(error.to_string()))?;
     }
     Ok(records)
+}
+
+/// Reads each `--catalogue` file by its catalogue's declared columns and
+/// supplies its entries to `plan`, with the version the argument states,
+/// before anything runs.
+///
+/// # Errors
+///
+/// A catalogue no ruleset declares, a catalogue given two files, and a
+/// file that cannot be read, is too large, or whose columns or entries are
+/// refused.
+fn supply_catalogues(
+    plan: &mut ExecutionPlan,
+    args: &[CatalogueArg],
+) -> Result<Vec<digest::CatalogueFileRecord>, Box<dyn Error>> {
+    let mut records = Vec::new();
+    for arg in args {
+        let shown = arg.path.display();
+        let refuse = |detail: String| format!("--catalogue {}={shown}: {detail}", arg.catalogue);
+        let definition = plan
+            .catalogues()
+            .into_iter()
+            .find(|known| known.id == arg.catalogue)
+            .cloned()
+            .ok_or_else(|| {
+                refuse(format!(
+                    "no ruleset declares the catalogue `{}`",
+                    arg.catalogue
+                ))
+            })?;
+        let size = fs::metadata(&arg.path)
+            .map_err(|error| refuse(error.to_string()))?
+            .len();
+        if size > axioval::engine::TABLE_FILE_LIMIT_BYTES {
+            return Err(refuse(format!(
+                "the file is larger than {} bytes",
+                axioval::engine::TABLE_FILE_LIMIT_BYTES
+            ))
+            .into());
+        }
+        let bytes = fs::read(&arg.path).map_err(|error| refuse(error.to_string()))?;
+        let name = arg
+            .path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| refuse("the file name is not UTF-8".into()))?;
+        let catalogue = SuppliedCatalogue::read(
+            &definition,
+            &bytes,
+            name,
+            arg.sheet.as_deref(),
+            arg.version.as_deref(),
+        )
+        .map_err(refuse)?;
+        records.push(digest::CatalogueFileRecord {
+            catalogue: arg.catalogue.clone(),
+            version: arg.version.clone(),
+            file: catalogue.origin().to_owned(),
+            sha256: catalogue.sha256().to_owned(),
+            entries: catalogue.rows().len(),
+        });
+        plan.supply_catalogue(&arg.catalogue, catalogue)
+            .map_err(|error| refuse(error.to_string()))?;
+    }
+    Ok(records)
+}
+
+/// Every catalogue given no file, as an integrity warning: the objects
+/// whose expressions read it are not evaluated.
+fn unsupplied_catalogues(plan: &ExecutionPlan) -> Vec<IntegrityRecord> {
+    plan.catalogues()
+        .into_iter()
+        .filter(|catalogue| plan.supplied_catalogue(&catalogue.id).is_none())
+        .map(|catalogue| IntegrityRecord {
+            code: "catalogue-not-supplied".into(),
+            severity: "warning".into(),
+            message: format!(
+                "catalogue `{}` takes its entries at check time, and none were supplied \
+                 (`--catalogue {}=FILE`); every object whose expression reads it is not \
+                 evaluated",
+                catalogue.id, catalogue.id
+            ),
+            locator: format!(
+                "{};id={}",
+                axioval::engine::CATALOGUE_LOCATOR_PREFIX,
+                catalogue.id
+            ),
+        })
+        .collect()
 }
 
 /// Every supplied relation given no file, as an integrity warning: the
@@ -1663,7 +1807,7 @@ fn main() -> ExitCode {
 
 #[cfg(test)]
 mod tests {
-    use super::{ModelArg, RelationArg, model_arg, relation_arg, utc};
+    use super::{CatalogueArg, ModelArg, RelationArg, catalogue_arg, model_arg, relation_arg, utc};
     use axioval::ir::Discipline;
     use std::path::PathBuf;
 
@@ -1689,6 +1833,35 @@ mod tests {
         assert!(relation_arg("serves").is_err());
         assert!(relation_arg("=p.csv").is_err());
         assert!(relation_arg("serves=").is_err());
+    }
+
+    #[test]
+    fn a_catalogue_argument_names_a_catalogue_its_version_and_a_file() {
+        let parsed = |catalogue: &str, version: Option<&str>, path: &str, sheet: Option<&str>| {
+            CatalogueArg {
+                catalogue: catalogue.into(),
+                version: version.map(Into::into),
+                path: PathBuf::from(path),
+                sheet: sheet.map(Into::into),
+            }
+        };
+        assert_eq!(
+            catalogue_arg("materials=m.csv"),
+            Ok(parsed("materials", None, "m.csv", None))
+        );
+        assert_eq!(
+            catalogue_arg("materials@2026-1=dir/m.xlsx#Data"),
+            Ok(parsed(
+                "materials",
+                Some("2026-1"),
+                "dir/m.xlsx",
+                Some("Data")
+            ))
+        );
+        assert!(catalogue_arg("materials").is_err());
+        assert!(catalogue_arg("@2026=m.csv").is_err());
+        assert!(catalogue_arg("materials@=m.csv").is_err());
+        assert!(catalogue_arg("materials=").is_err());
     }
 
     fn parsed(path: &str, discipline: Option<&str>) -> ModelArg {

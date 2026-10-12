@@ -31,6 +31,23 @@ All notable changes are documented here. This project follows Semantic Versionin
   (`AlignmentElementsRequest`, `AlignmentElements`, `AlignmentElement`,
   `ElementEnd`) refuses by default; the CLI reads the IFC4X3 layouts' segments
   ([#337](https://github.com/axioval/engine/issues/337)).
+- **Expressions**: material and product catalogues are read as stated
+  values. A ruleset declares a catalogue's shape under `catalogues`
+  (`CatalogueDefinition`: a text `key` column and the file's columns, as
+  a table file declares them); the host supplies its entries at check
+  time, a CSV file or an xlsx sheet with the catalogue's version
+  (`ExecutionPlan::supply_catalogue`, `SuppliedCatalogue`, `check
+  --catalogue CATALOGUE[@VERSION]=FILE[#SHEET]`, recorded in the result's
+  `catalogue_files`). The expression node `catalogue` reads the `column`
+  value of the entry whose key equals its text `key` exactly, such as a
+  material's λ by its name, typed by the column's declaration and cited
+  as the catalogue's statement (`axioval:catalogue;id=…;version=…;
+  sha256=…#entry=…`), never the model's. An empty cell and a `null` key
+  are `null`; a key no entry has, and a catalogue given no entries, are
+  not evaluated, the reason naming the key, never defaulted
+  (`catalogue-not-supplied` in the CLI's integrity). The authoring
+  catalogue lists the node (schema 1.5.0)
+  ([#322](https://github.com/axioval/engine/issues/322)).
 - **Measured values**: `height_above_surface;surface=<objects>[;edge=top|bottom]`
   is the least vertical distance from an object's faces looking up (or
   down) to the nearest selected surface beneath them, over the whole

@@ -50,7 +50,7 @@ by its `kind`:
 | `literal`, `name`, `choice`, `expressionOperator`, `selectorOperator`, `flag`, `path`, `value` | a field, in its JSON form | the value itself |
 
 A `name` field offers the choices its `refers` names (property sets,
-parameters, tables, rules, classifications …); a `choice` its `options`;
+parameters, tables, catalogues, rules, classifications …); a `choice` its `options`;
 an operator field the operators of `expressionComparisons` or
 `selectorComparisons`; a `path` is the list of relationship steps a
 `related` selector writes; a `value` is a parameter value in the package

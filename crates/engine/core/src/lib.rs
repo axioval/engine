@@ -182,6 +182,12 @@ pub enum EngineError {
     /// registered no outcome refiner to select its objects.
     #[error("relation `{relation}`: {detail}")]
     InvalidRelation { relation: String, detail: String },
+    /// A catalogue the ruleset declares is malformed (its id, its key or
+    /// its columns), is declared twice with different definitions, or the
+    /// host supplied entries for one no ruleset declares, twice, or whose
+    /// rows its declaration refuses.
+    #[error("catalogue `{catalogue}`: {detail}")]
+    InvalidCatalogue { catalogue: String, detail: String },
 }
 
 pub use schema::ColumnKind;
@@ -828,6 +834,9 @@ pub struct ExecutionPlan {
     relations: Vec<schema::RelationDefinition>,
     /// The pairs the host supplied for its supplied relations, by id.
     supplied: BTreeMap<String, SuppliedPairs>,
+    /// The catalogues the rulesets declare, with the entries the host
+    /// supplied for them.
+    catalogues: Catalogues,
     /// The values the ruleset derives, by name.
     values: Arc<BTreeMap<String, schema::Expression>>,
     /// The types the ruleset declares for its expressions' reads.
@@ -866,6 +875,36 @@ impl ExecutionPlan {
     /// The pairs the host supplied for the supplied relation `id`, if any.
     pub fn supplied_pairs(&self, id: &str) -> Option<&SuppliedPairs> {
         self.supplied.get(id)
+    }
+    /// The catalogues the plan's expressions may read, by id.
+    pub fn catalogues(&self) -> Vec<&schema::CatalogueDefinition> {
+        self.catalogues.definitions().collect()
+    }
+    /// The entries the host supplied for the catalogue `id`, if any.
+    pub fn supplied_catalogue(&self, id: &str) -> Option<&SuppliedCatalogue> {
+        self.catalogues.supplied(id)
+    }
+    /// Supplies the entries of the catalogue `id` for this run. A catalogue
+    /// the host supplies no entries for answers no key: every object whose
+    /// expression reads it is not evaluated.
+    ///
+    /// # Errors
+    ///
+    /// [`EngineError::InvalidCatalogue`] when no ruleset declares `id`, its
+    /// entries were already supplied, its version is blank, or an entry
+    /// fills an undeclared column, holds a cell not of its column's kind,
+    /// names no key or a key another entry names.
+    pub fn supply_catalogue(
+        &mut self,
+        id: &str,
+        catalogue: SuppliedCatalogue,
+    ) -> Result<(), EngineError> {
+        self.catalogues
+            .supply(id, catalogue)
+            .map_err(|detail| EngineError::InvalidCatalogue {
+                catalogue: id.to_owned(),
+                detail,
+            })
     }
     /// Supplies the pairs of the relation `id`, declared `by: supplied`,
     /// for this run. A supplied relation the host supplies no pairs for
@@ -915,6 +954,7 @@ mod alignment;
 mod alignment_element;
 mod boundary_coverage;
 pub mod catalogue;
+mod catalogues;
 mod circulation;
 mod classifications;
 mod compartments;
@@ -983,6 +1023,7 @@ pub use boundary_coverage::{
     BoundaryCoverageServiceHandle, BoundaryOverlap, BoundaryPlacement, CoverageAreas,
     MeasuredBoundary, ShareInterval, SurfaceAreaInterval,
 };
+pub use catalogues::{CATALOGUE_LOCATOR_PREFIX, Catalogues, SuppliedCatalogue};
 pub use circulation::{
     CirculationContact, CirculationMap, CirculationNode, CirculationNodeKind, CirculationRequest,
 };
@@ -1597,6 +1638,9 @@ impl Runtime {
         let mut tables: Vec<ReportTable> = Vec::new();
         let mut not_evaluated = self.deferred(plan.deferred, &mut summaries);
         self.install_expressions(&mut services, &plan.values, &plan.types);
+        // The catalogues are the plan's: a host copy could state entries it
+        // never supplied through the plan.
+        services.replace(Arc::new(plan.catalogues.clone()));
         self.registry.install_measured(&mut services, project);
         // Measured values are answered through the host's resolver in
         // every run; classifications are derived first when the plan has

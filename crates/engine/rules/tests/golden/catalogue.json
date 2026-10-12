@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.4.0",
+  "schemaVersion": "1.5.0",
   "languages": [
     "en",
     "de"
@@ -115844,6 +115844,62 @@
         {
           "language": "de",
           "text": "Eine Spalte eines Tabellenparameters an einem Zeilen- und einem Spaltenschlüssel, jeweils genau zugeordnet oder linear zwischen den einschließenden Schlüsseln einer numerischen Schlüsselspalte interpoliert. Ein Rasterpunkt ohne Zeile wird nicht ausgewertet."
+        }
+      ]
+    },
+    {
+      "kind": "catalogue",
+      "category": "value",
+      "fields": [
+        {
+          "name": "catalogue",
+          "kind": {
+            "type": "name",
+            "refers": "catalogue"
+          },
+          "required": true
+        },
+        {
+          "name": "key",
+          "kind": {
+            "type": "expression",
+            "accepts": [
+              "text",
+              "enum"
+            ]
+          },
+          "required": true
+        },
+        {
+          "name": "column",
+          "kind": {
+            "type": "name",
+            "refers": "catalogueColumn"
+          },
+          "required": true
+        }
+      ],
+      "result": {
+        "type": "declared"
+      },
+      "label": [
+        {
+          "language": "en",
+          "text": "Catalogue value"
+        },
+        {
+          "language": "de",
+          "text": "Katalogwert"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "A column of the catalogue entry whose key equals the key exactly, such as a material's thermal conductivity by its name: a value the catalogue states, cited with its version and entry. An empty cell is no value; a key without an entry is not evaluated."
+        },
+        {
+          "language": "de",
+          "text": "Eine Spalte des Katalogeintrags, dessen Schlüssel dem Schlüssel genau entspricht, etwa die Wärmeleitfähigkeit eines Materials nach seinem Namen: ein Wert, den der Katalog angibt, belegt mit seiner Version und seinem Eintrag. Eine leere Zelle ist kein Wert; ein Schlüssel ohne Eintrag wird nicht ausgewertet."
         }
       ]
     },

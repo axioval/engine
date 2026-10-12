@@ -148,6 +148,46 @@
       ],
       "type": "object"
     },
+    "CatalogueDefinition": {
+      "additionalProperties": false,
+      "description": "A catalogue of material or product data that models leave out or name\nonly by reference, such as each material's thermal conductivity, read\nas values the catalogue states.\n\nThe ruleset declares only its shape: the text column `key` whose cells\nname the entries (a material name, a classification code or a product\nid) and every column the file holds, as a `tableFile` declares them\n(`id`, optional `header`, `kind`, a quantity's `unit`). The host\nsupplies the rows at check time, beside the model, as a CSV file or one\nsheet of an xlsx workbook, with the catalogue's version, so one rule\npackage serves every catalogue edition. The file is data, never code.\n\nAn expression reads an entry's value with a `catalogue` node: the\nentry whose key equals the node's `key` exactly. Its value is stated by\nthe catalogue, cited with the catalogue's id, version, file digest and\nentry, never by the model. An empty cell is a value the catalogue\nstates as absent (`null`); a key no entry has, and a catalogue the host\ndid not supply, leave the reading object not evaluated, never given a\ndefault.",
+      "properties": {
+        "columns": {
+          "description": "Every column of the catalogue's file, the key column included.",
+          "items": {
+            "$ref": "#/$defs/TableFileColumn"
+          },
+          "type": "array"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LocalizedText"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "key": {
+          "description": "The id of the `string` column whose cells name the entries; every\nentry names a distinct, non-blank key.",
+          "type": "string"
+        },
+        "name": {
+          "$ref": "#/$defs/LocalizedText"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "key",
+        "columns"
+      ],
+      "type": "object"
+    },
     "CategoryLevel": {
       "additionalProperties": false,
       "description": "One level of a rule's `categories`: the value of `property` (in\n`propertySet`, a declared concept or a reserved set) on the finding's\nsubject, or on every object `path` reaches from it (steps as a `related`\nselector's path).\n\nEach level heads the message in brackets, `[F90] [Office] ...`; several\nreached values join in one heading, and no value is `[-]`, so every\nlevel keeps its place. A value that cannot be read leaves the finding\nnot evaluated rather than filed under the wrong heading.",
@@ -685,6 +725,38 @@
             "rowKey",
             "columnKeyColumn",
             "columnKey",
+            "column"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The `column` value of the entry of the ruleset's catalogue\n`catalogue` whose key equals `key` exactly (a material name, a\nclassification code or a product id), as the catalogue states it:\ncited with its id, version and entry, never as the model's. An\nempty cell is `null`, and so is a `null` key; a key no entry has,\nand a catalogue the host did not supply, are not evaluated.",
+          "properties": {
+            "catalogue": {
+              "type": "string"
+            },
+            "column": {
+              "type": "string"
+            },
+            "key": {
+              "$ref": "#/$defs/Expression"
+            },
+            "kind": {
+              "const": "catalogue",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "catalogue",
+            "key",
             "column"
           ],
           "type": "object"
@@ -3929,6 +4001,13 @@
   "additionalProperties": false,
   "description": "Rule instances in folders, with their parameter values, applicability, classifications, groupings, relations and derived values.",
   "properties": {
+    "catalogues": {
+      "additionalProperties": {
+        "$ref": "#/$defs/CatalogueDefinition"
+      },
+      "description": "Catalogues of material or product data the host supplies at check\ntime, by id; see [`CatalogueDefinition`]. Omitted when empty.",
+      "type": "object"
+    },
     "classifications": {
       "additionalProperties": {
         "$ref": "#/$defs/ClassificationDefinition"

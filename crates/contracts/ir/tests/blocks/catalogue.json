@@ -1,0 +1,32 @@
+{
+  "expression": {
+    "kind": "catalogue",
+    "catalogue": "materials",
+    "key": {
+      "kind": "property",
+      "propertySet": "ex:material",
+      "property": "ex:name"
+    },
+    "column": "lambda",
+    "label": "thermal conductivity"
+  },
+  "blocks": {
+    "type": "expression.catalogue",
+    "label": "thermal conductivity",
+    "fields": {
+      "catalogue": "materials",
+      "column": "lambda"
+    },
+    "inputs": {
+      "key": {
+        "block": {
+          "type": "expression.property",
+          "fields": {
+            "property": "ex:name",
+            "propertySet": "ex:material"
+          }
+        }
+      }
+    }
+  }
+}

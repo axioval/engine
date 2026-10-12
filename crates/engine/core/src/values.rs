@@ -114,6 +114,7 @@ pub(crate) struct DerivedValues {
     bindings: Option<ConceptBindings>,
     budget: Option<Arc<crate::expression::EvaluationBudget>>,
     types: Option<Arc<crate::expression::DeclaredTypes>>,
+    catalogues: Option<Arc<crate::Catalogues>>,
     cache: Mutex<BTreeMap<(ObjectId, String), Computed>>,
 }
 
@@ -122,19 +123,24 @@ pub(crate) struct DerivedValues {
 pub(crate) struct ValueExpressions(pub(crate) Arc<BTreeMap<String, Expression>>);
 
 impl DerivedValues {
-    /// Values of `definitions`, binding concepts through `bindings` and
-    /// typed as `types` declares, with an empty cache.
+    /// Values of `definitions`, binding concepts through `bindings`,
+    /// typed as `types` declares and reading `catalogues`, with an empty
+    /// cache.
     pub(crate) fn new(
         definitions: Arc<BTreeMap<String, Expression>>,
         bindings: Option<ConceptBindings>,
         budget: Option<Arc<crate::expression::EvaluationBudget>>,
-        types: Option<Arc<crate::expression::DeclaredTypes>>,
+        (types, catalogues): (
+            Option<Arc<crate::expression::DeclaredTypes>>,
+            Option<Arc<crate::Catalogues>>,
+        ),
     ) -> Self {
         Self {
             definitions,
             bindings,
             budget,
             types,
+            catalogues,
             cache: Mutex::new(BTreeMap::new()),
         }
     }
@@ -306,6 +312,13 @@ impl ExpressionContext for ObjectReads<'_> {
 
     fn declared_types(&self) -> Option<&crate::expression::DeclaredTypes> {
         self.values.types.as_deref()
+    }
+
+    fn catalogue(&mut self, catalogue: &str, key: &str, column: &str) -> Leaf {
+        match &self.values.catalogues {
+            Some(catalogues) => catalogues.read(catalogue, key, column, &self.object.source),
+            None => Leaf::unreadable(format!("catalogue `{catalogue}` cannot be read here")),
+        }
     }
 
     fn derived(&mut self, name: &str) -> Leaf {

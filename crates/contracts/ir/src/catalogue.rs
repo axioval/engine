@@ -17,7 +17,7 @@ use crate::measured::{LocalizedText, en_de};
 /// A consumer reads any catalogue of its own major version: a minor
 /// version only adds entries or optional fields, a patch only changes
 /// texts. Removing or renaming anything raises the major version.
-pub const CATALOGUE_SCHEMA_VERSION: &str = "1.4.0";
+pub const CATALOGUE_SCHEMA_VERSION: &str = "1.5.0";
 
 /// A value type an expression field takes or a node yields.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -170,6 +170,10 @@ pub enum Refers {
     Derived,
     Table,
     TableColumn,
+    /// A catalogue the ruleset declares.
+    Catalogue,
+    /// A column of that catalogue.
+    CatalogueColumn,
     Rule,
     ObjectType,
     Classification,
@@ -567,6 +571,27 @@ pub const EXPRESSION_KINDS: &[NodeKind] = &[
              jeweils genau zugeordnet oder linear zwischen den einschließenden Schlüsseln einer \
              numerischen Schlüsselspalte interpoliert. Ein Rasterpunkt ohne Zeile wird nicht \
              ausgewertet.",
+        ),
+    },
+    NodeKind {
+        kind: "catalogue",
+        category: "value",
+        fields: &[
+            named("catalogue", Refers::Catalogue, true),
+            one("key", TEXTUAL),
+            named("column", Refers::CatalogueColumn, true),
+        ],
+        result: ResultRule::Declared,
+        label: &en_de("Catalogue value", "Katalogwert"),
+        help: &en_de(
+            "A column of the catalogue entry whose key equals the key exactly, such as a \
+             material's thermal conductivity by its name: a value the catalogue states, cited \
+             with its version and entry. An empty cell is no value; a key without an entry is \
+             not evaluated.",
+            "Eine Spalte des Katalogeintrags, dessen Schlüssel dem Schlüssel genau entspricht, \
+             etwa die Wärmeleitfähigkeit eines Materials nach seinem Namen: ein Wert, den der \
+             Katalog angibt, belegt mit seiner Version und seinem Eintrag. Eine leere Zelle ist \
+             kein Wert; ein Schlüssel ohne Eintrag wird nicht ausgewertet.",
         ),
     },
     NodeKind {
@@ -1882,6 +1907,7 @@ mod tests {
             E::Property { .. } => "property", E::Parameter { .. } => "parameter",
             E::Derived { .. } => "derived", E::Lookup { .. } => "lookup",
             E::Interpolate { .. } => "interpolate", E::Lookup2 { .. } => "lookup2",
+            E::Catalogue { .. } => "catalogue",
             E::Not { .. } => "not", E::And { .. } => "and", E::Or { .. } => "or",
             E::Implies { .. } => "implies", E::Xor { .. } => "xor",
             E::Compare { .. } => "compare", E::Between { .. } => "between",

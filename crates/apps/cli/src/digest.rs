@@ -65,6 +65,26 @@ pub struct CheckOutput {
     /// in argument order, so the run can be reproduced. Absent otherwise.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub relation_files: Vec<RelationFileRecord>,
+    /// The entries `check --catalogue` supplied to each catalogue, in
+    /// argument order, so the run can be reproduced. Absent otherwise.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub catalogue_files: Vec<CatalogueFileRecord>,
+}
+
+/// One file of entries supplied to a catalogue at check time.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CatalogueFileRecord {
+    /// The catalogue's id.
+    pub catalogue: String,
+    /// The catalogue's version, as the argument states it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    /// The file's name, with `#SHEET` for a workbook.
+    pub file: String,
+    /// The lowercase hex SHA-256 of the file's bytes.
+    pub sha256: String,
+    /// How many entries it lists.
+    pub entries: usize,
 }
 
 /// One file of pairs supplied to a relation at check time.
@@ -484,6 +504,7 @@ impl CheckOutput {
             ids: None,
             unmatched_topics: Vec::new(),
             relation_files: Vec::new(),
+            catalogue_files: Vec::new(),
         }
     }
 
@@ -512,6 +533,14 @@ impl CheckOutput {
     #[must_use]
     pub fn with_relation_files(mut self, files: Vec<RelationFileRecord>) -> Self {
         self.relation_files = files;
+        self
+    }
+
+    /// The same result recording the files of entries supplied to
+    /// catalogues.
+    #[must_use]
+    pub fn with_catalogue_files(mut self, files: Vec<CatalogueFileRecord>) -> Self {
+        self.catalogue_files = files;
         self
     }
 

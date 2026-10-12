@@ -452,6 +452,75 @@ table states one cell per row: a row key, a column key and the value.
   matched exactly that is an interval holding a row's key is not
   evaluated: it may or may not be that row's.
 
+## Catalogues
+
+Many requirements need material or product data that models leave out or
+name only by reference: a material's thermal conductivity λ, its density
+or building material class, a product's sound insulation. A ruleset
+declares such a catalogue's shape under `catalogues`, by id, and the host
+supplies its entries at check time, beside the model (`--catalogue` in
+[the CLI](./cli.md#catalogues-supplied-beside-the-model),
+`ExecutionPlan::supply_catalogue` in a host), so one rule package serves
+every catalogue edition and the data is never code:
+
+```json
+"catalogues": {
+  "materials": {
+    "id": "materials",
+    "name": {"default": "Materials", "translations": {}},
+    "key": "name",
+    "columns": [
+      {"id": "name", "header": "material", "kind": "string"},
+      {"id": "lambda", "kind": "quantity", "unit": "W/m·K"},
+      {"id": "density", "kind": "quantity", "unit": "kg/m³"}
+    ]
+  }
+}
+```
+
+`columns` declares every column of the file as a
+[table file](./capabilities.md#tables-from-data-files) does: its `id`, its
+`header` (the id when omitted), its `kind` and a quantity's `unit`. `key`
+names the `string` column whose cells name the entries: a material name, a
+classification code or a product id. The compiler refuses a key column that
+is not declared or not text, a column that states no value (`reference`,
+`textPattern`, `selector`), a unit it cannot read, an id holding `:`, `;`,
+`|`, `/`, `#`, `=` or whitespace, and two rulesets declaring one id
+differently (`EngineError::InvalidCatalogue`). The entries the host supplies
+are checked against the declaration: every cell of its column's kind, every
+entry naming a non-blank key, no key twice.
+
+A `catalogue` node reads one entry's value:
+
+```json
+{"kind": "catalogue", "catalogue": "materials", "column": "lambda",
+ "key": {"kind": "property", "propertySet": "axioval:material", "property": "Name"}}
+```
+
+- The entry is the one whose key equals the text `key` exactly; case and
+  spaces count. An author who wants another match states it in `key`
+  (`trim`, `lower`), never the engine by a guess.
+- Its value is the catalogue's statement, typed by the column's
+  declaration (`lambda` above is a quantity of W/(m·K), so comparing it
+  with a length fails compilation) and composable like any other: `d / λ`
+  is a thermal resistance, and a derived value may read a catalogue too.
+- It is never the model's: its evidence cites
+  `axioval:catalogue;id=<id>;version=<version>;sha256=<digest>#entry=<key>`
+  (the version the host stated, the SHA-256 of the file), and a finding
+  lists it as `catalogue materials[ex-clay-brick].lambda = …` beside the
+  model values it read.
+- An empty cell is a value the catalogue states as absent: `null`, never
+  not evaluated. So is a `null` key, where the model states no material:
+  no entry is named.
+- A key no entry has is not evaluated, the reason naming the catalogue,
+  its version and the key ("catalogue `materials` (version 2026-1) has no
+  entry whose `name` is `ex-mystery-board`"); so is every read of a
+  catalogue the host supplied no entries for. Neither is ever given a
+  default.
+- The type checker refuses a catalogue the ruleset does not declare, a
+  column it does not declare or its key column read as a value, and a key
+  that is not text.
+
 ## Paths
 
 Every not-evaluated outcome and type error names its subexpression by a

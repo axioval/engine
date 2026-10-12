@@ -98,5 +98,13 @@ CLI output and exit codes are public automation contracts. Parse packages fail c
   and a supplied relation given no file is the integrity warning
   `relation-pairs-not-supplied`; its rules are not evaluated, never run
   over an empty relation.
+- `check --catalogue CATALOGUE[@VERSION]=FILE[#SHEET]` (`catalogue_arg`,
+  `supply_catalogues`) is the same for a ruleset's catalogues:
+  `SuppliedCatalogue::read` with the argument's version, supplied right
+  after compiling, the same refusals with status 1, each file recorded in
+  the additive `catalogue_files` (`digest::CatalogueFileRecord`), and a
+  catalogue given no file the integrity warning `catalogue-not-supplied`
+  (locator `axioval:catalogue;id=<id>`); the objects reading it are not
+  evaluated, never defaulted.
 - `check --timings` prints each phase's time on stderr as it ends (`geometry/timings.rs`, `Stopwatch`; rules through `Runtime::with_rule_observer`) and never changes the result or status; `tests/check.rs` pins it. Envelope declarations (`IsExternal` of every meshed object) are read on the first envelope membership request (`LazyEnvelope`), never eagerly: a ruleset without an envelope rule resolves none (the same test).
 - `check --rule-status` records `Report::rules`; the summary lists them bounded by `--top` (rules that did not pass first) and never changes the exit status.

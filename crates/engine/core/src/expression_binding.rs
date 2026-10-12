@@ -4,15 +4,18 @@
 use std::collections::BTreeMap;
 
 use axioval_ir::contract::{
-    ColumnKind, Expression, ParameterDefinition, ParameterKind, ParameterValue, PropertyDefinition,
-    PropertyValueKind,
+    CatalogueDefinition, ColumnKind, Expression, ParameterDefinition, ParameterKind,
+    ParameterValue, PropertyDefinition, PropertyValueKind,
 };
 
 use axioval_ir::QuantityDimension;
 
 use crate::EngineError;
 use crate::concepts::ConceptCatalog;
-use crate::expression::{Type, TypeEnvironment, Unit, check, check_as, measured_type, parse_unit};
+use crate::expression::{
+    CatalogueTypes, Type, TypeEnvironment, Unit, catalogue_column, check, check_as, measured_type,
+    parse_unit,
+};
 
 /// The types an expression of one rule may read: the vocabulary's
 /// properties, measured values, and the rule's own parameters.
@@ -20,6 +23,7 @@ struct RuleEnvironment<'a> {
     concepts: &'a ConceptCatalog,
     properties: &'a BTreeMap<&'a str, &'a PropertyDefinition>,
     values: &'a BTreeMap<String, Type>,
+    catalogues: &'a BTreeMap<String, CatalogueTypes>,
     rule: &'a str,
     parameters: &'a BTreeMap<String, ParameterValue>,
     declared: &'a BTreeMap<String, ParameterDefinition>,
@@ -82,6 +86,39 @@ impl TypeEnvironment for RuleEnvironment<'_> {
             .ok_or_else(|| format!("table `{table}` has no column `{column}`"))?;
         Ok((columns, result))
     }
+
+    fn catalogue(&self, catalogue: &str, column: &str) -> Result<Type, String> {
+        catalogue_column(self.catalogues, catalogue, column)
+    }
+}
+
+/// The types of each catalogue's value columns, by catalogue id: the
+/// key column read as a value is the key itself, so it is not one.
+pub(crate) fn catalogue_types(
+    catalogues: &[CatalogueDefinition],
+) -> BTreeMap<String, CatalogueTypes> {
+    catalogues
+        .iter()
+        .map(|catalogue| {
+            let columns = catalogue
+                .columns
+                .iter()
+                .filter(|column| column.id != catalogue.key)
+                .filter_map(|column| {
+                    let found = match column.kind {
+                        ColumnKind::Quantity => Type::Number(
+                            parse_unit(column.unit.as_deref().unwrap_or_default())
+                                .ok()?
+                                .1,
+                        ),
+                        kind => column_kind_type(kind)?,
+                    };
+                    Some((column.id.clone(), found))
+                })
+                .collect();
+            (catalogue.id.clone(), columns)
+        })
+        .collect()
 }
 
 /// Checks that every rule parameter the measured name `name` names
@@ -253,6 +290,7 @@ pub(crate) fn check_rule_expressions(
         concepts: vocabulary.concepts,
         properties: vocabulary.properties,
         values: &vocabulary.values,
+        catalogues: &vocabulary.catalogues,
         rule,
         parameters,
         declared,
@@ -380,6 +418,7 @@ impl Vocabulary<'_> {
             })
             .collect();
         crate::expression::DeclaredTypes::new(properties, self.values.clone())
+            .with_catalogues(self.catalogues.clone())
     }
 }
 
@@ -389,6 +428,7 @@ pub(crate) struct Vocabulary<'a> {
     pub(crate) concepts: &'a ConceptCatalog,
     pub(crate) properties: &'a BTreeMap<&'a str, &'a PropertyDefinition>,
     pub(crate) values: BTreeMap<String, Type>,
+    pub(crate) catalogues: BTreeMap<String, CatalogueTypes>,
 }
 
 /// Checks a ruleset's derived values in dependency order, then every
@@ -397,9 +437,11 @@ pub(crate) struct Vocabulary<'a> {
 pub(crate) fn check_values<'a>(
     concepts: &'a ConceptCatalog,
     properties: &'a BTreeMap<&'a str, &'a PropertyDefinition>,
+    catalogues: &[CatalogueDefinition],
     ruleset: &axioval_ir::RuleSetPackage,
 ) -> Result<(Vocabulary<'a>, BTreeMap<String, Expression>), EngineError> {
     let values = &ruleset.values;
+    let catalogues = catalogue_types(catalogues);
     let mut types = BTreeMap::new();
     let none = BTreeMap::new();
     let undeclared = BTreeMap::new();
@@ -422,6 +464,7 @@ pub(crate) fn check_values<'a>(
             concepts,
             properties,
             values: &types,
+            catalogues: &catalogues,
             rule: &name,
             parameters: &none,
             declared: &undeclared,
@@ -438,6 +481,7 @@ pub(crate) fn check_values<'a>(
         concepts,
         properties,
         values: types,
+        catalogues,
     };
     check_ruleset_selectors(&vocabulary, ruleset)?;
     Ok((vocabulary, expressions))
@@ -503,6 +547,7 @@ pub(crate) fn check_selector(
         concepts: vocabulary.concepts,
         properties: vocabulary.properties,
         values: &vocabulary.values,
+        catalogues: &vocabulary.catalogues,
         rule: owner,
         parameters: &none,
         declared: &undeclared,

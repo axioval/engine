@@ -474,9 +474,12 @@ pub(crate) fn install(
         services
             .get::<Arc<crate::expression::EvaluationBudget>>()
             .cloned(),
-        services
-            .get::<Arc<crate::expression::DeclaredTypes>>()
-            .cloned(),
+        (
+            services
+                .get::<Arc<crate::expression::DeclaredTypes>>()
+                .cloned(),
+            services.get::<Arc<crate::Catalogues>>().cloned(),
+        ),
     ));
     let measures = Measures::of(services, host, project);
     services.replace(crate::MeasuredValues::sharing(&measures));

@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use axioval_engine::expression::{
     EvaluationBudget, ExpressionContext, Interval, Leaf, Member, PairRead, Ranked, RuleRead,
-    Sequenced, Unit, Value, derived_value, evaluate, evaluate_untraced,
+    Sequenced, Unit, Value, catalogue_value, derived_value, evaluate, evaluate_untraced,
 };
 use axioval_engine::{
     MeasuredMember, MeasuredRead, Measurement, MemberValue, ObjectVerdict, RuleContext,
@@ -1458,6 +1458,22 @@ impl ExpressionContext for ObjectLeaves<'_> {
             return Leaf::unreadable(format!("the rule has no table `{table}`"));
         };
         read(rows)
+    }
+
+    fn catalogue(&mut self, catalogue: &str, key: &str, column: &str) -> Leaf {
+        let leaf = catalogue_value(
+            self.context.services,
+            catalogue,
+            key,
+            column,
+            &self.object.id.source,
+        );
+        if leaf.value.is_err() {
+            self.reasons
+                .borrow_mut()
+                .push(NotEvaluatedReason::IncompleteEvidence);
+        }
+        leaf
     }
 }
 

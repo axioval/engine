@@ -363,6 +363,17 @@ pub enum Source {
         /// The column read.
         column: String,
     },
+    /// A value a catalogue states for one of its entries, never the
+    /// model's: its evidence cites the catalogue, its version and the
+    /// entry.
+    Catalogue {
+        /// The catalogue.
+        catalogue: String,
+        /// The entry's key, as the expression computed it.
+        key: String,
+        /// The column read.
+        column: String,
+    },
 }
 
 /// A leaf's answer: its value, or why it has none, and the evidence it
@@ -548,6 +559,15 @@ pub trait ExpressionContext {
     fn table(&mut self, table: &str, read: &mut dyn FnMut(&[TableRow]) -> Leaf) -> Leaf {
         let _ = read;
         Leaf::unreadable(format!("table `{table}` cannot be read here"))
+    }
+
+    /// The `column` value of the entry of the catalogue `catalogue` whose
+    /// key is `key`, as the catalogue states it, cited with the catalogue,
+    /// its version and the entry: `null` for an empty cell, unreadable
+    /// (naming the key) where no entry has it.
+    fn catalogue(&mut self, catalogue: &str, key: &str, column: &str) -> Leaf {
+        let _ = (key, column);
+        Leaf::unreadable(format!("catalogue `{catalogue}` cannot be read here"))
     }
 
     /// What the rule `rule` of the ruleset concluded about the object in
@@ -997,6 +1017,35 @@ impl Evaluator<'_> {
                     },
                 ];
                 self.read_table(expression, path, table, &axes, column, *clamp)
+            }
+            Expression::Catalogue {
+                catalogue,
+                key,
+                column,
+                ..
+            } => {
+                let key = match self.eval(key, &child("key"))? {
+                    // No key is stated, so no entry is named.
+                    Value::Null => return Ok(Value::Null),
+                    Value::Text(key) | Value::Enum(key) => key,
+                    other => {
+                        return Err(here(Reason::Mismatch(format!(
+                            "a catalogue key is text, not {}",
+                            other.kind()
+                        ))));
+                    }
+                };
+                let leaf = self.context.catalogue(catalogue, &key, column);
+                self.read(
+                    expression,
+                    path,
+                    Source::Catalogue {
+                        catalogue: catalogue.clone(),
+                        key,
+                        column: column.clone(),
+                    },
+                    leaf,
+                )
             }
             Expression::Not { operand, .. } => {
                 let truth = self.truth(operand, &child("operand"))?;

@@ -273,6 +273,44 @@ pub struct RuleSetPackage {
     /// see [`ValueDefinition`]. Omitted when empty.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub values: BTreeMap<String, ValueDefinition>,
+    /// Catalogues of material or product data the host supplies at check
+    /// time, by id; see [`CatalogueDefinition`]. Omitted when empty.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub catalogues: BTreeMap<String, CatalogueDefinition>,
+}
+
+/// A catalogue of material or product data that models leave out or name
+/// only by reference, such as each material's thermal conductivity, read
+/// as values the catalogue states.
+///
+/// The ruleset declares only its shape: the text column `key` whose cells
+/// name the entries (a material name, a classification code or a product
+/// id) and every column the file holds, as a `tableFile` declares them
+/// (`id`, optional `header`, `kind`, a quantity's `unit`). The host
+/// supplies the rows at check time, beside the model, as a CSV file or one
+/// sheet of an xlsx workbook, with the catalogue's version, so one rule
+/// package serves every catalogue edition. The file is data, never code.
+///
+/// An expression reads an entry's value with a `catalogue` node: the
+/// entry whose key equals the node's `key` exactly. Its value is stated by
+/// the catalogue, cited with the catalogue's id, version, file digest and
+/// entry, never by the model. An empty cell is a value the catalogue
+/// states as absent (`null`); a key no entry has, and a catalogue the host
+/// did not supply, leave the reading object not evaluated, never given a
+/// default.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CatalogueDefinition {
+    pub id: String,
+    pub name: LocalizedText,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<LocalizedText>,
+    /// The id of the `string` column whose cells name the entries; every
+    /// entry names a distinct, non-blank key.
+    pub key: String,
+    /// Every column of the catalogue's file, the key column included.
+    pub columns: Vec<TableFileColumn>,
 }
 
 /// A value the ruleset names once and derives for every object from an

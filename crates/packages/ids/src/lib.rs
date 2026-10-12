@@ -684,6 +684,7 @@ fn translate_parts(
             groupings: BTreeMap::new(),
             relations: BTreeMap::new(),
             values: BTreeMap::new(),
+            catalogues: BTreeMap::new(),
         },
         specifications: outcomes,
         warnings: Vec::new(),

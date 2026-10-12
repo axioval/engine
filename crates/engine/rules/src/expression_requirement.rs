@@ -272,6 +272,12 @@ fn read_values(evaluation: &Evaluation) -> String {
             axioval_engine::expression::Source::Lookup { table, column } => {
                 format!("{table}.{column}")
             }
+            // A catalogue's statement, never the model's, by its entry.
+            axioval_engine::expression::Source::Catalogue {
+                catalogue,
+                key,
+                column,
+            } => format!("catalogue {catalogue}[{key}].{column}"),
             // Its members' values are cited, not listed; a value read within
             // a pair is shown by the pair's.
             axioval_engine::expression::Source::Aggregate(_)

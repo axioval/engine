@@ -130,6 +130,19 @@ pub enum Expression {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         label: Option<String>,
     },
+    /// The `column` value of the entry of the ruleset's catalogue
+    /// `catalogue` whose key equals `key` exactly (a material name, a
+    /// classification code or a product id), as the catalogue states it:
+    /// cited with its id, version and entry, never as the model's. An
+    /// empty cell is `null`, and so is a `null` key; a key no entry has,
+    /// and a catalogue the host did not supply, are not evaluated.
+    Catalogue {
+        catalogue: String,
+        key: Box<Expression>,
+        column: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        label: Option<String>,
+    },
     Not {
         operand: Box<Expression>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -679,7 +692,7 @@ pub enum ExpressionError {
 
 impl Expression {
     /// Every node `kind`, in declaration order.
-    pub const KINDS: [&'static str; 54] = [
+    pub const KINDS: [&'static str; 55] = [
         "literal",
         "null",
         "property",
@@ -688,6 +701,7 @@ impl Expression {
         "lookup",
         "interpolate",
         "lookup2",
+        "catalogue",
         "not",
         "and",
         "or",
@@ -748,6 +762,7 @@ impl Expression {
             Self::Lookup { .. } => "lookup",
             Self::Interpolate { .. } => "interpolate",
             Self::Lookup2 { .. } => "lookup2",
+            Self::Catalogue { .. } => "catalogue",
             Self::Not { .. } => "not",
             Self::And { .. } => "and",
             Self::Or { .. } => "or",
@@ -809,6 +824,7 @@ impl Expression {
             | Self::Lookup { label, .. }
             | Self::Interpolate { label, .. }
             | Self::Lookup2 { label, .. }
+            | Self::Catalogue { label, .. }
             | Self::Not { label, .. }
             | Self::And { label, .. }
             | Self::Or { label, .. }
@@ -873,7 +889,7 @@ impl Expression {
             | Self::FindingCount { .. }
             | Self::Deviation { .. } => Vec::new(),
             Self::Lookup { keys, .. } => keys.values().collect(),
-            Self::Interpolate { key, .. } => vec![key],
+            Self::Interpolate { key, .. } | Self::Catalogue { key, .. } => vec![key],
             Self::Lookup2 {
                 row_key,
                 column_key,
@@ -1034,7 +1050,9 @@ impl Expression {
                 }
             }
             Self::Lookup { keys, .. } => keys.values_mut().for_each(|key| key.rename_rules(rename)),
-            Self::Interpolate { key, .. } => key.rename_rules(rename),
+            Self::Interpolate { key, .. } | Self::Catalogue { key, .. } => {
+                key.rename_rules(rename);
+            }
             Self::Lookup2 {
                 row_key,
                 column_key,
@@ -1303,6 +1321,12 @@ impl Expression {
                 for key in keys.keys() {
                     blank(kind, "key column", key)?;
                 }
+            }
+            Self::Catalogue {
+                catalogue, column, ..
+            } => {
+                blank(kind, "catalogue", catalogue)?;
+                blank(kind, "column", column)?;
             }
             Self::Interpolate { .. } | Self::Lookup2 { .. } => {
                 for (field, name) in self.table_names() {

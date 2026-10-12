@@ -62,7 +62,7 @@ axioval check --model building.ifc[:DISCIPLINE] [--model other.ifc[:DISCIPLINE] 
   [--discipline-map FIELD:PATTERN=DISCIPLINE ...] \
   (--definitions definitions.json --ruleset ruleset.json [--ruleset other.json ...] \
    | --ids rules.ids [--ids-filter selector.json]) \
-  [--relations RELATION=FILE[#SHEET] ...] \
+  [--relations RELATION=FILE[#SHEET] ...] [--catalogue CATALOGUE[@VERSION]=FILE[#SHEET] ...] \
   [--geometry [--no-exact-boundaries]] [--locate storeys|containers|geometry] \
   [--rule-status] [--timings] [--report result.json] \
   [--decisions decisions.json | --decisions-from reviewed.bcfzip] \
@@ -171,6 +171,39 @@ run can be reproduced; every pair's evidence cites the same digest:
 ```json
 "relation_files": [
   { "relation": "serves", "file": "pairs.csv", "sha256": "9f2c…", "pairs": 42 }
+]
+```
+
+### Catalogues supplied beside the model
+
+A ruleset may declare a [catalogue](./expressions.md#catalogues) of
+material or product data whose entries expressions join to objects by a
+key, such as each material's thermal conductivity by its name.
+`--catalogue materials@2026-1=materials.csv` supplies its entries for this
+check: a CSV file, or one sheet of an xlsx workbook
+(`--catalogue materials=materials.xlsx#Data`), read by the columns the
+catalogue declares, as a
+[table file](./capabilities.md#tables-from-data-files) is, with the
+catalogue's version after an optional `@`. Repeat it for several
+catalogues. The catalogue id ends at the first `@` or `=`.
+
+Before any model is read, the check fails with status 1, writing nothing,
+when a file names a catalogue no ruleset declares or one already given a
+file, when the version is blank, or when the file cannot be read, is larger
+than 10 MB, or its header or entries are refused (an undeclared or missing
+column, a cell not of its column's kind, an entry naming no key or a key
+another entry names). A catalogue given no file answers no key: every
+object whose expression reads it is not evaluated, and `integrity` lists it
+as the warning `catalogue-not-supplied`.
+
+Every value read cites the catalogue, the version and the entry (see
+[Catalogues](./expressions.md#catalogues)), and the result's additive
+`catalogue_files` records each file supplied:
+
+```json
+"catalogue_files": [
+  { "catalogue": "materials", "version": "2026-1", "file": "materials.csv",
+    "sha256": "4be1…", "entries": 3 }
 ]
 ```
 
@@ -333,6 +366,9 @@ supplied pair of a ruleset's
 model does not hold, or several, and as `relation-pairs-not-supplied`
 warnings every supplied relation given no `--relations` file; the rules
 following them are not evaluated, and the exit status follows from them.
+As `catalogue-not-supplied` warnings it lists every
+[catalogue](./expressions.md#catalogues) given no `--catalogue` file; the
+objects whose expressions read it are not evaluated.
 With `--geometry` it lists, as `shape.no-representation` warnings, every
 physical product with no shape representation and no parts, and as
 `shape.self-intersecting-face` warnings every product unmeasured for a face

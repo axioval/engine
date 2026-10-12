@@ -456,6 +456,13 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **Geometry**: moved to `axiolid-mesh-compile` 0.3.22 and through it
+  `axiolid-triangulate` 0.3.4, which covers the exact convex hull
+  (axiolid/kernel#299) and merges coincident input points instead of
+  leaving zero-area triangles (#300); triangles come in a different,
+  still deterministic order. `axiolid-evaluate` 0.3.12, `axiolid-curve`
+  0.3.8, `axiolid-model` 0.3.11 and `axiolid-reference` 0.3.8 come along
+  in the lockfile.
 - **Geometry**: moved to `axiolid-overlay` 0.3.13 (exact edge contact),
   `axiolid-mesh-compile` 0.3.21 (a stretched instance's deviation within
   budget) and through it `axiolid-triangulate` 0.3.3, which triangulates in

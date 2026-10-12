@@ -142,8 +142,11 @@ axiolid-evaluate = "0.3.11"
 # exact and its mesh certified; 0.3.20 snaps oriented stations onto a seam
 # within their window (#294); 0.3.21 keeps a stretched instance's deviation
 # bound within the requested budget (#258). Its axiolid-triangulate 0.3.3
-# updates adjacency locally per flip (#268), with identical output.
-axiolid-mesh-compile = "0.3.21"
+# updates adjacency locally per flip (#268), with identical output; 0.3.22
+# brings axiolid-triangulate 0.3.4, which covers the exact convex hull
+# (#299) and merges coincident input points (#300), in a different but
+# deterministic triangle order.
+axiolid-mesh-compile = "0.3.22"
 axiolid-exact-compile-contract = "0.3.1"
 # 0.3.3 adds `MeshClosure::OpenSolid` (#265).
 axiolid-mesh-compile-contract = "0.3.3"

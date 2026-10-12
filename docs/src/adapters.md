@@ -877,7 +877,16 @@ of a closed mesh, vertical sides included, and is refused on an open one.
 A piece's area sums its triangles', boxed by their rounding; a tessellated
 piece's widens by `2·P·d + π·d²` for its triangles' summed perimeter `P`
 and its upper bound by the secant of its greatest lean. Pieces are exact
-only for a mesh that is the exact shape. Thicknesses
+only for a mesh that is the exact shape. The edges where the pieces meet
+answer `measure_face_edges`: every triangle edge between two pieces of a
+closed mesh's boundary, and an open mesh's border, merged into straight
+lines between the same two pieces where consecutive segments run straight
+on without rounding. Each side keeps its triangle's normal box (on an open
+mesh turned to look up, and an open mesh with a vertical triangle is
+refused) and the side of the line its face lies on, read from the
+triangle's winding, never from a rounded sign; an edge of a closed mesh not
+shared by exactly two triangles refuses. A tessellation widens the line's
+ends by its chord deviation. Thicknesses
 (`measure_thickness`) are measured on a closed mesh between the triangles
 looking along the direction within 60° and those looking back, at every
 projected corner and every crossing of their projected edges, where the

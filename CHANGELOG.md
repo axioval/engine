@@ -176,6 +176,20 @@ All notable changes are documented here. This project follows Semantic Versionin
   gap between them undecided. Along an alignment, `pairs` by the `station`
   measured value gives the gaps as station differences
   ([#342](https://github.com/axioval/engine/issues/342)).
+- **Roofs**: the measured member list `roof_features` lists the lines
+  where a roof body's upper faces meet or end, each a `ridge`, `hip`,
+  `valley`, `eaves`, `verge` or `abutment`, classified from the faces'
+  normals, the convexity between them and whether the line is level,
+  three-valued over sound intervals, with its `length` and the heights of
+  its lowest and highest point (`low`, `high`) above the source's zero or
+  the level `level_path` reaches; `feature` lists one class. A line two
+  faces meet at within `tolerance` (default 2°) of flat, or a level line
+  along a face within it of level, is undecided, a possible member of
+  every class it might have, never guessed. The vertical-extent service
+  gains `measure_face_edges` (`FaceEdges`, `FaceEdge`, `EdgeSide`,
+  `PointBox`), defaulted to refusing, which the Axiolid adapter answers
+  from the pieces it tells apart, merging collinear segments
+  ([#329](https://github.com/axioval/engine/issues/329)).
 
 ### Changed
 

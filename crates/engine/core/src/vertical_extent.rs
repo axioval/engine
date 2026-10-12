@@ -616,6 +616,199 @@ impl FacePieces {
     }
 }
 
+/// A box sure to hold a point in world coordinates, in metres: each
+/// coordinate lies in `[lower[i], upper[i]]`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PointBox {
+    lower: [f64; 3],
+    upper: [f64; 3],
+}
+
+impl PointBox {
+    /// The box `[lower, upper]`; every bound finite and ordered.
+    ///
+    /// # Errors
+    ///
+    /// [`VerticalExtentError::InvalidMeasurement`] for a bound that is not
+    /// finite or not ordered.
+    pub fn try_new(lower: [f64; 3], upper: [f64; 3]) -> Result<Self, VerticalExtentError> {
+        let valid = (0..3).all(|axis| {
+            lower[axis].is_finite() && upper[axis].is_finite() && lower[axis] <= upper[axis]
+        });
+        if !valid {
+            return Err(VerticalExtentError::InvalidMeasurement);
+        }
+        Ok(Self { lower, upper })
+    }
+
+    /// The exactly known point `point`.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::try_new`].
+    pub fn exact(point: [f64; 3]) -> Result<Self, VerticalExtentError> {
+        Self::try_new(point, point)
+    }
+
+    /// The least value of each coordinate.
+    #[must_use]
+    pub fn lower(&self) -> [f64; 3] {
+        self.lower
+    }
+
+    /// The greatest value of each coordinate.
+    #[must_use]
+    pub fn upper(&self) -> [f64; 3] {
+        self.upper
+    }
+
+    /// Whether the point is known exactly.
+    #[must_use]
+    #[allow(clippy::float_cmp)]
+    pub fn is_exact(&self) -> bool {
+        self.lower == self.upper
+    }
+}
+
+/// One face beside a [`FaceEdge`]: the normal box of the face where it
+/// meets the edge, pointing out of a closed body (up, on an open surface),
+/// and on which side of the edge the face lies. `left` states that the
+/// face lies where the cross product of its normal and the edge's
+/// direction (from its start to its end) points; otherwise it lies the
+/// other way.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct EdgeSide {
+    normal: FaceNormal,
+    left: bool,
+}
+
+impl EdgeSide {
+    /// A face of normal `normal` lying `left` of the edge, as
+    /// [`EdgeSide`] reads it.
+    #[must_use]
+    pub fn new(normal: FaceNormal, left: bool) -> Self {
+        Self { normal, left }
+    }
+
+    /// The normal box of the face beside the edge.
+    #[must_use]
+    pub fn normal(&self) -> FaceNormal {
+        self.normal
+    }
+
+    /// Whether the face lies where its normal crossed with the edge's
+    /// direction points.
+    #[must_use]
+    pub fn left(&self) -> bool {
+        self.left
+    }
+}
+
+/// One straight line where pieces of a body's boundary meet: its two ends
+/// and the faces beside it. A closed body's edge has two sides; an open
+/// surface's border has one.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FaceEdge {
+    start: PointBox,
+    end: PointBox,
+    sides: Vec<EdgeSide>,
+}
+
+impl FaceEdge {
+    /// The line from `start` to `end` between the faces `sides`, one or
+    /// two.
+    ///
+    /// # Errors
+    ///
+    /// [`VerticalExtentError::InvalidMeasurement`] for no side or more than
+    /// two.
+    pub fn try_new(
+        start: PointBox,
+        end: PointBox,
+        sides: Vec<EdgeSide>,
+    ) -> Result<Self, VerticalExtentError> {
+        if sides.is_empty() || sides.len() > 2 {
+            return Err(VerticalExtentError::InvalidMeasurement);
+        }
+        Ok(Self { start, end, sides })
+    }
+
+    /// Where the line starts.
+    #[must_use]
+    pub fn start(&self) -> PointBox {
+        self.start
+    }
+
+    /// Where the line ends.
+    #[must_use]
+    pub fn end(&self) -> PointBox {
+        self.end
+    }
+
+    /// The faces beside the line: two on a closed body, one on an open
+    /// surface's border.
+    #[must_use]
+    pub fn sides(&self) -> &[EdgeSide] {
+        &self.sides
+    }
+}
+
+/// The edges of one body's boundary where its planar or smooth pieces
+/// meet, as [`FacePieces`] tells the pieces apart, merged into straight
+/// lines, in the service's stable order, with evidence.
+///
+/// The evidence is exact only where the service states that the edges are
+/// of the object's exact shape, so every box holds nothing but rounding; a
+/// tessellation is never exact.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FaceEdges {
+    object: ObjectId,
+    edges: Vec<FaceEdge>,
+    evidence: Evidence,
+}
+
+impl FaceEdges {
+    /// The edges of `object`'s boundary; none for a body of one smooth
+    /// piece.
+    ///
+    /// # Errors
+    ///
+    /// [`VerticalExtentError::InexactEvidence`] for evidence without a
+    /// locator.
+    pub fn try_new(
+        object: ObjectId,
+        edges: Vec<FaceEdge>,
+        evidence: Evidence,
+    ) -> Result<Self, VerticalExtentError> {
+        if evidence.locator.trim().is_empty() {
+            return Err(VerticalExtentError::InexactEvidence);
+        }
+        Ok(Self {
+            object,
+            edges,
+            evidence,
+        })
+    }
+
+    /// The measured object.
+    #[must_use]
+    pub fn object(&self) -> &ObjectId {
+        &self.object
+    }
+
+    /// Every edge, in the service's order.
+    #[must_use]
+    pub fn edges(&self) -> &[FaceEdge] {
+        &self.edges
+    }
+
+    /// The source and exactness of the measurement.
+    #[must_use]
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+}
+
 /// How thick a body is along a direction: every local thickness, the
 /// length inside the body of a line along the direction, lies in `[lower,
 /// upper]`. A slab of constant thickness is a point; a tapered or sloped
@@ -765,6 +958,21 @@ pub trait VerticalExtentService: Send + Sync + 'static {
             "this service does not measure the pieces of faces".into(),
         ))
     }
+
+    /// The edges where the pieces of `object`'s boundary meet, merged into
+    /// straight lines: on a closed body between pieces as
+    /// [`FacePieceSet::Boundary`] tells them apart, normals pointing out;
+    /// on an open surface also its border, normals pointing up.
+    ///
+    /// A service that does not tell a body's edges apart refuses; it never
+    /// answers with the edges of every triangle.
+    // gate: measures length, plane_angle
+    fn measure_face_edges(&self, object: &ObjectId) -> Result<FaceEdges, VerticalExtentError> {
+        let _ = object;
+        Err(VerticalExtentError::Unavailable(
+            "this service does not measure the edges of faces".into(),
+        ))
+    }
 }
 
 /// Registry handle for a [`VerticalExtentService`].
@@ -846,6 +1054,16 @@ impl VerticalExtentServiceHandle {
             return Err(VerticalExtentError::InvalidMeasurement);
         }
         Ok(pieces)
+    }
+
+    /// The edges of `object`'s boundary. Edges naming another object
+    /// answer a different question and are refused.
+    pub fn measure_face_edges(&self, object: &ObjectId) -> Result<FaceEdges, VerticalExtentError> {
+        let edges = self.0.measure_face_edges(object)?;
+        if edges.object() != object {
+            return Err(VerticalExtentError::InvalidMeasurement);
+        }
+        Ok(edges)
     }
 }
 

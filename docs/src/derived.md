@@ -1221,6 +1221,7 @@ sites that cite a value exact:
 | `rectangle_side`, `obstruction_count`, `axes_within` | the rectangles and every obstacle measured are exact | the undecided obstacles |
 | `band_uncovered_area`, `parallel_pairs` | every pair and area is exact and every member was read | the possible bands |
 | `line_spacing` (members) | the object's and the members' directional extents are exact | rounding |
+| `roof_features` (members) | the body's edges (and a level's placement) are exact | rounding |
 | `level_rise`, `prevailing_rise`, `prevailing_elevation` | the heights' or extent's evidence is exact (points decide the prevailing value, as `level-spacing` decides it) | rounding |
 | `shelf_length`, `shelf_clear_height` | always: the linear-quantity service refuses inexact evidence | nothing |
 | `levels_above`, `levels_below`, `storey_end` | always: counted over stated elevations, which the property service answers exactly | nothing |
@@ -1401,6 +1402,7 @@ and declare their parameters and typed fields:
 | `parking_bay` (every `parking-bay` parameter under its own name, `selection`) | what `parking-bay` judges of a bay, in its order | `counting`, `count`, `allowed`, `found_words`, `open_words`, `related`; `sized`, `size` (undecided for why it cannot be measured), `measured`, `low`, `high`, `suffix`, `doubtful`, `applies_why`, `later`; `judged`, `found`, `message` |
 | `parallel_pairs` (`members`, `member_path`, `angle_tolerance`, `reach`) | the parallel pairs of members the object reaches, as `wall-spacing` pairs them | `distance` |
 | `line_spacing` (`members`, `member_path`, `direction`, `gap`) | the members the object reaches along a straight line through it, ordered by station ([Spacing along a line](#spacing-along-a-line)) | `member`, `what`, `station`, `from`, `to`, `gap` (`null` on the first), `start_gap`, `end_gap` (`null` but on the first and the last), `first`, `last` |
+| `roof_features` (`feature`, `tolerance`, `level_path`) | the lines where a roof body's upper faces meet or end, classified ([Roof feature lines](#roof-feature-lines)) | `feature` (undecided where it cannot be told), `what`, `length`, `low`, `high` |
 | `swing_spaces` (`path`, `kinds`) | the spaces a door opens onto, probed as `door-swing` probes them | `into`, `away` |
 | `connected_spaces` (`host_path`, `host_selector`, `external_property`, `space_path`, `space_selector`) | one item: an element's host walls and their exposure, how many spaces it relates to against how many the exposure needs, and whether the derived adjacency places them on the faces it needs, as `opening-spaces` reads them | `relates`, `count`, `possible`, `expected`, `known`, `sides`, `placed`, `wall`, `hosts`, `requirement`, `related` |
 | `zone_checks` (every `opening-zone` parameter by its own name, `openings`) | what `opening-zone` checks of an opening in each host its path reaches, in its order, host by host: the placement, the allowed zone it misses least, each row of `dimensions`, each requirement on the supports, and the nearest other opening closer than `opening_spacing` | `check`, `placed`, `host`, `inside`, `outside`, `end`, `edge`, `bottom`, `top`, `far_open`, `zone`, `needed`, `distance`, `minimum`, `maximum`, `slack`, `words`, `required`, `label`, `open`, `fails`, `message`, `spacing`, `related`, `reason` and the words findings show |
@@ -1606,6 +1608,62 @@ whose extent cannot be measured, or a path the source cannot answer,
 refuses the list. Along a curved alignment, read the `station` measured
 value of each member ([Alignments](#alignments)) as the `by` of a
 `pairs` instead; its gaps are station differences between centres.
+
+### Roof feature lines
+
+`roof_features[;feature=ridge|hip|valley|eaves|verge|abutment][;tolerance=<degrees>][;level_path=<steps>]`
+lists the lines where a roof body's upper faces meet each other or end,
+as the vertical-extent service's `measure_face_edges` gives them (the
+edges between the body's planar or smooth pieces, merged into straight
+lines), each classified from the faces beside it. A face is an upper face
+where its normal leans less than `90°` less `tolerance` (default 2°) from
+the vertical; a steeper one is a wall.
+
+| Faces beside the line | Line | Class |
+| --- | --- | --- |
+| two upper faces, convex | level | `ridge` |
+| two upper faces, convex | sloped | `hip` |
+| two upper faces, concave | either | `valley` |
+| an upper face and a wall, concave (a wall or a dormer's cheek rising from the roof) | either | `abutment` |
+| an upper face and a wall or the underside, convex, or an open surface's border | sloped | `verge` |
+| the same | level, the face rising away from it | `eaves` |
+| the same | level, the face falling away from it (a mono-pitch roof's top) | `ridge` |
+| no upper face | | no roof feature, not listed |
+
+A line is level where it leans no more than `tolerance` from the
+horizontal. Each predicate (upper face, convex, level, the face's run
+away from the line) is decided by sound interval arithmetic over the
+service's normal and end boxes, three-valued, and a line is classified
+only where every assignment the undecided ones allow gives one class.
+Two faces meeting within `tolerance` of flat, and a level line along a
+face within `tolerance` of level (a flat roof's edge), are never
+classified: such a line is listed with its `feature` undecided and the
+reason, a possible member of every list it might belong to, so an
+aggregate over it is not evaluated, never passed. A tessellation's boxes
+widen, so its lines are classified only where the widened boxes still
+decide them, and its values are never exact.
+
+Each line states its `length` and the heights of its lowest and highest
+point, `low` and `high`: above the source's zero, or with `level_path`
+above the elevation of the level that path reaches (its placement, stated
+exactly; a path reaching no level or levels at different elevations
+refuses the list). `what` names the line by its class and ends. A ridge
+height limit of 9 m above the ground floor:
+
+```json
+{"kind": "compare", "operator": "lessThanOrEquals",
+ "left": {"kind": "aggregate", "function": "max",
+          "over": {"kind": "measured", "name": "roof_features;feature=ridge;level_path=IfcRelContainedInSpatialStructure:backward"},
+          "value": {"kind": "property", "propertySet": "axioval:member", "property": "high"}},
+ "right": {"kind": "literal", "value": {"type": "quantity", "value": 9.0, "unit": "m"}}}
+```
+
+The eaves height is `min` of `low` over `feature=eaves`. A gable roof
+with a dormer lists its ridge, its eaves, its four verges and the
+dormer's ridge, eaves, verges, two valleys and the two abutments of its
+cheeks, each at its height. A body whose edges cannot be read (an edge of
+a closed body not shared by two faces, an open surface standing vertical)
+refuses the list.
 
 ### Levels
 

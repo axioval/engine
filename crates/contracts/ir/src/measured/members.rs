@@ -4616,6 +4616,132 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             ),
         ],
     },
+    MemberDescriptor {
+        list: MeasuredDescriptor {
+            name: "roof_features",
+            parameters: &[
+                MeasuredParameter {
+                    key: "feature",
+                    kind: MeasuredParameterKind::Choice {
+                        options: &["ridge", "hip", "valley", "eaves", "verge", "abutment"],
+                    },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "Only the lines of this class; a line whose class cannot be told is \
+                         a possible member of every class it may have. Without it, every \
+                         roof feature line.",
+                        "Nur die Linien dieser Art; eine Linie, deren Art sich nicht sagen \
+                         lässt, ist mögliches Mitglied jeder Art, die sie haben kann. Ohne \
+                         ihn jede Dachlinie.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "tolerance",
+                    kind: MeasuredParameterKind::Angle { below: 45.0 },
+                    required: false,
+                    default: Some("2"),
+                    help: &en_de(
+                        "How far from level a line or a face, and from flat two faces \
+                         meeting, may be and still count as level or flat, in degrees; a \
+                         face steeper than 90 degrees less it is a wall.",
+                        "Wie weit eine Linie oder Fläche von waagerecht und zwei \
+                         aufeinandertreffende Flächen von eben abweichen dürfen, um noch als \
+                         waagerecht oder eben zu gelten, in Grad; eine Fläche steiler als 90 \
+                         Grad weniger ihr ist eine Wand.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "level_path",
+                    kind: MeasuredParameterKind::Path,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The relationship steps from the roof to the level heights are \
+                         measured from, at its placement's elevation; without it, heights \
+                         are elevations above the source's zero.",
+                        "Die Beziehungsschritte vom Dach zum Geschoss, ab dessen \
+                         Platzierungshöhe die Höhen gemessen werden; ohne sie sind die \
+                         Höhen Höhen über dem Nullpunkt der Quelle.",
+                    ),
+                },
+            ],
+            dimension: None,
+            services: &["vertical-extent", "object-frame", "relationship-selection"],
+            exactness: MeasuredExactness::Measured,
+            subject: MeasuredSubject::Object,
+            not_evaluated: &[
+                NO_GEOMETRY,
+                "the body's edges cannot be read (an edge not shared by two faces, an open \
+                 surface standing vertical)",
+                "the path reaches no level, or levels at different elevations",
+                "a line's class cannot be told: faces meeting within the tolerance of flat, \
+                 a face within the tolerance of level, a convexity or slope the geometry \
+                 leaves open",
+            ],
+            label: &en_de("Roof feature lines", "Dachlinien"),
+            help: &en_de(
+                "The lines where the roof body's upper faces meet or end, each a ridge, \
+                 hip, valley, eaves, verge or abutment, classified from the faces' slopes \
+                 and the convexity between them, with its length and the heights of its \
+                 lowest and highest point.",
+                "Die Linien, an denen die oberen Flächen des Dachkörpers zusammentreffen \
+                 oder enden, jede ein First, Grat, Kehle, Traufe, Ortgang oder Anschluss, \
+                 eingeordnet nach den Neigungen der Flächen und der Wölbung zwischen \
+                 ihnen, mit ihrer Länge und den Höhen ihres tiefsten und höchsten Punkts.",
+            ),
+        },
+        fields: &[
+            field(
+                "feature",
+                MemberFieldKind::Text,
+                &en_de("Feature", "Art"),
+                &en_de(
+                    "The line's class: `ridge`, `hip`, `valley`, `eaves`, `verge` or \
+                     `abutment`; not evaluated where it cannot be told.",
+                    "Die Art der Linie: `ridge`, `hip`, `valley`, `eaves`, `verge` oder \
+                     `abutment`; ungeprüft, wo sie sich nicht sagen lässt.",
+                ),
+            ),
+            field(
+                "what",
+                MemberFieldKind::Text,
+                &en_de("Words", "Worte"),
+                &en_de(
+                    "The line as findings name it: its class and ends, in metres.",
+                    "Die Linie, wie Befunde sie nennen: ihre Art und Enden, in Metern.",
+                ),
+            ),
+            field(
+                "length",
+                LENGTH,
+                &en_de("Length", "Länge"),
+                &en_de("The line's length.", "Die Länge der Linie."),
+            ),
+            field(
+                "low",
+                LENGTH,
+                &en_de("Lowest height", "Tiefste Höhe"),
+                &en_de(
+                    "The height of the line's lowest point above the datum; a level line's \
+                     height, such as the eaves height.",
+                    "Die Höhe des tiefsten Punkts der Linie über dem Bezug; bei einer \
+                     waagerechten Linie ihre Höhe, etwa die Traufhöhe.",
+                ),
+            ),
+            field(
+                "high",
+                LENGTH,
+                &en_de("Highest height", "Höchste Höhe"),
+                &en_de(
+                    "The height of the line's highest point above the datum; on a ridge, the \
+                     ridge height.",
+                    "Die Höhe des höchsten Punkts der Linie über dem Bezug; am First die \
+                     Firsthöhe.",
+                ),
+            ),
+        ],
+    },
     searches::ROUTE_VERDICTS,
     MemberDescriptor {
         list: MeasuredDescriptor {

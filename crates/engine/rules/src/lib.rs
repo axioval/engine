@@ -85,6 +85,7 @@ mod recess_width;
 mod refine;
 mod related_count;
 mod relative_count;
+mod roof_features;
 mod same_container;
 mod selection;
 mod shelf_capacity;
@@ -389,5 +390,6 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(coordinate_consistency::CoordinateMeasures))
         .and_then(|registry| registry.register_measured(external_wall_validation::EnvelopeMeasures))
         .and_then(|registry| registry.register_measured(line_spacing::LineSpacingMeasures))
+        .and_then(|registry| registry.register_measured(roof_features::RoofFeatureMeasures))
         .map(|registry| registry.with_refiner(Refiner))
 }

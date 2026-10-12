@@ -14,8 +14,9 @@
 use axiolid_core::Tolerance;
 use axiolid_mesh::audit_mesh;
 use axioval_engine::{
-    DirectionalExtent, ElevationInterval, FaceNormals, FacePieceSet, FacePieces, MetricDirection,
-    SurfaceFace, Thickness, VerticalExtent, VerticalExtentError, VerticalExtentService,
+    DirectionalExtent, ElevationInterval, FaceEdges, FaceNormals, FacePieceSet, FacePieces,
+    MetricDirection, SurfaceFace, Thickness, VerticalExtent, VerticalExtentError,
+    VerticalExtentService,
 };
 use axioval_ir::{Evidence, ObjectId};
 
@@ -252,5 +253,17 @@ impl VerticalExtentService for AxiolidVerticalExtentService {
             closed,
         } = self.body(object)?;
         crate::face_normals::measure_pieces(object, set, &soup, tessellation, closed)
+    }
+
+    /// The edges where the body's pieces meet, and an open surface's
+    /// border, merged into straight lines with the normal boxes beside
+    /// them.
+    fn measure_face_edges(&self, object: &ObjectId) -> Result<FaceEdges, VerticalExtentError> {
+        let Body {
+            soup,
+            tessellation,
+            closed,
+        } = self.body(object)?;
+        crate::face_normals::measure_edges(object, &soup, tessellation, closed)
     }
 }

@@ -108003,6 +108003,243 @@
       "available": true
     },
     {
+      "name": "roof_features",
+      "parameters": [
+        {
+          "key": "feature",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "ridge",
+              "hip",
+              "valley",
+              "eaves",
+              "verge",
+              "abutment"
+            ]
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Only the lines of this class; a line whose class cannot be told is a possible member of every class it may have. Without it, every roof feature line."
+            },
+            {
+              "language": "de",
+              "text": "Nur die Linien dieser Art; eine Linie, deren Art sich nicht sagen lässt, ist mögliches Mitglied jeder Art, die sie haben kann. Ohne ihn jede Dachlinie."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "tolerance",
+          "kind": {
+            "type": "angle",
+            "below": 45.0
+          },
+          "required": false,
+          "default": "2",
+          "help": [
+            {
+              "language": "en",
+              "text": "How far from level a line or a face, and from flat two faces meeting, may be and still count as level or flat, in degrees; a face steeper than 90 degrees less it is a wall."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit eine Linie oder Fläche von waagerecht und zwei aufeinandertreffende Flächen von eben abweichen dürfen, um noch als waagerecht oder eben zu gelten, in Grad; eine Fläche steiler als 90 Grad weniger ihr ist eine Wand."
+            }
+          ],
+          "references": "angle"
+        },
+        {
+          "key": "level_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps from the roof to the level heights are measured from, at its placement's elevation; without it, heights are elevations above the source's zero."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte vom Dach zum Geschoss, ab dessen Platzierungshöhe die Höhen gemessen werden; ohne sie sind die Höhen Höhen über dem Nullpunkt der Quelle."
+            }
+          ],
+          "references": "stringList"
+        }
+      ],
+      "services": [
+        "vertical-extent",
+        "object-frame",
+        "relationship-selection"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "the body's edges cannot be read (an edge not shared by two faces, an open surface standing vertical)",
+        "the path reaches no level, or levels at different elevations",
+        "a line's class cannot be told: faces meeting within the tolerance of flat, a face within the tolerance of level, a convexity or slope the geometry leaves open"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Roof feature lines"
+        },
+        {
+          "language": "de",
+          "text": "Dachlinien"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The lines where the roof body's upper faces meet or end, each a ridge, hip, valley, eaves, verge or abutment, classified from the faces' slopes and the convexity between them, with its length and the heights of its lowest and highest point."
+        },
+        {
+          "language": "de",
+          "text": "Die Linien, an denen die oberen Flächen des Dachkörpers zusammentreffen oder enden, jede ein First, Grat, Kehle, Traufe, Ortgang oder Anschluss, eingeordnet nach den Neigungen der Flächen und der Wölbung zwischen ihnen, mit ihrer Länge und den Höhen ihres tiefsten und höchsten Punkts."
+        }
+      ],
+      "fields": [
+        {
+          "name": "feature",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Feature"
+            },
+            {
+              "language": "de",
+              "text": "Art"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The line's class: `ridge`, `hip`, `valley`, `eaves`, `verge` or `abutment`; not evaluated where it cannot be told."
+            },
+            {
+              "language": "de",
+              "text": "Die Art der Linie: `ridge`, `hip`, `valley`, `eaves`, `verge` oder `abutment`; ungeprüft, wo sie sich nicht sagen lässt."
+            }
+          ]
+        },
+        {
+          "name": "what",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Words"
+            },
+            {
+              "language": "de",
+              "text": "Worte"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The line as findings name it: its class and ends, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Die Linie, wie Befunde sie nennen: ihre Art und Enden, in Metern."
+            }
+          ]
+        },
+        {
+          "name": "length",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Length"
+            },
+            {
+              "language": "de",
+              "text": "Länge"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The line's length."
+            },
+            {
+              "language": "de",
+              "text": "Die Länge der Linie."
+            }
+          ]
+        },
+        {
+          "name": "low",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Lowest height"
+            },
+            {
+              "language": "de",
+              "text": "Tiefste Höhe"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The height of the line's lowest point above the datum; a level line's height, such as the eaves height."
+            },
+            {
+              "language": "de",
+              "text": "Die Höhe des tiefsten Punkts der Linie über dem Bezug; bei einer waagerechten Linie ihre Höhe, etwa die Traufhöhe."
+            }
+          ]
+        },
+        {
+          "name": "high",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Highest height"
+            },
+            {
+              "language": "de",
+              "text": "Höchste Höhe"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The height of the line's highest point above the datum; on a ridge, the ridge height."
+            },
+            {
+              "language": "de",
+              "text": "Die Höhe des höchsten Punkts der Linie über dem Bezug; am First die Firsthöhe."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
       "name": "route_verdicts",
       "parameters": [
         {

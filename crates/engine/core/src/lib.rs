@@ -1149,9 +1149,9 @@ pub use triangle_count::{
     TriangleCount, TriangleCountError, TriangleCountService, TriangleCountServiceHandle,
 };
 pub use vertical_extent::{
-    DirectionalExtent, ElevationInterval, FaceNormal, FaceNormals, FacePiece, FacePieceSet,
-    FacePieces, SurfaceFace, Thickness, VerticalExtent, VerticalExtentError, VerticalExtentService,
-    VerticalExtentServiceHandle,
+    DirectionalExtent, EdgeSide, ElevationInterval, FaceEdge, FaceEdges, FaceNormal, FaceNormals,
+    FacePiece, FacePieceSet, FacePieces, PointBox, SurfaceFace, Thickness, VerticalExtent,
+    VerticalExtentError, VerticalExtentService, VerticalExtentServiceHandle,
 };
 pub use walkability::{
     PassageAdmission, StretchLimit, VerifiedWalkablePassage, VerticalConnector,

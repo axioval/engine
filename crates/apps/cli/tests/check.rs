@@ -3494,6 +3494,338 @@ fn with_geometry_an_earthworks_fill_is_judged_piece_by_piece() {
     assert_eq!(judged, (vec![], vec![]), "{result:#}");
 }
 
+/// A face of a synthetic roof body: the direction it looks out of the
+/// body, and its triangles.
+type RoofFace = ([f64; 3], &'static [[[f64; 3]; 3]]);
+
+/// An `IfcRoof` #30 whose `Body` is one closed `IfcTriangulatedFaceSet`
+/// of `faces`, each triangle wound to look out along its face's direction.
+#[allow(clippy::float_cmp)] // Corners are shared where exactly equal.
+fn face_set_roof(faces: &[RoofFace]) -> String {
+    let mut points: Vec<[f64; 3]> = Vec::new();
+    let mut triangles = Vec::new();
+    for (outward, face) in faces {
+        for [a, b, c] in face.iter().copied() {
+            let (ab, ac) = (
+                [b[0] - a[0], b[1] - a[1], b[2] - a[2]],
+                [c[0] - a[0], c[1] - a[1], c[2] - a[2]],
+            );
+            let normal = [
+                ab[1] * ac[2] - ab[2] * ac[1],
+                ab[2] * ac[0] - ab[0] * ac[2],
+                ab[0] * ac[1] - ab[1] * ac[0],
+            ];
+            let looks: f64 = (0..3).map(|axis| normal[axis] * outward[axis]).sum();
+            let corners = if looks > 0.0 { [a, b, c] } else { [a, c, b] };
+            let indices = corners.map(|corner| {
+                points
+                    .iter()
+                    .position(|point| *point == corner)
+                    .unwrap_or_else(|| {
+                        points.push(corner);
+                        points.len() - 1
+                    })
+                    + 1
+            });
+            triangles.push(format!("({},{},{})", indices[0], indices[1], indices[2]));
+        }
+    }
+    let coordinates = points
+        .iter()
+        .map(|[x, y, z]| format!("({x:?},{y:?},{z:?})"))
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #10=IFCCARTESIANPOINTLIST3D(({coordinates}),$);\n\
+         #11=IFCTRIANGULATEDFACESET(#10,$,.T.,({}),$);\n\
+         #12=IFCSHAPEREPRESENTATION(#5,'Body','Tessellation',(#11));\n\
+         #13=IFCPRODUCTDEFINITIONSHAPE($,$,(#12));\n\
+         #30=IFCROOF('0000000000000000000030',$,$,$,$,#3,#13,$,.GABLE_ROOF.);\n\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        triangles.join(","),
+    )
+}
+
+/// engine#329: a closed gable roof 10 m along x over y in `[0, 8]`, eaves
+/// at 3 m and its ridge at 7 m along y = 4, with a gable dormer 2 m wide
+/// rising from its south eaves (eaves at 5 m, ridge at 6 m, two valleys
+/// where its roof meets the main roof, from (4, 2, 5) and (6, 2, 5) up to
+/// (5, 3, 6)).
+fn gable_roof_with_a_dormer() -> String {
+    face_set_roof(&[
+        (
+            [0.0, 0.0, -1.0],
+            &[
+                [[0.0, 0.0, 3.0], [4.0, 0.0, 3.0], [0.0, 8.0, 3.0]],
+                [[4.0, 0.0, 3.0], [10.0, 8.0, 3.0], [0.0, 8.0, 3.0]],
+                [[4.0, 0.0, 3.0], [6.0, 0.0, 3.0], [10.0, 8.0, 3.0]],
+                [[6.0, 0.0, 3.0], [10.0, 0.0, 3.0], [10.0, 8.0, 3.0]],
+            ],
+        ),
+        (
+            [0.0, -1.0, 1.0],
+            &[
+                [[0.0, 0.0, 3.0], [4.0, 0.0, 3.0], [4.0, 2.0, 5.0]],
+                [[0.0, 0.0, 3.0], [4.0, 2.0, 5.0], [0.0, 4.0, 7.0]],
+                [[0.0, 4.0, 7.0], [4.0, 2.0, 5.0], [5.0, 3.0, 6.0]],
+                [[0.0, 4.0, 7.0], [5.0, 3.0, 6.0], [10.0, 4.0, 7.0]],
+                [[5.0, 3.0, 6.0], [6.0, 2.0, 5.0], [10.0, 4.0, 7.0]],
+                [[6.0, 2.0, 5.0], [10.0, 0.0, 3.0], [10.0, 4.0, 7.0]],
+                [[6.0, 2.0, 5.0], [6.0, 0.0, 3.0], [10.0, 0.0, 3.0]],
+            ],
+        ),
+        (
+            [0.0, 1.0, 1.0],
+            &[
+                [[0.0, 4.0, 7.0], [10.0, 4.0, 7.0], [10.0, 8.0, 3.0]],
+                [[0.0, 4.0, 7.0], [10.0, 8.0, 3.0], [0.0, 8.0, 3.0]],
+            ],
+        ),
+        (
+            [-1.0, 0.0, 0.0],
+            &[[[0.0, 0.0, 3.0], [0.0, 4.0, 7.0], [0.0, 8.0, 3.0]]],
+        ),
+        (
+            [1.0, 0.0, 0.0],
+            &[[[10.0, 0.0, 3.0], [10.0, 8.0, 3.0], [10.0, 4.0, 7.0]]],
+        ),
+        // The dormer's front, cheeks and roof.
+        (
+            [0.0, -1.0, 0.0],
+            &[
+                [[4.0, 0.0, 3.0], [6.0, 0.0, 3.0], [6.0, 0.0, 5.0]],
+                [[4.0, 0.0, 3.0], [6.0, 0.0, 5.0], [5.0, 0.0, 6.0]],
+                [[4.0, 0.0, 3.0], [5.0, 0.0, 6.0], [4.0, 0.0, 5.0]],
+            ],
+        ),
+        (
+            [-1.0, 0.0, 0.0],
+            &[[[4.0, 0.0, 3.0], [4.0, 0.0, 5.0], [4.0, 2.0, 5.0]]],
+        ),
+        (
+            [1.0, 0.0, 0.0],
+            &[[[6.0, 0.0, 3.0], [6.0, 2.0, 5.0], [6.0, 0.0, 5.0]]],
+        ),
+        (
+            [-1.0, 0.0, 1.0],
+            &[
+                [[4.0, 0.0, 5.0], [5.0, 0.0, 6.0], [5.0, 3.0, 6.0]],
+                [[4.0, 0.0, 5.0], [5.0, 3.0, 6.0], [4.0, 2.0, 5.0]],
+            ],
+        ),
+        (
+            [1.0, 0.0, 1.0],
+            &[
+                [[6.0, 0.0, 5.0], [6.0, 2.0, 5.0], [5.0, 3.0, 6.0]],
+                [[6.0, 0.0, 5.0], [5.0, 3.0, 6.0], [5.0, 0.0, 6.0]],
+            ],
+        ),
+    ])
+}
+
+/// A gable roof as [`gable_roof_with_a_dormer`]'s without the dormer, whose
+/// south slope kinks 0.7° steeper at 5 m (y = 2) on its way up to the
+/// ridge at 7.05 m (y = 4).
+fn gable_roof_with_a_kink() -> String {
+    face_set_roof(&[
+        (
+            [0.0, 0.0, -1.0],
+            &[
+                [[0.0, 0.0, 3.0], [10.0, 0.0, 3.0], [10.0, 8.0, 3.0]],
+                [[0.0, 0.0, 3.0], [10.0, 8.0, 3.0], [0.0, 8.0, 3.0]],
+            ],
+        ),
+        (
+            [0.0, -1.0, 1.0],
+            &[
+                [[0.0, 0.0, 3.0], [10.0, 0.0, 3.0], [10.0, 2.0, 5.0]],
+                [[0.0, 0.0, 3.0], [10.0, 2.0, 5.0], [0.0, 2.0, 5.0]],
+            ],
+        ),
+        (
+            [0.0, -1.0, 1.0],
+            &[
+                [[0.0, 2.0, 5.0], [10.0, 2.0, 5.0], [10.0, 4.0, 7.05]],
+                [[0.0, 2.0, 5.0], [10.0, 4.0, 7.05], [0.0, 4.0, 7.05]],
+            ],
+        ),
+        (
+            [0.0, 1.0, 1.0],
+            &[
+                [[0.0, 4.0, 7.05], [10.0, 4.0, 7.05], [10.0, 8.0, 3.0]],
+                [[0.0, 4.0, 7.05], [10.0, 8.0, 3.0], [0.0, 8.0, 3.0]],
+            ],
+        ),
+        (
+            [-1.0, 0.0, 0.0],
+            &[
+                [[0.0, 8.0, 3.0], [0.0, 0.0, 3.0], [0.0, 2.0, 5.0]],
+                [[0.0, 8.0, 3.0], [0.0, 2.0, 5.0], [0.0, 4.0, 7.05]],
+            ],
+        ),
+        (
+            [1.0, 0.0, 0.0],
+            &[
+                [[10.0, 8.0, 3.0], [10.0, 0.0, 3.0], [10.0, 2.0, 5.0]],
+                [[10.0, 8.0, 3.0], [10.0, 2.0, 5.0], [10.0, 4.0, 7.05]],
+            ],
+        ),
+    ])
+}
+
+/// An expression rule over roof #30 with geometry: the exit status, how
+/// many findings and not-evaluated outcomes, and the saved result.
+#[allow(clippy::needless_pass_by_value)]
+fn roof_rule(case: &Case, model: &str, requirement: Value) -> (Output, (usize, usize), Value) {
+    let (output, result) = case.geometry_rule(
+        model,
+        &[("roof", "IfcRoof")],
+        "axioval:capability.expression",
+        &registry_signature("axioval:capability.expression"),
+        entity("roof"),
+        json!({"requirement": {"type": "expression", "value": requirement}}),
+    );
+    let count = |key: &str| result["report"][key].as_array().map_or(0, Vec::len);
+    let judged = (count("findings"), count("not_evaluated"));
+    (output, judged, result)
+}
+
+/// The roof feature lines of `feature` (with `;`-joined `more`).
+fn roof_lines(feature: &str) -> Value {
+    json!({"kind": "measured", "name": format!("roof_features;feature={feature}")})
+}
+
+fn roof_member(field: &str) -> Value {
+    json!({"kind": "property", "propertySet": "axioval:member", "property": field})
+}
+
+fn metres(value: f64) -> Value {
+    json!({"kind": "literal", "value": {"type": "quantity", "value": value, "unit": "m"}})
+}
+
+/// `function` over the lines `over`, reading `field`.
+#[allow(clippy::needless_pass_by_value)]
+fn over_roof_lines(function: &str, over: Value, field: Option<&str>) -> Value {
+    let mut aggregate = json!({"kind": "aggregate", "function": function, "over": over});
+    if let Some(field) = field {
+        aggregate["value"] = roof_member(field);
+    }
+    aggregate
+}
+
+/// Whether `operand` lies within a millimetre of `value` metres.
+#[allow(clippy::needless_pass_by_value)]
+fn about(operand: Value, value: f64) -> Value {
+    json!({"kind": "between", "operand": operand,
+        "low": metres(value - 0.001), "high": metres(value + 0.001)})
+}
+
+/// Whether the lines `over` number `count`.
+fn counted(over: Value, count: u32) -> Value {
+    json!({"kind": "compare", "operator": "equals",
+        "left": over_roof_lines("count", over, None),
+        "right": {"kind": "literal", "value": {"type": "number", "value": count}}})
+}
+
+/// engine#329: a gable roof with a dormer yields its ridge (7 m), its
+/// eaves (3 m), its verges, the dormer's ridge (6 m), eaves (5 m), verges
+/// and two valleys (from 5 m to 6 m), and the abutments of its cheeks; a
+/// ridge height limit of 6.5 m is missed by the main ridge.
+#[test]
+fn with_geometry_a_gable_roof_with_a_dormer_yields_its_feature_lines() {
+    let case = Case::new("geometry-roof-features");
+    let model = gable_roof_with_a_dormer();
+    let valley_heights = json!({"kind": "aggregate", "function": "all",
+        "over": roof_lines("valley"),
+        "value": {"kind": "and", "operands": [
+            about(roof_member("low"), 5.0), about(roof_member("high"), 6.0)]}});
+    let (output, judged, result) = roof_rule(
+        &case,
+        &model,
+        json!({"kind": "and", "operands": [
+            counted(roof_lines("ridge"), 2),
+            counted(roof_lines("eaves"), 5),
+            counted(roof_lines("verge"), 6),
+            counted(roof_lines("valley"), 2),
+            counted(roof_lines("abutment"), 2),
+            counted(roof_lines("hip"), 0),
+            about(over_roof_lines("max", roof_lines("ridge"), Some("high")), 7.0),
+            about(over_roof_lines("min", roof_lines("ridge"), Some("high")), 6.0),
+            about(over_roof_lines("max", roof_lines("ridge"), Some("length")), 10.0),
+            about(over_roof_lines("min", roof_lines("eaves"), Some("low")), 3.0),
+            about(over_roof_lines("max", roof_lines("eaves"), Some("high")), 5.0),
+            valley_heights,
+        ]}),
+    );
+    assert_eq!(judged, (0, 0), "{result:#}");
+    assert_eq!(output.status.code(), Some(0), "{result:#}");
+    // A ridge height limit of 6.5 m: the main ridge misses it.
+    let (output, judged, result) = roof_rule(
+        &case,
+        &model,
+        json!({"kind": "aggregate", "function": "all", "over": roof_lines("ridge"),
+            "value": {"kind": "compare", "operator": "lessThanOrEquals",
+                "left": roof_member("high"), "right": metres(6.5)}}),
+    );
+    assert_eq!(output.status.code(), Some(3), "{result:#}");
+    assert_eq!(judged, (1, 0), "{result:#}");
+    let finding = &result["report"]["findings"][0];
+    assert!(
+        finding["evidence"][0]["locator"]
+            .as_str()
+            .unwrap()
+            .contains(":roof_features:"),
+        "{finding:#}"
+    );
+}
+
+/// engine#329: a slope kinking 0.7° at a line, within the default 2° of
+/// flat, leaves that line's class undecided, so counting the ridges is not
+/// evaluated, never one; past a tolerance of half a degree the kink is a
+/// valley (the slope steepens above it) and the roof has one ridge.
+#[test]
+fn with_geometry_a_roof_kinking_within_the_tolerance_is_undecided() {
+    let case = Case::new("geometry-roof-kink");
+    let model = gable_roof_with_a_kink();
+    let (output, judged, result) = roof_rule(&case, &model, counted(roof_lines("ridge"), 1));
+    assert_eq!(output.status.code(), Some(4), "{result:#}");
+    assert_eq!(judged, (0, 1), "{result:#}");
+    // Asked what each possible ridge is, the kink answers why it cannot
+    // tell.
+    let (output, judged, result) = roof_rule(
+        &case,
+        &model,
+        json!({"kind": "aggregate", "function": "all", "over": roof_lines("ridge"),
+            "value": {"kind": "compare", "operator": "equals", "left": roof_member("feature"),
+                "right": {"kind": "literal", "value": {"type": "string", "value": "ridge"}}}}),
+    );
+    assert_eq!(output.status.code(), Some(4), "{result:#}");
+    assert_eq!(judged, (0, 1), "{result:#}");
+    let why = result["report"]["not_evaluated"][0]["message"].to_string();
+    assert!(
+        why.contains("(10, 2, 5) - (0, 2, 5)") && why.contains("within the tolerance of flat"),
+        "{why}"
+    );
+    let tight = |feature: &str| {
+        json!({"kind": "measured",
+            "name": format!("roof_features;feature={feature};tolerance=0.5")})
+    };
+    let (output, judged, result) = roof_rule(
+        &case,
+        &model,
+        json!({"kind": "and", "operands": [
+            counted(tight("ridge"), 1), counted(tight("valley"), 1)]}),
+    );
+    assert_eq!(judged, (0, 0), "{result:#}");
+    assert_eq!(output.status.code(), Some(0), "{result:#}");
+}
+
 /// The crossing walls with an `IfcOpeningElement` (#208) voiding the first
 /// wall (#16) where the second crosses it: a 1 m square prism from below
 /// the floor to above the walls, under the representation `identifier`, or

@@ -31,11 +31,20 @@
 //! widens by `2·P·d + π·d²` for the triangles' summed perimeter `P` and
 //! its upper bound by the secant of that lean. Only a mesh that is the
 //! exact shape states exact pieces.
+//!
+//! Where the pieces meet (`measure_edges`): every triangle edge between
+//! two pieces, and an open surface's border, merged into straight lines
+//! between the same pieces where consecutive segments run straight on
+//! without rounding. Each side keeps its triangle's normal box (merged
+//! only where the segments' agree, else their scaled hull) and which side
+//! of the line the face lies, read from the winding, never from a
+//! rounded sign; a tessellation's line ends widen by its chord deviation.
 
 use std::collections::BTreeMap;
 
 use axioval_engine::{
-    FaceNormal, FaceNormals, FacePiece, FacePieceSet, FacePieces, SurfaceFace, VerticalExtentError,
+    EdgeSide, FaceEdge, FaceEdges, FaceNormal, FaceNormals, FacePiece, FacePieceSet, FacePieces,
+    PointBox, SurfaceFace, VerticalExtentError,
 };
 use axioval_ir::{Evidence, ObjectId};
 
@@ -133,6 +142,9 @@ fn lean(triangle: &Triangle, normal: f64, deviation: f64) -> f64 {
 /// lean from it.
 struct Part {
     index: usize,
+    /// `1` where the normal is the triangle's cross product as wound, `-1`
+    /// where it is reversed.
+    sign: f64,
     normal: FaceNormal,
     centre: [f64; 3],
     size: f64,
@@ -145,6 +157,9 @@ struct Part {
 enum Which {
     Face(SurfaceFace),
     Boundary,
+    /// A closed body's whole boundary, normals pointing out, or an open
+    /// surface, each normal pointing up.
+    Upward,
 }
 
 /// The triangles of `which` of the mesh `soup`, each with its normal box.
@@ -159,6 +174,7 @@ fn parts(
         Which::Face(SurfaceFace::Top) => "top face",
         Which::Face(SurfaceFace::Bottom) => "bottom face",
         Which::Boundary => "boundary",
+        Which::Upward => "surface",
     };
     let unavailable =
         |reason: &str| VerticalExtentError::Unavailable(format!("the {name} of {object} {reason}"));
@@ -186,8 +202,17 @@ fn parts(
             continue;
         }
         let up = outward * centre[2];
+        // An open surface's triangles each look up, whatever their winding;
+        // one standing vertical has no upper side.
+        let sign = match which {
+            Which::Upward if !closed && up.abs() <= VERTICAL_TOLERANCE * size => {
+                return Err(unavailable("has no upper side where it stands vertical"));
+            }
+            Which::Upward if !closed => centre[2].signum(),
+            _ => outward,
+        };
         let looks = match which {
-            Which::Boundary => true,
+            Which::Boundary | Which::Upward => true,
             Which::Face(face) if closed => match face {
                 SurfaceFace::Top => up > VERTICAL_TOLERANCE * size,
                 SurfaceFace::Bottom => up < -VERTICAL_TOLERANCE * size,
@@ -219,7 +244,7 @@ fn parts(
         let mut upper = [0.0; 3];
         let mut oriented = [0.0; 3];
         for axis in 0..3 {
-            let value = outward * centre[axis];
+            let value = sign * centre[axis];
             oriented[axis] = value;
             let margin = rounding[axis] + spread;
             if margin == 0.0 {
@@ -233,6 +258,7 @@ fn parts(
             .map_err(|_| unavailable("has a triangle too small to bound its slope"))?;
         parts.push(Part {
             index,
+            sign,
             normal,
             centre: oriented,
             size,
@@ -325,6 +351,44 @@ fn perimeter(triangle: &Triangle) -> f64 {
     ((edge(a, b) + edge(b, c) + edge(c, a)) * (1.0 + 8.0 * f64::EPSILON)).next_up()
 }
 
+/// Each edge of the parts by its two vertices, lower first: the parts
+/// using it, each with whether it runs from the lower vertex to the higher
+/// as its triangle is wound.
+type SharedEdges = BTreeMap<([u64; 3], [u64; 3]), Vec<(usize, bool)>>;
+
+/// The edges the parts' triangles use, as [`SharedEdges`] lists them.
+fn shared_edges(parts: &[Part], soup: &[Triangle]) -> SharedEdges {
+    let mut edges = SharedEdges::new();
+    for (at, part) in parts.iter().enumerate() {
+        let corners = soup[part.index].each_ref().map(vertex);
+        for (from, to) in [(0, 1), (1, 2), (2, 0)] {
+            let (p, q) = (corners[from], corners[to]);
+            edges
+                .entry((p.min(q), p.max(q)))
+                .or_default()
+                .push((at, p < q));
+        }
+    }
+    edges
+}
+
+/// The parts joined into pieces across the edges where they may lie on
+/// one smooth surface: each part's parent, a piece's root its first part.
+fn joined(parts: &[Part], edges: &SharedEdges) -> Vec<usize> {
+    let mut parents: Vec<usize> = (0..parts.len()).collect();
+    for sharing in edges.values() {
+        for (i, &(a, _)) in sharing.iter().enumerate() {
+            for &(b, _) in &sharing[i + 1..] {
+                if smooth(&parts[a], &parts[b]) {
+                    let (a, b) = (root(&mut parents, a), root(&mut parents, b));
+                    parents[a.max(b)] = a.min(b);
+                }
+            }
+        }
+    }
+    parents
+}
+
 /// The pieces of `set` of the mesh `soup`, ordered by their first
 /// triangle.
 pub(crate) fn measure_pieces(
@@ -340,25 +404,7 @@ pub(crate) fn measure_pieces(
         FacePieceSet::Boundary => Which::Boundary,
     };
     let parts = parts(object, which, soup, tessellation, closed)?;
-    let mut parents: Vec<usize> = (0..parts.len()).collect();
-    let mut edges: BTreeMap<([u64; 3], [u64; 3]), Vec<usize>> = BTreeMap::new();
-    for (at, part) in parts.iter().enumerate() {
-        let corners = soup[part.index].each_ref().map(vertex);
-        for (from, to) in [(0, 1), (1, 2), (2, 0)] {
-            let (p, q) = (corners[from], corners[to]);
-            edges.entry((p.min(q), p.max(q))).or_default().push(at);
-        }
-    }
-    for sharing in edges.values() {
-        for (i, &a) in sharing.iter().enumerate() {
-            for &b in &sharing[i + 1..] {
-                if smooth(&parts[a], &parts[b]) {
-                    let (a, b) = (root(&mut parents, a), root(&mut parents, b));
-                    parents[a.max(b)] = a.min(b);
-                }
-            }
-        }
-    }
+    let mut parents = joined(&parts, &shared_edges(&parts, soup));
     // Pieces keyed by their first triangle, which is their root's.
     let mut grouped: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
     for at in 0..parts.len() {
@@ -404,4 +450,225 @@ pub(crate) fn measure_pieces(
         exact: tessellation.is_none(),
     };
     FacePieces::try_new(object.clone(), set, pieces, evidence)
+}
+
+/// One triangle edge where two pieces meet, or an open surface's border:
+/// its ends as its first side's piece runs along it, and its sides, each
+/// its piece, its part and whether the face lies left of the edge.
+struct Segment {
+    from: [u64; 3],
+    to: [u64; 3],
+    sides: Vec<(usize, usize, bool)>,
+}
+
+/// The coordinates of a vertex key.
+fn point(key: [u64; 3]) -> [f64; 3] {
+    key.map(f64::from_bits)
+}
+
+/// Whether `second` continues `first` in a straight line, as computed
+/// without rounding.
+fn continues(first: &Segment, second: &Segment) -> bool {
+    let along = |segment: &Segment| {
+        let (from, to) = (point(segment.from), point(segment.to));
+        let mut rounded = false;
+        let mut out = [0.0; 3];
+        for axis in 0..3 {
+            let (value, inexact) = difference(to[axis], from[axis]);
+            rounded |= inexact;
+            out[axis] = value;
+        }
+        (out, rounded)
+    };
+    let ((p, first_rounded), (q, second_rounded)) = (along(first), along(second));
+    if first_rounded || second_rounded {
+        return false;
+    }
+    let crossed = [(1, 2), (2, 0), (0, 1)]
+        .iter()
+        .all(|&(i, j)| determinant(p[i], q[j], p[j], q[i], false) == (0.0, 0.0));
+    let dot: f64 = (0..3).map(|axis| p[axis] * q[axis]).sum();
+    crossed && dot > 0.0
+}
+
+/// Whether two normal boxes are the same exact direction.
+fn parallel(first: &FaceNormal, second: &FaceNormal) -> bool {
+    let (p, q) = (first.lower(), second.lower());
+    first.is_exact()
+        && second.is_exact()
+        && [(1, 2), (2, 0), (0, 1)]
+            .iter()
+            .all(|&(i, j)| determinant(p[i], q[j], p[j], q[i], false) == (0.0, 0.0))
+        && (0..3).map(|axis| p[axis] * q[axis]).sum::<f64>() > 0.0
+}
+
+/// One normal box holding the directions of every box of `normals`: the
+/// first where all are the same exact direction, else the hull of each
+/// scaled to about unit length, rounded outward.
+fn merged(normals: &[FaceNormal]) -> Result<FaceNormal, VerticalExtentError> {
+    if normals.iter().all(|normal| parallel(&normals[0], normal)) {
+        return Ok(normals[0]);
+    }
+    let mut lower = [f64::INFINITY; 3];
+    let mut upper = [f64::NEG_INFINITY; 3];
+    for normal in normals {
+        let (low, high) = (normal.lower(), normal.upper());
+        let scale = length([0, 1, 2].map(|axis| f64::midpoint(low[axis], high[axis])));
+        for axis in 0..3 {
+            lower[axis] = lower[axis].min((low[axis] / scale).next_down());
+            upper[axis] = upper[axis].max((high[axis] / scale).next_up());
+        }
+    }
+    FaceNormal::try_new(lower, upper)
+}
+
+/// The box of a vertex: the point itself on an exact mesh, else within the
+/// chord deviation of it.
+fn corner(key: [u64; 3], tessellation: Option<f64>) -> Result<PointBox, VerticalExtentError> {
+    let at = point(key);
+    match tessellation {
+        None => PointBox::exact(at),
+        Some(deviation) => {
+            let mut lower = [0.0; 3];
+            let mut upper = [0.0; 3];
+            for axis in 0..3 {
+                let margin = deviation.max(f64::EPSILON * at[axis].abs().max(1.0));
+                lower[axis] = (at[axis] - margin).next_down();
+                upper[axis] = (at[axis] + margin).next_up();
+            }
+            PointBox::try_new(lower, upper)
+        }
+    }
+}
+
+/// The edges where the pieces of the mesh `soup` meet, as
+/// `measure_pieces` tells the pieces of a closed body's boundary apart, and
+/// an open surface's border, each merged into the straight lines its
+/// segments make between the same pieces, in the order of their pieces and
+/// their first vertices.
+///
+/// A closed body's normals point out of it; an open surface's each point
+/// up, and one standing vertical anywhere is refused, since its upper side
+/// is unknown there. An edge used by other than two triangles of a closed
+/// body, or by more than two of an open surface, is refused: the body's
+/// creases cannot be read there.
+pub(crate) fn measure_edges(
+    object: &ObjectId,
+    soup: &[Triangle],
+    tessellation: Option<f64>,
+    closed: bool,
+) -> Result<FaceEdges, VerticalExtentError> {
+    let parts = parts(object, Which::Upward, soup, tessellation, closed)?;
+    let edges = shared_edges(&parts, soup);
+    let mut parents = joined(&parts, &edges);
+    let mut groups: BTreeMap<(usize, Option<usize>), Vec<Segment>> = BTreeMap::new();
+    for ((low, high), sharing) in &edges {
+        let mut sides: Vec<(usize, usize, bool)> = sharing
+            .iter()
+            .map(|&(at, forward)| (root(&mut parents, at), at, forward))
+            .collect();
+        match sides.len() {
+            1 if !closed => {}
+            2 if sides[0].0 == sides[1].0 => continue,
+            2 => {}
+            _ => {
+                return Err(VerticalExtentError::Unavailable(format!(
+                    "the surface of {object} has an edge not shared by exactly two of its \
+                     triangles"
+                )));
+            }
+        }
+        sides.sort_unstable();
+        let forward = sides[0].2;
+        let (from, to) = if forward {
+            (*low, *high)
+        } else {
+            (*high, *low)
+        };
+        // A face lies left of its own winding where its normal is its cross
+        // product as wound; the edge runs with that winding where the
+        // triangle runs it as the first side does.
+        let sides: Vec<(usize, usize, bool)> = sides
+            .iter()
+            .map(|&(piece, at, along)| (piece, at, (parts[at].sign > 0.0) == (along == forward)))
+            .collect();
+        let key = (sides[0].0, sides.get(1).map(|side| side.0));
+        groups
+            .entry(key)
+            .or_default()
+            .push(Segment { from, to, sides });
+    }
+    let mut lines = Vec::new();
+    for segments in groups.values() {
+        let mut starting: BTreeMap<[u64; 3], Vec<usize>> = BTreeMap::new();
+        let mut ending: BTreeMap<[u64; 3], Vec<usize>> = BTreeMap::new();
+        for (at, segment) in segments.iter().enumerate() {
+            starting.entry(segment.from).or_default().push(at);
+            ending.entry(segment.to).or_default().push(at);
+        }
+        // A segment continues into the one starting where it ends, when
+        // that vertex joins only those two and they run straight on.
+        let next: Vec<Option<usize>> = segments
+            .iter()
+            .map(|segment| {
+                let (out, into) = (&starting.get(&segment.to)?, &ending.get(&segment.to)?);
+                (out.len() == 1 && into.len() == 1 && continues(segment, &segments[out[0]]))
+                    .then_some(out[0])
+            })
+            .collect();
+        let mut continued = vec![false; segments.len()];
+        for following in next.iter().flatten() {
+            continued[*following] = true;
+        }
+        let mut taken = vec![false; segments.len()];
+        for first in 0..segments.len() {
+            if continued[first] || taken[first] {
+                continue;
+            }
+            let mut chain = vec![first];
+            taken[first] = true;
+            while let Some(following) = next[*chain.last().unwrap_or(&first)] {
+                if taken[following] {
+                    break;
+                }
+                taken[following] = true;
+                chain.push(following);
+            }
+            lines.push(line(segments, &chain, &parts, tessellation)?);
+        }
+        // Straight segments never close a loop, but every one is listed.
+        for at in (0..segments.len()).filter(|at| !taken[*at]) {
+            lines.push(line(segments, &[at], &parts, tessellation)?);
+        }
+    }
+    let evidence = Evidence {
+        source: object.source.clone(),
+        locator: format!("face-edges:{object}"),
+        exact: tessellation.is_none(),
+    };
+    FaceEdges::try_new(object.clone(), lines, evidence)
+}
+
+/// The straight line the segments `chain` make, in order.
+fn line(
+    segments: &[Segment],
+    chain: &[usize],
+    parts: &[Part],
+    tessellation: Option<f64>,
+) -> Result<FaceEdge, VerticalExtentError> {
+    let (first, last) = (&segments[chain[0]], &segments[chain[chain.len() - 1]]);
+    let sides = (0..first.sides.len())
+        .map(|side| {
+            let normals: Vec<FaceNormal> = chain
+                .iter()
+                .map(|&at| parts[segments[at].sides[side].1].normal)
+                .collect();
+            Ok(EdgeSide::new(merged(&normals)?, first.sides[side].2))
+        })
+        .collect::<Result<Vec<_>, VerticalExtentError>>()?;
+    FaceEdge::try_new(
+        corner(first.from, tessellation)?,
+        corner(last.to, tessellation)?,
+        sides,
+    )
 }

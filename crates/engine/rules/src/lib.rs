@@ -357,6 +357,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(name_sequence::SequenceMeasures))
         .and_then(|registry| registry.register_measured(numbering_consistency::NumberingMeasures))
         .and_then(|registry| registry.register_measured(axioval_engine::FacePieceMeasures))
+        .and_then(|registry| registry.register_measured(axioval_engine::AlignmentElementMeasures))
         .and_then(|registry| registry.register_measured(escape_route::TravelMeasures))
         .and_then(|registry| registry.register_measured(escape_route::EscapeMeasures))
         .and_then(|registry| registry.register_measured(free_floor::PlacementMeasures))

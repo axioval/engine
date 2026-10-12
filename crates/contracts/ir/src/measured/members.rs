@@ -520,6 +520,200 @@ const ZONE: [MeasuredParameter; 21] = [
 
 /// Every list of measured members, sorted by name.
 pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
+    MemberDescriptor {
+        list: MeasuredDescriptor {
+            name: "alignment_elements",
+            parameters: &[MeasuredParameter {
+                key: "layout",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["horizontal", "vertical"],
+                },
+                required: true,
+                default: None,
+                help: &en_de(
+                    "`horizontal`: the plan's lines, arcs and transitions; `vertical`: the \
+                     gradient line's constant gradients and vertical curves.",
+                    "`horizontal`: die Geraden, Bögen und Übergangsbögen des Lageplans; \
+                     `vertical`: die Abschnitte konstanter Längsneigung und die Ausrundungen \
+                     der Gradiente.",
+                ),
+            }],
+            dimension: None,
+            services: &["alignment"],
+            exactness: MeasuredExactness::Measured,
+            subject: MeasuredSubject::Object,
+            not_evaluated: &[
+                "the object is no alignment the service can read",
+                "the alignment states no such layout, or one whose elements cannot be read",
+                "an element states no curvature the service can read at an end (its derived \
+                 fields)",
+                "an end is straight (its radius is unbounded)",
+            ],
+            label: &en_de("Alignment elements", "Elemente der Achse"),
+            help: &en_de(
+                "The elements of one layout of the alignment, in order along it: each with its \
+                 kind, stations, length, the curvature and radius at both ends, its one radius, \
+                 a clothoid's parameter and a vertical element's gradients. Relate consecutive \
+                 elements with `pairs` by `index`.",
+                "Die Elemente eines Entwurfs der Achse, in ihrer Reihenfolge: jedes mit Art, \
+                 Stationen, Länge, Krümmung und Radius an beiden Enden, seinem einen Radius, \
+                 dem Parameter einer Klothoide und den Längsneigungen eines Höhenelements. \
+                 Aufeinanderfolgende Elemente verknüpft `pairs` nach `index`.",
+            ),
+        },
+        fields: &[
+            field(
+                "index",
+                RATIO,
+                &en_de("Index", "Nummer"),
+                &en_de(
+                    "The element's place in its layout, from 1.",
+                    "Der Platz des Elements in seinem Entwurf, ab 1.",
+                ),
+            ),
+            field(
+                "kind",
+                MemberFieldKind::Text,
+                &en_de("Kind", "Art"),
+                &en_de(
+                    "`straight` (a line, or a constant gradient), `arc`, `clothoid`, \
+                     `transition` (another transition family), `parabola` or `other`.",
+                    "`straight` (eine Gerade oder konstante Längsneigung), `arc`, `clothoid`, \
+                     `transition` (ein anderer Übergangsbogen), `parabola` oder `other`.",
+                ),
+            ),
+            field(
+                "type",
+                MemberFieldKind::Text,
+                &en_de("Type", "Typ"),
+                &en_de(
+                    "The element's type as its source names it, such as `CLOTHOID`.",
+                    "Der Typ des Elements, wie seine Quelle ihn nennt, etwa `CLOTHOID`.",
+                ),
+            ),
+            field(
+                "element",
+                MemberFieldKind::Text,
+                &en_de("Element", "Element"),
+                &en_de(
+                    "The element's identity and type, as findings name it.",
+                    "Die Identität und der Typ des Elements, wie Befunde es nennen.",
+                ),
+            ),
+            field(
+                "from",
+                LENGTH,
+                &en_de("From station", "Von Station"),
+                &en_de(
+                    "The station the element starts at.",
+                    "Die Station, an der das Element beginnt.",
+                ),
+            ),
+            field(
+                "to",
+                LENGTH,
+                &en_de("To station", "Bis Station"),
+                &en_de(
+                    "The station the element ends at.",
+                    "Die Station, an der das Element endet.",
+                ),
+            ),
+            field(
+                "length",
+                LENGTH,
+                &en_de("Length", "Länge"),
+                &en_de(
+                    "The element's stated length: along the plan, or for a vertical element \
+                     its plan distance.",
+                    "Die angegebene Länge des Elements: im Lageplan, bei einem Höhenelement \
+                     seine Lagelänge.",
+                ),
+            ),
+            field(
+                "start_curvature",
+                RATIO,
+                &en_de("Curvature at the start", "Krümmung am Anfang"),
+                &en_de(
+                    "The curvature the element states at its start, per metre: positive \
+                     turning left in plan, in a sag in the vertical; zero where it is straight.",
+                    "Die Krümmung, die das Element an seinem Anfang angibt, je Meter: positiv \
+                     nach links im Lageplan, in einer Wanne in der Gradiente; null, wo es gerade \
+                     ist.",
+                ),
+            ),
+            field(
+                "end_curvature",
+                RATIO,
+                &en_de("Curvature at the end", "Krümmung am Ende"),
+                &en_de(
+                    "The curvature the element states at its end, as at its start.",
+                    "Die Krümmung, die das Element an seinem Ende angibt, wie am Anfang.",
+                ),
+            ),
+            field(
+                "start_radius",
+                LENGTH,
+                &en_de("Radius at the start", "Radius am Anfang"),
+                &en_de(
+                    "The radius the element states at its start, unsigned; not evaluated \
+                     where it is straight there.",
+                    "Der Radius, den das Element an seinem Anfang angibt, ohne Vorzeichen; \
+                     nicht ausgewertet, wo es dort gerade ist.",
+                ),
+            ),
+            field(
+                "end_radius",
+                LENGTH,
+                &en_de("Radius at the end", "Radius am Ende"),
+                &en_de(
+                    "The radius the element states at its end, as at its start.",
+                    "Der Radius, den das Element an seinem Ende angibt, wie am Anfang.",
+                ),
+            ),
+            field(
+                "radius",
+                LENGTH,
+                &en_de("Radius", "Radius"),
+                &en_de(
+                    "The element's one radius, unsigned, where both ends state the same (an \
+                     arc, a parabola's parameter); `null` for a transition, not evaluated for \
+                     a straight.",
+                    "Der eine Radius des Elements, ohne Vorzeichen, wo beide Enden denselben \
+                     angeben (ein Bogen, der Parameter einer Parabel); `null` bei einem \
+                     Übergangsbogen, nicht ausgewertet bei einer Geraden.",
+                ),
+            ),
+            field(
+                "clothoid_parameter",
+                LENGTH,
+                &en_de("Clothoid parameter", "Klothoidenparameter"),
+                &en_de(
+                    "A clothoid's parameter `A`, `A^2 = L / |k_end - k_start|`; `null` for \
+                     any other kind.",
+                    "Der Parameter `A` einer Klothoide, `A^2 = L / |k_Ende - k_Anfang|`; \
+                     `null` bei jeder anderen Art.",
+                ),
+            ),
+            field(
+                "start_gradient",
+                RATIO,
+                &en_de("Gradient at the start", "Längsneigung am Anfang"),
+                &en_de(
+                    "A vertical element's gradient at its start; `null` in plan.",
+                    "Die Längsneigung eines Höhenelements an seinem Anfang; `null` im Lageplan.",
+                ),
+            ),
+            field(
+                "end_gradient",
+                RATIO,
+                &en_de("Gradient at the end", "Längsneigung am Ende"),
+                &en_de(
+                    "A vertical element's gradient at its end; `null` in plan.",
+                    "Die Längsneigung eines Höhenelements an seinem Ende; `null` im Lageplan.",
+                ),
+            ),
+        ],
+    },
     searches::ALLOCATIONS,
     MemberDescriptor {
         list: MeasuredDescriptor {

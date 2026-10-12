@@ -890,6 +890,7 @@ mod tests {
         IfcAlignmentService {
             points: BTreeMap::new(),
             alignments: BTreeMap::from([(id("axis"), Ok(centreline))]),
+            layouts: BTreeMap::new(),
             geometry,
         }
     }

@@ -67877,6 +67877,158 @@
       "available": true
     },
     {
+      "name": "alignment_vertical_curvature",
+      "parameters": [
+        {
+          "key": "alignment",
+          "kind": {
+            "type": "sourceKind"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The source kinds of the alignment, `,`-separated; subtypes match. The one object of these kinds the path reaches, or without a path the one in the object's source."
+            },
+            {
+              "language": "de",
+              "text": "Die Quellarten der Achse, durch `,` getrennt; Untertypen zählen mit. Das eine Objekt dieser Arten, das der Pfad erreicht, oder ohne Pfad das eine in der Quelle des Objekts."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps from the object to its alignment; without it, every object of the alignment's kinds in the object's source is a candidate."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte vom Objekt zu seiner Achse; ohne sie ist jedes Objekt der Arten der Achse in der Quelle des Objekts ein Kandidat."
+            }
+          ],
+          "references": "stringList"
+        }
+      ],
+      "services": [
+        "alignment",
+        "type-hierarchy",
+        "relationship-selection"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the alignment cannot be read as a centreline, the object's reference point cannot be resolved, or not exactly one alignment is selected",
+        "the reference point's nearest foot lies before the alignment's start or beyond its end",
+        "two feet on the alignment are equally near within the measurement's bounds, or none can be decided",
+        "a segment of the alignment follows a law the service cannot bound, such as a transition spiral of an unsupported family"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Vertical curvature"
+        },
+        {
+          "language": "de",
+          "text": "Krümmung der Gradiente"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The curvature of the gradient line in its vertical plane at the object's station, per metre: positive in a sag, negative on a crest, zero on a constant gradient."
+        },
+        {
+          "language": "de",
+          "text": "Die Krümmung der Gradiente in ihrer lotrechten Ebene an der Station des Objekts, je Meter: positiv in einer Wanne, negativ auf einer Kuppe, null bei konstanter Längsneigung."
+        }
+      ],
+      "unit": "1",
+      "available": true
+    },
+    {
+      "name": "alignment_vertical_radius",
+      "parameters": [
+        {
+          "key": "alignment",
+          "kind": {
+            "type": "sourceKind"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The source kinds of the alignment, `,`-separated; subtypes match. The one object of these kinds the path reaches, or without a path the one in the object's source."
+            },
+            {
+              "language": "de",
+              "text": "Die Quellarten der Achse, durch `,` getrennt; Untertypen zählen mit. Das eine Objekt dieser Arten, das der Pfad erreicht, oder ohne Pfad das eine in der Quelle des Objekts."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps from the object to its alignment; without it, every object of the alignment's kinds in the object's source is a candidate."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte vom Objekt zu seiner Achse; ohne sie ist jedes Objekt der Arten der Achse in der Quelle des Objekts ein Kandidat."
+            }
+          ],
+          "references": "stringList"
+        }
+      ],
+      "dimension": "length",
+      "services": [
+        "alignment",
+        "type-hierarchy",
+        "relationship-selection"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the alignment cannot be read as a centreline, the object's reference point cannot be resolved, or not exactly one alignment is selected",
+        "the reference point's nearest foot lies before the alignment's start or beyond its end",
+        "two feet on the alignment are equally near within the measurement's bounds, or none can be decided",
+        "a segment of the alignment follows a law the service cannot bound, such as a transition spiral of an unsupported family",
+        "the gradient line may run at a constant gradient there, so its radius is unbounded"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Vertical radius"
+        },
+        {
+          "language": "de",
+          "text": "Halbmesser der Gradiente"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The radius of the gradient line in its vertical plane at the object's station, unsigned, crest or sag; not evaluated where it may run at a constant gradient there."
+        },
+        {
+          "language": "de",
+          "text": "Der Halbmesser der Gradiente in ihrer lotrechten Ebene an der Station des Objekts, ohne Vorzeichen, Kuppe oder Wanne; nicht ausgewertet, wo sie dort mit konstanter Längsneigung verlaufen kann."
+        }
+      ],
+      "unit": "m",
+      "available": true
+    },
+    {
       "name": "angle_to",
       "parameters": [
         {
@@ -78509,18 +78661,19 @@
               "gradient",
               "curvature",
               "cant",
-              "cant_ratio"
+              "cant_ratio",
+              "vertical_curvature"
             ]
           },
           "required": true,
           "help": [
             {
               "language": "en",
-              "text": "The value along the alignment: `gradient` (rise over plan run), `curvature` (plan curvature per metre, positive turning left), `cant` (metres, unsigned) or `cant_ratio` (the cant over the rail head distance, unsigned)."
+              "text": "The value along the alignment: `gradient` (rise over plan run), `curvature` (plan curvature per metre, positive turning left), `cant` (metres, unsigned), `cant_ratio` (the cant over the rail head distance, unsigned) or `vertical_curvature` (the gradient line's curvature per metre, positive in a sag)."
             },
             {
               "language": "de",
-              "text": "Der Wert entlang der Achse: `gradient` (Steigung über der Lagelänge), `curvature` (Krümmung im Lageplan je Meter, positiv nach links), `cant` (Meter, ohne Vorzeichen) oder `cant_ratio` (die Überhöhung über dem Schienenkopfabstand, ohne Vorzeichen)."
+              "text": "Der Wert entlang der Achse: `gradient` (Steigung über der Lagelänge), `curvature` (Krümmung im Lageplan je Meter, positiv nach links), `cant` (Meter, ohne Vorzeichen), `cant_ratio` (die Überhöhung über dem Schienenkopfabstand, ohne Vorzeichen) oder `vertical_curvature` (die Krümmung der Gradiente je Meter, positiv in einer Wanne)."
             }
           ],
           "references": "string"
@@ -79297,18 +79450,19 @@
               "gradient",
               "curvature",
               "cant",
-              "cant_ratio"
+              "cant_ratio",
+              "vertical_curvature"
             ]
           },
           "required": true,
           "help": [
             {
               "language": "en",
-              "text": "The value along the alignment: `gradient` (rise over plan run), `curvature` (plan curvature per metre, positive turning left), `cant` (metres, unsigned) or `cant_ratio` (the cant over the rail head distance, unsigned)."
+              "text": "The value along the alignment: `gradient` (rise over plan run), `curvature` (plan curvature per metre, positive turning left), `cant` (metres, unsigned), `cant_ratio` (the cant over the rail head distance, unsigned) or `vertical_curvature` (the gradient line's curvature per metre, positive in a sag)."
             },
             {
               "language": "de",
-              "text": "Der Wert entlang der Achse: `gradient` (Steigung über der Lagelänge), `curvature` (Krümmung im Lageplan je Meter, positiv nach links), `cant` (Meter, ohne Vorzeichen) oder `cant_ratio` (die Überhöhung über dem Schienenkopfabstand, ohne Vorzeichen)."
+              "text": "Der Wert entlang der Achse: `gradient` (Steigung über der Lagelänge), `curvature` (Krümmung im Lageplan je Meter, positiv nach links), `cant` (Meter, ohne Vorzeichen), `cant_ratio` (die Überhöhung über dem Schienenkopfabstand, ohne Vorzeichen) oder `vertical_curvature` (die Krümmung der Gradiente je Meter, positiv in einer Wanne)."
             }
           ],
           "references": "string"
@@ -81891,18 +82045,19 @@
               "gradient",
               "curvature",
               "cant",
-              "cant_ratio"
+              "cant_ratio",
+              "vertical_curvature"
             ]
           },
           "required": true,
           "help": [
             {
               "language": "en",
-              "text": "The value along the alignment: `gradient` (rise over plan run), `curvature` (plan curvature per metre, positive turning left), `cant` (metres, unsigned) or `cant_ratio` (the cant over the rail head distance, unsigned)."
+              "text": "The value along the alignment: `gradient` (rise over plan run), `curvature` (plan curvature per metre, positive turning left), `cant` (metres, unsigned), `cant_ratio` (the cant over the rail head distance, unsigned) or `vertical_curvature` (the gradient line's curvature per metre, positive in a sag)."
             },
             {
               "language": "de",
-              "text": "Der Wert entlang der Achse: `gradient` (Steigung über der Lagelänge), `curvature` (Krümmung im Lageplan je Meter, positiv nach links), `cant` (Meter, ohne Vorzeichen) oder `cant_ratio` (die Überhöhung über dem Schienenkopfabstand, ohne Vorzeichen)."
+              "text": "Der Wert entlang der Achse: `gradient` (Steigung über der Lagelänge), `curvature` (Krümmung im Lageplan je Meter, positiv nach links), `cant` (Meter, ohne Vorzeichen), `cant_ratio` (die Überhöhung über dem Schienenkopfabstand, ohne Vorzeichen) oder `vertical_curvature` (die Krümmung der Gradiente je Meter, positiv in einer Wanne)."
             }
           ],
           "references": "string"
@@ -85757,6 +85912,463 @@
     }
   ],
   "measuredMembers": [
+    {
+      "name": "alignment_elements",
+      "parameters": [
+        {
+          "key": "layout",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "horizontal",
+              "vertical"
+            ]
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "`horizontal`: the plan's lines, arcs and transitions; `vertical`: the gradient line's constant gradients and vertical curves."
+            },
+            {
+              "language": "de",
+              "text": "`horizontal`: die Geraden, Bögen und Übergangsbögen des Lageplans; `vertical`: die Abschnitte konstanter Längsneigung und die Ausrundungen der Gradiente."
+            }
+          ],
+          "references": "string"
+        }
+      ],
+      "services": [
+        "alignment"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object is no alignment the service can read",
+        "the alignment states no such layout, or one whose elements cannot be read",
+        "an element states no curvature the service can read at an end (its derived fields)",
+        "an end is straight (its radius is unbounded)"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Alignment elements"
+        },
+        {
+          "language": "de",
+          "text": "Elemente der Achse"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The elements of one layout of the alignment, in order along it: each with its kind, stations, length, the curvature and radius at both ends, its one radius, a clothoid's parameter and a vertical element's gradients. Relate consecutive elements with `pairs` by `index`."
+        },
+        {
+          "language": "de",
+          "text": "Die Elemente eines Entwurfs der Achse, in ihrer Reihenfolge: jedes mit Art, Stationen, Länge, Krümmung und Radius an beiden Enden, seinem einen Radius, dem Parameter einer Klothoide und den Längsneigungen eines Höhenelements. Aufeinanderfolgende Elemente verknüpft `pairs` nach `index`."
+        }
+      ],
+      "fields": [
+        {
+          "name": "index",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Index"
+            },
+            {
+              "language": "de",
+              "text": "Nummer"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The element's place in its layout, from 1."
+            },
+            {
+              "language": "de",
+              "text": "Der Platz des Elements in seinem Entwurf, ab 1."
+            }
+          ]
+        },
+        {
+          "name": "kind",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Kind"
+            },
+            {
+              "language": "de",
+              "text": "Art"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "`straight` (a line, or a constant gradient), `arc`, `clothoid`, `transition` (another transition family), `parabola` or `other`."
+            },
+            {
+              "language": "de",
+              "text": "`straight` (eine Gerade oder konstante Längsneigung), `arc`, `clothoid`, `transition` (ein anderer Übergangsbogen), `parabola` oder `other`."
+            }
+          ]
+        },
+        {
+          "name": "type",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Type"
+            },
+            {
+              "language": "de",
+              "text": "Typ"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The element's type as its source names it, such as `CLOTHOID`."
+            },
+            {
+              "language": "de",
+              "text": "Der Typ des Elements, wie seine Quelle ihn nennt, etwa `CLOTHOID`."
+            }
+          ]
+        },
+        {
+          "name": "element",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Element"
+            },
+            {
+              "language": "de",
+              "text": "Element"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The element's identity and type, as findings name it."
+            },
+            {
+              "language": "de",
+              "text": "Die Identität und der Typ des Elements, wie Befunde es nennen."
+            }
+          ]
+        },
+        {
+          "name": "from",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "From station"
+            },
+            {
+              "language": "de",
+              "text": "Von Station"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The station the element starts at."
+            },
+            {
+              "language": "de",
+              "text": "Die Station, an der das Element beginnt."
+            }
+          ]
+        },
+        {
+          "name": "to",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "To station"
+            },
+            {
+              "language": "de",
+              "text": "Bis Station"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The station the element ends at."
+            },
+            {
+              "language": "de",
+              "text": "Die Station, an der das Element endet."
+            }
+          ]
+        },
+        {
+          "name": "length",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Length"
+            },
+            {
+              "language": "de",
+              "text": "Länge"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The element's stated length: along the plan, or for a vertical element its plan distance."
+            },
+            {
+              "language": "de",
+              "text": "Die angegebene Länge des Elements: im Lageplan, bei einem Höhenelement seine Lagelänge."
+            }
+          ]
+        },
+        {
+          "name": "start_curvature",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Curvature at the start"
+            },
+            {
+              "language": "de",
+              "text": "Krümmung am Anfang"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The curvature the element states at its start, per metre: positive turning left in plan, in a sag in the vertical; zero where it is straight."
+            },
+            {
+              "language": "de",
+              "text": "Die Krümmung, die das Element an seinem Anfang angibt, je Meter: positiv nach links im Lageplan, in einer Wanne in der Gradiente; null, wo es gerade ist."
+            }
+          ]
+        },
+        {
+          "name": "end_curvature",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Curvature at the end"
+            },
+            {
+              "language": "de",
+              "text": "Krümmung am Ende"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The curvature the element states at its end, as at its start."
+            },
+            {
+              "language": "de",
+              "text": "Die Krümmung, die das Element an seinem Ende angibt, wie am Anfang."
+            }
+          ]
+        },
+        {
+          "name": "start_radius",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Radius at the start"
+            },
+            {
+              "language": "de",
+              "text": "Radius am Anfang"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The radius the element states at its start, unsigned; not evaluated where it is straight there."
+            },
+            {
+              "language": "de",
+              "text": "Der Radius, den das Element an seinem Anfang angibt, ohne Vorzeichen; nicht ausgewertet, wo es dort gerade ist."
+            }
+          ]
+        },
+        {
+          "name": "end_radius",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Radius at the end"
+            },
+            {
+              "language": "de",
+              "text": "Radius am Ende"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The radius the element states at its end, as at its start."
+            },
+            {
+              "language": "de",
+              "text": "Der Radius, den das Element an seinem Ende angibt, wie am Anfang."
+            }
+          ]
+        },
+        {
+          "name": "radius",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Radius"
+            },
+            {
+              "language": "de",
+              "text": "Radius"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The element's one radius, unsigned, where both ends state the same (an arc, a parabola's parameter); `null` for a transition, not evaluated for a straight."
+            },
+            {
+              "language": "de",
+              "text": "Der eine Radius des Elements, ohne Vorzeichen, wo beide Enden denselben angeben (ein Bogen, der Parameter einer Parabel); `null` bei einem Übergangsbogen, nicht ausgewertet bei einer Geraden."
+            }
+          ]
+        },
+        {
+          "name": "clothoid_parameter",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Clothoid parameter"
+            },
+            {
+              "language": "de",
+              "text": "Klothoidenparameter"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "A clothoid's parameter `A`, `A^2 = L / |k_end - k_start|`; `null` for any other kind."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `A` einer Klothoide, `A^2 = L / |k_Ende - k_Anfang|`; `null` bei jeder anderen Art."
+            }
+          ]
+        },
+        {
+          "name": "start_gradient",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Gradient at the start"
+            },
+            {
+              "language": "de",
+              "text": "Längsneigung am Anfang"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "A vertical element's gradient at its start; `null` in plan."
+            },
+            {
+              "language": "de",
+              "text": "Die Längsneigung eines Höhenelements an seinem Anfang; `null` im Lageplan."
+            }
+          ]
+        },
+        {
+          "name": "end_gradient",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Gradient at the end"
+            },
+            {
+              "language": "de",
+              "text": "Längsneigung am Ende"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "A vertical element's gradient at its end; `null` in plan."
+            },
+            {
+              "language": "de",
+              "text": "Die Längsneigung eines Höhenelements an seinem Ende; `null` im Lageplan."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
     {
       "name": "allocations",
       "parameters": [

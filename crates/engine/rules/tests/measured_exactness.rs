@@ -25,6 +25,11 @@ use axioval_ir::{Evidence, Property, PropertyValue, QuantityDimension};
 /// root) and the test.
 const COVERED: &[(&str, &str, &str)] = &[
     (
+        "alignment_elements",
+        "tests/alignment_elements.rs",
+        "elements_labelled_with_rounded_stations_are_inexact",
+    ),
+    (
         "containment_items",
         "tests/containment.rs",
         "a_cover_measured_on_a_tessellation_is_inexact",

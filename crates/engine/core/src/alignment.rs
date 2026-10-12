@@ -1,6 +1,8 @@
 //! Positions along an alignment: an object's station, signed lateral
-//! offset and height above the gradient line, and the alignment's own
-//! parameters (horizontal curvature, gradient, cant) over a stretch.
+//! offset and height above the gradient line, the alignment's own
+//! parameters (horizontal and vertical curvature, gradient, cant) over a
+//! stretch, and the elements its layouts are made of
+//! ([`crate::alignment_element`]).
 //!
 //! ADR 0004: this seam measures. Whether a pier stands within a station
 //! range or a mast far enough from the track axis is a rule's judgement
@@ -38,6 +40,7 @@ use std::sync::Arc;
 use axioval_ir::{Evidence, ObjectId};
 use thiserror::Error;
 
+use crate::alignment_element::{AlignmentElements, AlignmentElementsRequest};
 use crate::section::{EnvelopeRequest, EnvelopeSweep, Section, SectionRequest};
 use crate::station_profile::{AlignmentProfile, AlignmentProfileRequest};
 
@@ -236,6 +239,11 @@ pub enum AlignmentParameter {
     /// The cant's magnitude over the rail head distance: the sine of the
     /// bank angle, a plain number.
     CantRatio,
+    /// The gradient line's curvature in its vertical plane (plan distance
+    /// against height), per metre: `z'' / (1 + z'^2)^(3/2)`, positive in a
+    /// sag (concave upwards), negative on a crest, zero on a constant
+    /// gradient.
+    VerticalCurvature,
 }
 
 /// `parameter` of `alignment` over the plan distances `distance`.
@@ -383,6 +391,22 @@ pub trait AlignmentService: Send + Sync + 'static {
         ))
     }
 
+    /// The elements of one layout of an alignment, in order
+    /// ([`AlignmentElements`]).
+    ///
+    /// The default refuses, so a service that reads no layouts fails
+    /// closed rather than answering with no elements.
+    // gate: measures length, number
+    fn measure_alignment_elements(
+        &self,
+        request: &AlignmentElementsRequest,
+    ) -> Result<AlignmentElements, AlignmentError> {
+        let _ = request;
+        Err(AlignmentError::Unavailable(
+            "this alignment service reads no alignment elements".into(),
+        ))
+    }
+
     /// The sections of bodies at a station ([`Section`]).
     ///
     /// The default refuses, so a service that cuts no bodies fails closed
@@ -457,6 +481,19 @@ impl AlignmentServiceHandle {
             return Err(AlignmentError::InvalidMeasurement);
         }
         Ok(profile)
+    }
+
+    /// The elements of one layout of an alignment. An answer about another
+    /// request is refused.
+    pub fn measure_alignment_elements(
+        &self,
+        request: &AlignmentElementsRequest,
+    ) -> Result<AlignmentElements, AlignmentError> {
+        let elements = self.0.measure_alignment_elements(request)?;
+        if elements.request() != request {
+            return Err(AlignmentError::InvalidMeasurement);
+        }
+        Ok(elements)
     }
 
     /// The sections of bodies at a station. An answer about another
@@ -604,6 +641,13 @@ mod tests {
         .unwrap();
         assert!(matches!(
             handle.measure_alignment_parameter(&parameter),
+            Err(AlignmentError::Unavailable(_))
+        ));
+        // A service reading no layouts refuses their elements.
+        let elements =
+            crate::AlignmentElementsRequest::new(id("axis"), crate::AlignmentLayout::Vertical);
+        assert!(matches!(
+            handle.measure_alignment_elements(&elements),
             Err(AlignmentError::Unavailable(_))
         ));
     }

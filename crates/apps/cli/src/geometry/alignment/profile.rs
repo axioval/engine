@@ -21,7 +21,13 @@
 //!   `xi^4 (35 - 84 xi + 70 xi^2 - 20 xi^3)` whose derivative
 //!   `140 xi^3 (1 - xi)^3` peaks at mid-segment too. The unsigned cant is
 //!   its magnitude, split where it crosses zero, and the cant ratio that
-//!   over the rail head distance.
+//!   over the rail head distance;
+//! - the vertical curvature `k = z'' / (1 + z'^2)^(3/2)` of a polynomial
+//!   elevation, its rate `z''' F - 3 z' z''^2 G` with
+//!   `F = (1 + z'^2)^(-3/2)` and `G = (1 + z'^2)^(-5/2)` (both monotone in
+//!   `|z'|`), by interval arithmetic over the stretch, so a constant
+//!   gradient is exactly zero and a parabola's is bounded by its grades; of
+//!   a vertical circular arc, the constant `1 / R`.
 //!
 //! A law whose rate has no such bound (a sinusoidal spiral, a parametric
 //! plan piece, a vertical clothoid) is refused by name, never sampled.
@@ -66,6 +72,11 @@ enum Law<'l> {
     Arc { law: &'l ElevationLaw, origin: f64 },
     /// The signed cant `left - right` of a segment.
     Cant { segment: &'l CantSegment, rail: f64 },
+    /// The vertical curvature of the elevation `p(d - origin)`, ascending
+    /// powers.
+    Vertical { elevation: Vec<f64>, origin: f64 },
+    /// A value constant along the leaf (a vertical arc's curvature).
+    Fixed(Bounds),
 }
 
 /// `a - b` as an interval: a point where the subtraction is exact.
@@ -140,7 +151,31 @@ impl Law<'_> {
                 Ok(widen((grade, grade)))
             }
             Law::Cant { segment, rail } => cant(segment, *rail, at),
+            Law::Vertical { elevation, origin } => {
+                let local = (at - origin, at - origin);
+                let grade = polynomial(&derivative(elevation), local);
+                let bend = polynomial(&derivative(&derivative(elevation)), local);
+                Ok(times(bend, steepness(grade, 1.5)))
+            }
+            Law::Fixed(value) => Ok(*value),
         }
+    }
+
+    /// Every value over `[a, b]`: bounded from either end by the rate over
+    /// the stretch (the mean value theorem), exact where the law is
+    /// constant and exact.
+    fn over(&self, (a, b): (f64, f64)) -> Result<(f64, f64), String> {
+        let (start, end) = (self.value(a)?, self.value(b)?);
+        let (slow, fast) = self.rate((a, b))?;
+        if zero((slow, fast)) && start == end {
+            return Ok(start);
+        }
+        let width = b - a;
+        let rise = (fast.max(0.0) * width).next_up();
+        let fall = (slow.min(0.0) * width).next_down();
+        let low = (start.0 + fall).next_down().max((end.0 - rise).next_down());
+        let high = (start.1 + rise).next_up().min((end.1 - fall).next_up());
+        Ok((low.min(start.0).min(end.0), high.max(start.1).max(end.1)))
     }
 
     /// Every rate along plan distance over `[a, b]`.
@@ -173,8 +208,62 @@ impl Law<'_> {
                 Ok(signed(radius.signum(), widen((rate(least), rate(most)))))
             }
             Law::Cant { segment, rail } => cant_rate(segment, *rail, (a, b)),
+            Law::Vertical { elevation, origin } => {
+                let local = (a - origin, b - origin);
+                let grade = polynomial(&derivative(elevation), local);
+                let second = derivative(&derivative(elevation));
+                let bend = polynomial(&second, local);
+                let third = polynomial(&derivative(&second), local);
+                // k' = z''' F - 3 z' z''^2 G.
+                let first = times(third, steepness(grade, 1.5));
+                let squared = times(bend, bend);
+                let other = times(
+                    times(grade, squared),
+                    times((3.0, 3.0), steepness(grade, 2.5)),
+                );
+                Ok(minus(first, other))
+            }
+            Law::Fixed(_) => Ok((0.0, 0.0)),
         }
     }
+}
+
+/// Whether an interval is exactly zero.
+fn zero((low, high): Bounds) -> bool {
+    low == 0.0 && high == 0.0
+}
+
+/// `a * b` for intervals, outward; exactly zero where either factor is.
+fn times(a: Bounds, b: Bounds) -> Bounds {
+    if zero(a) || zero(b) {
+        return (0.0, 0.0);
+    }
+    let corners = [a.0 * b.0, a.0 * b.1, a.1 * b.0, a.1 * b.1];
+    widen(hull(&corners))
+}
+
+/// `a - b` for intervals, outward; `a` itself where `b` is exactly zero.
+fn minus(a: Bounds, b: Bounds) -> Bounds {
+    if zero(b) {
+        return a;
+    }
+    if zero(a) {
+        return (-b.1, -b.0);
+    }
+    widen((a.0 - b.1, a.1 - b.0))
+}
+
+/// `(1 + g^2)^(-power)` for every grade `g` in `grade`: falling in `|g|`,
+/// so the least and greatest `|g|` bound it.
+fn steepness(grade: Bounds, power: f64) -> Bounds {
+    let least = if grade.0 <= 0.0 && grade.1 >= 0.0 {
+        0.0
+    } else {
+        grade.0.abs().min(grade.1.abs())
+    };
+    let most = grade.0.abs().max(grade.1.abs());
+    let at = |g: f64| (1.0 + g * g).powf(-power);
+    widen((at(most), at(least)))
 }
 
 fn signed(sign: f64, (low, high): (f64, f64)) -> (f64, f64) {
@@ -454,6 +543,74 @@ fn gradient_leaves<'l>(
     Ok(())
 }
 
+/// The leaves of the vertical curvature of `law` over
+/// `[start, start + length]`.
+fn vertical_leaves<'l>(
+    law: &'l ElevationLaw,
+    start: f64,
+    length: f64,
+    out: &mut Vec<Leaf<'l>>,
+) -> Result<(), String> {
+    match law {
+        ElevationLaw::Polynomial { coefficients } => out.push(Leaf {
+            start,
+            end: start + length,
+            law: Law::Vertical {
+                elevation: coefficients.clone(),
+                origin: start,
+            },
+        }),
+        ElevationLaw::Piecewise { breaks, laws } => {
+            if laws.len() != breaks.len() + 1 {
+                return Err("a piecewise law whose pieces and seams do not match".into());
+            }
+            for (index, law) in laws.iter().enumerate() {
+                let from = if index == 0 { 0.0 } else { breaks[index - 1] };
+                let to = breaks.get(index).copied().unwrap_or(length);
+                vertical_leaves(law, start + from, to - from, out)?;
+            }
+        }
+        // A circle in the (distance, height) plane: `1 / R` throughout,
+        // positive in a sag.
+        ElevationLaw::CircularArc { radius, .. } => {
+            let curvature = 1.0 / radius;
+            out.push(Leaf {
+                start,
+                end: start + length,
+                law: Law::Fixed(widen((curvature, curvature))),
+            });
+        }
+        _ => {
+            return Err(
+                "a vertical segment whose law is no polynomial or circular arc (a vertical \
+                 clothoid) has no certified curvature bound here"
+                    .into(),
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Every vertical curvature of `law`, laid along `[0, length]`, over the
+/// plan distances `stretch`.
+pub(super) fn vertical_curvature(
+    law: &ElevationLaw,
+    length: f64,
+    (a, b): (f64, f64),
+) -> Result<(f64, f64), String> {
+    let mut leaves = Vec::new();
+    vertical_leaves(law, 0.0, length, &mut leaves)?;
+    let mut out: Option<Bounds> = None;
+    for leaf in &leaves {
+        let (first, last) = (a.max(leaf.start), b.min(leaf.end));
+        if first <= last {
+            let value = leaf.law.over((first, last))?;
+            out = Some(out.map_or(value, |seen| (seen.0.min(value.0), seen.1.max(value.1))));
+        }
+    }
+    out.ok_or_else(|| format!("no vertical segment states [{a}, {b}] m along it"))
+}
+
 /// The leaves of the signed cant of `layout`.
 fn cant_leaves(layout: &CantLayout) -> Vec<Leaf<'_>> {
     layout
@@ -626,6 +783,12 @@ impl IfcAlignmentService {
                 gradient_leaves(&elevated.elevation, 0.0, centreline.length, &mut leaves)
                     .map_err(unavailable)?;
                 (leaves, "gradient", None)
+            }
+            AlignmentParameter::VerticalCurvature => {
+                let mut leaves = Vec::new();
+                vertical_leaves(&elevated.elevation, 0.0, centreline.length, &mut leaves)
+                    .map_err(unavailable)?;
+                (leaves, "vertical curvature", None)
             }
             parameter @ (AlignmentParameter::Cant | AlignmentParameter::CantRatio) => {
                 let layout = centreline
@@ -842,6 +1005,52 @@ mod tests {
             ),
             Err(AlignmentError::OffRange(_))
         ));
+    }
+
+    /// #337: the parabolic sag's vertical curvature is greatest where its
+    /// grade is least, 0.042 / 60 / (1 + 0.02^2)^(3/2) at station 1100;
+    /// the crest's least where its grade is least, at 1240; both constant
+    /// gradients are exactly zero.
+    #[test]
+    fn the_vertical_curvature_of_the_parabolas_is_bounded_by_their_grades() {
+        let (service, alignment) = service("LINEARTRANSITION");
+        let curvature = |range| {
+            profile(
+                &service,
+                &alignment,
+                AlignmentParameter::VerticalCurvature,
+                range,
+            )
+            .unwrap()
+        };
+        let whole = curvature((None, None));
+        let greatest = whole.extreme(ProfileExtreme::Greatest).unwrap();
+        let sag = 0.042 / 60.0 / 1.0004_f64.powf(1.5);
+        let value = greatest.value();
+        assert!(
+            value.lower() <= sag && value.upper() >= sag && value.upper() - value.lower() < 1e-12,
+            "{value:?}"
+        );
+        assert!(
+            greatest
+                .stations()
+                .iter()
+                .any(|(from, to)| *from <= 1100.0 && *to >= 1100.0)
+        );
+        let least = whole.extreme(ProfileExtreme::Least).unwrap();
+        let crest = -0.032 / 80.0 / 1.0009_f64.powf(1.5);
+        let value = least.value();
+        assert!(
+            value.lower() <= crest
+                && value.upper() >= crest
+                && value.upper() - value.lower() < 1e-12,
+            "{value:?}"
+        );
+        // The first constant gradient: exactly straight.
+        let straight = curvature((Some(1000.0), Some(1090.0)));
+        let value = straight.extreme(ProfileExtreme::Greatest).unwrap();
+        assert!(value.is_exact());
+        assert_eq!((value.value().lower(), value.value().upper()), (0.0, 0.0));
     }
 
     /// The cant is greatest, 0.09 m or 6 %, from the transition's end on.

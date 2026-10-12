@@ -553,8 +553,8 @@ ignoring ASCII case):
 | `external_declarations;derivations=<derivations>[;bounding=…][;groups=…;group_path=…];objects=<objects>` | of a source: how many of its objects the model declares external in any derivation, up to those of unknown declaration | built in, over `EnvelopeMembershipService` |
 | `any_external;host_selector=<objects>;external_property=<set/name>`, `host_walls`, `undeclared_hosts`, `possible_hosts` (the same arguments) | of a source, as `opening-spaces` reads it: whether any of its walls declares itself external (1, 0, or between where a wall declaring nothing or an object that may be a wall could; read in identity order up to the first that does); how many walls it holds; how many declare nothing usable where none declares itself external; how many more objects may be walls. `any_external` cites the walls where none does | built in, over the property resolution |
 | `station`, `offset[;side=left\|right]`, `height_above_gradient` `;alignment=<kinds>[;path=<steps>]` | the reference point's station along an alignment, its signed plan offset from it and its height above the gradient line, each a length | `AlignmentService::measure_alignment_position`, `TypeHierarchyService`, `RelationshipSelectionService` for a path |
-| `alignment_curvature`, `alignment_radius`, `alignment_gradient`, `alignment_cant`, `alignment_cant_ratio` `;alignment=<kinds>[;path=<steps>]` | the alignment's plan curvature (per metre) and radius, gradient, cant and cant over the rail head distance at the reference point's station | `AlignmentService::measure_alignment_parameter` |
-| `max_along`, `min_along` `;of=gradient\|curvature\|cant\|cant_ratio[;from=<m>][;to=<m>][;step=<m>][;rate=true]` | of an alignment: the greatest or least value of `of` (with `rate=true` its rate of change per metre) from station `from` to `to`, the stations where it may be attained in the evidence | `AlignmentService::measure_alignment_profile` |
+| `alignment_curvature`, `alignment_radius`, `alignment_gradient`, `alignment_cant`, `alignment_cant_ratio`, `alignment_vertical_curvature`, `alignment_vertical_radius` `;alignment=<kinds>[;path=<steps>]` | the alignment's plan curvature (per metre) and radius, gradient, cant, cant over the rail head distance, and the gradient line's curvature and radius in its vertical plane at the reference point's station | `AlignmentService::measure_alignment_parameter` |
+| `max_along`, `min_along` `;of=gradient\|curvature\|cant\|cant_ratio\|vertical_curvature[;from=<m>][;to=<m>][;step=<m>][;rate=true]` | of an alignment: the greatest or least value of `of` (with `rate=true` its rate of change per metre) from station `from` to `to`, the stations where it may be attained in the evidence | `AlignmentService::measure_alignment_profile` |
 | `rate_along;of=…;station=<m>[;over=<m>]` | of an alignment: how fast `of` changes per metre at a station, or over `over` metres from it | `AlignmentService::measure_alignment_profile` |
 | `station_section_area`, `station_section_thickness[;direction=lateral\|up]` `;alignment=<kinds>[;path=<steps>];station=<m>` | the area and the vertical or horizontal reach of the object's own body in the section normal to the alignment at a station | `AlignmentService::measure_section` |
 | `envelope_intrusions;bodies=<kinds>;envelope=<lateral:up,…>;from=<m>;to=<m>;step=<m>` | of an alignment: how many bodies of the kinds reach into a clearance envelope swept along it, a count from the sure to the possible intrusions | `AlignmentService::measure_envelope`, `TypeHierarchyService` |
@@ -1304,6 +1304,7 @@ sites that cite a value exact:
 | `rectangle_side`, `obstruction_count`, `axes_within` | the rectangles and every obstacle measured are exact | the undecided obstacles |
 | `band_uncovered_area`, `parallel_pairs` | every pair and area is exact and every member was read | the possible bands |
 | `line_spacing` (members) | the object's and the members' directional extents are exact | rounding |
+| `alignment_elements` (members) | every station is a point (the service reads stated parameters exactly) | rounding |
 | `roof_features` (members) | the body's edges (and a level's placement) are exact | rounding |
 | `level_rise`, `prevailing_rise`, `prevailing_elevation` | the heights' or extent's evidence is exact (points decide the prevailing value, as `level-spacing` decides it) | rounding |
 | `shelf_length`, `shelf_clear_height` | always: the linear-quantity service refuses inexact evidence | nothing |
@@ -1486,6 +1487,7 @@ and declare their parameters and typed fields:
 | `axes_within` (`of`, `reach`) | the objects of the kinds named within reach of the footprint in plan | `angle`, `centre_angle` |
 | `parking_bay` (every `parking-bay` parameter under its own name, `selection`) | what `parking-bay` judges of a bay, in its order | `counting`, `count`, `allowed`, `found_words`, `open_words`, `related`; `sized`, `size` (undecided for why it cannot be measured), `measured`, `low`, `high`, `suffix`, `doubtful`, `applies_why`, `later`; `judged`, `found`, `message` |
 | `parallel_pairs` (`members`, `member_path`, `angle_tolerance`, `reach`) | the parallel pairs of members the object reaches, as `wall-spacing` pairs them | `distance` |
+| `alignment_elements` (`layout`) | of an alignment: the elements of its plan or gradient line, in order ([Alignment elements](#alignment-elements)) | `index`, `kind`, `type`, `element`, `from`, `to`, `length`, `start_curvature`, `end_curvature`, `start_radius`, `end_radius` (not evaluated where straight), `radius` (`null` for a transition), `clothoid_parameter` (`null` but for a clothoid), `start_gradient`, `end_gradient` (`null` in plan) |
 | `line_spacing` (`members`, `member_path`, `direction`, `gap`) | the members the object reaches along a straight line through it, ordered by station ([Spacing along a line](#spacing-along-a-line)) | `member`, `what`, `station`, `from`, `to`, `gap` (`null` on the first), `start_gap`, `end_gap` (`null` but on the first and the last), `first`, `last` |
 | `roof_features` (`feature`, `tolerance`, `level_path`) | the lines where a roof body's upper faces meet or end, classified ([Roof feature lines](#roof-feature-lines)) | `feature` (undecided where it cannot be told), `what`, `length`, `low`, `high` |
 | `swing_spaces` (`path`, `kinds`) | the spaces a door opens onto, probed as `door-swing` probes them | `into`, `away` |
@@ -1989,7 +1991,22 @@ unbounded), `alignment_gradient` the gradient line's rise over plan run
 one rail head stands above the other, unsigned, and `alignment_cant_ratio`
 that cant over the rail head distance (the sine of the bank angle, a plain
 number). An alignment stating no cant has none: an exact absence, never a
-zero. The trait's
+zero.
+
+`alignment_vertical_curvature` is the curvature of the gradient line in
+its vertical plane (plan distance against height), per metre:
+`z'' / (1 + z'^2)^(3/2)`, positive in a sag, negative on a crest and
+exactly zero on a constant gradient. `alignment_vertical_radius` is its
+unsigned inverse, a length, refused where the gradient line may run at a
+constant gradient there, as `alignment_radius` is refused on a straight:
+a straight has zero curvature and no radius, never an infinite or a
+defaulted one. A vertical circular arc has its radius throughout, so a
+crest of R = 5000 m measures 5000 m at its midpoint within the bound of
+the station the object is located at. A parabolic vertical curve's stated
+radius (its parameter, `L / (g2 - g1)`) is its radius of curvature only at
+its vertex, where its gradient is zero; elsewhere the measured radius is
+larger by `(1 + g^2)^(3/2)`. Rules on a parabola's design radius read the
+element list below. The trait's
 `measure_alignment_parameter` refuses by default, so a service that reads
 no parameters never answers with a straight, level, uncanted line.
 
@@ -2018,8 +2035,8 @@ once per rule and source. The CLI's IFC implementation is described under
 Limits often apply to the worst point of a stretch: the steepest gradient
 of a ramp, the greatest cant of a curve. `max_along` and `min_along` are
 measured on an alignment and read a **station profile** of the parameter
-`of` names (`gradient`, `curvature`, `cant` or `cant_ratio`, as the values
-above define them) from station `from` to station `to`, the alignment's
+`of` names (`gradient`, `curvature`, `cant`, `cant_ratio` or
+`vertical_curvature`, as the values above define them) from station `from` to station `to`, the alignment's
 start and end where either is not stated. A route is an alignment: without
 `from` and `to` the value is read along all of it.
 
@@ -2073,7 +2090,61 @@ plan length (the cant ramp of a transition, the change of gradient):
   whose rate may reach it as the stations.
 
 A linear cant transition from 2.5 % to 6 % over 50 m changes by 0.07 % per
-metre, within the rounding of its values.
+metre, within the rounding of its values. The vertical curvature at a
+station is `max_along;of=vertical_curvature;from=<m>;to=<m>` with both
+stations the same; `min_along` over a range is its tightest crest.
+
+#### Alignment elements
+
+Design guidelines relate consecutive elements: a clothoid's parameter to
+the radius it leads into, one arc's radius to the next. The member list
+`alignment_elements;layout=horizontal|vertical`, measured on an alignment
+(`AlignmentServiceHandle::measure_alignment_elements`,
+`AlignmentElementsRequest`), lists the elements of its plan or of its
+gradient line in their order along it, each with:
+
+| Field | Value |
+|---|---|
+| `index` | its place in the layout, from 1 |
+| `kind` | `straight` (a line, a constant gradient), `arc`, `clothoid`, `transition` (another transition family), `parabola` or `other` |
+| `type`, `element` | its type as the source names it (`CLOTHOID`), and its identity and type, as findings name it |
+| `from`, `to`, `length` | the stations it runs between and its stated length (plan distance for a vertical element) |
+| `start_curvature`, `end_curvature` | the signed curvature it states at each end, per metre: positive turning left in plan, in a sag in the vertical; zero where straight |
+| `start_radius`, `end_radius` | the unsigned radius at each end; not evaluated where straight |
+| `radius` | its one radius where both ends state the same (an arc, a parabola's parameter); `null` for a transition; not evaluated for a straight |
+| `clothoid_parameter` | a clothoid's `A`, `A^2 = L / \|k_end - k_start\|`; `null` for any other kind |
+| `start_gradient`, `end_gradient` | a vertical element's gradients; `null` in plan |
+
+An element states its curvature at each end (`ElementEnd`): straight, a
+signed radius, or none the service can read, with the reason. Curvatures,
+radii and the clothoid parameter are derived from it in the engine
+(`AlignmentElement`), never accepted from a service, each an interval
+holding the exact value; an unread end leaves every field derived from it
+not evaluated, never a straight or a default. The list's evidence is exact
+exactly when every station is a point. Relate consecutive elements with
+[`pairs`](./expressions.md#consecutive-members) by `index`: "a clothoid's
+parameter is at least a third of the radius it leads into" is
+
+```json
+{"kind": "pairs", "function": "all",
+ "over": {"kind": "measured", "name": "alignment_elements;layout=horizontal"},
+ "by": {"kind": "property", "propertySet": "axioval:member", "property": "index"},
+ "value": {"kind": "implies",
+   "antecedent": {"kind": "compare", "operator": "equals",
+     "left": {"kind": "previous", "operand": {"kind": "property", "propertySet": "axioval:member", "property": "kind"}},
+     "right": {"kind": "literal", "value": {"type": "string", "value": "clothoid"}}},
+   "consequent": {"kind": "compare", "operator": "greaterThanOrEquals",
+     "left": {"kind": "previous", "operand": {"kind": "property", "propertySet": "axioval:member", "property": "clothoid_parameter"}},
+     "right": {"kind": "divide",
+       "left": {"kind": "property", "propertySet": "axioval:member", "property": "radius"},
+       "right": {"kind": "literal", "value": {"type": "number", "value": 3}}}}}}
+```
+
+and a finding names the pair (`pairs #103 (CLOTHOID) → #105 (CIRCULARARC)`).
+A clothoid from straight into a radius of 500 m over 100 m has
+`A = sqrt(100 * 500) = 223.6 m`. An object that is no alignment, or an
+alignment whose layout cannot be read, refuses the list with the reason;
+the trait's `measure_alignment_elements` refuses by default.
 
 #### Sections and clearance envelopes
 

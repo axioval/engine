@@ -38,6 +38,7 @@ fn parameter(call: &MeasuredCall) -> Result<AlignmentParameter, PropertyResoluti
         Some("curvature") => AlignmentParameter::Curvature,
         Some("cant") => AlignmentParameter::Cant,
         Some("cant_ratio") => AlignmentParameter::CantRatio,
+        Some("vertical_curvature") => AlignmentParameter::VerticalCurvature,
         _ => return Err(PropertyResolutionError::InvalidRequest),
     })
 }

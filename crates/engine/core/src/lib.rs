@@ -912,6 +912,7 @@ impl ExecutionPlan {
 }
 
 mod alignment;
+mod alignment_element;
 mod boundary_coverage;
 pub mod catalogue;
 mod circulation;
@@ -972,6 +973,10 @@ pub use alignment::{
     AlignmentError, AlignmentInterval, AlignmentParameter, AlignmentParameterRequest,
     AlignmentParameterValue, AlignmentPosition, AlignmentRequest, AlignmentService,
     AlignmentServiceHandle,
+};
+pub use alignment_element::{
+    AlignmentElement, AlignmentElementKind, AlignmentElements, AlignmentElementsRequest,
+    AlignmentLayout, ElementEnd,
 };
 pub use boundary_coverage::{
     BoundaryCoverage, BoundaryCoverageError, BoundaryCoverageRequest, BoundaryCoverageService,
@@ -1047,6 +1052,7 @@ pub use linear_quantity::{
     LinearInterval, LinearQuantityError, LinearQuantityEvidence, LinearQuantityKind,
     LinearQuantityRequest, LinearQuantityService, LinearQuantityServiceHandle, ShelfGeometry,
 };
+pub use measured::elements::AlignmentElementMeasures;
 pub use measured::faces::FacePieceMeasures;
 pub use measured::provider::{
     ArgumentsKey, Citation, MeasuredMember, MeasuredMemo, MeasuredProvider, Measurement,

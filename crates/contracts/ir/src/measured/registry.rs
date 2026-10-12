@@ -2361,18 +2361,26 @@ const ENVELOPE_PARAMETERS: &[MeasuredParameter] = &[
 const PROFILE_OF: MeasuredParameter = MeasuredParameter {
     key: "of",
     kind: MeasuredParameterKind::Choice {
-        options: &["gradient", "curvature", "cant", "cant_ratio"],
+        options: &[
+            "gradient",
+            "curvature",
+            "cant",
+            "cant_ratio",
+            "vertical_curvature",
+        ],
     },
     required: true,
     default: None,
     help: &en_de(
         "The value along the alignment: `gradient` (rise over plan run), `curvature` (plan \
-         curvature per metre, positive turning left), `cant` (metres, unsigned) or \
-         `cant_ratio` (the cant over the rail head distance, unsigned).",
+         curvature per metre, positive turning left), `cant` (metres, unsigned), \
+         `cant_ratio` (the cant over the rail head distance, unsigned) or \
+         `vertical_curvature` (the gradient line's curvature per metre, positive in a sag).",
         "Der Wert entlang der Achse: `gradient` (Steigung über der Lagelänge), `curvature` \
          (Krümmung im Lageplan je Meter, positiv nach links), `cant` (Meter, ohne \
-         Vorzeichen) oder `cant_ratio` (die Überhöhung über dem Schienenkopfabstand, ohne \
-         Vorzeichen).",
+         Vorzeichen), `cant_ratio` (die Überhöhung über dem Schienenkopfabstand, ohne \
+         Vorzeichen) oder `vertical_curvature` (die Krümmung der Gradiente je Meter, positiv \
+         in einer Wanne).",
     ),
 };
 
@@ -2594,6 +2602,52 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              where the alignment may run straight there.",
             "Der Radius der Achse im Lageplan an der Station des Objekts, ohne Vorzeichen; nicht \
              ausgewertet, wo die Achse dort gerade verlaufen kann.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "alignment_vertical_curvature",
+        parameters: ALONG,
+        dimension: None,
+        services: ALIGNMENT_SERVICES,
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[
+            ALIGNMENT_UNREAD,
+            OFF_RANGE,
+            AMBIGUOUS_FOOT,
+            PARAMETER_UNBOUNDED,
+        ],
+        label: &en_de("Vertical curvature", "Krümmung der Gradiente"),
+        help: &en_de(
+            "The curvature of the gradient line in its vertical plane at the object's station, \
+             per metre: positive in a sag, negative on a crest, zero on a constant gradient.",
+            "Die Krümmung der Gradiente in ihrer lotrechten Ebene an der Station des Objekts, je \
+             Meter: positiv in einer Wanne, negativ auf einer Kuppe, null bei konstanter \
+             Längsneigung.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "alignment_vertical_radius",
+        parameters: ALONG,
+        dimension: Some(QuantityDimension::Length),
+        services: ALIGNMENT_SERVICES,
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[
+            ALIGNMENT_UNREAD,
+            OFF_RANGE,
+            AMBIGUOUS_FOOT,
+            PARAMETER_UNBOUNDED,
+            "the gradient line may run at a constant gradient there, so its radius is unbounded",
+        ],
+        label: &en_de("Vertical radius", "Halbmesser der Gradiente"),
+        help: &en_de(
+            "The radius of the gradient line in its vertical plane at the object's station, \
+             unsigned, crest or sag; not evaluated where it may run at a constant gradient \
+             there.",
+            "Der Halbmesser der Gradiente in ihrer lotrechten Ebene an der Station des Objekts, \
+             ohne Vorzeichen, Kuppe oder Wanne; nicht ausgewertet, wo sie dort mit konstanter \
+             Längsneigung verlaufen kann.",
         ),
     },
     MeasuredDescriptor {

@@ -1455,8 +1455,10 @@ plan's curvature from its curvature law (lines, arcs, clothoids and other
 polynomial curvature, piecewise and chained), the gradient from the
 elevation law (polynomials and circular arcs), and the cant from the
 `IfcAlignmentCant` segments, whose transition shapes are all monotone
-along a segment. A sinusoidal spiral, a cubic parabola given as a
-parametric plan piece and another elevation law are refused by name.
+along a segment; the vertical curvature from the same elevation laws the
+profiles read (below). A sinusoidal spiral, a cubic parabola given as a
+parametric plan piece and another elevation law (a vertical clothoid) are
+refused by name.
 
 Profiles along a station range (`max_along`, `min_along`, `rate_along`) read the same
 laws piece by piece, each piece's rate proven from its law: the derivative
@@ -1469,7 +1471,28 @@ at mid-segment and fall back, so a stretch's ends and the middle bound
 them. Pieces end at the laws' seams and at station equations, and every
 `step` where one is stated; a segment's authored cants are kept exact,
 values computed in floating point are widened outward. A law with no rate
-bound is refused by name, never sampled.
+bound is refused by name, never sampled. The vertical curvature
+`z'' / (1 + z'^2)^(3/2)` of a polynomial elevation and its rate
+`z''' F - 3 z' z''^2 G` (`F = (1 + z'^2)^(-3/2)`, `G = (1 + z'^2)^(-5/2)`,
+both falling in `|z'|`) are bounded by interval arithmetic over the
+stretch, so a constant gradient is exactly zero; a vertical circular arc's
+is its constant `1 / R`.
+
+The elements of `alignment_elements` are read from the alignment's
+`IfcAlignmentHorizontal` and `IfcAlignmentVertical` segments as they state
+them, apart from the centreline (so a layout the centreline cannot be
+composed from may still list its elements), in nesting order and without
+the zero-length segment closing a layout. A horizontal segment's radii are
+its `StartRadiusOfCurvature` and `EndRadiusOfCurvature` (`0` a straight
+end; `CLOTHOID` is a clothoid, every other transition token a transition);
+its stations run from the sum of the lengths before it. A vertical segment
+runs from its `StartDistAlong` over its `HorizontalLength`: a constant
+gradient is straight, a circular arc states its `RadiusOfCurvature` at
+both ends, and a parabola too, but only where its gradients change over
+its length as that radius says (`L / (g2 - g1)` within a millionth), else
+its ends are unread with both values; a vertical clothoid states neither
+end curvature, so its ends are unread. Stations are labelled through the
+station equations as positions are.
 
 The same service cuts sections and sweeps clearance envelopes (see
 [Sections and clearance envelopes](./derived.md#sections-and-clearance-envelopes))

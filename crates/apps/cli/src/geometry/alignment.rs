@@ -53,8 +53,16 @@
 //! piecewise of those), whose grade is monotone on each arc; and the cant
 //! from the alignment's `IfcAlignmentCant` segments, whose every transition
 //! shape is monotone along its segment, so each rail's elevation is bounded
-//! by its values at the stretch's ends within each segment. Other laws are
-//! refused by name. An alignment nesting no cant layout states no cant.
+//! by its values at the stretch's ends within each segment; the vertical
+//! curvature from the same laws the profile reads them by
+//! (`profile::vertical_curvature`). Other laws are refused by name. An
+//! alignment nesting no cant layout states no cant.
+//!
+//! # Elements
+//!
+//! The elements of each layout (`elements`) are read from the alignment's
+//! `IfcAlignmentHorizontal` and `IfcAlignmentVertical` segments as they
+//! state them, independently of its centreline.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -72,6 +80,7 @@ use ifc_model::{EntityId, Model};
 
 use super::{PRODUCT_REPRESENTATION, Parsed, context_frame, entity_id, session, world_transform};
 
+mod elements;
 mod profile;
 mod section;
 
@@ -98,6 +107,9 @@ fn slack(scale: f64) -> f64 {
 pub(super) struct IfcAlignmentService {
     points: BTreeMap<ObjectId, Result<[f64; 3], String>>,
     alignments: BTreeMap<ObjectId, Result<Centreline, String>>,
+    /// The elements of every alignment's layouts, read apart from its
+    /// centreline.
+    layouts: BTreeMap<ObjectId, elements::Layouts>,
     /// The bodies sections cut and envelopes are swept past.
     geometry: axioval::axiolid::AxiolidGeometry,
 }
@@ -110,6 +122,7 @@ pub(super) fn alignment_service(
     geometry: axioval::axiolid::AxiolidGeometry,
 ) -> IfcAlignmentService {
     let mut alignments = BTreeMap::new();
+    let mut layouts = BTreeMap::new();
     for id in objects {
         let (Some(source), Some(entity)) = (parsed.get(&id.source), entity_id(id)) else {
             continue;
@@ -120,6 +133,7 @@ pub(super) fn alignment_service(
             .is_some_and(|found| found.type_name.eq_ignore_ascii_case("IFCALIGNMENT"));
         if is_alignment {
             alignments.insert(id.clone(), Centreline::read(source, entity));
+            layouts.insert(id.clone(), elements::Layouts::read(source, entity));
         }
     }
     let sources: BTreeSet<&SourceId> = alignments.keys().map(|id| &id.source).collect();
@@ -142,6 +156,7 @@ pub(super) fn alignment_service(
     IfcAlignmentService {
         points,
         alignments,
+        layouts,
         geometry,
     }
 }
@@ -1010,6 +1025,13 @@ impl AlignmentService for IfcAlignmentService {
                 Some(gradient(&elevated.elevation, stretch).map_err(AlignmentError::Unavailable)?),
                 "gradient",
             ),
+            AlignmentParameter::VerticalCurvature => (
+                Some(
+                    profile::vertical_curvature(&elevated.elevation, centreline.length, stretch)
+                        .map_err(AlignmentError::Unavailable)?,
+                ),
+                "vertical curvature",
+            ),
             parameter @ (AlignmentParameter::Cant | AlignmentParameter::CantRatio) => {
                 let layout = centreline
                     .cant
@@ -1057,6 +1079,13 @@ impl AlignmentService for IfcAlignmentService {
         request: &axioval::engine::AlignmentProfileRequest,
     ) -> Result<axioval::engine::AlignmentProfile, AlignmentError> {
         self.profile(request)
+    }
+
+    fn measure_alignment_elements(
+        &self,
+        request: &axioval::engine::AlignmentElementsRequest,
+    ) -> Result<axioval::engine::AlignmentElements, AlignmentError> {
+        self.elements(request)
     }
 
     fn measure_section(
@@ -1377,6 +1406,12 @@ mod tests {
             1e-5,
         );
         assert_eq!(parameter(AlignmentParameter::Cant), None);
+        // A circle in the vertical: its curvature is 1 / R throughout.
+        holds(
+            bounds(parameter(AlignmentParameter::VerticalCurvature).unwrap()),
+            0.001,
+            1e-14,
+        );
     }
 
     #[test]

@@ -3388,6 +3388,146 @@ fn with_geometry_the_cant_ramp_along_an_alignment_is_judged_by_its_rate() {
     assert_eq!(output.status.code(), Some(0), "{result:#}");
 }
 
+/// An IFC4X3 alignment by its layouts (#401): a plan of a 100 m line, a
+/// 100 m clothoid from straight into a left-hand radius of 500 m
+/// (`A = sqrt(100 * 500)`) and 100 m of that arc; a vertical crest arc of
+/// radius 5000 m from +2 % to -2 %, then -2 % to 300 m. A proxy (#604)
+/// stands above the crest's midpoint.
+fn alignment_with_a_crest() -> String {
+    let (radius, length) = (500.0_f64, 100.0_f64);
+    // The clothoid's end by Simpson's rule (its seam is not verified).
+    let steps = 4000_u32;
+    let width = length / f64::from(steps);
+    let heading = |s: f64| s * s / (2.0 * radius * length);
+    let (mut x, mut y) = (0.0, 0.0);
+    for step in 0..=steps {
+        let s = f64::from(step) * width;
+        let weight = if step == 0 || step == steps {
+            1.0
+        } else if step % 2 == 1 {
+            4.0
+        } else {
+            2.0
+        };
+        x += weight * heading(s).cos();
+        y += weight * heading(s).sin();
+    }
+    let (x, y) = (100.0 + x * width / 3.0, y * width / 3.0);
+    let turned = length / (2.0 * radius);
+    let (cx, cy) = (x - radius * turned.sin(), y + radius * turned.cos());
+    let end = turned + 100.0 / radius;
+    let (ex, ey) = (cx + radius * end.sin(), cy - radius * end.cos());
+    // `R (sin t0 - sin t1)` from +2 % to -2 %.
+    let crest = 2.0 * 5000.0 * 0.02 / 1.0004_f64.sqrt();
+    let tail = 300.0 - crest;
+    let low = 50.0 - 0.02 * tail;
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\n\
+         FILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4X3_ADD2'));\nENDSEC;\nDATA;\n\
+         #4=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #5=IFCAXIS2PLACEMENT3D(#4,$,$);\n\
+         #7=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-6,#5,$);\n\
+         #100=IFCCARTESIANPOINT((0.,0.));\n\
+         #101=IFCALIGNMENTHORIZONTALSEGMENT($,$,#100,0.,0.,0.,100.,$,.LINE.);\n\
+         #102=IFCCARTESIANPOINT((100.,0.));\n\
+         #103=IFCALIGNMENTHORIZONTALSEGMENT($,$,#102,0.,0.,500.,100.,$,.CLOTHOID.);\n\
+         #104=IFCCARTESIANPOINT(({x:?},{y:?}));\n\
+         #105=IFCALIGNMENTHORIZONTALSEGMENT($,$,#104,{turned:?},500.,500.,100.,$,.CIRCULARARC.);\n\
+         #106=IFCCARTESIANPOINT(({ex:?},{ey:?}));\n\
+         #107=IFCALIGNMENTHORIZONTALSEGMENT($,$,#106,{end:?},0.,0.,0.,$,.LINE.);\n\
+         #111=IFCALIGNMENTSEGMENT('seg-h-0000000000000001',$,$,$,$,$,$,#101);\n\
+         #112=IFCALIGNMENTSEGMENT('seg-h-0000000000000002',$,$,$,$,$,$,#103);\n\
+         #113=IFCALIGNMENTSEGMENT('seg-h-0000000000000003',$,$,$,$,$,$,#105);\n\
+         #114=IFCALIGNMENTSEGMENT('seg-h-0000000000000004',$,$,$,$,$,$,#107);\n\
+         #121=IFCALIGNMENTHORIZONTAL('align-horiz-0000000001',$,$,$,$,$,$);\n\
+         #122=IFCRELNESTS('nest-h-000000000000001',$,$,$,#121,(#111,#112,#113,#114));\n\
+         #200=IFCALIGNMENTVERTICALSEGMENT($,$,0.,{crest:?},50.,0.02,-0.02,-5000.,.CIRCULARARC.);\n\
+         #201=IFCALIGNMENTVERTICALSEGMENT($,$,{crest:?},{tail:?},50.,-0.02,-0.02,$,.CONSTANTGRADIENT.);\n\
+         #202=IFCALIGNMENTVERTICALSEGMENT($,$,300.,0.,{low:?},-0.02,-0.02,$,.CONSTANTGRADIENT.);\n\
+         #211=IFCALIGNMENTSEGMENT('seg-v-0000000000000001',$,$,$,$,$,$,#200);\n\
+         #212=IFCALIGNMENTSEGMENT('seg-v-0000000000000002',$,$,$,$,$,$,#201);\n\
+         #213=IFCALIGNMENTSEGMENT('seg-v-0000000000000003',$,$,$,$,$,$,#202);\n\
+         #221=IFCALIGNMENTVERTICAL('align-vert-00000000001',$,$,$,$,$,$);\n\
+         #222=IFCRELNESTS('nest-v-000000000000001',$,$,$,#221,(#211,#212,#213));\n\
+         #401=IFCALIGNMENT('0000000000000000000401',$,$,$,$,$,$,$);\n\
+         #402=IFCRELNESTS('nest-a-000000000000001',$,$,$,#401,(#121,#221));\n\
+         #601=IFCCARTESIANPOINT(({half:?},0.,60.));\n\
+         #602=IFCAXIS2PLACEMENT3D(#601,$,$);\n\
+         #603=IFCLOCALPLACEMENT($,#602);\n\
+         #604=IFCBUILDINGELEMENTPROXY('0000000000000000000604',$,$,$,$,#603,$,$,$);\n\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        half = crest / 2.0,
+    )
+}
+
+/// engine#337 end to end: the crest's radius at the proxy above its
+/// midpoint is 5000 m within the bound, so a band of a millimetre around
+/// it holds and a 5001 m minimum fails; the plan's clothoid leads into its
+/// 500 m arc with `A = 223.6 m`, which a third of the radius allows and
+/// half of it does not, read by `pairs` over the element list; the
+/// finding names the pair.
+#[test]
+fn with_geometry_a_crest_radius_and_the_element_sequence_are_judged() {
+    let case = Case::new("geometry-alignment-vertical-radius");
+    let types = [
+        ("alignment", "IfcAlignment"),
+        ("proxy", "IfcBuildingElementProxy"),
+    ];
+    let metres = |value: f64| json!({"kind": "literal", "value": {"type": "quantity", "value": value, "unit": "m"}});
+    let radius = json!({"kind": "property", "propertySet": "axioval:measured",
+        "property": "alignment_vertical_radius;alignment=IfcAlignment"});
+    let expression = |subject: &str, value: Value| {
+        case.geometry_rule(
+            &alignment_with_a_crest(),
+            &types,
+            "axioval:capability.expression",
+            &registry_signature("axioval:capability.expression"),
+            entity(subject),
+            json!({"requirement": {"type": "expression", "value": value}}),
+        )
+    };
+    let (output, result) = expression(
+        "proxy",
+        json!({"kind": "between", "operand": radius, "low": metres(4999.999), "high": metres(5000.001)}),
+    );
+    assert_eq!(output.status.code(), Some(0), "{result:#}");
+    let (output, result) = expression(
+        "proxy",
+        json!({"kind": "compare", "operator": "greaterThanOrEquals", "left": radius,
+            "right": metres(5001.0)}),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(
+        result["report"]["findings"][0]["object_id"]["local_id"], "#604",
+        "{result:#}"
+    );
+
+    let member =
+        |name: &str| json!({"kind": "property", "propertySet": "axioval:member", "property": name});
+    let parameter = |share: f64| {
+        json!({"kind": "pairs", "function": "all",
+            "over": {"kind": "measured", "name": "alignment_elements;layout=horizontal"},
+            "by": member("index"),
+            "value": {"kind": "implies",
+                "antecedent": {"kind": "compare", "operator": "equals",
+                    "left": {"kind": "previous", "operand": member("kind")},
+                    "right": {"kind": "literal", "value": {"type": "string", "value": "clothoid"}}},
+                "consequent": {"kind": "compare", "operator": "greaterThanOrEquals",
+                    "left": {"kind": "previous", "operand": member("clothoid_parameter")},
+                    "right": {"kind": "multiply", "left": member("radius"),
+                        "right": {"kind": "literal", "value": {"type": "number", "value": share}}}}}})
+    };
+    let (output, result) = expression("alignment", parameter(1.0 / 3.0));
+    assert_eq!(output.status.code(), Some(0), "{result:#}");
+    let (output, result) = expression("alignment", parameter(0.5));
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let finding = result["report"]["findings"][0].to_string();
+    assert!(
+        finding.contains("pairs #103 (CLOTHOID) → #105 (CIRCULARARC)"),
+        "{finding}"
+    );
+}
+
 /// engine#275 on real tessellated data: an `IfcEarthworksFill` of the
 /// buildingSMART IFC 4.3 sample scene (`fixtures/ifc4x3-earthworks`), one
 /// `IfcTriangulatedFaceSet` whose top is a level part, a ramp rising one in

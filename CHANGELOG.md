@@ -6,6 +6,31 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Measured values**: `alignment_vertical_curvature` and
+  `alignment_vertical_radius` read the gradient line's curvature in its
+  vertical plane (`z'' / (1 + z'^2)^(3/2)`, positive in a sag) and its
+  unsigned radius at an object's station, and `max_along`, `min_along` and
+  `rate_along` take `of=vertical_curvature`. A crest of R = 5000 m
+  measures 5000 m at its midpoint within the bound of the located
+  station. A constant gradient is exactly zero and its radius not
+  evaluated, as `alignment_radius` is on a straight.
+  `AlignmentParameter` gains `VerticalCurvature`; the CLI bounds it from
+  the elevation laws the profiles read
+  ([#337](https://github.com/axioval/engine/issues/337)).
+- **Measured members**: `alignment_elements;layout=horizontal|vertical`
+  lists an alignment's plan or gradient-line elements in order, each with
+  its `index`, `kind` (`straight`, `arc`, `clothoid`, `transition`,
+  `parabola`, `other`), `type`, stations, length, curvature and radius at
+  both ends, one `radius`, a clothoid's `clothoid_parameter`
+  (`A^2 = L / |k_end - k_start|`) and a vertical element's gradients, so
+  `pairs` by `index` relates consecutive elements: a clothoid from
+  straight into 500 m over 100 m has A = 223.6 m. A straight end's radius
+  and every value derived from an end the source states no curvature for
+  (a vertical clothoid) are not evaluated, never defaulted.
+  `AlignmentService::measure_alignment_elements`
+  (`AlignmentElementsRequest`, `AlignmentElements`, `AlignmentElement`,
+  `ElementEnd`) refuses by default; the CLI reads the IFC4X3 layouts' segments
+  ([#337](https://github.com/axioval/engine/issues/337)).
 - **Measured values**: `height_above_surface;surface=<objects>[;edge=top|bottom]`
   is the least vertical distance from an object's faces looking up (or
   down) to the nearest selected surface beneath them, over the whole

@@ -30,6 +30,7 @@ mod alignment;
 mod angles;
 mod areas;
 mod clearance;
+pub(crate) mod elements;
 pub(crate) mod faces;
 mod levels;
 mod profile;

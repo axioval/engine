@@ -1,7 +1,8 @@
 //! Positions along an alignment as values: the station, signed offset and
 //! height above the gradient line of an object's reference point, and the
-//! alignment's curvature, radius, gradient and cant at that station, each
-//! as the alignment service measures it ([`crate::alignment`]).
+//! alignment's curvature, radius, gradient and cant at that station, in
+//! plan and in the vertical, each as the alignment service measures it
+//! ([`crate::alignment`]).
 //!
 //! The alignment is the one object of the `alignment` kinds that `path`
 //! reaches from the object, or, without a path, the one in the object's
@@ -36,10 +37,25 @@ pub(super) const CURVATURE: &str = "alignment_curvature";
 pub(super) const GRADIENT: &str = "alignment_gradient";
 /// The alignment's plan radius at the object's station.
 pub(super) const RADIUS: &str = "alignment_radius";
+/// The gradient line's curvature in its vertical plane at the object's
+/// station.
+pub(super) const VERTICAL_CURVATURE: &str = "alignment_vertical_curvature";
+/// The gradient line's radius in its vertical plane at the object's
+/// station.
+pub(super) const VERTICAL_RADIUS: &str = "alignment_vertical_radius";
 
 /// The names measured here.
 pub(super) const NAMES: &[&str] = &[
-    CANT, CANT_RATIO, CURVATURE, GRADIENT, RADIUS, HEIGHT, OFFSET, STATION,
+    CANT,
+    CANT_RATIO,
+    CURVATURE,
+    GRADIENT,
+    RADIUS,
+    VERTICAL_CURVATURE,
+    VERTICAL_RADIUS,
+    HEIGHT,
+    OFFSET,
+    STATION,
 ];
 
 impl Measures {
@@ -124,6 +140,7 @@ impl Measures {
             CANT => AlignmentParameter::Cant,
             CANT_RATIO => AlignmentParameter::CantRatio,
             GRADIENT => AlignmentParameter::Gradient,
+            VERTICAL_CURVATURE | VERTICAL_RADIUS => AlignmentParameter::VerticalCurvature,
             _ => AlignmentParameter::Curvature,
         };
         let request =
@@ -141,14 +158,19 @@ impl Measures {
         };
         Ok(match name {
             CANT => cited(value, length, locator, exact),
-            RADIUS => {
+            RADIUS | VERTICAL_RADIUS => {
+                let (plane, straight) = if name == RADIUS {
+                    ("curvature", "straight")
+                } else {
+                    ("vertical curvature", "at a constant gradient")
+                };
                 let (lower, upper) = radius(value).ok_or_else(|| {
                     Self::unavailable(
                         name,
                         object,
                         &format!(
-                            "the curvature of {alignment} there lies in [{}, {}] per metre, \
-                             which may be straight, so its radius is unbounded",
+                            "the {plane} of {alignment} there lies in [{}, {}] per metre, \
+                             which may run {straight}, so its radius is unbounded",
                             value.lower(),
                             value.upper()
                         ),
@@ -245,6 +267,7 @@ mod tests {
             let value = match request.parameter() {
                 AlignmentParameter::Curvature => Some(interval(0.002, 0.002)),
                 AlignmentParameter::Gradient => Some(interval(0.0199, 0.0201)),
+                AlignmentParameter::VerticalCurvature => Some(interval(-0.000_200_1, -0.000_2)),
                 AlignmentParameter::Cant | AlignmentParameter::CantRatio => None,
             };
             let mut evidence = evidence("parameters of #175");
@@ -340,6 +363,20 @@ mod tests {
         let (lower, upper, dimension) =
             interval_of(&value("pier", "alignment_gradient;alignment=IfcAlignment").unwrap());
         assert_eq!((lower, upper, dimension), (0.0199, 0.0201, None));
+        // A crest: negative vertical curvature, its radius unsigned.
+        let (lower, upper, dimension) = interval_of(
+            &value(
+                "pier",
+                "alignment_vertical_curvature;alignment=IfcAlignment",
+            )
+            .unwrap(),
+        );
+        assert_eq!((lower, upper, dimension), (-0.000_200_1, -0.000_2, None));
+        let (lower, upper, dimension) = interval_of(
+            &value("pier", "alignment_vertical_radius;alignment=IfcAlignment").unwrap(),
+        );
+        assert_eq!(dimension, Some(QuantityDimension::Length));
+        assert!(lower <= 1.0 / 0.000_200_1 && upper >= 5000.0 && upper - lower < 3.0);
         // No cant stated is an absence, not a zero.
         assert!(matches!(
             value("pier", "alignment_cant;alignment=IfcAlignment").unwrap(),

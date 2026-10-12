@@ -18,6 +18,8 @@ use std::sync::Arc;
 use axioval_ir::{Evidence, ObjectId};
 use thiserror::Error;
 
+use crate::vertical_extent::FaceNormal;
+
 /// Failure to measure a facade area.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum FacadeAreaError {
@@ -105,6 +107,141 @@ impl FacadeArea {
     }
 }
 
+/// Whether a face looks outside over all of it, or only over part.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum FacadeFaceSide {
+    /// Every point the service probed looks outside.
+    Outside,
+    /// Some probes look outside and some do not: the face is partly
+    /// covered, and how much of it looks outside is unknown.
+    Partly,
+}
+
+/// One planar part of an object's boundary that looks outside: its
+/// outward normal, its area and a point on it.
+///
+/// The normal points out of the body, as [`FaceNormal`] bounds it; a
+/// planar body's part is its triangle, and the box only bounds the
+/// rounding of its cross product.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FacadeFace {
+    normal: FaceNormal,
+    area: (f64, f64),
+    centroid: [f64; 3],
+    side: FacadeFaceSide,
+}
+
+impl FacadeFace {
+    /// A face with the outward `normal`, an area in `[lower, upper]` square
+    /// metres and its `centroid`.
+    ///
+    /// # Errors
+    ///
+    /// [`FacadeAreaError::InvalidMeasurement`] for an area not finite,
+    /// negative or reversed, or a centroid that is not finite.
+    pub fn try_new(
+        normal: FaceNormal,
+        (lower, upper): (f64, f64),
+        centroid: [f64; 3],
+        side: FacadeFaceSide,
+    ) -> Result<Self, FacadeAreaError> {
+        if !lower.is_finite()
+            || !upper.is_finite()
+            || lower < 0.0
+            || lower > upper
+            || !centroid.iter().all(|value| value.is_finite())
+        {
+            return Err(FacadeAreaError::InvalidMeasurement);
+        }
+        Ok(Self {
+            normal,
+            area: (lower, upper),
+            centroid,
+            side,
+        })
+    }
+
+    /// The outward normal.
+    #[must_use]
+    pub fn normal(&self) -> &FaceNormal {
+        &self.normal
+    }
+
+    /// The least and greatest area the face may have, in square metres.
+    #[must_use]
+    pub fn area_square_metres(&self) -> (f64, f64) {
+        self.area
+    }
+
+    /// The face's centroid, in canonical metres.
+    #[must_use]
+    pub fn centroid(&self) -> [f64; 3] {
+        self.centroid
+    }
+
+    /// Whether all of it looks outside.
+    #[must_use]
+    pub fn side(&self) -> FacadeFaceSide {
+        self.side
+    }
+}
+
+/// Every face of one object that looks outside, wholly or in part, in the
+/// service's stable order, with evidence.
+///
+/// Unlike [`FacadeAreaService::measure_facade_area`], which counts steep
+/// faces only, the list holds faces of every slope: a roof's top and a
+/// ground slab's underside look outside too. The evidence is exact only
+/// where the service states the faces of the object's exact shape, so
+/// every normal box and area holds nothing but rounding; a tessellation is
+/// never exact.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FacadeFaces {
+    object: ObjectId,
+    faces: Vec<FacadeFace>,
+    evidence: Evidence,
+}
+
+impl FacadeFaces {
+    /// The outward faces of `object`; none where no face looks outside.
+    ///
+    /// # Errors
+    ///
+    /// [`FacadeAreaError::InexactEvidence`] for evidence without a locator.
+    pub fn try_new(
+        object: ObjectId,
+        faces: Vec<FacadeFace>,
+        evidence: Evidence,
+    ) -> Result<Self, FacadeAreaError> {
+        if evidence.locator.trim().is_empty() {
+            return Err(FacadeAreaError::InexactEvidence);
+        }
+        Ok(Self {
+            object,
+            faces,
+            evidence,
+        })
+    }
+
+    /// The measured object.
+    #[must_use]
+    pub fn object(&self) -> &ObjectId {
+        &self.object
+    }
+
+    /// Every face looking outside, in the service's order.
+    #[must_use]
+    pub fn faces(&self) -> &[FacadeFace] {
+        &self.faces
+    }
+
+    /// Reviewable provenance of the measurement.
+    #[must_use]
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+}
+
 /// Measures the outward-facing surface area of model objects.
 pub trait FacadeAreaService: Send + Sync + 'static {
     /// The area of `object`'s faces that face the outside.
@@ -121,6 +258,20 @@ pub trait FacadeAreaService: Send + Sync + 'static {
         let _ = object;
         Err(FacadeAreaError::Unavailable(
             "face areas are not measured by this service".into(),
+        ))
+    }
+
+    /// Every face of `object` that looks outside, of any slope, with its
+    /// outward normal, area and centroid, classified as the facade area
+    /// classifies its steep faces.
+    ///
+    /// The default refuses with [`FacadeAreaError::Unavailable`], so a
+    /// service that does not list faces fails closed.
+    // gate: measures plane_angle, area
+    fn measure_facade_faces(&self, object: &ObjectId) -> Result<FacadeFaces, FacadeAreaError> {
+        let _ = object;
+        Err(FacadeAreaError::Unavailable(
+            "outward faces are not listed by this service".into(),
         ))
     }
 }
@@ -154,6 +305,16 @@ impl FacadeAreaServiceHandle {
             return Err(FacadeAreaError::InvalidMeasurement);
         }
         Ok(area)
+    }
+
+    /// Every face of `object` that looks outside. Faces naming another
+    /// object answer a different question and are refused.
+    pub fn measure_facade_faces(&self, object: &ObjectId) -> Result<FacadeFaces, FacadeAreaError> {
+        let faces = self.0.measure_facade_faces(object)?;
+        if faces.object() != object {
+            return Err(FacadeAreaError::InvalidMeasurement);
+        }
+        Ok(faces)
     }
 }
 
@@ -200,6 +361,27 @@ mod tests {
                 "{lower} {upper}"
             );
         }
+    }
+
+    #[test]
+    fn outward_faces_need_an_area_and_evidence_a_locator() {
+        let point = FaceNormal::exact([0.0, -1.0, 0.0]).unwrap();
+        let boxed = FaceNormal::try_new([0.0, -1.0, -0.1], [0.0, -1.0, 0.1]).unwrap();
+        let face =
+            |normal, area| FacadeFace::try_new(normal, area, [0.0; 3], FacadeFaceSide::Outside);
+        assert!(face(point, (2.0, 1.0)).is_err());
+        assert!(face(point, (-1.0, 1.0)).is_err());
+        let exact_face = face(point, (1.0, 1.0)).unwrap();
+        assert!(FacadeFaces::try_new(id("a"), vec![exact_face], exact()).is_ok());
+        let leaning = face(boxed, (1.0, 1.0)).unwrap();
+        let mut unlocated = exact();
+        unlocated.locator = " ".into();
+        assert_eq!(
+            FacadeFaces::try_new(id("a"), vec![leaning.clone()], unlocated),
+            Err(FacadeAreaError::InexactEvidence)
+        );
+        assert!(FacadeFaces::try_new(id("a"), vec![leaning], exact()).is_ok());
+        assert!(FacadeFaces::try_new(id("a"), vec![], exact()).is_ok());
     }
 
     struct Other;

@@ -4,7 +4,9 @@
 use axiolid_core::Point3;
 use axiolid_mesh::TriMesh;
 use axioval_axiolid::{AxiolidGeometry, AxiolidSightService};
-use axioval_engine::{SightError, SightOutcome, SightRequest, SightService};
+use axioval_engine::{
+    SightError, SightOutcome, SightRequest, SightService, SkyObstruction, SkyObstructionRequest,
+};
 use axioval_ir::{ObjectId, SourceId};
 
 fn source() -> SourceId {
@@ -139,4 +141,95 @@ fn inexact_or_unmeasured_blockers_and_bodiless_targets_refuse() {
         AxiolidSightService::new(scene()).assess_sight(&request),
         Err(SightError::UnknownObject(_))
     ));
+}
+
+/// From the middle of a window's outer face at (5, -0.3, 1.75), looking
+/// south (-y) over a sector reaching `half` either side.
+fn obstruction(
+    geometry: AxiolidGeometry,
+    half: f64,
+    obstacles: &[&str],
+) -> Result<SkyObstruction, SightError> {
+    let request = SkyObstructionRequest::try_new(
+        id("window"),
+        [5.0, -0.3, 1.75],
+        [0.0, -1.0],
+        half,
+        obstacles.iter().map(|local| id(local)).collect(),
+    )
+    .expect("valid request");
+    AxiolidSightService::new(geometry).measure_sky_obstruction(&request)
+}
+
+/// A block 10 m high above the eye, its face 20 m in front of the window,
+/// a tower behind the window and another building well to the side.
+fn street() -> AxiolidGeometry {
+    AxiolidGeometry::new()
+        .with_mesh(id("window"), cuboid([4.0, -0.3, 1.0], [6.0, 0.0, 2.5]))
+        .with_mesh(
+            id("block"),
+            cuboid([-10.0, -30.3, 0.0], [20.0, -20.3, 11.75]),
+        )
+        .with_mesh(id("tower"), cuboid([0.0, 5.0, 0.0], [10.0, 10.0, 50.0]))
+        .with_mesh(id("aside"), cuboid([40.0, -10.0, 0.0], [45.0, -5.0, 30.0]))
+        .with_no_body(id("zone"))
+}
+
+#[test]
+fn a_block_ten_metres_up_twenty_metres_ahead_rises_by_its_arctangent() {
+    let expected = 0.5_f64.atan();
+    for half in [0.0, 0.3, std::f64::consts::FRAC_PI_2] {
+        let answer = obstruction(street(), half, &["block", "tower", "zone"]).unwrap();
+        let (lower, upper) = answer.angle_radians();
+        assert!(
+            lower <= expected && expected <= upper && upper - lower < 1e-8,
+            "{half}: {lower} {upper}"
+        );
+        assert_eq!(answer.highest(), [id("block")]);
+        assert!(answer.evidence().exact);
+    }
+    // 26.57 degrees.
+    assert!((expected.to_degrees() - 26.565).abs() < 1e-3);
+}
+
+#[test]
+fn only_what_stands_in_front_within_the_sector_obstructs() {
+    // The tower stands behind the window; the other building lies well to
+    // the side of straight ahead.
+    let answer = obstruction(street(), 0.3, &["tower", "aside"]).unwrap();
+    assert_eq!(answer.angle_radians(), (0.0, 0.0));
+    assert!(answer.highest().is_empty());
+    let wide = obstruction(street(), 1.4, &["tower", "aside"]).unwrap();
+    assert_eq!(wide.highest(), [id("aside")]);
+    assert!(wide.angle_radians().0 > 0.0);
+    // Below the horizon nothing obstructs.
+    let low =
+        AxiolidGeometry::new().with_mesh(id("kerb"), cuboid([0.0, -20.0, 0.0], [10.0, -19.0, 0.2]));
+    let answer = obstruction(low, 0.0, &["kerb"]).unwrap();
+    assert_eq!(answer.angle_radians(), (0.0, 0.0));
+}
+
+#[test]
+fn a_tessellated_or_unmeasured_obstacle_in_front_refuses() {
+    let tessellated = street().with_tessellated_mesh(
+        id("block"),
+        cuboid([-10.0, -30.3, 0.0], [20.0, -20.3, 11.75]),
+        1e-3,
+    );
+    assert!(matches!(
+        obstruction(tessellated, 0.0, &["block"]),
+        Err(SightError::Unavailable(_))
+    ));
+    let unmeasured = street().with_unmeasured(id("ghost"), "failed");
+    assert!(matches!(
+        obstruction(unmeasured, 0.0, &["ghost"]),
+        Err(SightError::Unavailable(_))
+    ));
+    // Behind the window, a tessellation cannot matter.
+    let behind = street().with_tessellated_mesh(
+        id("tower"),
+        cuboid([0.0, 5.0, 0.0], [10.0, 10.0, 50.0]),
+        1e-3,
+    );
+    assert!(obstruction(behind, 0.0, &["tower"]).is_ok());
 }

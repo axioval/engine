@@ -38,7 +38,10 @@ use axiolid_core::{Point3, Ray3, Tolerance, Vec3};
 use axiolid_measure::WindingMesh;
 use axiolid_mesh::{TriMesh, audit_mesh};
 use axiolid_ray_mesh::intersect_triangle;
-use axioval_engine::{FacadeArea, FacadeAreaError, FacadeAreaService, GeometryFidelity};
+use axioval_engine::{
+    FacadeArea, FacadeAreaError, FacadeAreaService, FacadeFace, FacadeFaceSide, FacadeFaces,
+    GeometryFidelity,
+};
 use axioval_ir::{Evidence, ObjectId};
 
 use crate::geometry::{AxiolidGeometry, Extent, Triangle, extent_gap, mesh_extent, triangles};
@@ -166,8 +169,29 @@ impl AxiolidFacadeAreaService {
     }
 }
 
-impl FacadeAreaService for AxiolidFacadeAreaService {
-    fn measure_facade_area(&self, object: &ObjectId) -> Result<FacadeArea, FacadeAreaError> {
+/// Which faces a classification probes.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Faces {
+    /// Steep faces only, probed horizontally out of them as wound: the
+    /// facade area.
+    Steep,
+    /// Every face of a closed body, probed along its normal turned out of
+    /// the body: the outward faces.
+    All,
+}
+
+/// How a subject's faces look: its triangles, the index and outside count
+/// of each face probed, and its chord deviation when it is a tessellation.
+struct Classified {
+    soup: Vec<Triangle>,
+    looked: Vec<(usize, usize)>,
+    deviation: Option<f64>,
+}
+
+impl AxiolidFacadeAreaService {
+    /// Probes `faces` of `object` and counts how many samples of each look
+    /// outside; a face none of whose samples does is left out.
+    fn classify(&self, object: &ObjectId, faces: Faces) -> Result<Classified, FacadeAreaError> {
         if self.geometry.has_no_body(object) {
             return Err(FacadeAreaError::Unavailable(format!(
                 "{object} is declared to have no body"
@@ -180,11 +204,26 @@ impl FacadeAreaService for AxiolidFacadeAreaService {
             .ok_or_else(|| FacadeAreaError::UnknownObject(object.clone()))?;
         let tolerance = tolerance()?;
         let soup = triangles(mesh);
-        if soup.is_empty() || !audit_mesh(mesh, tolerance).is_surface_usable() {
+        let health = audit_mesh(mesh, tolerance);
+        if soup.is_empty() || !health.is_surface_usable() {
             return Err(FacadeAreaError::Unavailable(format!(
                 "the mesh of {object} cannot be measured"
             )));
         }
+        // Outward faces need an outside: a closed body, its winding told
+        // by the sign of the volume it encloses.
+        let orientation = match faces {
+            Faces::Steep => 1.0,
+            Faces::All => {
+                let volume = crate::face_normals::signed_volume(&soup);
+                if !health.is_closed_two_manifold() || volume == 0.0 || !volume.is_finite() {
+                    return Err(FacadeAreaError::Unavailable(format!(
+                        "the mesh of {object} encloses no volume, so its faces have no outside"
+                    )));
+                }
+                volume.signum()
+            }
+        };
         let extent = mesh_extent(mesh).ok_or_else(|| {
             FacadeAreaError::Unavailable(format!("the mesh of {object} is empty"))
         })?;
@@ -200,23 +239,21 @@ impl FacadeAreaService for AxiolidFacadeAreaService {
                 })
             })
             .collect::<Result<Vec<_>, _>>()?;
-
-        // Area certainly and possibly on the facade, the summed perimeter of
-        // their triangles, and how many faces each counted.
-        let (mut certain, mut possible, mut perimeter) = (0.0, 0.0, 0.0);
-        let (mut faces, mut partial) = (0usize, 0usize);
-        for triangle in &soup {
+        let mut looked = Vec::new();
+        for (index, triangle) in soup.iter().enumerate() {
             let [a, b, c] = *triangle;
-            let normal = (b - a).cross(c - a);
+            let normal = (b - a).cross(c - a) * orientation;
             let doubled = normal.length();
             if doubled <= ON_SURFACE {
                 continue;
             }
-            // Steep faces only: a floor, a roof or a sill faces up or down.
-            if normal.z.abs() / doubled > std::f64::consts::FRAC_1_SQRT_2 {
-                continue;
-            }
-            let outward = Vec3::new(normal.x, normal.y, 0.0).normalize();
+            let steep = normal.z.abs() / doubled <= std::f64::consts::FRAC_1_SQRT_2;
+            let outward = match faces {
+                // Steep faces only: a floor, a roof or a sill faces up or down.
+                Faces::Steep if !steep => continue,
+                Faces::Steep => Vec3::new(normal.x, normal.y, 0.0).normalize(),
+                Faces::All => normal / doubled,
+            };
             let mut outside = 0;
             for sample in samples(*triangle) {
                 let start = sample + outward * PROBE_OFFSET;
@@ -224,20 +261,10 @@ impl FacadeAreaService for AxiolidFacadeAreaService {
                     outside += 1;
                 }
             }
-            match outside {
-                0 => continue,
-                SAMPLES => {
-                    certain += doubled / 2.0;
-                    faces += 1;
-                }
-                _ => {
-                    possible += doubled / 2.0;
-                    partial += 1;
-                }
+            if outside > 0 {
+                looked.push((index, outside));
             }
-            perimeter += (b - a).length() + (c - b).length() + (a - c).length();
         }
-
         let deviation = match self.geometry.fidelity(object) {
             Ok(GeometryFidelity::Exact) => None,
             Ok(GeometryFidelity::Tessellated {
@@ -245,6 +272,37 @@ impl FacadeAreaService for AxiolidFacadeAreaService {
             }) => Some(chord_deviation_metres),
             Err(_) => return Err(FacadeAreaError::InvalidMeasurement),
         };
+        Ok(Classified {
+            soup,
+            looked,
+            deviation,
+        })
+    }
+}
+
+impl FacadeAreaService for AxiolidFacadeAreaService {
+    fn measure_facade_area(&self, object: &ObjectId) -> Result<FacadeArea, FacadeAreaError> {
+        let Classified {
+            soup,
+            looked,
+            deviation,
+        } = self.classify(object, Faces::Steep)?;
+        // Area certainly and possibly on the facade, the summed perimeter of
+        // their triangles, and how many faces each counted.
+        let (mut certain, mut possible, mut perimeter) = (0.0, 0.0, 0.0);
+        let (mut faces, mut partial) = (0usize, 0usize);
+        for (index, outside) in looked {
+            let [a, b, c] = soup[index];
+            let doubled = (b - a).cross(c - a).length();
+            if outside == SAMPLES {
+                certain += doubled / 2.0;
+                faces += 1;
+            } else {
+                possible += doubled / 2.0;
+                partial += 1;
+            }
+            perimeter += (b - a).length() + (c - b).length() + (a - c).length();
+        }
         let band = deviation.map_or(0.0, |d| {
             // Never a point, even for a declared zero deviation.
             (2.0 * perimeter * d + std::f64::consts::PI * d * d)
@@ -257,6 +315,48 @@ impl FacadeAreaService for AxiolidFacadeAreaService {
         };
         let (lower, upper) = ((certain - band).max(0.0), certain + possible + band);
         FacadeArea::try_new(object.clone(), lower, upper, evidence)
+    }
+
+    fn measure_facade_faces(&self, object: &ObjectId) -> Result<FacadeFaces, FacadeAreaError> {
+        let Classified {
+            soup,
+            looked,
+            deviation,
+        } = self.classify(object, Faces::All)?;
+        let boundary = crate::face_normals::boundary(object, &soup, deviation)
+            .map_err(|error| FacadeAreaError::Unavailable(error.to_string()))?;
+        let mut faces = Vec::new();
+        let mut partial = 0usize;
+        for (index, outside) in looked {
+            let Ok(at) = boundary.binary_search_by_key(&index, |(index, ..)| *index) else {
+                // Degenerate in the certified normals: it covers nothing.
+                continue;
+            };
+            let (_, normal, area) = boundary[at];
+            let [a, b, c] = soup[index];
+            let centroid = (a + b + c) / 3.0;
+            let side = if outside == SAMPLES {
+                FacadeFaceSide::Outside
+            } else {
+                partial += 1;
+                FacadeFaceSide::Partly
+            };
+            faces.push(FacadeFace::try_new(
+                normal,
+                area,
+                centroid.to_array(),
+                side,
+            )?);
+        }
+        let evidence = Evidence {
+            source: object.source.clone(),
+            locator: format!(
+                "facade-faces:{object}:faces={}:partial={partial}",
+                faces.len()
+            ),
+            exact: deviation.is_none(),
+        };
+        FacadeFaces::try_new(object.clone(), faces, evidence)
     }
 
     fn measure_face_area(&self, object: &ObjectId) -> Result<FacadeArea, FacadeAreaError> {

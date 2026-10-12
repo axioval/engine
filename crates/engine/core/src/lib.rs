@@ -1018,7 +1018,10 @@ pub use envelope_membership::{
     EnvelopeDerivation, EnvelopeMembershipError, EnvelopeMembershipEvidence,
     EnvelopeMembershipRequest, EnvelopeMembershipService, EnvelopeMembershipServiceHandle,
 };
-pub use facade_area::{FacadeArea, FacadeAreaError, FacadeAreaService, FacadeAreaServiceHandle};
+pub use facade_area::{
+    FacadeArea, FacadeAreaError, FacadeAreaService, FacadeAreaServiceHandle, FacadeFace,
+    FacadeFaceSide, FacadeFaces,
+};
 pub use free_space::{
     AreaInterval, BoxClearance, ClearanceOutcome, ClearancePlacementEvidence, ClearanceRequest,
     ClearanceShape, CompleteClearanceEvidence, CompletePlacementEvidence, CompleteSupportEvidence,
@@ -1129,6 +1132,7 @@ pub use side_distance::{
 };
 pub use sight::{
     SightError, SightEvidence, SightOutcome, SightRequest, SightService, SightServiceHandle,
+    SkyObstruction, SkyObstructionRequest,
 };
 pub use source_metadata::{SourceMetadata, SourceMetadataIndex};
 pub use space::{

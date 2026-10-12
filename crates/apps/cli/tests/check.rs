@@ -20568,3 +20568,155 @@ fn the_height_of_an_upstand_is_its_least_height_above_the_roof() {
     assert_eq!(open.len(), 1, "{result:#}");
     assert_eq!(open[0]["object_id"]["local_id"], "#40", "{result:#}");
 }
+
+/// A 10 m wall #19 (y -0.3..0, 3 m high) with a 2 x 1.5 m window #39
+/// (x 4..6, z 1..2.5) filling opening #29, space #49 behind it (x 0..7,
+/// y 0..4), a second window #79 (x 8..9.5) in opening #69 with no space
+/// behind it, and a block #59 30 m wide whose face stands 20 m south of the
+/// windows and whose top is 10 m above #39's centre. `north` is the plan
+/// direction of true north.
+fn window_before_a_block(north: &str) -> String {
+    let wall = "IFCWALL('GID',$,$,$,$,PL,REP,$,$)";
+    let opening = "IFCOPENINGELEMENT('GID',$,$,$,$,PL,REP,$,.OPENING.)";
+    let window = "IFCWINDOW('GID',$,$,$,$,PL,REP,$,1.5,2.,$,$,$)";
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,#110);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCSIUNIT(*,.AREAUNIT.,$,.SQUARE_METRE.);\n\
+         #8=IFCUNITASSIGNMENT((#6,#7));\n\
+         #9=IFCPROJECT('0000000000000000000009',$,'P',$,$,$,$,(#5),#8);\n\
+         #110=IFCDIRECTION(({north}));\n\
+         {}{}{}{}{}{}{}\
+         #108=IFCRELVOIDSELEMENT('0000000000000000000108',$,$,$,#19,#29);\n\
+         #109=IFCRELVOIDSELEMENT('0000000000000000000109',$,$,$,#19,#69);\n\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        placed_box(10, [5.0, -0.15, 0.0], [10.0, 0.3, 3.0], wall),
+        placed_box(20, [5.0, -0.15, 1.0], [2.0, 0.5, 1.5], opening),
+        placed_box(30, [5.0, -0.15, 1.0], [2.0, 0.3, 1.5], window),
+        placed_box(
+            40,
+            [3.5, 2.0, 0.0],
+            [7.0, 4.0, 3.0],
+            "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,$,$)"
+        ),
+        placed_box(
+            50,
+            [5.0, -25.3, 0.0],
+            [30.0, 10.0, 11.75],
+            "IFCBUILDINGELEMENTPROXY('GID',$,$,$,$,PL,REP,$,$)"
+        ),
+        placed_box(60, [8.75, -0.15, 1.0], [1.5, 0.5, 1.5], opening),
+        placed_box(70, [8.75, -0.15, 1.0], [1.5, 0.3, 1.5], window),
+    )
+}
+
+/// engine#332: the window facing south measures an azimuth of 180° from a
+/// true north along the plan's y axis (135° from one to the north-east,
+/// 180° again from project north), a tilt of 90°, and, with a block rising
+/// 10 m above its centre 20 m in front of it, an obstruction angle of
+/// atan(10 / 20) = 26.57°. The window with no room behind it looks out
+/// both ways, so its orientation and obstruction are not evaluated.
+#[test]
+fn a_window_facing_south_measures_its_azimuth_tilt_and_obstruction() {
+    let case = Case::new("facade-orientation");
+    let types = [("window", "IfcWindow")];
+    let degrees = |value: f64| json!({"kind": "literal", "value": {"type": "quantity", "value": value, "unit": "deg"}});
+    let measured = |name: &str| {
+        json!({"kind": "property", "propertySet": "axioval:measured", "property": name,
+               "label": "value"})
+    };
+    let between = |name: &str, low: f64, high: f64| {
+        json!({"requirement": {"type": "expression", "value": {
+                "kind": "between", "operand": measured(name),
+                "low": degrees(low), "high": degrees(high)}},
+               "message": {"type": "string", "value": "measures {value}"}})
+    };
+    let rule = |model: &str, parameters: Value| {
+        case.geometry_rule(
+            model,
+            &types,
+            "axioval:capability.expression",
+            &registry_signature("axioval:capability.expression"),
+            entity("window"),
+            parameters,
+        )
+    };
+    let objects = |result: &Value, key: &str| -> Vec<String> {
+        let mut objects: Vec<String> = result["report"][key]
+            .as_array()
+            .map(|outcomes| {
+                outcomes
+                    .iter()
+                    .filter_map(|outcome| {
+                        outcome["object_id"]["local_id"]
+                            .as_str()
+                            .or_else(|| outcome["scope"]["object"]["local_id"].as_str())
+                            .map(str::to_owned)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        objects.sort();
+        objects
+    };
+    let north = window_before_a_block("0.,1.");
+    let north_east = window_before_a_block("1.,1.");
+    for (model, name, low, high) in [
+        (&north, "azimuth", 179.99, 180.01),
+        (&north_east, "azimuth", 134.99, 135.01),
+        (
+            &north_east,
+            "azimuth;reference=project_north",
+            179.99,
+            180.01,
+        ),
+        (&north, "tilt", 89.99, 90.01),
+        (
+            &north,
+            "obstruction_angle;obstacles=IfcBuildingElementProxy",
+            26.56,
+            26.57,
+        ),
+        (
+            &north,
+            "obstruction_angle;obstacles=IfcBuildingElementProxy;sector=60",
+            26.56,
+            26.57,
+        ),
+    ] {
+        let (output, result) = rule(model, between(name, low, high));
+        // #39 passes; #79 looks out both ways and is not evaluated.
+        assert_eq!(output.status.code(), Some(4), "{name}: {}", stderr(&output));
+        assert!(
+            objects(&result, "findings").is_empty(),
+            "{name}: {result:#}"
+        );
+        assert_eq!(
+            objects(&result, "not_evaluated"),
+            ["#79"],
+            "{name}: {result:#}"
+        );
+        assert!(
+            result
+                .to_string()
+                .contains("which side faces out is undecided"),
+            "{name}: {result:#}"
+        );
+    }
+    // Below 26.5° the block obstructs too much.
+    let (output, result) = rule(
+        &north,
+        between(
+            "obstruction_angle;obstacles=IfcBuildingElementProxy",
+            0.0,
+            26.5,
+        ),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(objects(&result, "findings"), ["#39"], "{result:#}");
+}

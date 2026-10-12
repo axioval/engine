@@ -27,10 +27,14 @@ use axiolid_core::Point3;
 use axiolid_inspect::{Sight, line_of_sight};
 use axiolid_measure::{closest_point_on_triangle, closest_points_on_segments};
 use axiolid_mesh::TriMesh;
-use axioval_engine::{SightError, SightEvidence, SightOutcome, SightRequest, SightService};
+use axioval_engine::{
+    SightError, SightEvidence, SightOutcome, SightRequest, SightService, SkyObstruction,
+    SkyObstructionRequest,
+};
 use axioval_ir::{Evidence, ObjectId};
+use std::f64::consts::FRAC_PI_2;
 
-use crate::geometry::{AxiolidGeometry, Extent, mesh_extent, triangles};
+use crate::geometry::{AxiolidGeometry, Extent, Triangle, mesh_extent, triangles};
 
 /// Relative rounding bound on a measured distance, and its absolute floor.
 const DISTANCE_SLACK: f64 = 1e-9;
@@ -168,6 +172,240 @@ impl SightService for AxiolidSightService {
             _ => (SightOutcome::Undecided, "undecided".to_owned()),
         };
         SightEvidence::try_new(target.clone(), bounds, Some(outcome), evidence(&what))
+    }
+
+    fn measure_sky_obstruction(
+        &self,
+        request: &SkyObstructionRequest,
+    ) -> Result<SkyObstruction, SightError> {
+        let wedge = Wedge::of(request);
+        // Each obstacle's own greatest elevation, where it has a point in
+        // front within the sector.
+        let mut tops: Vec<(&ObjectId, f64)> = Vec::new();
+        for obstacle in request.obstacles() {
+            if self.geometry.has_no_body(obstacle) {
+                continue;
+            }
+            let mesh = self.mesh(obstacle, "obstacle")?;
+            if mesh_extent(mesh).is_some_and(|extent| wedge.behind(&extent)) {
+                continue;
+            }
+            self.exact(obstacle, "obstacle")?;
+            let top = triangles(mesh)
+                .iter()
+                .filter_map(|triangle| wedge.highest(triangle))
+                .reduce(f64::max);
+            if let Some(top) = top {
+                tops.push((obstacle, top));
+            }
+        }
+        let greatest = tops
+            .iter()
+            .map(|(_, top)| *top)
+            .fold(f64::NEG_INFINITY, f64::max);
+        let highest: Vec<ObjectId> = tops
+            .iter()
+            .filter(|(_, top)| *top > -ANGLE_SLACK && *top >= greatest - 2.0 * ANGLE_SLACK)
+            .map(|(id, _)| (*id).clone())
+            .collect();
+        let angle = if greatest < -ANGLE_SLACK {
+            (0.0, 0.0)
+        } else {
+            (
+                (greatest - ANGLE_SLACK).max(0.0),
+                (greatest + ANGLE_SLACK).min(FRAC_PI_2),
+            )
+        };
+        let [x, y, z] = request.eye();
+        let [east, north] = request.toward();
+        let named = highest
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(",");
+        let evidence = Evidence {
+            source: request.from().source.clone(),
+            locator: format!(
+                "sky-obstruction:{}:({x},{y},{z}):toward=({east},{north}):half-width={}:\
+                 highest={named}",
+                request.from(),
+                request.half_width()
+            ),
+            exact: true,
+        };
+        SkyObstruction::try_new(angle, highest, evidence)
+    }
+}
+
+/// Bound on the rounding of a measured elevation angle, in radians.
+const ANGLE_SLACK: f64 = 1e-9;
+
+/// How far in front of the eye, along the direction looked, a point must
+/// lie to count: a body flush with the face the eye stands on does not
+/// rise straight above it.
+const IN_FRONT: f64 = 1e-6;
+
+/// A point relative to the eye: how far ahead along the direction looked,
+/// how far to its left, and how far above the eye, in metres.
+#[derive(Clone, Copy, Debug)]
+struct Local {
+    ahead: f64,
+    left: f64,
+    above: f64,
+}
+
+impl Local {
+    /// The point `share` of the way from `self` to `other`.
+    fn towards(self, other: Self, share: f64) -> Self {
+        Self {
+            ahead: self.ahead + (other.ahead - self.ahead) * share,
+            left: self.left + (other.left - self.left) * share,
+            above: self.above + (other.above - self.above) * share,
+        }
+    }
+
+    /// Its elevation angle above the eye's horizontal plane.
+    fn elevation(self) -> f64 {
+        self.above.atan2(self.ahead.hypot(self.left))
+    }
+}
+
+/// The sector in front of an eye, in which obstacles are looked at.
+struct Wedge {
+    eye: [f64; 3],
+    toward: [f64; 2],
+    /// The tangent of the half-width; `None` for a half-plane.
+    spread: Option<f64>,
+}
+
+impl Wedge {
+    fn of(request: &SkyObstructionRequest) -> Self {
+        let half = request.half_width();
+        Self {
+            eye: request.eye(),
+            toward: request.toward(),
+            spread: (half < FRAC_PI_2).then(|| half.tan()),
+        }
+    }
+
+    fn local(&self, point: &Point3) -> Local {
+        let [x, y, z] = [
+            point.x - self.eye[0],
+            point.y - self.eye[1],
+            point.z - self.eye[2],
+        ];
+        let [east, north] = self.toward;
+        Local {
+            ahead: x * east + y * north,
+            left: y * east - x * north,
+            above: z,
+        }
+    }
+
+    /// Whether a box lies wholly at or behind the line the eye looks out
+    /// of, so no point of it is in front.
+    fn behind(&self, (min, max): &Extent) -> bool {
+        let [east, north] = self.toward;
+        let ahead = |x: f64, y: f64| (x - self.eye[0]) * east + (y - self.eye[1]) * north;
+        [
+            ahead(min[0], min[1]),
+            ahead(min[0], max[1]),
+            ahead(max[0], min[1]),
+            ahead(max[0], max[1]),
+        ]
+        .into_iter()
+        .all(|value| value <= IN_FRONT)
+    }
+
+    /// The greatest elevation of the triangle's part within the sector,
+    /// `None` where none of it is.
+    ///
+    /// Along any ray from the eye's vertical line, the elevation over a
+    /// plane is monotone in the distance, so the greatest lies on the
+    /// boundary of the part: on its edges, at an end or where an edge's
+    /// elevation is stationary.
+    fn highest(&self, triangle: &Triangle) -> Option<f64> {
+        let corners: Vec<Local> = triangle.iter().map(|point| self.local(point)).collect();
+        let ahead = clip(&corners, |point| point.ahead - IN_FRONT);
+        let part = match self.spread {
+            None => ahead,
+            Some(spread) if spread > 0.0 => {
+                let right = clip(&ahead, |point| point.ahead * spread - point.left);
+                clip(&right, |point| point.ahead * spread + point.left)
+            }
+            Some(_) => on_line(&ahead),
+        };
+        match part.as_slice() {
+            [] => None,
+            [point] => Some(point.elevation()),
+            points => (0..points.len())
+                .map(|at| edge_highest(points[at], points[(at + 1) % points.len()]))
+                .reduce(f64::max),
+        }
+    }
+}
+
+/// The part of the convex polygon `points` where `side` is not negative.
+fn clip(points: &[Local], side: impl Fn(&Local) -> f64) -> Vec<Local> {
+    let mut kept = Vec::new();
+    for (at, point) in points.iter().enumerate() {
+        let next = points[(at + 1) % points.len()];
+        let (here, there) = (side(point), side(&next));
+        if here >= 0.0 {
+            kept.push(*point);
+        }
+        if (here >= 0.0) != (there >= 0.0) {
+            kept.push(point.towards(next, here / (here - there)));
+        }
+    }
+    kept
+}
+
+/// The part of the convex polygon `points` on the vertical plane straight
+/// ahead of the eye (`left` zero): the polygon itself where it lies in
+/// that plane, otherwise the points where its edges cross it.
+#[allow(clippy::float_cmp)]
+fn on_line(points: &[Local]) -> Vec<Local> {
+    if points.iter().all(|point| point.left == 0.0) {
+        return points.to_vec();
+    }
+    let mut crossing = Vec::new();
+    for (at, point) in points.iter().enumerate() {
+        let next = points[(at + 1) % points.len()];
+        if point.left == 0.0 {
+            crossing.push(*point);
+        } else if (point.left < 0.0) != (next.left < 0.0) && next.left != 0.0 {
+            let mut met = point.towards(next, point.left / (point.left - next.left));
+            met.left = 0.0;
+            crossing.push(met);
+        }
+    }
+    crossing
+}
+
+/// The greatest elevation along the segment from `start` to `end`: at an
+/// end, or where `above / distance` is stationary, which for a straight
+/// segment is one root of a linear equation.
+fn edge_highest(start: Local, end: Local) -> f64 {
+    let ends = start.elevation().max(end.elevation());
+    let (ahead, left, above) = (
+        end.ahead - start.ahead,
+        end.left - start.left,
+        end.above - start.above,
+    );
+    // The squared plan distance is `a·s² + b·s + c` along the share `s`.
+    let a = ahead * ahead + left * left;
+    let b = 2.0 * (start.ahead * ahead + start.left * left);
+    let c = start.ahead * start.ahead + start.left * start.left;
+    let denominator = above * b / 2.0 - start.above * a;
+    if denominator == 0.0 {
+        return ends;
+    }
+    let share = (start.above * b / 2.0 - above * c) / denominator;
+    if share > 0.0 && share < 1.0 {
+        ends.max(start.towards(end, share).elevation())
+    } else {
+        ends
     }
 }
 

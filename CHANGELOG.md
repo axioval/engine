@@ -26,6 +26,23 @@ All notable changes are documented here. This project follows Semantic Versionin
   its end the 25 mm. No host is `null`; several hosts, a body not wholly
   inside its host (never a negative cover) and a tessellated host are not
   evaluated ([#341](https://github.com/axioval/engine/issues/341)).
+- **Measured values**: `azimuth` and `tilt` read which way an object
+  faces: the compass direction of the outward normals of its faces
+  looking outside, clockwise from true north as the source states it (or
+  `reference=project_north`), and their angle from straight up, of the
+  one direction surely holding the most area. `obstruction_angle;
+  obstacles=<objects>[;sector=<degrees>]` is the greatest elevation above
+  the horizon of the obstacles strictly in front of those faces' centroid
+  within the sector: a south-facing window measures an azimuth of 180°, a
+  tilt of 90°, and 26.57° to a block rising 10 m above it 20 m in front.
+  An object looking out both ways (no room declared behind a window) is
+  not evaluated with the reason, and so is a level face's azimuth.
+  `FacadeAreaService::measure_facade_faces` lists an object's outward
+  faces of any slope (`FacadeFaces`, `FacadeFace`, `FacadeFaceSide`), and
+  `SightService::measure_sky_obstruction` measures the elevation
+  (`SkyObstructionRequest`, `SkyObstruction`); both refuse by default,
+  and the Axiolid adapter answers both
+  ([#332](https://github.com/axioval/engine/issues/332)).
 - **Measured values**: `rate_along` reads how fast `of` changes along an
   alignment per metre of plan length: the derivative at `station` (both
   one-sided derivatives where two laws meet there), or with `over` the

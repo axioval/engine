@@ -501,6 +501,31 @@ pub(super) const SPACE_TOLERANCE: MeasuredParameter = MeasuredParameter {
     ),
 };
 
+/// The services the outward faces' orientation reads.
+const FACING_SERVICES: &[&str] = &["facade-area", "coordinate-system"];
+/// Why an object has no one outward direction.
+const NO_OUTWARD_FACE: &str = "no face of the body looks outside";
+const OUTWARD_SIDE_UNDECIDED: &str =
+    "both sides of the body look outside, so which side faces out is undecided";
+const SEVERAL_DIRECTIONS: &str =
+    "the body looks outside in several directions and none surely holds the most area";
+const NO_TRUE_NORTH: &str = "the source states no true north";
+
+/// `reference`: north as the plan states it or as the source states it.
+const NORTH_REFERENCE: MeasuredParameter = MeasuredParameter {
+    key: "reference",
+    kind: MeasuredParameterKind::Choice {
+        options: &["true_north", "project_north"],
+    },
+    required: false,
+    default: Some("true_north"),
+    help: &en_de(
+        "`true_north` as the source states it, or `project_north`, the plan y axis.",
+        "`true_north`, wie die Quelle sie angibt, oder `project_north`, die y-Achse des \
+         Plans.",
+    ),
+};
+
 /// Why a space-validation value of selected elements is not evaluated.
 pub(super) const SPACE_UNDECIDED: &str = "the selection leaves elements undecided";
 
@@ -2641,6 +2666,33 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
             "Die Fläche des Grundrisses des Objekts, Überlappungen einmal gezählt."
         )
     ),
+    MeasuredDescriptor {
+        name: "azimuth",
+        parameters: &[NORTH_REFERENCE],
+        dimension: Some(QuantityDimension::PlaneAngle),
+        services: FACING_SERVICES,
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[
+            NO_GEOMETRY,
+            NO_OUTWARD_FACE,
+            OUTWARD_SIDE_UNDECIDED,
+            SEVERAL_DIRECTIONS,
+            "the face looking outside is level, so it faces no compass direction",
+            NO_TRUE_NORTH,
+        ],
+        label: &en_de("Azimuth", "Azimut"),
+        help: &en_de(
+            "The compass direction the object faces, clockwise from north in `[0, 2π)`: \
+             the plan direction of the outward normal of its faces looking outside, those \
+             of the one direction surely holding the most area (a window's outer face, a \
+             wall's external side).",
+            "Die Himmelsrichtung, in die das Objekt weist, im Uhrzeigersinn von Norden in \
+             `[0, 2π)`: die Grundrissrichtung der äußeren Normale seiner nach außen \
+             blickenden Flächen, derjenigen der einen Richtung, die sicher die größte \
+             Fläche hat (die Außenseite eines Fensters, die Außenseite einer Wand).",
+        ),
+    },
     MeasuredDescriptor {
         name: "band_uncovered_area",
         parameters: &[
@@ -5355,6 +5407,59 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         ),
     },
     MeasuredDescriptor {
+        name: "obstruction_angle",
+        parameters: &[
+            selected(
+                "obstacles",
+                true,
+                &en_de(
+                    "The objects that may obstruct the sky: their source kinds, `,`-separated, \
+                     or `@` a selector parameter of the rule, whose undecided objects may \
+                     obstruct; never the object itself.",
+                    "Die Objekte, die den Himmel verstellen können: ihre Quellarten, durch `,` \
+                     getrennt, oder mit `@` ein Selektorparameter der Regel, dessen \
+                     unentschiedene Objekte verstellen können; nie das Objekt selbst.",
+                ),
+            ),
+            MeasuredParameter {
+                key: "sector",
+                kind: MeasuredParameterKind::Angle { below: 180.0 },
+                required: false,
+                default: Some("0"),
+                help: &en_de(
+                    "The width of the horizontal sector looked over, centred on the outward \
+                     direction, in degrees; 0 for the vertical plane straight out.",
+                    "Die Breite des betrachteten waagerechten Sektors um die Richtung nach \
+                     außen, in Grad; 0 für die senkrechte Ebene geradeaus.",
+                ),
+            },
+        ],
+        dimension: Some(QuantityDimension::PlaneAngle),
+        services: &["facade-area", "line-of-sight"],
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[
+            NO_GEOMETRY,
+            NO_OUTWARD_FACE,
+            OUTWARD_SIDE_UNDECIDED,
+            SEVERAL_DIRECTIONS,
+            "the face looking outside is level, so it looks along no plan direction",
+            "the object is a tessellation, so the direction it faces is approximate",
+            "an obstacle in front was not measured or is a tessellation",
+        ],
+        label: &en_de("Obstruction angle", "Verbauungswinkel"),
+        help: &en_de(
+            "How high obstacles rise in front of the object, an angle above the horizon in \
+             `[0, π/2]`: the greatest elevation of any point of them seen from the centroid \
+             of its faces looking outside, strictly in front along their outward direction \
+             and within the sector; 0 where nothing rises above the horizon.",
+            "Wie hoch Hindernisse vor dem Objekt aufragen, ein Winkel über dem Horizont in \
+             `[0, π/2]`: die größte Erhebung eines ihrer Punkte vom Schwerpunkt seiner nach \
+             außen blickenden Flächen aus, echt davor in deren Richtung nach außen und \
+             innerhalb des Sektors; 0, wo nichts über den Horizont ragt.",
+        ),
+    },
+    MeasuredDescriptor {
         name: "obstruction_count",
         parameters: &[
             objects(
@@ -6854,6 +6959,31 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
             "Die Stufe von jedem erreichten Boden zur Türunterkante mit Schwelle, wie \
              `keyed-limit` `threshold-step` misst: eine Rampe sicher nahe über einem Raum \
              ist sein Boden, eine nur mögliche lässt beide offen.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "tilt",
+        parameters: &[],
+        dimension: Some(QuantityDimension::PlaneAngle),
+        services: &["facade-area"],
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[
+            NO_GEOMETRY,
+            NO_OUTWARD_FACE,
+            OUTWARD_SIDE_UNDECIDED,
+            SEVERAL_DIRECTIONS,
+        ],
+        label: &en_de("Tilt", "Neigung der Außenseite"),
+        help: &en_de(
+            "How far the object's outward faces tilt from looking straight up, in `[0, π]`: \
+             0 for a flat roof, `π/2` for an upright facade, `π` for a face looking straight \
+             down; of the faces looking outside in the one direction surely holding the most \
+             area.",
+            "Wie weit die nach außen blickenden Flächen des Objekts vom Blick senkrecht nach \
+             oben abweichen, in `[0, π]`: 0 für ein Flachdach, `π/2` für eine senkrechte \
+             Fassade, `π` für eine Fläche, die senkrecht nach unten blickt; die der einen \
+             Richtung, die sicher die größte Fläche hat.",
         ),
     },
     plain!(

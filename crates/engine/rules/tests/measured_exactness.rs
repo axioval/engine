@@ -333,6 +333,13 @@ const COVERED: &[(&str, &str, &str)] = &[
         "../../facade/axioval/tests/axiolid_cover_and_height.rs",
         "a_height_measured_on_a_tessellation_is_refused",
     ),
+    // Outward faces listed off a tessellation give an inexact azimuth and
+    // tilt, and no obstruction angle.
+    (
+        "azimuth",
+        "tests/facade_orientation.rs",
+        "an_orientation_measured_on_a_tessellation_is_inexact",
+    ),
     // A port placement must be stated exactly: one cited approximate is
     // refused before it reaches a fall.
     (

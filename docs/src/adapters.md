@@ -958,6 +958,16 @@ corner within 1 nm of the plane), so a wall's side less its openings, or a
 slab's top, even when the body is modelled in pieces. Only an exact mesh
 answers, and exactly; a tessellated body's planes are chords of curved
 faces, so it refuses, as does a bodiless or unknown object.
+
+It also lists an object's outward faces (`measure_facade_faces`): every
+triangle of a closed body, of any slope, probed as above but along its
+normal turned out of the body (the sign of the volume it encloses tells
+which way that is), so a roof's top and a ground slab's underside look
+outside while a slab top under a declared space does not. Each listed face
+carries its certified normal box and area (as the boundary pieces of
+`measure_face_pieces` bound them, widened for a tessellation) and its
+centroid, and is `Outside` where all four samples look outside, `Partly`
+where only some do. An open surface has no outside and refuses.
 `AxiolidProximityService::measure_body_volume` answers the certified
 `enclosed_volume` of a closed two-manifold, widened by the chord band
 (`tube_volume`) for a tessellated one; an open surface refuses with
@@ -1056,6 +1066,19 @@ target cannot meet any segment between them and is not handed over. A
 tessellated target in range or tessellated blocker that may matter refuses,
 since its mesh is not its shape; an unmeasured blocker refuses; a bodiless
 blocker is skipped and a bodiless target refused.
+
+The same service measures sky obstruction (`measure_sky_obstruction`): the
+greatest elevation above the eye's horizontal plane of any point of the
+obstacles more than 1 µm in front of the eye along the direction looked and
+within the sector. Each triangle is clipped to the sector (to the vertical
+plane straight ahead for a sector of no width); along any ray from the
+eye's vertical, the elevation over a plane is monotone in the distance, so
+the greatest lies on the clipped part's edges, at an end or where an edge's
+elevation is stationary, the one root of a linear equation. The angle is
+widened by 1e-9 rad for rounding, zero where nothing rises above the
+horizon, and names the obstacles that may attain it. An obstacle whose box
+lies wholly behind the eye is skipped; one in front that is tessellated or
+unmeasured refuses, and a bodiless one is skipped.
 
 `AxiolidProximityService` measures pairwise proximity for clash and distance checks. Hosts register curved parts with `with_tessellated_mesh` and a chord deviation, and measurements involving them are approximate; with `with_exact_boundary` beside the mesh, the distance in space, the horizontal distance, plan overlap and the footprint relation of vertical distances between two such objects are also certified on their exact boundaries. `exact_boundary(graph, node)` builds such a boundary from the Axiolid geometry graph a host meshes, for rigidly placed extrusions and revolutions of rectangle, circle, ellipse, section and line-and-arc profiles, disks swept along a segment or an arc, differences of placed extrusions (openings, round holes touching a beam's flange or root fillets included) and their clips by half-spaces (a wall under its roof planes), built at no tolerance first and within the kernel's tolerance only where that is refused, exact where the kernel's boolean reports no decision within its tolerance (an empty report at no tolerance always means exact, axiolid/kernel#251) and otherwise marked perturbed by what it reports (`ExactBody::perturbation_metres`), each widened by the rounding the boolean merges points within (`ExactBody::rounding_metres`), and bodies of several such items (`ExactBody`, `with_exact_body`), whose plan relations are measured over every item pair, and refuses everything else with the reason; `check_exact_boundary` compares it with the registered mesh before the host registers it. See [Clash, interference and distance](./clash.md#axiolid-measurement). Plan regions (free floor, unallocated floor, coverage, walkable plans) are overlay output and never pass through the kernel's ring triangulator, which since axiolid-construct 0.3.15 refuses rings touching at a point unless asked to accept them (axiolid/kernel#253, #262); such regions, two rooms meeting at a corner or a corridor narrowed to a point, are measured. Any mesh whose audit finds an open edge, such as the T-junction a B-rep face with touching rings can leave in its neighbour, is a surface to every service, never a closed solid. A mesh closed only with zero-area triangles (a T-junction closed by a sliver) is a closed solid to the proximity service, which measures each zero-area triangle as its edges and takes the winding number without it (#221; see [Zero-area triangles](./clash.md#axiolid-measurement)); the other services read the audit as it stands.
 

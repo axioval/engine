@@ -39,6 +39,7 @@ mod exit_separation;
 mod expression_leaves;
 mod expression_requirement;
 mod external_wall_validation;
+mod facade_orientation;
 mod fall_in_flow;
 mod free_floor;
 mod free_floor_circle;
@@ -377,6 +378,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(fall_in_flow::FallMeasures))
         .and_then(|registry| registry.register_measured(cover::CoverMeasures))
         .and_then(|registry| registry.register_measured(height_above::HeightMeasures))
+        .and_then(|registry| registry.register_measured(facade_orientation::FacingMeasures))
         .and_then(|registry| registry.register_measured(body_extent::ExtentMeasures))
         .and_then(|registry| registry.register_measured(plan_area::AreaMeasures))
         .and_then(|registry| registry.register_measured(area_ratio::RatioMeasures))

@@ -3,7 +3,7 @@
 use axiolid_core::Point3;
 use axiolid_mesh::TriMesh;
 use axioval_axiolid::{AxiolidFacadeAreaService, AxiolidGeometry};
-use axioval_engine::{FacadeAreaError, FacadeAreaService};
+use axioval_engine::{FacadeAreaError, FacadeAreaService, FacadeFaceSide};
 use axioval_ir::{ObjectId, SourceId};
 
 fn source() -> SourceId {
@@ -277,4 +277,73 @@ fn a_face_area_is_the_largest_plane_face() {
         service.measure_face_area(&id("ghost")),
         Err(FacadeAreaError::UnknownObject(id("ghost")))
     );
+}
+
+#[test]
+fn a_window_before_a_room_lists_one_face_looking_out() {
+    // A 2 x 1.5 m window in the wall's plane, the room behind it.
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("window"), cuboid([4.0, -0.3, 1.0], [6.0, 0.0, 2.5]))
+        .with_mesh(id("room"), room());
+    let service = AxiolidFacadeAreaService::new(geometry).with_space(id("room"));
+    let faces = service.measure_facade_faces(&id("window")).unwrap();
+    assert!(faces.evidence().exact);
+    assert!(faces.evidence().locator.starts_with("facade-faces:"));
+    // Its outer face looks south; its sides, top and bottom look outside
+    // too, since nothing holds them.
+    let south: Vec<_> = faces
+        .faces()
+        .iter()
+        .filter(|face| face.normal().upper()[1] < 0.0)
+        .collect();
+    assert_eq!(south.len(), 2, "{faces:?}");
+    let area: f64 = south.iter().map(|face| face.area_square_metres().0).sum();
+    assert!(close(area, 3.0), "{area}");
+    assert!(
+        south
+            .iter()
+            .all(|face| face.side() == FacadeFaceSide::Outside && close(face.centroid()[1], -0.3))
+    );
+    assert!(
+        faces
+            .faces()
+            .iter()
+            .all(|face| face.normal().lower()[1] <= 0.0),
+        "the face against the room looks into it: {faces:?}"
+    );
+
+    // Standing alone, its inner face looks outside as well.
+    let alone = AxiolidFacadeAreaService::new(
+        AxiolidGeometry::new().with_mesh(id("window"), cuboid([4.0, -0.3, 1.0], [6.0, 0.0, 2.5])),
+    );
+    let faces = alone.measure_facade_faces(&id("window")).unwrap();
+    assert!(
+        faces
+            .faces()
+            .iter()
+            .any(|face| face.normal().lower()[1] > 0.0)
+    );
+}
+
+#[test]
+fn a_roof_looks_up_and_a_slab_under_a_room_does_not() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("floor"), cuboid([0.0, 0.0, -0.3], [10.0, 4.0, 0.0]))
+        .with_mesh(id("roof"), cuboid([0.0, 0.0, 3.0], [10.0, 4.0, 3.3]))
+        .with_mesh(id("room"), room());
+    let service = AxiolidFacadeAreaService::new(geometry).with_space(id("room"));
+    let up = |object: &str| -> f64 {
+        let faces = service.measure_facade_faces(&id(object)).unwrap();
+        faces
+            .faces()
+            .iter()
+            .filter(|face| face.normal().lower()[2] > 0.0)
+            .map(|face| face.area_square_metres().0)
+            .sum()
+    };
+    assert!(close(up("roof"), 40.0));
+    assert!(close(up("floor"), 0.0));
+    // The facade area still counts steep faces only.
+    let roof = service.measure_facade_area(&id("roof")).unwrap();
+    assert!(close(roof.lower_square_metres(), 8.4), "{roof:?}");
 }

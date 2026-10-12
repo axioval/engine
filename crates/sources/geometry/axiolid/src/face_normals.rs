@@ -389,6 +389,35 @@ fn joined(parts: &[Part], edges: &SharedEdges) -> Vec<usize> {
     parents
 }
 
+/// A boundary triangle: its index in the soup, its outward normal box and
+/// its area `[lower, upper]`.
+pub(crate) type BoundaryPart = (usize, FaceNormal, (f64, f64));
+
+/// Every triangle of a closed mesh's boundary, by its index in `soup`,
+/// with its outward normal box and its area `[lower, upper]`, widened for
+/// a tessellation as a piece's area is.
+pub(crate) fn boundary(
+    object: &ObjectId,
+    soup: &[Triangle],
+    tessellation: Option<f64>,
+) -> Result<Vec<BoundaryPart>, VerticalExtentError> {
+    let parts = parts(object, Which::Boundary, soup, tessellation, true)?;
+    Ok(parts
+        .iter()
+        .map(|part| {
+            let (mut lower, mut upper) = area(part);
+            if let Some(deviation) = tessellation {
+                let band = (2.0 * perimeter(&soup[part.index]) * deviation
+                    + std::f64::consts::PI * deviation * deviation)
+                    * (1.0 + 8.0 * f64::EPSILON);
+                lower = (lower - band).next_down().max(0.0);
+                upper = ((upper + band) / part.lean.cos() * (1.0 + 8.0 * f64::EPSILON)).next_up();
+            }
+            (part.index, part.normal, (lower, upper))
+        })
+        .collect())
+}
+
 /// The pieces of `set` of the mesh `soup`, ordered by their first
 /// triangle.
 pub(crate) fn measure_pieces(

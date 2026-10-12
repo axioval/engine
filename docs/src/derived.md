@@ -524,6 +524,8 @@ ignoring ASCII case):
 | `angle_to;path=<steps>[;between=axis\|face_normal]` | the angle to the objects a path reaches, an angle | `PlanSpanService::measure_rectangle` or `VerticalExtentService::measure_face_normals`, `RelationshipSelectionService` |
 | `skew;path=<steps>` | how far the long axis is from square to the reached objects', an angle | `PlanSpanService::measure_rectangle`, `RelationshipSelectionService` |
 | `bearing;axis=own_x\|own_y\|long[;reference=project_north\|true_north]` | an axis's plan bearing clockwise from north, an angle | `ObjectFrameService` or `PlanSpanService`, `CoordinateSystemService` for true north |
+| `azimuth[;reference=true_north\|project_north]`, `tilt` | the compass direction the object's outward faces look, clockwise from true north (by default) or the plan's y axis, and their angle from straight up, each an angle (see [Orientation and obstruction](#orientation-and-obstruction)) | built in, over `FacadeAreaService::measure_facade_faces`, `CoordinateSystemService` for true north |
+| `obstruction_angle;obstacles=<objects>[;sector=<degrees>]` | how high the obstacles rise above the horizon in front of the object's outward faces, an angle | built in, over `FacadeAreaService::measure_facade_faces` and `SightService::measure_sky_obstruction` |
 | `rectangle_side;side=width\|length` | the shorter or longer side of the footprint's least-area rectangle, a length | `PlanSpanService::measure_rectangle` |
 | `obstruction_count;obstacles=<kinds>;reach=<m>;at=ends\|sides\|within[;side_zone=<m>]` | how many ends or sides of that rectangle obstacles obstruct, or how many stand within it, a plain number | built in, over `PlanSpanService`, `ProximityService`, `VerticalExtentService` |
 | `band_uncovered_area;members=<kinds>;member_path=<steps>;angle_tolerance=<degrees>;maximum=<m>;footprints=<kinds>;footprint_path=<steps>` | the largest area of a reached footprint outside every band between parallel members at most `maximum` apart | built in, over `PlanSpanService`, `ProximityService`, `VerticalExtentService`, `PlanAreaService::measure_outside_bands` |
@@ -780,6 +782,49 @@ The face slopes read any face of any body, with no walking direction and
 no runs: a roof, a batter, a cross fall, a terrain sheet. Use `runs` (or
 `ramp-geometry`) to judge a ramp's gradient, and `slope` or `cross_fall`
 for a face's steepest or sideways fall, including a ramp's cross fall.
+
+### Orientation and obstruction
+
+Which way an object faces is read from its faces that look outside, as
+the facade-area service classifies them
+(`FacadeAreaService::measure_facade_faces`: every face of any slope a probe
+just outside it finds outside, neither held against another body nor
+looking into a declared space or the object itself, each with its outward
+normal box, area and centroid). Faces whose normals may be parallel make
+one direction, and the object faces the one direction whose area surely
+exceeds every other's, a partly covered face counting only towards the
+most it may hold: a window's outer face over its frame's edges, a wall's
+external side over its free ends, a roof's top over its eaves.
+
+- `azimuth` is the plan bearing of that direction's outward normals,
+  clockwise from true north as the source states it (`reference`
+  `true_north`, the default; a source stating none leaves it not
+  evaluated) or from the plan's y axis (`project_north`), in `[0, 2π)`: a
+  window facing south measures 180°. A level face, a flat roof, faces no
+  compass direction and is not evaluated.
+- `tilt` is the angle of those normals from straight up, in `[0, π]`: 0 for
+  a flat roof, 90° for an upright facade, 30° for a roof pitched at 30°.
+- `obstruction_angle;obstacles=<objects>[;sector=<degrees>]` is the
+  greatest elevation above the horizon of any point of the obstacles seen
+  from the area-weighted centroid of the direction's faces (those wholly
+  outside, where it has any), strictly in front along the direction's plan
+  bearing and within the sector centred on it (`sector`, its whole width,
+  `0` by default for the vertical plane straight out, below 180°), as the
+  line-of-sight service measures it (`SightService::measure_sky_obstruction`).
+  It is zero where nothing rises above the horizon. A block rising 10 m
+  above a window's centre with its face 20 m in front of it measures
+  `atan(10 / 20)`, 26.57°. The obstacles are kinds, or `@` a selector
+  parameter whose undecided objects may obstruct: they raise only the
+  upper bound, and the value cites the obstacles that may rise highest.
+
+An object whose faces look out both ways, such as a window with no room
+declared behind it, has no outward side: its values are not evaluated
+with that reason, and so are those of an object looking out in several
+directions none of which surely holds the most area. Every value is the
+hull over the direction's faces, rounded outward, and exact only where the
+faces are of the object's exact shape; the obstruction angle of a
+tessellation is not evaluated, since the direction it looks along is
+approximate.
 
 ### Dimensions
 
@@ -1232,6 +1277,7 @@ sites that cite a value exact:
 | `cover` | the face distances are (a host is exact or refused; a tessellated body's are not) | the body's chord deviation |
 | `height_above_surface` | always: the proximity service refuses tessellated bodies | the clipping's rounding, sixteen ulps of the largest coordinate |
 | `fall_in_flow` | always: the object-frame service refuses inexact placements | the arithmetic's rounding, eight ulps of the quotient outward |
+| `azimuth`, `tilt`, `obstruction_angle` | the outward faces are of the object's exact shape (and true north is stated exactly); for the obstruction angle also every obstacle is measured exactly and none is undecided | the hull over the faces' normal boxes, rounded outward; 1e-9 rad around the elevation; undecided obstacles raise only the upper bound |
 | `stack_distance`, `stack_prevailing`, `body_extent`, `plan_area`, `triangle_count` | every extent, frame, area or count is exact (for `stack_prevailing`, the prevailing pair's) | rounding |
 | `counterpart_uncovered_share`, `counterpart_uncovered`, `counterpart_whole` | every evidence is exact and every counterpart that may cover was read | the undecided cover, as `counterpart-coverage` cites it (`Cited`) |
 | `counterpart_covering`, `counterpart_infill` | always: counted over what was read | the undecided cover, or whether the infill applies |

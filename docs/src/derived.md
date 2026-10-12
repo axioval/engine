@@ -350,6 +350,82 @@ host registered no outcome refiner. The listing of every edge
 (`RelationshipSelectionService::edges`) is refused for declared relations,
 as for every derived relationship.
 
+## Distribution networks
+
+Drainage, ventilation and supply rules apply along a connected network: the
+fixture units upstream of a pipe, whether every outlet reaches a collector,
+the length of a duct run. A source states such a network through ports: each
+belongs to one element, states the direction flow takes through it
+(`source`, flow leaves the element; `sink`, flow enters it;
+`source-and-sink`; or a direction it does not define), and is connected to
+another element's port. A source adapter lists them through
+`DistributionNetworkServiceHandle` as an `axioval_ir::DistributionNetwork`
+per source (see [Services](./services.md)); the IFC adapter reads them from
+`IfcDistributionPort`s (see [the IFC adapter](./adapters.md#distribution-networks)).
+
+The engine joins them into a graph of elements, `FlowGraph`: two elements
+whose ports are connected are neighbours, through the element realizing the
+connection where the source names one (a fitting), and flow runs from the
+element whose port is a `source` to the one whose port is a `sink`. The
+relationship `axioval:derived.flow` walks it:
+
+- `forward` from an element reaches the elements its flow passes to
+  (downstream), `backward` those whose flow reaches it (upstream), and
+  `either` every element connected to it, whatever the direction;
+- a `+` step (or `follow_chain`) follows the chain, so
+  `axioval:derived.flow:backward+` is everything upstream and
+  `axioval:derived.flow:either+` the connected network the element belongs
+  to.
+
+It is usable wherever a relationship is: an aggregate's `path` (the
+fixture units upstream of each pipe are a `sum` over
+`axioval:derived.flow:backward+` of the terminals' `FixtureUnits`), a
+`related` selector, takeoff columns. The path between two members is a
+composition: the elements downstream of one that themselves reach the other
+downstream (`where` a `related` selector whose `path` is
+`axioval:derived.flow+` and whose `selector` selects the other).
+Which system an element belongs to is a stated relationship of its own
+(`axioval:relationship.group`, `IfcRelServicesBuildings`), read beside it.
+
+```json
+{"kind": "aggregate", "function": "sum", "label": "upstream fixture units",
+ "over": {"kind": "path", "path": ["axioval:derived.flow:backward+"]},
+ "where": {"kind": "entityType", "objectType": "ex:sanitary-terminal",
+           "includeSubtypes": true},
+ "value": {"kind": "property", "propertySet": "ex:drainage",
+           "property": "ex:fixture-units"}}
+```
+
+Nothing is guessed about a direction:
+
+- A connection whose ports state no single direction (a port stating none,
+  one passing flow either way or not defining it, or two ports facing the
+  same way) is undecided. A `forward` or `backward` read that reaches an
+  element holding such a connection is not evaluated, naming the ports and
+  what they state: the connection could carry flow either way.
+- Flow running in a cycle (each element of the cycle reached from the next
+  in flow direction) leaves every directed read reaching the cycle not
+  evaluated, naming its elements.
+- A port connected to a port that belongs to no element, or to several,
+  leaves every read through its element not evaluated, `either` included:
+  where the connection leads is unknown.
+
+An `either` read needs no direction and is answered across undecided
+connections and cycles. A port connected to nothing is an open end: the
+source states that nothing is connected there, so nothing is reached
+through it, and every answer reaching its element cites it
+(`axioval:derived.flow:open-end:<port>`). A fixture whose outlet is open
+reaches no collector: a finding, not an undecided read. An element without
+ports belongs to no network and reaches nothing.
+
+Every answer cites the network's completeness proof (for IFC
+`network-scan:ports=<n>:…`), each connection it passed and its ports. Without a
+network service every read of `axioval:derived.flow` is not evaluated, never
+an empty network; a network the source cannot read exactly (a connection
+naming an absent port, a direction outside the four) is refused as a whole.
+The flow takes no parameters; `axioval:derived.flow;…` is an invalid
+request. Its edges are not listed, as for every derived relationship.
+
 ## Measured values
 
 The set `axioval:measured` (`axioval_ir::MEASURED_SET`) holds values the

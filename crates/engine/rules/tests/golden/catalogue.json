@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.3.0",
+  "schemaVersion": "1.4.0",
   "languages": [
     "en",
     "de"
@@ -119014,6 +119014,29 @@
         {
           "language": "de",
           "text": "Eine Beziehung, die das Regelwerk zwischen Objekten deklariert, die das Modell nicht verbindet, mit `;id=` und der Kennung der Beziehung."
+        }
+      ]
+    },
+    "flow": {
+      "id": "axioval:derived.flow",
+      "label": [
+        {
+          "language": "en",
+          "text": "Flows to"
+        },
+        {
+          "language": "de",
+          "text": "Fließt zu"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "A distribution element to the elements its flow passes to through connected ports: `forward` downstream, `backward` upstream, `either` every connected element. A direction the ports leave undecided, or flow in a cycle, leaves a directed read not evaluated."
+        },
+        {
+          "language": "de",
+          "text": "Ein Verteilelement zu den Elementen, zu denen sein Durchfluss über verbundene Anschlüsse gelangt: `forward` stromabwärts, `backward` stromaufwärts, `either` jedes verbundene Element. Eine von den Anschlüssen offen gelassene Richtung oder ein Kreislauf lässt eine gerichtete Abfrage unbewertet."
         }
       ]
     }

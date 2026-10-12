@@ -59,13 +59,13 @@ pub(crate) struct AbsentEnd {
 #[derive(Debug, Default)]
 pub(crate) struct EdgeIndex {
     /// relating -> [(related, relationship instance)]
-    forward: BTreeMap<EntityId, Vec<(EntityId, EntityId)>>,
+    pub(crate) forward: BTreeMap<EntityId, Vec<(EntityId, EntityId)>>,
     /// related -> [(relating, relationship instance)]
-    backward: BTreeMap<EntityId, Vec<(EntityId, EntityId)>>,
+    pub(crate) backward: BTreeMap<EntityId, Vec<(EntityId, EntityId)>>,
     /// Canonical schema name of the requested type.
-    type_name: String,
+    pub(crate) type_name: String,
     /// Number of instances scanned, recorded in completeness evidence.
-    instances: usize,
+    pub(crate) instances: usize,
     /// Instances that contributed no edge through an absent required end.
     pub(crate) absent: Vec<AbsentEnd>,
 }
@@ -350,7 +350,7 @@ fn shared_group(index: &EdgeIndex, anchor: EntityId) -> Reached {
     (reached, used)
 }
 
-fn build_index(
+pub(crate) fn build_index(
     release: Release,
     model: &Model,
     relationship: &str,

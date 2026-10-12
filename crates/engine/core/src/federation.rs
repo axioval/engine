@@ -13,8 +13,9 @@ use axioval_ir::{Object, ObjectId, SourceId};
 use crate::{
     ClassificationAssignment, ClassificationError, ClassificationService,
     ClassificationServiceHandle, CompleteRelationshipEdges, CompleteRelationshipSelection,
-    CoordinateSystemError, CoordinateSystemService, CoordinateSystemServiceHandle, DoorLeaves,
-    DoorLeavesError, EvidenceSessionError, IntegrityError, IntegrityIssue, ObjectFrame,
+    CoordinateSystemError, CoordinateSystemService, CoordinateSystemServiceHandle,
+    DistributionNetworkService, DistributionNetworkServiceHandle, DoorLeaves, DoorLeavesError,
+    EvidenceSessionError, IntegrityError, IntegrityIssue, NetworkServiceError, ObjectFrame,
     ObjectFrameError, ObjectFrameService, ObjectFrameServiceHandle, PropertyEnumeration,
     PropertyEnumerationRequest, PropertyRequest, PropertyResolution, PropertyResolutionError,
     PropertyResolutionService, PropertyResolutionServiceHandle, RelationshipEdgesRequest,
@@ -39,6 +40,7 @@ pub(crate) fn routed(registry: &ServiceRegistry) -> usize {
         + usize::from(registry.get::<ObjectFrameServiceHandle>().is_some())
         + usize::from(registry.get::<CoordinateSystemServiceHandle>().is_some())
         + usize::from(registry.get::<ResourceServiceHandle>().is_some())
+        + usize::from(registry.get::<DistributionNetworkServiceHandle>().is_some())
 }
 
 /// Registers one router per semantic interface any member provides.
@@ -66,6 +68,9 @@ pub(crate) fn register(
     }
     if let Some(router) = Router::<ResourceServiceHandle>::of(members) {
         target.register(ResourceServiceHandle::new(Arc::new(router)))?;
+    }
+    if let Some(router) = Router::<DistributionNetworkServiceHandle>::of(members) {
+        target.register(DistributionNetworkServiceHandle::new(Arc::new(router)))?;
     }
     let hierarchies: Vec<&TypeHierarchyServiceHandle> = members
         .iter()
@@ -242,6 +247,21 @@ impl SourceIntegrityService for Router<SourceIntegrityServiceHandle> {
             .member(source)
             .ok_or_else(|| IntegrityError::UncoveredSource(source.clone()))?;
         member.issues(source)
+    }
+}
+
+impl DistributionNetworkService for Router<DistributionNetworkServiceHandle> {
+    fn source_snapshots(&self) -> &[SourceSnapshot] {
+        &self.snapshots
+    }
+    fn network(
+        &self,
+        source: &SourceId,
+    ) -> Result<axioval_ir::DistributionNetwork, NetworkServiceError> {
+        let (_, member) = self
+            .member(source)
+            .ok_or_else(|| NetworkServiceError::UncoveredSource(source.clone()))?;
+        member.network(source)
     }
 }
 

@@ -22,6 +22,7 @@ mod levels;
 mod materials;
 mod measure;
 mod metadata;
+mod network;
 mod relationships;
 mod release;
 mod resources;

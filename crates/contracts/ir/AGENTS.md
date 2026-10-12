@@ -118,3 +118,8 @@ Keep this crate serializable and deterministic. It must not depend on a source f
   serialize as before. An explanation keeps its deciding path whole and at
   most `MAX_EXPLANATION_ENTRIES` other steps, in evaluation order; never
   sort or drop deciding steps.
+- `network.rs` holds the source-neutral distribution network an adapter
+  states (`DistributionNetwork`: ports with their elements and
+  `FlowDirection`, port connections, completeness evidence). It records
+  what the source states, `None` for an unstated direction; it never
+  decides a direction or a graph, which is the engine's.

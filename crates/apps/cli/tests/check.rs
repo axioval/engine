@@ -6189,9 +6189,17 @@ impl Case {
         rule["definitionId"] = json!("axioval:example.under-test");
         rule["parameters"] = parameters;
         rule["applicability"]["groups"]["walls"]["selector"] = applicability;
-        // A `ruleset:` field belongs to the ruleset, every other to the rule.
+        // A `ruleset:` field belongs to the ruleset, a `definitions:` one
+        // adds its entries to that section of the definitions, every other
+        // belongs to the rule.
         let mut outer = Vec::new();
         for (field, value) in extra.as_object().into_iter().flatten() {
+            if let Some(section) = field.strip_prefix("definitions:") {
+                for (id, entry) in value.as_object().into_iter().flatten() {
+                    definitions[section][id] = entry.clone();
+                }
+                continue;
+            }
             match field.strip_prefix("ruleset:") {
                 Some(field) => outer.push((field.to_owned(), value.clone())),
                 None => rule[field] = value.clone(),
@@ -19429,4 +19437,227 @@ fn with_geometry_stations_on_a_composite_basis_lower() {
             "{corner}: {reason}"
         );
     }
+}
+
+/// A drainage tree: WC #10 (2 fixture units) and basin #11 (1) drain into
+/// pipe #20, which with shower #12 (3) drains into pipe #21, which drains
+/// into manhole #30. WC #13 (2), named `WC 2`, has an outlet #130
+/// connected to nothing. `shower_outlet` is the flow direction the
+/// shower's outlet #120 states.
+fn drainage_tree(shower_outlet: &str) -> String {
+    let mut data = String::from(
+        "#1=IFCPROJECT('0000000000000000000001',$,'P',$,$,$,$,$,$);\n\
+         #10=IFCSANITARYTERMINAL('0000000000000000000010',$,'WC 1',$,$,$,$,$,.TOILETPAN.);\n\
+         #11=IFCSANITARYTERMINAL('0000000000000000000011',$,'Basin',$,$,$,$,$,.WASHHANDBASIN.);\n\
+         #12=IFCSANITARYTERMINAL('0000000000000000000012',$,'Shower',$,$,$,$,$,.SHOWER.);\n\
+         #13=IFCSANITARYTERMINAL('0000000000000000000013',$,'WC 2',$,$,$,$,$,.TOILETPAN.);\n\
+         #20=IFCPIPESEGMENT('0000000000000000000020',$,'Branch',$,$,$,$,$,.RIGIDSEGMENT.);\n\
+         #21=IFCPIPESEGMENT('0000000000000000000021',$,'Stack',$,$,$,$,$,.RIGIDSEGMENT.);\n\
+         #30=IFCDISTRIBUTIONCHAMBERELEMENT('0000000000000000000030',$,'Manhole',$,$,$,$,$,.MANHOLE.);\n",
+    );
+    let ports: [(u32, u32, &str); 11] = [
+        (100, 10, "SOURCE"),
+        (110, 11, "SOURCE"),
+        (120, 12, shower_outlet),
+        (130, 13, "SOURCE"),
+        (200, 20, "SINK"),
+        (201, 20, "SINK"),
+        (202, 20, "SOURCE"),
+        (210, 21, "SINK"),
+        (211, 21, "SINK"),
+        (212, 21, "SOURCE"),
+        (300, 30, "SINK"),
+    ];
+    for (port, element, flow) in ports {
+        let _ = writeln!(
+            data,
+            "#{port}=IFCDISTRIBUTIONPORT('0000000000000000000{port}',$,$,$,$,$,$,.{flow}.,.PIPE.,.DRAINAGE.);\n\
+             #{nest}=IFCRELNESTS('000000000000000000{nest}',$,$,$,#{element},(#{port}));",
+            nest = port + 1000,
+        );
+    }
+    let connections = [(100, 200), (110, 201), (202, 210), (120, 211), (212, 300)];
+    for (index, (relating, related)) in connections.into_iter().enumerate() {
+        let _ = writeln!(
+            data,
+            "#{id}=IFCRELCONNECTSPORTS('000000000000000000{id}',$,$,$,#{relating},#{related},$);",
+            id = 2000 + index,
+        );
+    }
+    for (element, units) in [(10, 2.0), (11, 1.0), (12, 3.0), (13, 2.0)] {
+        let _ = writeln!(
+            data,
+            "#{value}=IFCPROPERTYSINGLEVALUE('FixtureUnits',$,IFCREAL({units:.1}),$);\n\
+             #{set}=IFCPROPERTYSET('000000000000000000{set}',$,'Drainage',$,(#{value}));\n\
+             #{rel}=IFCRELDEFINESBYPROPERTIES('000000000000000000{rel}',$,$,$,(#{element}),#{set});",
+            value = 3000 + element,
+            set = 3100 + element,
+            rel = 3200 + element,
+        );
+    }
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n{data}ENDSEC;\nEND-ISO-10303-21;\n"
+    )
+}
+
+impl Case {
+    /// Runs an expression rule over `drainage_tree(shower_outlet)`, its
+    /// subjects `applies_to`, the fixture units bound as
+    /// `axioval:example.ifc.fixture-units` in `axioval:example.ifc.drainage`.
+    fn drainage_rule(
+        &self,
+        shower_outlet: &str,
+        applies_to: &str,
+        requirement: &Value,
+        message: &str,
+    ) -> (Output, Value) {
+        self.write("model.ifc", &drainage_tree(shower_outlet));
+        let bound = |id: &str, name: &str, kind: Option<&str>| {
+            let mut entry = json!({
+                "id": format!("axioval:example.ifc.{id}"),
+                "name": {"default": name, "translations": {}},
+                "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": name}],
+                "citations": [],
+            });
+            if let Some(kind) = kind {
+                entry["valueKind"] = json!(kind);
+            }
+            (format!("axioval:example.ifc.{id}"), entry)
+        };
+        let (set, set_entry) = bound("drainage", "Drainage", None);
+        let (units, units_entry) = bound("fixture-units", "FixtureUnits", Some("number"));
+        self.geometry_rule_with(
+            &["model.ifc"],
+            &[
+                ("terminal", "IfcSanitaryTerminal"),
+                ("pipe", "IfcPipeSegment"),
+                ("chamber", "IfcDistributionChamberElement"),
+            ],
+            (
+                "axioval:capability.expression",
+                &registry_signature("axioval:capability.expression"),
+            ),
+            entity(applies_to),
+            json!({
+                "requirement": {"type": "expression", "value": requirement},
+                "message": {"type": "string", "value": message},
+            }),
+            &json!({
+                "definitions:propertySets": {set: set_entry},
+                "definitions:properties": {units: units_entry},
+            }),
+            &[],
+        )
+    }
+}
+
+/// The fixture units draining into a pipe: their sum over the terminals
+/// upstream of it, in flow direction.
+fn upstream_units() -> Value {
+    json!({"kind": "compare", "operator": "lessThanOrEquals",
+        "left": {"kind": "aggregate", "function": "sum", "label": "units",
+            "over": {"kind": "path", "path": ["axioval:derived.flow:backward+"]},
+            "where": entity("terminal"),
+            "value": {"kind": "property", "propertySet": "axioval:example.ifc.drainage",
+                      "property": "axioval:example.ifc.fixture-units"}},
+        "right": {"kind": "literal", "value": {"type": "number", "value": 0.0}}})
+}
+
+/// engine#344: every pipe of the drainage tree is reported with the fixture
+/// units upstream of it, the branch #20 the WC's and the basin's, the
+/// stack #21 those and the shower's.
+#[test]
+fn a_drainage_tree_sums_the_fixture_units_upstream_of_each_pipe() {
+    let case = Case::new("network-upstream-units");
+    let (output, result) =
+        case.drainage_rule("SOURCE", "pipe", &upstream_units(), "{units} fixture units");
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(
+        finding_messages(&result),
+        [
+            ("#20".to_owned(), "3 fixture units".to_owned()),
+            ("#21".to_owned(), "6 fixture units".to_owned()),
+        ],
+        "{result:#}"
+    );
+    // The network the sum walked is cited.
+    let stack = result["report"]["findings"][1]["evidence"].to_string();
+    assert!(stack.contains("network-scan"), "{stack}");
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+}
+
+/// engine#344: the shower's outlet passing flow either way leaves the
+/// direction of its connection to the stack undecided: the stack's
+/// upstream sum is not evaluated, naming the port, while the branch's is
+/// not affected and every terminal but WC 2 still reaches the manhole
+/// either way.
+#[test]
+fn an_undecided_flow_direction_leaves_only_reads_depending_on_it_open() {
+    let case = Case::new("network-undecided-direction");
+    let (output, result) = case.drainage_rule(
+        "SOURCEANDSINK",
+        "pipe",
+        &upstream_units(),
+        "{units} fixture units",
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(
+        finding_messages(&result),
+        [("#20".to_owned(), "3 fixture units".to_owned())],
+        "{result:#}"
+    );
+    let open = result["report"]["not_evaluated"].as_array().unwrap();
+    assert_eq!(open.len(), 1, "{result:#}");
+    assert_eq!(open[0]["object_id"]["local_id"], "#21", "{result:#}");
+    let why = open[0]["message"].as_str().unwrap();
+    assert!(
+        why.contains("undecided") && why.contains("#120 is source-and-sink"),
+        "{why}"
+    );
+
+    let connected = json!({"kind": "compare", "operator": "greaterThan",
+        "left": {"kind": "aggregate", "function": "count", "label": "chambers",
+            "over": {"kind": "path", "path": ["axioval:derived.flow:either+"]},
+            "where": entity("chamber")},
+        "right": {"kind": "literal", "value": {"type": "integer", "value": 0}}});
+    let (_, result) = case.drainage_rule("SOURCEANDSINK", "terminal", &connected, "isolated");
+    assert_eq!(
+        finding_messages(&result),
+        [("#13".to_owned(), "isolated".to_owned())],
+        "{result:#}"
+    );
+}
+
+/// engine#344: WC 2, whose outlet is connected to nothing, is reported by
+/// name as reaching no collector downstream; the other terminals reach the
+/// manhole.
+#[test]
+fn a_disconnected_fixture_is_reported_as_reaching_no_collector() {
+    let case = Case::new("network-no-collector");
+    let requirement = json!({"kind": "and", "operands": [
+        {"kind": "isDefined", "operand": {"kind": "property", "label": "name",
+            "propertySet": "axioval:attributes", "property": "axioval:example.ifc.name"}},
+        {"kind": "compare", "operator": "greaterThan",
+            "left": {"kind": "aggregate", "function": "count", "label": "collectors",
+                "over": {"kind": "path", "path": ["axioval:derived.flow:forward+"]},
+                "where": entity("chamber")},
+            "right": {"kind": "literal", "value": {"type": "integer", "value": 0}}},
+    ]});
+    let (output, result) = case.drainage_rule(
+        "SOURCE",
+        "terminal",
+        &requirement,
+        "{name} reaches no collector",
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(
+        finding_messages(&result),
+        [("#13".to_owned(), "`WC 2` reaches no collector".to_owned())],
+        "{result:#}"
+    );
 }

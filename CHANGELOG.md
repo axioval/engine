@@ -33,6 +33,25 @@ All notable changes are documented here. This project follows Semantic Versionin
   distance at an object's station; `AlignmentParameter` gains
   `CantRatio`
   ([#339](https://github.com/axioval/engine/issues/339)).
+- **Networks**: the derived relationship `axioval:derived.flow` walks the
+  connected building services network a source states through its ports:
+  `forward` downstream, `backward` upstream, `either` every connected
+  element, `+` along the chain, so an aggregate over
+  `axioval:derived.flow:backward+` sums the fixture units upstream of each
+  pipe and a count over `axioval:derived.flow:forward+` finds a fixture
+  reaching no collector. Adapters list ports, their flow directions and
+  connections through the new `DistributionNetworkServiceHandle`
+  (`axioval_ir::DistributionNetwork`); the IFC adapter reads
+  `IfcDistributionPort`s nested in (`IfcRelNests`) or connected to
+  (`IfcRelConnectsPortToElement`) their elements and joined by
+  `IfcRelConnectsPorts`. A connection whose ports state no single
+  direction, and flow in a cycle, leave directed reads reaching them not
+  evaluated, naming them; a port connected to an unattached port leaves
+  every read through its element open; reachability `either` way is
+  answered regardless; an open port is cited, never guessed connected.
+  The catalogue lists the flow under `relationships.flow`; its schema
+  version is 1.4.0
+  ([#344](https://github.com/axioval/engine/issues/344)).
 - **Expressions**: `floor` and `ceil` take an optional `step`, of the
   operand's unit, and round down or up to its multiples as norms prescribe
   the direction: `ceil(4.2, 1)` is 5, `floor(0.987 m, 0.01 m)` is

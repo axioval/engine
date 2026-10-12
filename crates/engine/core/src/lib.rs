@@ -939,6 +939,7 @@ mod integrity;
 mod linear_quantity;
 mod measured;
 mod metric_routing;
+mod network;
 mod object_frame;
 mod pairwise;
 mod path;
@@ -1057,6 +1058,10 @@ pub use metric_routing::{
     MetricRoutingServiceHandle, MobilityProfile, NearestTargetEvidence, NearestTargetOutcome,
     NearestTargetRequest, NeverEnteredEvidence, PathTrace, PathTraceRequest, StairLength,
     ThresholdVerdict, TravelCost, UnreachableRegionEvidence, UnreachableTargetsEvidence,
+};
+pub use network::{
+    DistributionNetworkService, DistributionNetworkServiceHandle, FLOW_RELATIONSHIP, FlowGraph,
+    NetworkServiceError,
 };
 pub use object_frame::{
     ObjectFrame, ObjectFrameError, ObjectFrameService, ObjectFrameServiceHandle, ObjectFront,
@@ -1572,6 +1577,9 @@ impl Runtime {
         // And the resource objects the rules name: a host copy could claim
         // resource objects the session never listed.
         resources::install(&mut services, project, &plan.rules);
+        // The flow through the sources' distribution networks, a derived
+        // relationship every path reads like a stated one.
+        network::install(&mut services);
         let refiner = self.refiner_for(&plan)?;
         let mut summaries: Vec<RuleSummary> = Vec::new();
         let mut findings = Vec::new();

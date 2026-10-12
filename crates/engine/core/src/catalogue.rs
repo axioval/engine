@@ -399,6 +399,18 @@ pub struct Relationships {
     pub derived: &'static [DerivationEntry],
     /// A relation a ruleset declares, by its id.
     pub declared: DeclaredRelation,
+    /// The flow through the sources' distribution networks.
+    pub flow: FlowRelationship,
+}
+
+/// The derived relationship running in flow direction through a network.
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FlowRelationship {
+    /// Written as it is; takes no parameters.
+    pub id: &'static str,
+    pub label: &'static [LocalizedText],
+    pub help: &'static [LocalizedText],
 }
 
 /// One source-neutral kind of stated relationship.
@@ -515,6 +527,21 @@ const DECLARED_RELATION: DeclaredRelation = DeclaredRelation {
     ),
 };
 
+const FLOW: FlowRelationship = FlowRelationship {
+    id: crate::network::FLOW_RELATIONSHIP,
+    label: &en_de("Flows to", "Fließt zu"),
+    help: &en_de(
+        "A distribution element to the elements its flow passes to through connected ports: \
+         `forward` downstream, `backward` upstream, `either` every connected element. A \
+         direction the ports leave undecided, or flow in a cycle, leaves a directed read not \
+         evaluated.",
+        "Ein Verteilelement zu den Elementen, zu denen sein Durchfluss über verbundene \
+         Anschlüsse gelangt: `forward` stromabwärts, `backward` stromaufwärts, `either` jedes \
+         verbundene Element. Eine von den Anschlüssen offen gelassene Richtung oder ein \
+         Kreislauf lässt eine gerichtete Abfrage unbewertet.",
+    ),
+};
+
 /// Whether `texts` states English then German, none blank.
 fn bilingual(texts: &[LocalizedText]) -> bool {
     texts.iter().map(|text| text.language).eq(["en", "de"])
@@ -588,6 +615,7 @@ fn relationships() -> Relationships {
             .collect(),
         derived: DERIVATIONS,
         declared: DECLARED_RELATION,
+        flow: FLOW,
     }
 }
 
@@ -731,6 +759,7 @@ mod tests {
             let (label, help) = stated_texts(kind);
             assert!(bilingual(label) && bilingual(help), "{}", kind.name());
         }
+        assert!(bilingual(FLOW.label) && bilingual(FLOW.help));
         for derivation in DERIVATIONS {
             assert!(bilingual(derivation.label) && bilingual(derivation.help));
             assert!(

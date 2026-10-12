@@ -1,0 +1,60 @@
+{
+  "expression": {
+    "kind": "aggregate",
+    "function": "sum",
+    "over": {
+      "kind": "path",
+      "path": [
+        "axioval:derived.flow:backward+"
+      ]
+    },
+    "where": {
+      "kind": "entityType",
+      "objectType": "ex:sanitary-terminal",
+      "includeSubtypes": true
+    },
+    "value": {
+      "kind": "property",
+      "propertySet": "ex:drainage",
+      "property": "ex:fixture-units"
+    },
+    "label": "upstream fixture units"
+  },
+  "blocks": {
+    "type": "expression.aggregate",
+    "label": "upstream fixture units",
+    "fields": {
+      "function": "sum"
+    },
+    "inputs": {
+      "over": {
+        "block": {
+          "type": "source.path",
+          "fields": {
+            "path": [
+              "axioval:derived.flow:backward+"
+            ]
+          }
+        }
+      },
+      "value": {
+        "block": {
+          "type": "expression.property",
+          "fields": {
+            "property": "ex:fixture-units",
+            "propertySet": "ex:drainage"
+          }
+        }
+      },
+      "where": {
+        "block": {
+          "type": "selector.entityType",
+          "fields": {
+            "includeSubtypes": true,
+            "objectType": "ex:sanitary-terminal"
+          }
+        }
+      }
+    }
+  }
+}

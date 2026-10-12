@@ -942,6 +942,9 @@ pub(crate) fn session(
         model.clone(),
         snapshots.clone(),
     )));
+    let network = axioval_engine::DistributionNetworkServiceHandle::new(Arc::new(
+        crate::network::IfcNetworkService::new(release, model.clone(), snapshots.clone()),
+    ));
     let relationships = RelationshipSelectionServiceHandle::new(Arc::new(
         IfcRelationshipService::new(release, model, snapshots.clone()),
     ));
@@ -957,6 +960,7 @@ pub(crate) fn session(
         .and_then(|session| session.with_service(frames))
         .and_then(|session| session.with_service(coordinates))
         .and_then(|session| session.with_service(resources))
+        .and_then(|session| session.with_service(network))
         .and_then(|session| session.with_source_metadata(source, metadata))
         .map_err(|error| session_error(&error))
 }

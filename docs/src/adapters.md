@@ -211,6 +211,25 @@ snapshot, so package concepts bind to IFC names (see
 [Concept binding](./concept-binding.md)), and registers that release's entity
 inheritance from the bundled normative schema for `includeSubtypes`.
 
+### Distribution networks
+
+The session registers a `DistributionNetworkServiceHandle` stating the model's
+ports: every instance of `IfcPort` or a subtype, the element nesting it
+(`IfcRelNests`, IFC4 and IFC4X3) or connected to it
+(`IfcRelConnectsPortToElement`, the IFC2X3 form, read wherever the release
+declares it), the `FlowDirection` an `IfcDistributionPort` states
+(`.SOURCE.`, `.SINK.`, `.SOURCEANDSINK.`, `.NOTDEFINED.`; `$` is none), and
+the ports `IfcRelConnectsPorts` joins with its `RealizingElement`. Ends are
+read by the relationship service's own reader, slots from the release's
+schema. A relationship instance omitting a required end, a connection of
+anything but two ports and a direction outside the enumeration refuse the
+network; a port nested in no element or in several is stated so, and the
+engine decides what that leaves open. The completeness proof is
+`network-scan:ports=<n>:IfcRelNests=<n>,…`, each port `port:<id>` and each
+relationship `relationship:<id>`. System membership
+(`IfcRelAssignsToGroup` to an `IfcDistributionSystem`,
+`IfcRelServicesBuildings`) is read as any stated relationship is.
+
 ### Resource objects
 
 The session's objects are its `IfcObject` occurrences, `IfcContext`s and

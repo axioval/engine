@@ -46,6 +46,10 @@ pub use decision::{
     DecisionStatus, Decisions, EvidenceCheck, FindingDecision,
 };
 
+/// Distribution networks: ports, their flow directions and connections.
+pub mod network;
+pub use network::{DistributionNetwork, FlowDirection, NetworkPort, PortConnection};
+
 /// Named tables of measured values reported beside findings.
 pub mod table;
 pub use table::{

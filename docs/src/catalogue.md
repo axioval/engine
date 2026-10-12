@@ -31,7 +31,7 @@ takes the host's texts for every capability it registered.
 | `aggregateFunctions`, `aggregateSources` | What an aggregate computes and what it ranges over. |
 | `slopeForms` | How `convertSlope` states a slope. |
 | `selectorKinds`, `selectorComparisons` | Every selector kind a package writes, with its fields, and the operators of `property` and `source` selectors. |
-| `relationships` | Path step directions, the source-neutral stated relationships, the derived relationships with their parameters and defaults, and the relation a ruleset declares. |
+| `relationships` | Path step directions, the source-neutral stated relationships, the derived relationships with their parameters and defaults, the relation a ruleset declares, and the flow through distribution networks (`flow`, since 1.4.0). |
 | `concepts` | For each `--definitions` package: its object types, property sets, properties and rule definitions. |
 
 Every list is in a stable order: capabilities by id, measured values and

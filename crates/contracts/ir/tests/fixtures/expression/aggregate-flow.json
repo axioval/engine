@@ -1,0 +1,21 @@
+{
+  "kind": "aggregate",
+  "function": "sum",
+  "over": {
+    "kind": "path",
+    "path": [
+      "axioval:derived.flow:backward+"
+    ]
+  },
+  "where": {
+    "kind": "entityType",
+    "objectType": "ex:sanitary-terminal",
+    "includeSubtypes": true
+  },
+  "value": {
+    "kind": "property",
+    "propertySet": "ex:drainage",
+    "property": "ex:fixture-units"
+  },
+  "label": "upstream fixture units"
+}

@@ -39,6 +39,7 @@ use axioval_ir::{Evidence, ObjectId};
 use thiserror::Error;
 
 use crate::section::{EnvelopeRequest, EnvelopeSweep, Section, SectionRequest};
+use crate::station_profile::{AlignmentProfile, AlignmentProfileRequest};
 
 /// Failure to locate a point along an alignment or read its parameters.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
@@ -232,6 +233,9 @@ pub enum AlignmentParameter {
     /// The cant's magnitude: how far one rail head stands above the other,
     /// in metres.
     Cant,
+    /// The cant's magnitude over the rail head distance: the sine of the
+    /// bank angle, a plain number.
+    CantRatio,
 }
 
 /// `parameter` of `alignment` over the plan distances `distance`.
@@ -296,12 +300,14 @@ impl AlignmentParameterValue {
         value: Option<AlignmentInterval>,
         evidence: Evidence,
     ) -> Result<Self, AlignmentError> {
-        if value.is_none() && request.parameter != AlignmentParameter::Cant {
+        let cant = matches!(
+            request.parameter,
+            AlignmentParameter::Cant | AlignmentParameter::CantRatio
+        );
+        if value.is_none() && !cant {
             return Err(AlignmentError::InvalidMeasurement);
         }
-        if value.is_some_and(|value| value.lower < 0.0)
-            && request.parameter == AlignmentParameter::Cant
-        {
+        if value.is_some_and(|value| value.lower < 0.0) && cant {
             return Err(AlignmentError::InvalidMeasurement);
         }
         let exact = value.is_none_or(|value| value.is_exact());
@@ -357,6 +363,23 @@ pub trait AlignmentService: Send + Sync + 'static {
         let _ = request;
         Err(AlignmentError::Unavailable(
             "this alignment service reads no alignment parameters".into(),
+        ))
+    }
+
+    /// A parameter of an alignment as a profile along a station range
+    /// ([`AlignmentProfile`]): pieces whose values and rates bound it
+    /// everywhere between their ends.
+    ///
+    /// The default refuses, so a service that reads no profiles fails
+    /// closed rather than answering with a level line.
+    // gate: measures length, number
+    fn measure_alignment_profile(
+        &self,
+        request: &AlignmentProfileRequest,
+    ) -> Result<AlignmentProfile, AlignmentError> {
+        let _ = request;
+        Err(AlignmentError::Unavailable(
+            "this alignment service reads no alignment profiles".into(),
         ))
     }
 
@@ -421,6 +444,19 @@ impl AlignmentServiceHandle {
             return Err(AlignmentError::InvalidMeasurement);
         }
         Ok(value)
+    }
+
+    /// A parameter of an alignment as a profile along a station range. An
+    /// answer about another request is refused.
+    pub fn measure_alignment_profile(
+        &self,
+        request: &AlignmentProfileRequest,
+    ) -> Result<AlignmentProfile, AlignmentError> {
+        let profile = self.0.measure_alignment_profile(request)?;
+        if profile.request() != request {
+            return Err(AlignmentError::InvalidMeasurement);
+        }
+        Ok(profile)
     }
 
     /// The sections of bodies at a station. An answer about another

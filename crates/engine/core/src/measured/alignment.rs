@@ -27,6 +27,9 @@ pub(super) const OFFSET: &str = "offset";
 pub(super) const HEIGHT: &str = "height_above_gradient";
 /// The alignment's cant at the object's station.
 pub(super) const CANT: &str = "alignment_cant";
+/// The alignment's cant over its rail head distance at the object's
+/// station.
+pub(super) const CANT_RATIO: &str = "alignment_cant_ratio";
 /// The alignment's plan curvature at the object's station.
 pub(super) const CURVATURE: &str = "alignment_curvature";
 /// The alignment's gradient at the object's station.
@@ -35,7 +38,9 @@ pub(super) const GRADIENT: &str = "alignment_gradient";
 pub(super) const RADIUS: &str = "alignment_radius";
 
 /// The names measured here.
-pub(super) const NAMES: &[&str] = &[CANT, CURVATURE, GRADIENT, RADIUS, HEIGHT, OFFSET, STATION];
+pub(super) const NAMES: &[&str] = &[
+    CANT, CANT_RATIO, CURVATURE, GRADIENT, RADIUS, HEIGHT, OFFSET, STATION,
+];
 
 impl Measures {
     /// The one alignment `call` selects for `object`, `None` when none is
@@ -117,6 +122,7 @@ impl Measures {
                 });
             }
             CANT => AlignmentParameter::Cant,
+            CANT_RATIO => AlignmentParameter::CantRatio,
             GRADIENT => AlignmentParameter::Gradient,
             _ => AlignmentParameter::Curvature,
         };
@@ -239,7 +245,7 @@ mod tests {
             let value = match request.parameter() {
                 AlignmentParameter::Curvature => Some(interval(0.002, 0.002)),
                 AlignmentParameter::Gradient => Some(interval(0.0199, 0.0201)),
-                AlignmentParameter::Cant => None,
+                AlignmentParameter::Cant | AlignmentParameter::CantRatio => None,
             };
             let mut evidence = evidence("parameters of #175");
             evidence.exact = value.is_none_or(|value| value.is_exact());

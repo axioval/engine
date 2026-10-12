@@ -3230,6 +3230,126 @@ fn with_geometry_a_clearance_envelope_and_sections_are_judged_along_an_alignment
     assert!(objects(&result, "not_evaluated").is_empty(), "{result:#}");
 }
 
+/// An IFC4X3 alignment by its layouts (#401), stationed from 1000: a 300 m
+/// straight plan; a gradient of 2 % to 100 m, a parabolic sag to a peak of
+/// 6.2 % at 160 m, a parabolic crest down to 3 % at 240 m and 3 % to the
+/// end; and a cant over a 1.5 m rail head distance of 0.0375 m (2.5 %) to
+/// 100 m, a linear transition over 50 m to 0.09 m (6 %) and 0.09 m on.
+fn alignment_by_layouts() -> String {
+    "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\n\
+     FILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4X3_ADD2'));\nENDSEC;\nDATA;\n\
+     #4=IFCCARTESIANPOINT((0.,0.,0.));\n\
+     #5=IFCAXIS2PLACEMENT3D(#4,$,$);\n\
+     #7=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-6,#5,$);\n\
+     #100=IFCCARTESIANPOINT((0.,0.));\n\
+     #101=IFCALIGNMENTHORIZONTALSEGMENT($,$,#100,0.,0.,0.,300.,$,.LINE.);\n\
+     #104=IFCCARTESIANPOINT((300.,0.));\n\
+     #105=IFCALIGNMENTHORIZONTALSEGMENT($,$,#104,0.,0.,0.,0.,$,.LINE.);\n\
+     #111=IFCALIGNMENTSEGMENT('seg-h-0000000000000001',$,$,$,$,$,$,#101);\n\
+     #115=IFCALIGNMENTSEGMENT('seg-h-0000000000000003',$,$,$,$,$,$,#105);\n\
+     #121=IFCALIGNMENTHORIZONTAL('align-horiz-0000000001',$,$,$,$,$,$);\n\
+     #122=IFCRELNESTS('nest-h-000000000000001',$,$,$,#121,(#111,#115));\n\
+     #200=IFCALIGNMENTVERTICALSEGMENT($,$,0.,100.,50.,0.02,0.02,$,.CONSTANTGRADIENT.);\n\
+     #201=IFCALIGNMENTVERTICALSEGMENT($,$,100.,60.,52.,0.02,0.062,1428.5714285714287,.PARABOLICARC.);\n\
+     #202=IFCALIGNMENTVERTICALSEGMENT($,$,160.,80.,54.46,0.062,0.03,-2500.,.PARABOLICARC.);\n\
+     #203=IFCALIGNMENTVERTICALSEGMENT($,$,240.,60.,58.14,0.03,0.03,$,.CONSTANTGRADIENT.);\n\
+     #204=IFCALIGNMENTVERTICALSEGMENT($,$,300.,0.,59.94,0.03,0.03,$,.CONSTANTGRADIENT.);\n\
+     #211=IFCALIGNMENTSEGMENT('seg-v-0000000000000001',$,$,$,$,$,$,#200);\n\
+     #212=IFCALIGNMENTSEGMENT('seg-v-0000000000000002',$,$,$,$,$,$,#201);\n\
+     #213=IFCALIGNMENTSEGMENT('seg-v-0000000000000003',$,$,$,$,$,$,#202);\n\
+     #214=IFCALIGNMENTSEGMENT('seg-v-0000000000000004',$,$,$,$,$,$,#203);\n\
+     #215=IFCALIGNMENTSEGMENT('seg-v-0000000000000005',$,$,$,$,$,$,#204);\n\
+     #221=IFCALIGNMENTVERTICAL('align-vert-00000000001',$,$,$,$,$,$);\n\
+     #222=IFCRELNESTS('nest-v-000000000000001',$,$,$,#221,(#211,#212,#213,#214,#215));\n\
+     #300=IFCALIGNMENTCANTSEGMENT($,$,0.,100.,0.0375,0.0375,0.,0.,.CONSTANTCANT.);\n\
+     #301=IFCALIGNMENTCANTSEGMENT($,$,100.,50.,0.0375,0.09,0.,0.,.LINEARTRANSITION.);\n\
+     #302=IFCALIGNMENTCANTSEGMENT($,$,150.,150.,0.09,0.09,0.,0.,.CONSTANTCANT.);\n\
+     #303=IFCALIGNMENTCANTSEGMENT($,$,300.,0.,0.09,$,0.,$,.CONSTANTCANT.);\n\
+     #311=IFCALIGNMENTSEGMENT('seg-c-0000000000000001',$,$,$,$,$,$,#300);\n\
+     #312=IFCALIGNMENTSEGMENT('seg-c-0000000000000002',$,$,$,$,$,$,#301);\n\
+     #313=IFCALIGNMENTSEGMENT('seg-c-0000000000000003',$,$,$,$,$,$,#302);\n\
+     #314=IFCALIGNMENTSEGMENT('seg-c-0000000000000004',$,$,$,$,$,$,#303);\n\
+     #321=IFCALIGNMENTCANT('align-cant-00000000001',$,$,$,$,$,$,1.5);\n\
+     #322=IFCRELNESTS('nest-c-000000000000001',$,$,$,#321,(#311,#312,#313,#314));\n\
+     #401=IFCALIGNMENT('0000000000000000000401',$,$,$,$,$,$,$);\n\
+     #402=IFCRELNESTS('nest-a-000000000000001',$,$,$,#401,(#121,#221,#321));\n\
+     #501=IFCCARTESIANPOINT((0.,0.,0.));\n\
+     #502=IFCDIRECTION((1.,0.,0.));\n\
+     #503=IFCVECTOR(#502,1.);\n\
+     #504=IFCLINE(#501,#503);\n\
+     #510=IFCPOINTBYDISTANCEEXPRESSION(IFCLENGTHMEASURE(0.),$,$,$,#504);\n\
+     #513=IFCAXIS2PLACEMENTLINEAR(#510,$,$);\n\
+     #514=IFCLINEARPLACEMENT($,#513,$);\n\
+     #520=IFCREFERENT('referent-0000000000001',$,'STA 1+000',$,$,#514,$,.STATION.);\n\
+     #521=IFCRELNESTS('nest-r-000000000000001',$,$,$,#401,(#520));\n\
+     #531=IFCPROPERTYSINGLEVALUE('Station',$,IFCLENGTHMEASURE(1000.),$);\n\
+     #533=IFCPROPERTYSET('pset-stationing-000001',$,'Pset_Stationing',$,(#531));\n\
+     #534=IFCRELDEFINESBYPROPERTIES('rel-defprop-0000000001',$,$,$,(#520),#533);\n\
+     ENDSEC;\nEND-ISO-10303-21;\n"
+        .to_owned()
+}
+
+/// An `expression` rule on the alignment by its layouts comparing a value
+/// along it with a plain number.
+fn along_rule(case: &Case, name: &str, operator: &str, limit: f64) -> (Output, Value) {
+    case.geometry_rule(
+        &alignment_by_layouts(),
+        &[("alignment", "IfcAlignment")],
+        "axioval:capability.expression",
+        &registry_signature("axioval:capability.expression"),
+        entity("alignment"),
+        json!({"requirement": {"type": "expression", "value": {
+            "kind": "compare", "operator": operator, "label": "value",
+            "left": {"kind": "property", "propertySet": "axioval:measured", "property": name},
+            "right": {"kind": "literal", "value": {"type": "number", "value": limit}}}}}),
+    )
+}
+
+/// engine#339 end to end: the steepest gradient along the alignment is
+/// its 6.2 % peak, so a 6 % limit fails at station 1160, which the
+/// evidence names; up to station 1130 the curve is still below it, and
+/// the least gradient is the 2 % held from the start.
+#[test]
+fn with_geometry_the_steepest_gradient_along_an_alignment_is_judged_at_its_station() {
+    let case = Case::new("geometry-alignment-max-along");
+    let (output, result) = along_rule(&case, "max_along;of=gradient", "lessThanOrEquals", 0.06);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let finding = &result["report"]["findings"][0];
+    assert_eq!(finding["object_id"]["local_id"], "#401", "{result:#}");
+    let finding = finding.to_string();
+    assert!(
+        finding.contains("0.062") && finding.contains("greatest at station 1160.0000"),
+        "{finding}"
+    );
+
+    let (output, result) = along_rule(
+        &case,
+        "max_along;of=gradient;from=1000;to=1130",
+        "lessThanOrEquals",
+        0.06,
+    );
+    assert_eq!(output.status.code(), Some(0), "{result:#}");
+
+    let (output, result) = along_rule(&case, "min_along;of=gradient", "greaterThanOrEquals", 0.025);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let finding = result["report"]["findings"][0].to_string();
+    assert!(
+        finding.contains("least at stations 1000.000000 to 1100.0000"),
+        "{finding}"
+    );
+
+    // A range beyond the alignment's end is not evaluated with the reason.
+    let (output, result) = along_rule(
+        &case,
+        "max_along;of=cant_ratio;from=1100;to=1400",
+        "lessThanOrEquals",
+        0.06,
+    );
+    assert_eq!(output.status.code(), Some(4), "{result:#}");
+    let reason = result["report"]["not_evaluated"][0].to_string();
+    assert!(reason.contains("1400"), "{reason}");
+}
+
 /// engine#275 on real tessellated data: an `IfcEarthworksFill` of the
 /// buildingSMART IFC 4.3 sample scene (`fixtures/ifc4x3-earthworks`), one
 /// `IfcTriangulatedFaceSet` whose top is a level part, a ramp rising one in

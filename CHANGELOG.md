@@ -6,6 +6,23 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Measured values**: `max_along` and `min_along` read the greatest or
+  least `gradient`, `curvature`, `cant` or `cant_ratio` of an alignment
+  from station `from` to `to` (all of it without them). They read a
+  station profile, `AlignmentService::measure_alignment_profile`: pieces
+  stating their values at both ends and a rate interval holding every
+  derivative between, the certificate that bounds the value between
+  samples. Where the rate keeps one sign (linear gradients over parabolic
+  vertical curves, clothoids, every cant transition) the extreme is read at
+  a piece's end exactly; elsewhere it is bounded where the rate lines from
+  both ends meet, `step` sampling the law more finely. The evidence names
+  the stations where the extreme may be attained: a 6.2 % gradient peak is
+  0.062 at its station. A law without a rate bound is refused by name,
+  never sampled. The CLI reads the profiles from IFC4X3 alignments'
+  laws, and `alignment_cant_ratio` is the cant over the rail head
+  distance at an object's station; `AlignmentParameter` gains
+  `CantRatio`
+  ([#339](https://github.com/axioval/engine/issues/339)).
 - **Expressions**: `floor` and `ceil` take an optional `step`, of the
   operand's unit, and round down or up to its multiples as norms prescribe
   the direction: `ceil(4.2, 1)` is 5, `floor(0.987 m, 0.01 m)` is

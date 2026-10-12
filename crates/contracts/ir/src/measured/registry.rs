@@ -2316,6 +2316,97 @@ const ENVELOPE_PARAMETERS: &[MeasuredParameter] = &[
     },
 ];
 
+/// The parameter a station profile reads.
+const PROFILE_OF: MeasuredParameter = MeasuredParameter {
+    key: "of",
+    kind: MeasuredParameterKind::Choice {
+        options: &["gradient", "curvature", "cant", "cant_ratio"],
+    },
+    required: true,
+    default: None,
+    help: &en_de(
+        "The value along the alignment: `gradient` (rise over plan run), `curvature` (plan \
+         curvature per metre, positive turning left), `cant` (metres, unsigned) or \
+         `cant_ratio` (the cant over the rail head distance, unsigned).",
+        "Der Wert entlang der Achse: `gradient` (Steigung über der Lagelänge), `curvature` \
+         (Krümmung im Lageplan je Meter, positiv nach links), `cant` (Meter, ohne \
+         Vorzeichen) oder `cant_ratio` (die Überhöhung über dem Schienenkopfabstand, ohne \
+         Vorzeichen).",
+    ),
+};
+
+const PROFILE_STEP: MeasuredParameter = MeasuredParameter {
+    key: "step",
+    kind: MeasuredParameterKind::Length { minimum: 0.001 },
+    required: false,
+    default: None,
+    help: &en_de(
+        "The greatest plan distance between samples, in metres: each piece of the law is \
+         split so. Between two samples the value is bounded by its rate, never \
+         interpolated; without it each piece of the law is one stretch.",
+        "Der größte Abstand der Stützstellen im Lageplan, in Metern: jedes Stück des \
+         Gesetzes wird so geteilt. Zwischen zwei Stützstellen wird der Wert über seine \
+         Änderungsrate abgeschätzt, nie interpoliert; ohne ihn ist jedes Stück des Gesetzes \
+         ein Abschnitt.",
+    ),
+};
+
+/// A station range along an alignment, the whole alignment where open.
+const PROFILE_RANGE: &[MeasuredParameter] = &[
+    PROFILE_OF,
+    MeasuredParameter {
+        key: "from",
+        kind: MeasuredParameterKind::Length { minimum: -1.0e6 },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The station the range starts at, in metres; the alignment's start without it.",
+            "Die Station, an der der Bereich beginnt, in Metern; ohne sie der Anfang der Achse.",
+        ),
+    },
+    MeasuredParameter {
+        key: "to",
+        kind: MeasuredParameterKind::Length { minimum: -1.0e6 },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The station the range ends at, in metres, not before `from`; the alignment's end \
+             without it.",
+            "Die Station, an der der Bereich endet, in Metern, nicht vor `from`; ohne sie das \
+             Ende der Achse.",
+        ),
+    },
+    PROFILE_STEP,
+];
+
+const PROFILE_SERVICES: &[&str] = &["alignment"];
+const PROFILE_NOT_EVALUATED: &[&str] = &[
+    "the object is no alignment the service can read as a centreline",
+    "a station of the range is carried by no distance or by several, or lies before the \
+     alignment's start or beyond its end",
+    "a piece of the alignment follows a law whose rate the service cannot bound",
+    "the range runs backwards",
+];
+
+/// The greatest or least value along a station range.
+const fn along(
+    name: &'static str,
+    label: &'static [LocalizedText],
+    help: &'static [LocalizedText],
+) -> MeasuredDescriptor {
+    MeasuredDescriptor {
+        name,
+        parameters: PROFILE_RANGE,
+        dimension: None,
+        services: PROFILE_SERVICES,
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: PROFILE_NOT_EVALUATED,
+        label,
+        help,
+    }
+}
+
 /// Every measured value, sorted by name.
 pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
     MeasuredDescriptor {
@@ -2337,6 +2428,28 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              unsigned; none when the alignment states no cant.",
             "Wie weit ein Schienenkopf über dem anderen steht, an der Station des Objekts, \
              ohne Vorzeichen; keine, wenn die Achse keine Überhöhung angibt.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "alignment_cant_ratio",
+        parameters: ALONG,
+        dimension: None,
+        services: ALIGNMENT_SERVICES,
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[
+            ALIGNMENT_UNREAD,
+            OFF_RANGE,
+            AMBIGUOUS_FOOT,
+            PARAMETER_UNBOUNDED,
+        ],
+        label: &en_de("Cant ratio", "Überhöhungsverhältnis"),
+        help: &en_de(
+            "The cant at the object's station over the rail head distance, unsigned: the sine \
+             of the bank angle, a plain number; none when the alignment states no cant.",
+            "Die Überhöhung an der Station des Objekts über dem Schienenkopfabstand, ohne \
+             Vorzeichen: der Sinus des Querneigungswinkels, eine reine Zahl; keine, wenn die \
+             Achse keine Überhöhung angibt.",
         ),
     },
     MeasuredDescriptor {
@@ -4833,6 +4946,21 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              als die der Referenzquelle, 0, wo beide dasselbe nennen.",
         ),
     },
+    along(
+        "max_along",
+        &en_de("Greatest along", "Größter entlang"),
+        &en_de(
+            "Of an alignment: the greatest value of `of` along it from station `from` to `to`, \
+             in its own unit. Where the value changes monotonically over a piece of the law it \
+             is read at the piece's ends, exactly; elsewhere it is bounded by how fast it can \
+             change. The evidence names the stations where it may be attained.",
+            "Einer Achse: der größte Wert von `of` entlang der Achse von Station `from` bis \
+             `to`, in seiner eigenen Einheit. Wo sich der Wert über ein Stück des Gesetzes \
+             monoton ändert, wird er an dessen Enden exakt gelesen; sonst über seine \
+             Änderungsrate abgeschätzt. Der Nachweis nennt die Stationen, an denen er \
+             erreicht werden kann.",
+        ),
+    ),
     within(
         MAX_WITHIN,
         &en_de("Greatest within", "Größter im Umkreis"),
@@ -4878,6 +5006,18 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              des Umrisses oder seine Sehne entlang der Ansicht mal der Höhe.",
         ),
     },
+    along(
+        "min_along",
+        &en_de("Least along", "Kleinster entlang"),
+        &en_de(
+            "Of an alignment: the least value of `of` along it from station `from` to `to`, \
+             as `max_along` bounds the greatest. The evidence names the stations where it may \
+             be attained.",
+            "Einer Achse: der kleinste Wert von `of` entlang der Achse von Station `from` bis \
+             `to`, so abgeschätzt wie `max_along` den größten. Der Nachweis nennt die \
+             Stationen, an denen er erreicht werden kann.",
+        ),
+    ),
     within(
         MIN_WITHIN,
         &en_de("Least within", "Kleinster im Umkreis"),

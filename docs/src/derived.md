@@ -436,7 +436,8 @@ ignoring ASCII case):
 | `external_declarations;derivations=<derivations>[;bounding=…][;groups=…;group_path=…];objects=<objects>` | of a source: how many of its objects the model declares external in any derivation, up to those of unknown declaration | built in, over `EnvelopeMembershipService` |
 | `any_external;host_selector=<objects>;external_property=<set/name>`, `host_walls`, `undeclared_hosts`, `possible_hosts` (the same arguments) | of a source, as `opening-spaces` reads it: whether any of its walls declares itself external (1, 0, or between where a wall declaring nothing or an object that may be a wall could; read in identity order up to the first that does); how many walls it holds; how many declare nothing usable where none declares itself external; how many more objects may be walls. `any_external` cites the walls where none does | built in, over the property resolution |
 | `station`, `offset[;side=left\|right]`, `height_above_gradient` `;alignment=<kinds>[;path=<steps>]` | the reference point's station along an alignment, its signed plan offset from it and its height above the gradient line, each a length | `AlignmentService::measure_alignment_position`, `TypeHierarchyService`, `RelationshipSelectionService` for a path |
-| `alignment_curvature`, `alignment_radius`, `alignment_gradient`, `alignment_cant` `;alignment=<kinds>[;path=<steps>]` | the alignment's plan curvature (per metre) and radius, gradient and cant at the reference point's station | `AlignmentService::measure_alignment_parameter` |
+| `alignment_curvature`, `alignment_radius`, `alignment_gradient`, `alignment_cant`, `alignment_cant_ratio` `;alignment=<kinds>[;path=<steps>]` | the alignment's plan curvature (per metre) and radius, gradient, cant and cant over the rail head distance at the reference point's station | `AlignmentService::measure_alignment_parameter` |
+| `max_along`, `min_along` `;of=gradient\|curvature\|cant\|cant_ratio[;from=<m>][;to=<m>][;step=<m>]` | of an alignment: the greatest or least value of `of` from station `from` to `to`, the stations where it may be attained in the evidence | `AlignmentService::measure_alignment_profile` |
 | `station_section_area`, `station_section_thickness[;direction=lateral\|up]` `;alignment=<kinds>[;path=<steps>];station=<m>` | the area and the vertical or horizontal reach of the object's own body in the section normal to the alignment at a station | `AlignmentService::measure_section` |
 | `envelope_intrusions;bodies=<kinds>;envelope=<lateral:up,…>;from=<m>;to=<m>;step=<m>` | of an alignment: how many bodies of the kinds reach into a clearance envelope swept along it, a count from the sure to the possible intrusions | `AlignmentService::measure_envelope`, `TypeHierarchyService` |
 
@@ -1599,9 +1600,11 @@ is the plan's signed curvature per metre (positive turning left, zero on a
 straight), `alignment_radius` its unsigned inverse (a length, refused
 where the alignment may run straight there, since the radius is then
 unbounded), `alignment_gradient` the gradient line's rise over plan run
-(positive rising in the direction of travel), and `alignment_cant` how far
-one rail head stands above the other, unsigned. An alignment stating no
-cant has none: an exact absence, never a zero. The trait's
+(positive rising in the direction of travel), `alignment_cant` how far
+one rail head stands above the other, unsigned, and `alignment_cant_ratio`
+that cant over the rail head distance (the sine of the bank angle, a plain
+number). An alignment stating no cant has none: an exact absence, never a
+zero. The trait's
 `measure_alignment_parameter` refuses by default, so a service that reads
 no parameters never answers with a straight, level, uncanted line.
 
@@ -1624,6 +1627,50 @@ evaluated with the service's reason when:
 Without an alignment service the values are a missing service, reported
 once per rule and source. The CLI's IFC implementation is described under
 [Geometry](./cli.md#geometry).
+
+#### Values along a station range
+
+Limits often apply to the worst point of a stretch: the steepest gradient
+of a ramp, the greatest cant of a curve. `max_along` and `min_along` are
+measured on an alignment and read a **station profile** of the parameter
+`of` names (`gradient`, `curvature`, `cant` or `cant_ratio`, as the values
+above define them) from station `from` to station `to`, the alignment's
+start and end where either is not stated. A route is an alignment: without
+`from` and `to` the value is read along all of it.
+
+`AlignmentServiceHandle::measure_alignment_profile` answers an
+`AlignmentProfileRequest` (the alignment, the parameter, the stations, an
+optional `step`) with an `AlignmentProfile`: pieces laid end to end along
+plan distance (`ProfilePiece`), each stating its value at its start and at
+its end and a **rate**, an interval holding every derivative of the value
+along plan distance over the piece, and the station labelling its start.
+The rate is the sampling certificate: between its ends the value can move
+no faster, so over a piece of width `w`
+
+```text
+v(a + t) <= min(v(a) + rate.upper * t, v(b) - rate.lower * (w - t))
+```
+
+and the greatest value is bounded where those two lines meet. Where the
+rate keeps one sign over a piece (a linear gradient over a parabolic
+vertical curve, a clothoid's curvature, every cant transition) the extreme
+is one of its ends and is exact as the law states it; elsewhere it is an
+interval from the greatest value surely attained to that bound, and
+`step` splits each piece of the law into stretches at most that long to
+narrow it. A service states no piece whose rate it cannot bound: it
+refuses the profile with the reason, so a value is never sampled without
+a bound and called exact. The unsigned cant is the magnitude of the signed
+one, split where it crosses zero; the stretch the crossing may lie in
+takes every rate of either sign.
+
+The value is the extreme, a plain number in the unit of `of` (metres for
+`cant`). Its evidence names the stations where it may be attained (every
+point where it is lies in one of them; a constant value held over a
+stretch names the stretch), the first five of them. An alignment stating
+no cant has none (an exact absence), a range running backwards, a station
+no distance or several distances carry, one beyond the alignment's end or
+a law without a rate bound leave the value not evaluated with the reason.
+The trait's `measure_alignment_profile` refuses by default.
 
 #### Sections and clearance envelopes
 

@@ -1458,6 +1458,19 @@ elevation law (polynomials and circular arcs), and the cant from the
 along a segment. A sinusoidal spiral, a cubic parabola given as a
 parametric plan piece and another elevation law are refused by name.
 
+Profiles along a station range (`max_along`, `min_along`) read the same
+laws piece by piece, each piece's rate proven from its law: the derivative
+of a polynomial curvature or gradient by interval evaluation; a vertical
+circular arc's `(1 + grade^2)^(3/2) / R`, bounded by the grades at the
+stretch's ends since the grade is monotone along it; and the cant
+transitions `D1 + f(xi) (D2 - D1)`, whose slope shapes `f'` (linear, Bloss,
+cosine, sine, Helmert) and the Viennese bend's blend all rise to their peak
+at mid-segment and fall back, so a stretch's ends and the middle bound
+them. Pieces end at the laws' seams and at station equations, and every
+`step` where one is stated; a segment's authored cants are kept exact,
+values computed in floating point are widened outward. A law with no rate
+bound is refused by name, never sampled.
+
 The same service cuts sections and sweeps clearance envelopes (see
 [Sections and clearance envelopes](./derived.md#sections-and-clearance-envelopes))
 over the bodies the bridge meshed, along the same centreline: an alignment

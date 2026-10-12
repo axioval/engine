@@ -958,6 +958,7 @@ mod side_distance;
 mod sight;
 mod source_metadata;
 mod space;
+mod station_profile;
 mod table_files;
 pub mod template;
 mod topology;
@@ -1128,6 +1129,9 @@ pub use space::{
     BoundaryGap, BoundaryRequest, Cap, CapCoverage, CapRequest, ClearHeightEvidence, Containment,
     OverlapRequest, SpaceAspect, SpaceError, SpaceOverlap, SpaceService, SpaceServiceHandle,
     SupportCounts, UnallocatedRegion, UnallocatedShare, UnmeasuredObjects,
+};
+pub use station_profile::{
+    AlignmentProfile, AlignmentProfileRequest, ProfileExtreme, ProfileExtremeValue, ProfilePiece,
 };
 pub use table_files::{
     PackageDirectory, PackageFiles, TABLE_FILE_LIMIT_BYTES, TableFileError,

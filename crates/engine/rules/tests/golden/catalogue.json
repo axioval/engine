@@ -67575,6 +67575,81 @@
       "available": true
     },
     {
+      "name": "alignment_cant_ratio",
+      "parameters": [
+        {
+          "key": "alignment",
+          "kind": {
+            "type": "sourceKind"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The source kinds of the alignment, `,`-separated; subtypes match. The one object of these kinds the path reaches, or without a path the one in the object's source."
+            },
+            {
+              "language": "de",
+              "text": "Die Quellarten der Achse, durch `,` getrennt; Untertypen zählen mit. Das eine Objekt dieser Arten, das der Pfad erreicht, oder ohne Pfad das eine in der Quelle des Objekts."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps from the object to its alignment; without it, every object of the alignment's kinds in the object's source is a candidate."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte vom Objekt zu seiner Achse; ohne sie ist jedes Objekt der Arten der Achse in der Quelle des Objekts ein Kandidat."
+            }
+          ],
+          "references": "stringList"
+        }
+      ],
+      "services": [
+        "alignment",
+        "type-hierarchy",
+        "relationship-selection"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the alignment cannot be read as a centreline, the object's reference point cannot be resolved, or not exactly one alignment is selected",
+        "the reference point's nearest foot lies before the alignment's start or beyond its end",
+        "two feet on the alignment are equally near within the measurement's bounds, or none can be decided",
+        "a segment of the alignment follows a law the service cannot bound, such as a transition spiral of an unsupported family"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Cant ratio"
+        },
+        {
+          "language": "de",
+          "text": "Überhöhungsverhältnis"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The cant at the object's station over the rail head distance, unsigned: the sine of the bank angle, a plain number; none when the alignment states no cant."
+        },
+        {
+          "language": "de",
+          "text": "Die Überhöhung an der Station des Objekts über dem Schienenkopfabstand, ohne Vorzeichen: der Sinus des Querneigungswinkels, eine reine Zahl; keine, wenn die Achse keine Überhöhung angibt."
+        }
+      ],
+      "unit": "1",
+      "available": true
+    },
+    {
       "name": "alignment_curvature",
       "parameters": [
         {
@@ -77822,6 +77897,124 @@
       "available": true
     },
     {
+      "name": "max_along",
+      "parameters": [
+        {
+          "key": "of",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "gradient",
+              "curvature",
+              "cant",
+              "cant_ratio"
+            ]
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The value along the alignment: `gradient` (rise over plan run), `curvature` (plan curvature per metre, positive turning left), `cant` (metres, unsigned) or `cant_ratio` (the cant over the rail head distance, unsigned)."
+            },
+            {
+              "language": "de",
+              "text": "Der Wert entlang der Achse: `gradient` (Steigung über der Lagelänge), `curvature` (Krümmung im Lageplan je Meter, positiv nach links), `cant` (Meter, ohne Vorzeichen) oder `cant_ratio` (die Überhöhung über dem Schienenkopfabstand, ohne Vorzeichen)."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "from",
+          "kind": {
+            "type": "length",
+            "minimum": -1000000.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The station the range starts at, in metres; the alignment's start without it."
+            },
+            {
+              "language": "de",
+              "text": "Die Station, an der der Bereich beginnt, in Metern; ohne sie der Anfang der Achse."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "to",
+          "kind": {
+            "type": "length",
+            "minimum": -1000000.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The station the range ends at, in metres, not before `from`; the alignment's end without it."
+            },
+            {
+              "language": "de",
+              "text": "Die Station, an der der Bereich endet, in Metern, nicht vor `from`; ohne sie das Ende der Achse."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "step",
+          "kind": {
+            "type": "length",
+            "minimum": 0.001
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The greatest plan distance between samples, in metres: each piece of the law is split so. Between two samples the value is bounded by its rate, never interpolated; without it each piece of the law is one stretch."
+            },
+            {
+              "language": "de",
+              "text": "Der größte Abstand der Stützstellen im Lageplan, in Metern: jedes Stück des Gesetzes wird so geteilt. Zwischen zwei Stützstellen wird der Wert über seine Änderungsrate abgeschätzt, nie interpoliert; ohne ihn ist jedes Stück des Gesetzes ein Abschnitt."
+            }
+          ],
+          "references": "length"
+        }
+      ],
+      "services": [
+        "alignment"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object is no alignment the service can read as a centreline",
+        "a station of the range is carried by no distance or by several, or lies before the alignment's start or beyond its end",
+        "a piece of the alignment follows a law whose rate the service cannot bound",
+        "the range runs backwards"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Greatest along"
+        },
+        {
+          "language": "de",
+          "text": "Größter entlang"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "Of an alignment: the greatest value of `of` along it from station `from` to `to`, in its own unit. Where the value changes monotonically over a piece of the law it is read at the piece's ends, exactly; elsewhere it is bounded by how fast it can change. The evidence names the stations where it may be attained."
+        },
+        {
+          "language": "de",
+          "text": "Einer Achse: der größte Wert von `of` entlang der Achse von Station `from` bis `to`, in seiner eigenen Einheit. Wo sich der Wert über ein Stück des Gesetzes monoton ändert, wird er an dessen Enden exakt gelesen; sonst über seine Änderungsrate abgeschätzt. Der Nachweis nennt die Stationen, an denen er erreicht werden kann."
+        }
+      ],
+      "unit": "1",
+      "available": true
+    },
+    {
       "name": "max_within",
       "parameters": [
         {
@@ -78471,6 +78664,124 @@
         }
       ],
       "unit": "m2",
+      "available": true
+    },
+    {
+      "name": "min_along",
+      "parameters": [
+        {
+          "key": "of",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "gradient",
+              "curvature",
+              "cant",
+              "cant_ratio"
+            ]
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The value along the alignment: `gradient` (rise over plan run), `curvature` (plan curvature per metre, positive turning left), `cant` (metres, unsigned) or `cant_ratio` (the cant over the rail head distance, unsigned)."
+            },
+            {
+              "language": "de",
+              "text": "Der Wert entlang der Achse: `gradient` (Steigung über der Lagelänge), `curvature` (Krümmung im Lageplan je Meter, positiv nach links), `cant` (Meter, ohne Vorzeichen) oder `cant_ratio` (die Überhöhung über dem Schienenkopfabstand, ohne Vorzeichen)."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "from",
+          "kind": {
+            "type": "length",
+            "minimum": -1000000.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The station the range starts at, in metres; the alignment's start without it."
+            },
+            {
+              "language": "de",
+              "text": "Die Station, an der der Bereich beginnt, in Metern; ohne sie der Anfang der Achse."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "to",
+          "kind": {
+            "type": "length",
+            "minimum": -1000000.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The station the range ends at, in metres, not before `from`; the alignment's end without it."
+            },
+            {
+              "language": "de",
+              "text": "Die Station, an der der Bereich endet, in Metern, nicht vor `from`; ohne sie das Ende der Achse."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "step",
+          "kind": {
+            "type": "length",
+            "minimum": 0.001
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The greatest plan distance between samples, in metres: each piece of the law is split so. Between two samples the value is bounded by its rate, never interpolated; without it each piece of the law is one stretch."
+            },
+            {
+              "language": "de",
+              "text": "Der größte Abstand der Stützstellen im Lageplan, in Metern: jedes Stück des Gesetzes wird so geteilt. Zwischen zwei Stützstellen wird der Wert über seine Änderungsrate abgeschätzt, nie interpoliert; ohne ihn ist jedes Stück des Gesetzes ein Abschnitt."
+            }
+          ],
+          "references": "length"
+        }
+      ],
+      "services": [
+        "alignment"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object is no alignment the service can read as a centreline",
+        "a station of the range is carried by no distance or by several, or lies before the alignment's start or beyond its end",
+        "a piece of the alignment follows a law whose rate the service cannot bound",
+        "the range runs backwards"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Least along"
+        },
+        {
+          "language": "de",
+          "text": "Kleinster entlang"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "Of an alignment: the least value of `of` along it from station `from` to `to`, as `max_along` bounds the greatest. The evidence names the stations where it may be attained."
+        },
+        {
+          "language": "de",
+          "text": "Einer Achse: der kleinste Wert von `of` entlang der Achse von Station `from` bis `to`, so abgeschätzt wie `max_along` den größten. Der Nachweis nennt die Stationen, an denen er erreicht werden kann."
+        }
+      ],
+      "unit": "1",
       "available": true
     },
     {

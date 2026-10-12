@@ -158,7 +158,7 @@ impl Centreline {
     }
 
     /// The plan distance a station labels.
-    fn distance_of(&self, station: f64) -> Result<f64, AlignmentError> {
+    pub(super) fn distance_of(&self, station: f64) -> Result<f64, AlignmentError> {
         let stationing = self
             .stationing
             .as_ref()

@@ -72,6 +72,7 @@ use ifc_model::{EntityId, Model};
 
 use super::{PRODUCT_REPRESENTATION, Parsed, context_frame, entity_id, session, world_transform};
 
+mod profile;
 mod section;
 
 /// Width, in metres of plan distance, below which a bracket is no longer
@@ -1009,18 +1010,32 @@ impl AlignmentService for IfcAlignmentService {
                 Some(gradient(&elevated.elevation, stretch).map_err(AlignmentError::Unavailable)?),
                 "gradient",
             ),
-            AlignmentParameter::Cant => {
+            parameter @ (AlignmentParameter::Cant | AlignmentParameter::CantRatio) => {
                 let layout = centreline
                     .cant
                     .as_ref()
                     .map_err(|reason| AlignmentError::Unavailable(reason.clone()))?;
+                let ratio = parameter == AlignmentParameter::CantRatio;
                 (
                     layout
                         .as_ref()
-                        .map(|layout| cant(layout, stretch))
+                        .map(|layout| {
+                            let value = cant(layout, stretch)?;
+                            if !ratio {
+                                return Ok(value);
+                            }
+                            let rail = layout.rail_head_distance;
+                            if !(rail.is_finite() && rail > 0.0) {
+                                return Err(
+                                    "its cant layout states no positive rail head distance"
+                                        .to_owned(),
+                                );
+                            }
+                            Ok(widen((value.0 / rail, value.1 / rail)))
+                        })
                         .transpose()
                         .map_err(AlignmentError::Unavailable)?,
-                    "cant",
+                    if ratio { "cant ratio" } else { "cant" },
                 )
             }
         };
@@ -1035,6 +1050,13 @@ impl AlignmentService for IfcAlignmentService {
             value,
             evidence(&alignment.source, locator, exact),
         )
+    }
+
+    fn measure_alignment_profile(
+        &self,
+        request: &axioval::engine::AlignmentProfileRequest,
+    ) -> Result<axioval::engine::AlignmentProfile, AlignmentError> {
+        self.profile(request)
     }
 
     fn measure_section(

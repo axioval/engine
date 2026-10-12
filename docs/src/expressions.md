@@ -317,6 +317,63 @@ which are chosen, and the chosen members' `value` evidence. A measured
 member list names its members by their words (a text field), else their
 place (`member 2 of 3`), and relates the objects its fields name.
 
+## Consecutive members
+
+`pairs` relates each member of an ordered sequence to the one before it:
+consecutive risers, the plan radii one after another along a road, the
+heights of storeys stacked by elevation. It ranges over members as an
+aggregate does (`over`, `where`), orders them by `by` ascending (a number:
+a station, an elevation, a sequence number), and applies its `function`
+(any aggregate function) to `value` evaluated once per consecutive pair.
+The later member of the pair is in scope; `previous` reads its `operand`
+of the earlier one, and `next` of the later one, so a pair can be written
+either way. "Consecutive risers differ by at most 5 mm":
+
+```json
+{"kind": "pairs", "function": "all",
+ "over": {"kind": "path", "path": ["IfcRelAggregates:forward"]},
+ "by": {"kind": "property", "propertySet": "ex:pset-stair-flight-common", "property": "ex:riser-sequence"},
+ "value": {"kind": "compare", "operator": "lessThanOrEquals",
+           "left": {"kind": "abs", "operand": {"kind": "subtract",
+             "left": {"kind": "property", "propertySet": "ex:pset-stair-flight-common", "property": "ex:riser-height"},
+             "right": {"kind": "previous", "operand":
+               {"kind": "property", "propertySet": "ex:pset-stair-flight-common", "property": "ex:riser-height"}}}},
+           "right": {"kind": "literal", "value": {"type": "quantity", "value": 5, "unit": "mm"}}}}
+```
+
+Risers of 172, 175 and 181 mm fail it at the pair 175 → 181. A finding
+the requirement reports names the pairs that decide it (`pairs r2 → r3`
+among the values read) and relates their members: the pairs failing an
+`all`, holding an `any`, holding a `none` that fails, or whose value may
+be the least or greatest of a `min` or `max`. `previous` and `next` stand
+only within the `value` of a `pairs`, and not within a member scope
+nested there (`Expression::validate` refuses them elsewhere). `count`
+takes no `value` and counts one pair fewer than the members.
+
+An order is never guessed. The members are listed by the lower bound of
+their `by`, then its upper bound; two neighbours in that listing are a
+*decided* pair when every order the intervals allow keeps them
+neighbours: the earlier's upper bound lies below the later's lower bound,
+and every other member surely lies before, after or between them. Equal
+points are no order. A pair that is not decided is not evaluated (the
+order of the two members is undecided), never ordered by a guess and
+never a pass: an `all` it touches fails where a decided pair fails and is
+otherwise not evaluated, and a sum, least or greatest over it is not
+evaluated. Risers whose levels are [0.17, 0.18] m and [0.175, 0.185] m
+may come either way round, so a flight holding them stays open.
+
+- A member whose membership is undecided may be absent, and the pair
+  bridging it is then consecutive: every pair some choice of present
+  members makes consecutive is listed, possible unless both members surely
+  belong and none lies between them, and the function widens or leaves
+  the result open as an aggregate's does. Every possible pair holding, an
+  `all` over two or more members surely belonging holds.
+- A member whose `by` is not evaluated may lie anywhere, so no pair is
+  decided: the result is not evaluated, for that member's reason.
+- A member surely belonging whose `by` is `null` (the source states no
+  position) makes the result `null`; an undecided member's `null` leaves
+  it not evaluated. `null` and not evaluated never mix.
+
 ## Other rules' outcomes
 
 Composite checks read how other rules of the same ruleset judged the object in scope:
@@ -417,7 +474,7 @@ are bounded:
 | --- | --- | --- |
 | nesting depth | `MAX_EXPRESSION_DEPTH` (64) | `Expression::validate`, the text parser |
 | nodes, aggregate filters included | `MAX_EXPRESSION_NODES` (2048) | `Expression::validate` |
-| aggregates, `argmin` and `argmax` within one another's `value`, `by` or `where` | `MAX_AGGREGATE_NESTING` (2) | `Expression::validate` |
+| aggregates, `argmin`, `argmax` and `pairs` within one another's `value`, `by` or `where` | `MAX_AGGREGATE_NESTING` (2) | `Expression::validate` |
 | text | `MAX_TEXT_LENGTH` (1000 characters) | the text parser |
 | nodes evaluated per run, every rule, value and aggregate member together | `DEFAULT_EVALUATION_BUDGET` (100 000 000) | `Runtime::with_evaluation_budget` |
 

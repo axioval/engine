@@ -387,6 +387,41 @@ const RANKED: &[Field] = &[
     one("by", NUMERIC),
     one("value", ANY),
 ];
+/// The function, members, order and per-pair value of a `pairs`.
+const PAIRED: &[Field] = &[
+    choice(
+        "function",
+        &[
+            "count",
+            "sum",
+            "min",
+            "max",
+            "average",
+            "any",
+            "all",
+            "none",
+            "distinctCount",
+        ],
+        true,
+    ),
+    Field {
+        name: "over",
+        kind: FieldKind::AggregateSource,
+        required: true,
+    },
+    Field {
+        name: "where",
+        kind: FieldKind::Selector,
+        required: false,
+    },
+    one("by", NUMERIC),
+    Field {
+        name: "value",
+        kind: FieldKind::Expression { accepts: ANY },
+        required: false,
+    },
+];
+const OPERAND_ANY: &[Field] = &[one("operand", ANY)];
 const CASE: Field = flag("caseSensitive");
 const SLOPE_FORMS: &[&str] = &["ratio", "percent", "angle"];
 
@@ -998,6 +1033,51 @@ pub const EXPRESSION_KINDS: &[NodeKind] = &[
             "Ein Wert des Glieds mit dem größten `by`, etwa der Name der steilsten Fläche; wo \
              sich Intervalle überschneiden, jedes Glied, das das größte sein kann, deren Werte \
              übereinstimmen müssen, und ein Befund nennt sie.",
+        ),
+    },
+    NodeKind {
+        kind: "pairs",
+        category: "aggregate",
+        fields: PAIRED,
+        result: ResultRule::Aggregate,
+        label: &en_de("Consecutive pairs", "Aufeinanderfolgende Paare"),
+        help: &en_de(
+            "A count, sum, extreme, average or quantified truth over each member and the one \
+             before it, ordered by `by`, such as consecutive risers differing by at most 5 mm; \
+             a pair whose order is undecided is not evaluated, and a finding names the pairs \
+             that decide it.",
+            "Anzahl, Summe, Extremwert, Mittelwert oder quantifizierte Aussage über jedes Glied \
+             und das vor ihm, geordnet nach `by`, etwa aufeinanderfolgende Steigungen, die \
+             höchstens 5 mm voneinander abweichen; ein Paar unentschiedener Reihenfolge bleibt \
+             ungeprüft, und ein Befund nennt die entscheidenden Paare.",
+        ),
+    },
+    NodeKind {
+        kind: "previous",
+        category: "aggregate",
+        fields: OPERAND_ANY,
+        result: ResultRule::Joined {
+            fields: &["operand"],
+        },
+        label: &en_de("Of the previous", "Des vorigen"),
+        help: &en_de(
+            "The operand read of the earlier member of the pair, within a `pairs` value.",
+            "Der Operand, gelesen am früheren Glied des Paars, innerhalb eines `pairs`-Werts.",
+        ),
+    },
+    NodeKind {
+        kind: "next",
+        category: "aggregate",
+        fields: OPERAND_ANY,
+        result: ResultRule::Joined {
+            fields: &["operand"],
+        },
+        label: &en_de("Of the next", "Des nächsten"),
+        help: &en_de(
+            "The operand read of the later member of the pair, the one in scope, within a \
+             `pairs` value.",
+            "Der Operand, gelesen am späteren Glied des Paars, dem im Geltungsbereich, \
+             innerhalb eines `pairs`-Werts.",
         ),
     },
     NodeKind {
@@ -1817,7 +1897,9 @@ mod tests {
             E::Atan2 { .. } => "atan2", E::ConvertSlope { .. } => "convertSlope",
             E::InUnit { .. } => "inUnit",
             E::Aggregate { .. } => "aggregate", E::Argmin { .. } => "argmin",
-            E::Argmax { .. } => "argmax", E::RuleOutcome { .. } => "ruleOutcome",
+            E::Argmax { .. } => "argmax", E::Pairs { .. } => "pairs",
+            E::Previous { .. } => "previous", E::Next { .. } => "next",
+            E::RuleOutcome { .. } => "ruleOutcome",
             E::Selected { .. } => "selected",
             E::FindingCount { .. } => "findingCount", E::Deviation { .. } => "deviation",
             E::Concat { .. } => "concat", E::Length { .. } => "length",

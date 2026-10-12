@@ -1,0 +1,118 @@
+{
+  "expression": {
+    "kind": "pairs",
+    "function": "max",
+    "over": {
+      "kind": "path",
+      "path": [
+        "IfcRelContainedInSpatialStructure:forward"
+      ]
+    },
+    "where": {
+      "kind": "entityType",
+      "objectType": "ex:storey",
+      "includeSubtypes": true
+    },
+    "by": {
+      "kind": "property",
+      "propertySet": "ex:pset-storey-common",
+      "property": "ex:elevation"
+    },
+    "value": {
+      "kind": "subtract",
+      "left": {
+        "kind": "next",
+        "operand": {
+          "kind": "property",
+          "propertySet": "ex:pset-storey-common",
+          "property": "ex:elevation"
+        }
+      },
+      "right": {
+        "kind": "previous",
+        "operand": {
+          "kind": "property",
+          "propertySet": "ex:pset-storey-common",
+          "property": "ex:elevation"
+        }
+      }
+    },
+    "label": "tallest storey"
+  },
+  "blocks": {
+    "type": "expression.pairs",
+    "label": "tallest storey",
+    "fields": {
+      "function": "max"
+    },
+    "inputs": {
+      "by": {
+        "block": {
+          "type": "expression.property",
+          "fields": {
+            "property": "ex:elevation",
+            "propertySet": "ex:pset-storey-common"
+          }
+        }
+      },
+      "over": {
+        "block": {
+          "type": "source.path",
+          "fields": {
+            "path": [
+              "IfcRelContainedInSpatialStructure:forward"
+            ]
+          }
+        }
+      },
+      "value": {
+        "block": {
+          "type": "expression.subtract",
+          "inputs": {
+            "left": {
+              "block": {
+                "type": "expression.next",
+                "inputs": {
+                  "operand": {
+                    "block": {
+                      "type": "expression.property",
+                      "fields": {
+                        "property": "ex:elevation",
+                        "propertySet": "ex:pset-storey-common"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "right": {
+              "block": {
+                "type": "expression.previous",
+                "inputs": {
+                  "operand": {
+                    "block": {
+                      "type": "expression.property",
+                      "fields": {
+                        "property": "ex:elevation",
+                        "propertySet": "ex:pset-storey-common"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "where": {
+        "block": {
+          "type": "selector.entityType",
+          "fields": {
+            "includeSubtypes": true,
+            "objectType": "ex:storey"
+          }
+        }
+      }
+    }
+  }
+}

@@ -126,6 +126,12 @@ optional `where` inputs, a `by` input ranking the members (a number) and a
 `value` input read of the chosen member, both evaluated with each member
 in scope.
 
+`expression.pairs` takes an aggregate's `function` field and `over`,
+`where` and `value` inputs, and a `by` input ordering the members (a
+number); `value` is evaluated per consecutive pair. `expression.previous`
+and `expression.next`, each with an `operand` input, stand only within
+it.
+
 ## Measured values
 
 A `property` read of `axioval:measured` is shown as a `measured.<name>`

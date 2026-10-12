@@ -36,10 +36,17 @@ fn every_fixture_round_trips() {
 
 #[test]
 fn every_kind_has_a_fixture() {
-    let covered: BTreeSet<String> = fixtures()
-        .into_iter()
-        .map(|(_, json)| json["kind"].as_str().unwrap().to_owned())
-        .collect();
+    // `previous` and `next` stand only within a `pairs`: a kind counts
+    // wherever a fixture holds it.
+    let mut covered = BTreeSet::new();
+    for (_, json) in fixtures() {
+        let expression: Expression = serde_json::from_value(json).unwrap();
+        let mut pending = vec![&expression];
+        while let Some(node) = pending.pop() {
+            covered.insert(node.kind().to_owned());
+            pending.extend(node.children());
+        }
+    }
     let kinds: BTreeSet<String> = Expression::KINDS.iter().map(|&kind| kind.into()).collect();
     assert_eq!(covered, kinds);
 }

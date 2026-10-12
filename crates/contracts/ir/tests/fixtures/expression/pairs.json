@@ -1,0 +1,53 @@
+{
+  "kind": "pairs",
+  "function": "all",
+  "over": {
+    "kind": "path",
+    "path": [
+      "IfcRelAggregates:forward"
+    ]
+  },
+  "where": {
+    "kind": "entityType",
+    "objectType": "ex:stair-flight",
+    "includeSubtypes": true
+  },
+  "by": {
+    "kind": "property",
+    "propertySet": "ex:pset-stair-flight-common",
+    "property": "ex:riser-sequence"
+  },
+  "value": {
+    "kind": "compare",
+    "operator": "lessThanOrEquals",
+    "left": {
+      "kind": "abs",
+      "operand": {
+        "kind": "subtract",
+        "left": {
+          "kind": "property",
+          "propertySet": "ex:pset-stair-flight-common",
+          "property": "ex:riser-height"
+        },
+        "right": {
+          "kind": "previous",
+          "operand": {
+            "kind": "property",
+            "propertySet": "ex:pset-stair-flight-common",
+            "property": "ex:riser-height"
+          },
+          "label": "previous riser"
+        }
+      }
+    },
+    "right": {
+      "kind": "literal",
+      "value": {
+        "type": "quantity",
+        "value": 5.0,
+        "unit": "mm"
+      }
+    }
+  },
+  "label": "consecutive risers"
+}

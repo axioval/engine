@@ -205,7 +205,9 @@ fn operands<'e>(node: &'e Expression, path: &str) -> Vec<(String, &'e Expression
         | Expression::Length { operand, .. }
         | Expression::Lower { operand, .. }
         | Expression::Upper { operand, .. }
-        | Expression::Trim { operand, .. } => vec![(field("operand"), operand.as_ref())],
+        | Expression::Trim { operand, .. }
+        | Expression::Previous { operand, .. }
+        | Expression::Next { operand, .. } => vec![(field("operand"), operand.as_ref())],
         Expression::And { operands, .. }
         | Expression::Or { operands, .. }
         | Expression::Coalesce { operands, .. }
@@ -299,6 +301,15 @@ fn operands<'e>(node: &'e Expression, path: &str) -> Vec<(String, &'e Expression
             .flat_map(|filter| filter.expressions())
             .map(|nested| (field("where"), nested))
             .chain([(field("by"), by.as_ref()), (field("value"), value.as_ref())])
+            .collect(),
+        Expression::Pairs {
+            filter, by, value, ..
+        } => filter
+            .iter()
+            .flat_map(|filter| filter.expressions())
+            .map(|nested| (field("where"), nested))
+            .chain(std::iter::once((field("by"), by.as_ref())))
+            .chain(value.iter().map(|value| (field("value"), value.as_ref())))
             .collect(),
     }
 }

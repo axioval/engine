@@ -6,8 +6,8 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use axioval_engine::expression::{
-    EvaluationBudget, ExpressionContext, Interval, Leaf, Member, Ranked, RuleRead, Unit, Value,
-    derived_value, evaluate, evaluate_untraced,
+    EvaluationBudget, ExpressionContext, Interval, Leaf, Member, PairRead, Ranked, RuleRead,
+    Sequenced, Unit, Value, derived_value, evaluate, evaluate_untraced,
 };
 use axioval_engine::{
     MeasuredMember, MeasuredRead, Measurement, MemberValue, ObjectVerdict, RuleContext,
@@ -39,6 +39,21 @@ pub(crate) struct Stated(pub(crate) Option<axioval_ir::PropertyValue>);
 /// A candidate member: the object, whether it surely belongs, and the
 /// evidence that reached it.
 pub(crate) type Candidate<'a> = (&'a Object, bool, Vec<Evidence>);
+
+/// The members of the `pairs` listed last, in listing order: objects, or
+/// the measured members of the object in scope.
+enum Sequence<'a> {
+    Objects(Vec<&'a Object>),
+    Measured(Vec<MeasuredMember>),
+}
+
+/// A member in scope: an object, or a measured member of the object in
+/// scope.
+#[derive(Clone, Copy)]
+enum Scope<'a> {
+    Object(&'a Object),
+    Member(&'a MeasuredMember),
+}
 
 /// A measured value of the object in scope read ahead of its read, by set
 /// and name: what [`resolve`] would answer for it, read for many objects
@@ -116,6 +131,11 @@ pub(crate) struct ObjectLeaves<'a> {
     /// objects a finding naming each relates, and why its value was not
     /// evaluated, taken over only where it is chosen.
     ranked: Vec<(Vec<ObjectId>, Option<NotEvaluatedReason>)>,
+    /// The members of the `pairs` listed last, whose pairs it reads.
+    sequence: Sequence<'a>,
+    /// The pair in scope within a `pairs` value, earlier member first: what
+    /// `previous` and `next` read.
+    pair: Option<[Scope<'a>; 2]>,
 }
 
 /// A property resolved for an object (the object in scope, or the subject
@@ -162,6 +182,8 @@ impl<'a> ObjectLeaves<'a> {
             sources: RefCell::new(Vec::new()),
             lists: RefCell::new(Vec::new()),
             ranked: Vec::new(),
+            sequence: Sequence::Objects(Vec::new()),
+            pair: None,
         }
     }
 
@@ -198,6 +220,8 @@ impl<'a> ObjectLeaves<'a> {
             sources: RefCell::new(Vec::new()),
             lists: RefCell::new(Vec::new()),
             ranked: Vec::new(),
+            sequence: Sequence::Objects(Vec::new()),
+            pair: None,
         }
     }
 
@@ -226,6 +250,16 @@ impl<'a> ObjectLeaves<'a> {
             sources: RefCell::new(Vec::new()),
             lists: RefCell::new(Vec::new()),
             ranked: Vec::new(),
+            sequence: Sequence::Objects(Vec::new()),
+            pair: None,
+        }
+    }
+
+    /// The leaves of `scope`, a member of an aggregate or a pair.
+    fn scoped(&self, scope: Scope<'a>) -> Self {
+        match scope {
+            Scope::Object(object) => self.member(object),
+            Scope::Member(member) => self.measured_member(member),
         }
     }
 
@@ -940,6 +974,35 @@ impl<'a> ObjectLeaves<'a> {
     }
 }
 
+/// The evidence every leaf of `evaluation` read.
+fn cited(evaluation: &axioval_engine::expression::Evaluation) -> Vec<Evidence> {
+    evaluation
+        .reads
+        .iter()
+        .flat_map(|read| read.leaf.evidence.iter().cloned())
+        .collect()
+}
+
+/// How a finding names the measured member `index` of `count`, by its
+/// words, else its place, and the objects relating it.
+fn measured_words(member: &MeasuredMember, index: usize, count: usize) -> (String, Vec<ObjectId>) {
+    let words = member.fields.values().find_map(|field| match field {
+        MemberValue::Text { text } => Some(text.clone()),
+        _ => None,
+    });
+    let name = words.unwrap_or_else(|| format!("member {} of {count}", index + 1));
+    let objects = member
+        .fields
+        .values()
+        .filter_map(|field| match field {
+            MemberValue::Objects { objects } => Some(objects.iter().cloned()),
+            _ => None,
+        })
+        .flatten()
+        .collect();
+    (name, objects)
+}
+
 impl ExpressionContext for ObjectLeaves<'_> {
     fn spend(&mut self) -> bool {
         let spent = self.budget.is_none_or(|budget| budget.spend());
@@ -1225,21 +1288,7 @@ impl ExpressionContext for ObjectLeaves<'_> {
             for (index, member) in measured.iter().enumerate() {
                 let mut by_leaves = self.measured_member(member);
                 let mut value_leaves = self.measured_member(member);
-                // A measured member is named by its words, else its place.
-                let words = member.fields.values().find_map(|field| match field {
-                    MemberValue::Text { text } => Some(text.clone()),
-                    _ => None,
-                });
-                let name = words.unwrap_or_else(|| format!("member {} of {count}", index + 1));
-                let objects = member
-                    .fields
-                    .values()
-                    .filter_map(|field| match field {
-                        MemberValue::Objects { objects } => Some(objects.iter().cloned()),
-                        _ => None,
-                    })
-                    .flatten()
-                    .collect();
+                let (name, objects) = measured_words(member, index, count);
                 let (member, kept) = self.rank(
                     (&mut by_leaves, &mut value_leaves),
                     (member.certain, Vec::new(), name, objects),
@@ -1277,6 +1326,97 @@ impl ExpressionContext for ObjectLeaves<'_> {
             self.ranked.push(kept);
         }
         Ok(ranked)
+    }
+
+    fn sequenced_members(
+        &mut self,
+        over: &AggregateSource,
+        filter: Option<&Selector>,
+        (by, by_path): (&Expression, &str),
+    ) -> Result<Vec<Sequenced>, String> {
+        self.ranked.clear();
+        self.sequence = Sequence::Objects(Vec::new());
+        let mut sequenced = Vec::new();
+        if let AggregateSource::Measured { name } = over {
+            let measured = self.measured_listing(name)?;
+            let count = measured.len();
+            for (index, member) in measured.iter().enumerate() {
+                let (name, objects) = measured_words(member, index, count);
+                let mut leaves = self.measured_member(member);
+                let ordered = evaluate_untraced(by, by_path, &mut leaves);
+                self.adopt_reason(&leaves, &ordered.outcome);
+                sequenced.push(Sequenced {
+                    certain: member.certain,
+                    evidence: cited(&ordered),
+                    by: ordered.outcome,
+                    name,
+                });
+                self.ranked.push((objects, None));
+            }
+            self.sequence = Sequence::Measured(measured);
+            return Ok(sequenced);
+        }
+        let mut objects = Vec::new();
+        for (object, mut certain, mut evidence) in self.candidates(over)? {
+            if let Some(filter) = filter {
+                match selector_matches(self.context, filter, object, &mut evidence) {
+                    Selection::Match => {}
+                    Selection::NoMatch => continue,
+                    Selection::NotEvaluated(..) => certain = false,
+                }
+            }
+            let mut leaves = self.member(object);
+            let ordered = evaluate_untraced(by, by_path, &mut leaves);
+            self.adopt_reason(&leaves, &ordered.outcome);
+            evidence.extend(cited(&ordered));
+            sequenced.push(Sequenced {
+                certain,
+                by: ordered.outcome,
+                evidence,
+                name: object.id.to_string(),
+            });
+            self.ranked.push((vec![object.id.clone()], None));
+            objects.push(object);
+        }
+        self.sequence = Sequence::Objects(objects);
+        Ok(sequenced)
+    }
+
+    fn pair_value(
+        &mut self,
+        earlier: usize,
+        later: usize,
+        (value, path): (&Expression, &str),
+    ) -> PairRead {
+        let this = &*self;
+        let pair = match &this.sequence {
+            Sequence::Objects(objects) => [objects[earlier], objects[later]].map(Scope::Object),
+            Sequence::Measured(members) => [&members[earlier], &members[later]].map(Scope::Member),
+        };
+        let mut leaves = this.scoped(pair[1]);
+        leaves.pair = Some(pair);
+        let evaluation = evaluate_untraced(value, path, &mut leaves);
+        this.adopt_reason(&leaves, &evaluation.outcome);
+        (evaluation.outcome.clone(), cited(&evaluation))
+    }
+
+    fn neighbour(&mut self, previous: bool, (operand, path): (&Expression, &str)) -> PairRead {
+        let Some(pair) = self.pair else {
+            return (
+                Err(axioval_engine::expression::NotEvaluated {
+                    path: path.to_owned(),
+                    label: None,
+                    reason: axioval_engine::expression::Reason::Unreadable(
+                        "`previous` and `next` are read only within the value of a `pairs`".into(),
+                    ),
+                }),
+                Vec::new(),
+            );
+        };
+        let mut leaves = self.scoped(pair[usize::from(!previous)]);
+        let evaluation = evaluate_untraced(operand, path, &mut leaves);
+        self.adopt_reason(&leaves, &evaluation.outcome);
+        (evaluation.outcome.clone(), cited(&evaluation))
     }
 
     fn chosen(&mut self, chosen: &[usize]) {

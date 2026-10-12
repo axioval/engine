@@ -100,6 +100,20 @@ All notable changes are documented here. This project follows Semantic Versionin
   undecided, or which belongs to another group not known completely, adds
   its value or nothing
   ([#351](https://github.com/axioval/engine/issues/351)).
+- **Expressions**: `pairs` relates consecutive members of an ordered
+  sequence: an aggregate `function` over each member, ordered by `by`
+  (a station, an elevation, a sequence number), and the one before it,
+  `value` evaluated per pair with the later member in scope; `previous`
+  and `next` read the earlier and the later member within it. Risers of
+  172, 175 and 181 mm with a 5 mm limit on consecutive differences fail at
+  the pair 175 → 181, and the finding names and relates both risers. An
+  order the intervals of `by` leave undecided is never guessed: its pairs
+  are not evaluated (`Reason::UndecidedOrder`), never a pass. A member of
+  undecided membership makes the pairs around it and the pair bridging it
+  possible, a `by` not evaluated leaves the result not evaluated, and a
+  sure member's `null` `by` makes it `null`. `ExpressionContext` gains
+  `sequenced_members`, `pair_value` and `neighbour`, all defaulted
+  ([#350](https://github.com/axioval/engine/issues/350)).
 
 ### Changed
 

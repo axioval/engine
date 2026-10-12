@@ -464,6 +464,39 @@ impl<'e> Checker<'e> {
         })
     }
 
+    /// The type of `function` over members (or pairs) whose `value`, at
+    /// `value_path`, this member scope checks.
+    fn aggregated(
+        &self,
+        function: axioval_ir::contract::AggregateFunction,
+        value: Option<&Expression>,
+        value_path: &str,
+    ) -> Result<Type, TypeError> {
+        use axioval_ir::contract::AggregateFunction as F;
+        Ok(match (function, value) {
+            (F::Count | F::DistinctCount, value) => {
+                if let Some(value) = value {
+                    self.check(value, value_path)?;
+                }
+                Type::Integer
+            }
+            (F::Any | F::All | F::None, Some(value)) => {
+                self.boolean(value, value_path)?;
+                Type::Boolean
+            }
+            (F::Sum | F::Min | F::Max, Some(value)) => match self.numeric(value, value_path)? {
+                Type::Null => Type::Any,
+                found => found,
+            },
+            (F::Average, Some(value)) => match self.numeric(value, value_path)? {
+                Type::Integer => Type::NUMBER,
+                Type::Null => Type::Any,
+                found => found,
+            },
+            (_, None) => Type::Any,
+        })
+    }
+
     #[allow(clippy::too_many_lines)]
     fn check(&self, expression: &Expression, path: &str) -> Result<Type, TypeError> {
         let kind = expression.kind();
@@ -856,35 +889,26 @@ impl<'e> Checker<'e> {
                 over,
                 value,
                 ..
+            } => self.members(expression, over, path)?.aggregated(
+                *function,
+                value.as_deref(),
+                &child("value"),
+            )?,
+            Expression::Pairs {
+                function,
+                over,
+                by,
+                value,
+                ..
             } => {
-                use axioval_ir::contract::AggregateFunction as F;
                 let scoped = self.members(expression, over, path)?;
-                let this = &scoped;
-                let value_path = child("value");
-                match (function, value) {
-                    (F::Count | F::DistinctCount, value) => {
-                        if let Some(value) = value {
-                            this.check(value, &value_path)?;
-                        }
-                        Type::Integer
-                    }
-                    (F::Any | F::All | F::None, Some(value)) => {
-                        this.boolean(value, &value_path)?;
-                        Type::Boolean
-                    }
-                    (F::Sum | F::Min | F::Max, Some(value)) => {
-                        match this.numeric(value, &value_path)? {
-                            Type::Null => Type::Any,
-                            found => found,
-                        }
-                    }
-                    (F::Average, Some(value)) => match this.numeric(value, &value_path)? {
-                        Type::Integer => Type::NUMBER,
-                        Type::Null => Type::Any,
-                        found => found,
-                    },
-                    (_, None) => Type::Any,
-                }
+                scoped.numeric(by, &child("by"))?;
+                scoped.aggregated(*function, value.as_deref(), &child("value"))?
+            }
+            // Within a pair's value (`Expression::validate` refuses them
+            // elsewhere), read of the other member of the same list.
+            Expression::Previous { operand, .. } | Expression::Next { operand, .. } => {
+                self.check(operand, &child("operand"))?
             }
             Expression::Argmin {
                 over, by, value, ..

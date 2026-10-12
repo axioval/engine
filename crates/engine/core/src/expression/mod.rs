@@ -7,6 +7,7 @@ mod aggregate;
 mod evaluate;
 mod extreme;
 mod interval;
+mod sequence;
 mod table;
 mod text;
 mod types;
@@ -15,7 +16,8 @@ mod unit;
 pub use crate::values::derived_value;
 pub use evaluate::{
     DEFAULT_EVALUATION_BUDGET, Evaluation, EvaluationBudget, ExpressionContext, Leaf, Member,
-    NotEvaluated, Ranked, Read, Reason, RuleRead, Source, Value, evaluate, evaluate_untraced,
+    NotEvaluated, PairRead, Ranked, Read, Reason, RuleRead, Sequenced, Source, Value, evaluate,
+    evaluate_untraced,
 };
 pub use interval::{Interval, IntervalFailure, IntervalResult};
 pub use text::{MAX_TEXT_LENGTH, parse_text};

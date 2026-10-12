@@ -253,6 +253,10 @@ pub enum Reason {
     /// This many members of an `argmin` or `argmax` may be the extreme,
     /// and their values differ.
     UndecidedExtreme(usize),
+    /// The order of a pair of a `pairs` is undecided: the intervals of
+    /// `by` let another member come between the two members named, or
+    /// either come first.
+    UndecidedOrder(String, String),
 }
 
 impl fmt::Display for Reason {
@@ -278,6 +282,10 @@ impl fmt::Display for Reason {
             Self::UndecidedExtreme(count) => write!(
                 f,
                 "{count} members may be the extreme, and their values differ"
+            ),
+            Self::UndecidedOrder(earlier, later) => write!(
+                f,
+                "whether {earlier} and {later} follow each other is undecided by their order"
             ),
         }
     }
@@ -326,6 +334,20 @@ pub enum Source {
         greatest: bool,
         /// The members chosen, named.
         chosen: Vec<String>,
+    },
+    /// The consecutive pairs of a `pairs`, and the pairs that decide it,
+    /// named `earlier → later`: those failing an `all`, holding an `any`,
+    /// holding a `none` that fails, or that may be the least or greatest.
+    Pairs {
+        /// The function over the pairs.
+        function: AggregateFunction,
+        /// The deciding pairs, named.
+        chosen: Vec<String>,
+    },
+    /// A value read of the earlier (`previous`) or later member of a pair.
+    Neighbour {
+        /// Whether the earlier member was read.
+        previous: bool,
     },
     /// Another rule's outcome about the object in scope.
     Rule {
@@ -431,6 +453,24 @@ pub struct Ranked {
     /// Words naming it: its identity, or a measured member's words.
     pub name: String,
 }
+
+/// One member of a `pairs`: whether it surely is one, what orders it,
+/// and how a finding names it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Sequenced {
+    /// Whether the member surely belongs; `false` when its path or filter
+    /// could not decide it.
+    pub certain: bool,
+    /// What orders it, with it in scope.
+    pub by: Result<Value, NotEvaluated>,
+    /// The evidence of its membership and its `by`.
+    pub evidence: Vec<Evidence>,
+    /// Words naming it: its identity, or a measured member's words.
+    pub name: String,
+}
+
+/// A value read with a member of a pair in scope, and its evidence.
+pub type PairRead = (Result<Value, NotEvaluated>, Vec<Evidence>);
 
 /// The default number of expression nodes one run may evaluate.
 pub const DEFAULT_EVALUATION_BUDGET: u64 = 100_000_000;
@@ -581,6 +621,58 @@ pub trait ExpressionContext {
     /// the result is `null` or not evaluated.
     fn chosen(&mut self, chosen: &[usize]) {
         let _ = chosen;
+    }
+
+    /// The members `over` reaches from the object in scope that `filter`
+    /// selects, for a `pairs`: each with `by` evaluated with it in scope,
+    /// at the path given beside it. The listing is kept for
+    /// [`Self::pair_value`] and [`Self::chosen`].
+    ///
+    /// # Errors
+    ///
+    /// Why the members cannot be listed: a path the source cannot answer.
+    fn sequenced_members(
+        &mut self,
+        over: &AggregateSource,
+        filter: Option<&Selector>,
+        by: (&Expression, &str),
+    ) -> Result<Vec<Sequenced>, String> {
+        let _ = (over, filter, by);
+        Err("`pairs` cannot list members here".into())
+    }
+
+    /// `value` (at the path given beside it) of the pair of members
+    /// `earlier` and `later` of the listing [`Self::sequenced_members`]
+    /// last answered, by their index in it: evaluated with `later` in
+    /// scope, its `previous` reading `earlier` and its `next` `later`.
+    fn pair_value(&mut self, earlier: usize, later: usize, value: (&Expression, &str)) -> PairRead {
+        let _ = (earlier, later);
+        (
+            Err(NotEvaluated {
+                path: value.1.to_owned(),
+                label: value.0.label().map(str::to_owned),
+                reason: Reason::Unreadable("pairs cannot be read here".into()),
+            }),
+            Vec::new(),
+        )
+    }
+
+    /// `operand` (at the path given beside it) with the earlier
+    /// (`previous`) or the later member of the pair in scope: answered only
+    /// within [`Self::pair_value`].
+    fn neighbour(&mut self, previous: bool, operand: (&Expression, &str)) -> PairRead {
+        let _ = operand.0;
+        (
+            Err(NotEvaluated {
+                path: operand.1.to_owned(),
+                label: None,
+                reason: Reason::Unreadable(format!(
+                    "`{}` is read only within the value of a `pairs`",
+                    if previous { "previous" } else { "next" }
+                )),
+            }),
+            Vec::new(),
+        )
     }
 
     /// The types the compiled ruleset declares, which type a sum over no
@@ -1263,6 +1355,98 @@ impl Evaluator<'_> {
                             .map(|index| members[*index].name.clone())
                             .collect(),
                     },
+                    leaf: Leaf {
+                        value: outcome.clone().map_err(|why| why.reason.to_string()),
+                        evidence,
+                    },
+                });
+                outcome
+            }
+            Expression::Pairs {
+                function,
+                over,
+                filter,
+                by,
+                value,
+                ..
+            } => {
+                let listed =
+                    self.context
+                        .sequenced_members(over, filter.as_deref(), (by, &child("by")));
+                let mut evidence = self.context.listing_evidence();
+                evidence.extend(
+                    listed
+                        .iter()
+                        .flatten()
+                        .flat_map(|member| member.evidence.iter().cloned()),
+                );
+                let value_path = child("value");
+                // A sum over no pair is zero of the unit its value is typed in.
+                let declared = self.context.declared_types().cloned();
+                let typed = || {
+                    value.as_deref().and_then(|value| {
+                        super::types::member_value_unit(over, value, declared.as_ref())
+                    })
+                };
+                let outcome = match &listed {
+                    Err(why) => Err(super::aggregate::Failure::Here(Reason::Unreadable(
+                        why.clone(),
+                    ))),
+                    Ok(members) => super::sequence::pairs(members).and_then(|pairs| {
+                        super::sequence::over_pairs(
+                            *function,
+                            (members, pairs),
+                            &mut |earlier, later| match value.as_deref() {
+                                None => (Ok(Value::Null), Vec::new()),
+                                Some(value) => {
+                                    self.context
+                                        .pair_value(earlier, later, (value, &value_path))
+                                }
+                            },
+                            (&typed, &here),
+                            &mut evidence,
+                        )
+                    }),
+                };
+                let (outcome, chosen) = match outcome {
+                    Ok((value, chosen)) => (Ok(value), chosen),
+                    Err(super::aggregate::Failure::Member(inner)) => (Err(inner), Vec::new()),
+                    Err(super::aggregate::Failure::Here(reason)) => (Err(here(reason)), Vec::new()),
+                };
+                let members = listed.unwrap_or_default();
+                let mut related: Vec<usize> = chosen
+                    .iter()
+                    .flat_map(|(earlier, later)| [*earlier, *later])
+                    .collect();
+                related.sort_unstable();
+                related.dedup();
+                self.context.chosen(&related);
+                self.reads.push(Read {
+                    path: path.to_owned(),
+                    source: Source::Pairs {
+                        function: *function,
+                        chosen: chosen
+                            .iter()
+                            .map(|(earlier, later)| {
+                                format!("{} → {}", members[*earlier].name, members[*later].name)
+                            })
+                            .collect(),
+                    },
+                    leaf: Leaf {
+                        value: outcome.clone().map_err(|why| why.reason.to_string()),
+                        evidence,
+                    },
+                });
+                outcome
+            }
+            Expression::Previous { operand, .. } | Expression::Next { operand, .. } => {
+                let previous = matches!(expression, Expression::Previous { .. });
+                let (outcome, evidence) = self
+                    .context
+                    .neighbour(previous, (operand, &child("operand")));
+                self.reads.push(Read {
+                    path: path.to_owned(),
+                    source: Source::Neighbour { previous },
                     leaf: Leaf {
                         value: outcome.clone().map_err(|why| why.reason.to_string()),
                         evidence,

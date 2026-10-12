@@ -1,0 +1,40 @@
+{
+  "kind": "pairs",
+  "function": "max",
+  "over": {
+    "kind": "path",
+    "path": [
+      "IfcRelContainedInSpatialStructure:forward"
+    ]
+  },
+  "where": {
+    "kind": "entityType",
+    "objectType": "ex:storey",
+    "includeSubtypes": true
+  },
+  "by": {
+    "kind": "property",
+    "propertySet": "ex:pset-storey-common",
+    "property": "ex:elevation"
+  },
+  "value": {
+    "kind": "subtract",
+    "left": {
+      "kind": "next",
+      "operand": {
+        "kind": "property",
+        "propertySet": "ex:pset-storey-common",
+        "property": "ex:elevation"
+      }
+    },
+    "right": {
+      "kind": "previous",
+      "operand": {
+        "kind": "property",
+        "propertySet": "ex:pset-storey-common",
+        "property": "ex:elevation"
+      }
+    }
+  },
+  "label": "tallest storey"
+}

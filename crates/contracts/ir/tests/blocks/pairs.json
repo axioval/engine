@@ -1,0 +1,154 @@
+{
+  "expression": {
+    "kind": "pairs",
+    "function": "all",
+    "over": {
+      "kind": "path",
+      "path": [
+        "IfcRelAggregates:forward"
+      ]
+    },
+    "where": {
+      "kind": "entityType",
+      "objectType": "ex:stair-flight",
+      "includeSubtypes": true
+    },
+    "by": {
+      "kind": "property",
+      "propertySet": "ex:pset-stair-flight-common",
+      "property": "ex:riser-sequence"
+    },
+    "value": {
+      "kind": "compare",
+      "operator": "lessThanOrEquals",
+      "left": {
+        "kind": "abs",
+        "operand": {
+          "kind": "subtract",
+          "left": {
+            "kind": "property",
+            "propertySet": "ex:pset-stair-flight-common",
+            "property": "ex:riser-height"
+          },
+          "right": {
+            "kind": "previous",
+            "operand": {
+              "kind": "property",
+              "propertySet": "ex:pset-stair-flight-common",
+              "property": "ex:riser-height"
+            },
+            "label": "previous riser"
+          }
+        }
+      },
+      "right": {
+        "kind": "literal",
+        "value": {
+          "type": "quantity",
+          "value": 5.0,
+          "unit": "mm"
+        }
+      }
+    },
+    "label": "consecutive risers"
+  },
+  "blocks": {
+    "type": "expression.pairs",
+    "label": "consecutive risers",
+    "fields": {
+      "function": "all"
+    },
+    "inputs": {
+      "by": {
+        "block": {
+          "type": "expression.property",
+          "fields": {
+            "property": "ex:riser-sequence",
+            "propertySet": "ex:pset-stair-flight-common"
+          }
+        }
+      },
+      "over": {
+        "block": {
+          "type": "source.path",
+          "fields": {
+            "path": [
+              "IfcRelAggregates:forward"
+            ]
+          }
+        }
+      },
+      "value": {
+        "block": {
+          "type": "expression.compare",
+          "fields": {
+            "operator": "lessThanOrEquals"
+          },
+          "inputs": {
+            "left": {
+              "block": {
+                "type": "expression.abs",
+                "inputs": {
+                  "operand": {
+                    "block": {
+                      "type": "expression.subtract",
+                      "inputs": {
+                        "left": {
+                          "block": {
+                            "type": "expression.property",
+                            "fields": {
+                              "property": "ex:riser-height",
+                              "propertySet": "ex:pset-stair-flight-common"
+                            }
+                          }
+                        },
+                        "right": {
+                          "block": {
+                            "type": "expression.previous",
+                            "label": "previous riser",
+                            "inputs": {
+                              "operand": {
+                                "block": {
+                                  "type": "expression.property",
+                                  "fields": {
+                                    "property": "ex:riser-height",
+                                    "propertySet": "ex:pset-stair-flight-common"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "right": {
+              "block": {
+                "type": "expression.literal",
+                "fields": {
+                  "value": {
+                    "type": "quantity",
+                    "unit": "mm",
+                    "value": 5.0
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "where": {
+        "block": {
+          "type": "selector.entityType",
+          "fields": {
+            "includeSubtypes": true,
+            "objectType": "ex:stair-flight"
+          }
+        }
+      }
+    }
+  }
+}

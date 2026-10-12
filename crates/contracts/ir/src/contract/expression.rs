@@ -404,6 +404,39 @@ pub enum Expression {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         label: Option<String>,
     },
+    /// `function` over the consecutive pairs of the members `over` reaches
+    /// that `filter` (`where`) selects, ordered by `by` ascending (a station,
+    /// an elevation, a sequence number), evaluated with each member in
+    /// scope. `value` is evaluated once per pair with the later member in
+    /// scope; [`Expression::Previous`] reads the earlier one. A pair whose
+    /// order the intervals of `by` leave undecided is not evaluated, never
+    /// ordered by a guess, and a finding names the pairs that decide it.
+    Pairs {
+        function: AggregateFunction,
+        over: AggregateSource,
+        #[serde(rename = "where", default, skip_serializing_if = "Option::is_none")]
+        filter: Option<Box<Selector>>,
+        by: Box<Expression>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        value: Option<Box<Expression>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        label: Option<String>,
+    },
+    /// `operand` evaluated with the earlier member of the pair in scope;
+    /// only within the `value` of a [`Expression::Pairs`].
+    Previous {
+        operand: Box<Expression>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        label: Option<String>,
+    },
+    /// `operand` evaluated with the later member of the pair in scope (the
+    /// one a `pairs` value reads anyway), so a pair can be written
+    /// symmetrically; only within the `value` of a [`Expression::Pairs`].
+    Next {
+        operand: Box<Expression>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        label: Option<String>,
+    },
     /// How the rule `rule` of the same ruleset judged the object in scope:
     /// true when it passed it, false when it reported a finding about it,
     /// `null` when it did not select it, and not evaluated when it left it
@@ -640,11 +673,13 @@ pub enum ExpressionError {
     AggregateValue { function: AggregateFunction },
     #[error("an aggregate over measured members: {detail}")]
     MeasuredMembers { detail: String },
+    #[error("a `{kind}` expression is read only within the `value` of a `pairs` expression")]
+    OutsidePairs { kind: &'static str },
 }
 
 impl Expression {
     /// Every node `kind`, in declaration order.
-    pub const KINDS: [&'static str; 51] = [
+    pub const KINDS: [&'static str; 54] = [
         "literal",
         "null",
         "property",
@@ -687,6 +722,9 @@ impl Expression {
         "aggregate",
         "argmin",
         "argmax",
+        "pairs",
+        "previous",
+        "next",
         "ruleOutcome",
         "selected",
         "findingCount",
@@ -744,6 +782,9 @@ impl Expression {
             Self::Aggregate { .. } => "aggregate",
             Self::Argmin { .. } => "argmin",
             Self::Argmax { .. } => "argmax",
+            Self::Pairs { .. } => "pairs",
+            Self::Previous { .. } => "previous",
+            Self::Next { .. } => "next",
             Self::RuleOutcome { .. } => "ruleOutcome",
             Self::Selected { .. } => "selected",
             Self::FindingCount { .. } => "findingCount",
@@ -802,6 +843,9 @@ impl Expression {
             | Self::Aggregate { label, .. }
             | Self::Argmin { label, .. }
             | Self::Argmax { label, .. }
+            | Self::Pairs { label, .. }
+            | Self::Previous { label, .. }
+            | Self::Next { label, .. }
             | Self::RuleOutcome { label, .. }
             | Self::Selected { label, .. }
             | Self::FindingCount { label, .. }
@@ -849,7 +893,9 @@ impl Expression {
             | Self::Length { operand, .. }
             | Self::Lower { operand, .. }
             | Self::Upper { operand, .. }
-            | Self::Trim { operand, .. } => vec![operand],
+            | Self::Trim { operand, .. }
+            | Self::Previous { operand, .. }
+            | Self::Next { operand, .. } => vec![operand],
             Self::Floor { operand, step, .. } | Self::Ceil { operand, step, .. } => {
                 std::iter::once(operand.as_ref())
                     .chain(step.as_deref())
@@ -893,29 +939,33 @@ impl Expression {
             Self::Round { operand, step, .. } => vec![operand, step],
             Self::Aggregate { value, .. } => value.iter().map(AsRef::as_ref).collect(),
             Self::Argmin { by, value, .. } | Self::Argmax { by, value, .. } => vec![by, value],
+            Self::Pairs { by, value, .. } => std::iter::once(by.as_ref())
+                .chain(value.as_deref())
+                .collect(),
             Self::Atan2 { y, x, .. } => vec![y, x],
         }
     }
 
-    /// The member filter (`where`) of an aggregate, `argmin` or `argmax`;
-    /// `None` for any other node, or one without a filter.
+    /// The member filter (`where`) of an aggregate, `argmin`, `argmax` or
+    /// `pairs`; `None` for any other node, or one without a filter.
     #[must_use]
     pub fn member_filter(&self) -> Option<&Selector> {
         match self {
             Self::Aggregate { filter, .. }
             | Self::Argmin { filter, .. }
-            | Self::Argmax { filter, .. } => filter.as_deref(),
+            | Self::Argmax { filter, .. }
+            | Self::Pairs { filter, .. } => filter.as_deref(),
             _ => None,
         }
     }
 
-    /// Whether the node ranges over members: an aggregate, `argmin` or
-    /// `argmax`.
+    /// Whether the node ranges over members: an aggregate, `argmin`,
+    /// `argmax` or `pairs`.
     #[must_use]
     pub const fn ranges_over_members(&self) -> bool {
         matches!(
             self,
-            Self::Aggregate { .. } | Self::Argmin { .. } | Self::Argmax { .. }
+            Self::Aggregate { .. } | Self::Argmin { .. } | Self::Argmax { .. } | Self::Pairs { .. }
         )
     }
 
@@ -971,6 +1021,17 @@ impl Expression {
                 }
                 by.rename_rules(rename);
                 value.rename_rules(rename);
+            }
+            Self::Pairs {
+                filter, by, value, ..
+            } => {
+                if let Some(filter) = filter {
+                    filter.rename_rules(rename);
+                }
+                by.rename_rules(rename);
+                if let Some(value) = value {
+                    value.rename_rules(rename);
+                }
             }
             Self::Lookup { keys, .. } => keys.values_mut().for_each(|key| key.rename_rules(rename)),
             Self::Interpolate { key, .. } => key.rename_rules(rename),
@@ -1028,7 +1089,9 @@ impl Expression {
             | Self::Length { operand, .. }
             | Self::Lower { operand, .. }
             | Self::Upper { operand, .. }
-            | Self::Trim { operand, .. } => operand.rename_rules(rename),
+            | Self::Trim { operand, .. }
+            | Self::Previous { operand, .. }
+            | Self::Next { operand, .. } => operand.rename_rules(rename),
             Self::Floor { operand, step, .. } | Self::Ceil { operand, step, .. } => {
                 operand.rename_rules(rename);
                 step.iter_mut().for_each(|step| step.rename_rules(rename));
@@ -1094,7 +1157,7 @@ impl Expression {
     ///
     /// The first structural problem found, depth first.
     pub fn validate(&self) -> Result<(), ExpressionError> {
-        self.validate_at(1)?;
+        self.validate_at(1, false)?;
         let (nodes, nesting) = self.size();
         if nodes > MAX_EXPRESSION_NODES {
             return Err(ExpressionError::TooLarge);
@@ -1160,7 +1223,42 @@ impl Expression {
         }
     }
 
-    fn validate_at(&self, depth: usize) -> Result<(), ExpressionError> {
+    /// A `pairs` at `depth`: a `value` unless it counts, a valid source,
+    /// and its `value` the one place `previous` and `next` may stand.
+    fn validate_pairs(&self, depth: usize) -> Result<(), ExpressionError> {
+        let Self::Pairs {
+            function,
+            over,
+            filter,
+            by,
+            value,
+            ..
+        } = self
+        else {
+            return Ok(());
+        };
+        if !matches!(function, AggregateFunction::Count) != value.is_some() {
+            return Err(ExpressionError::AggregateValue {
+                function: *function,
+            });
+        }
+        validate_source(self.kind(), over, filter.is_some())?;
+        if let Some(filter) = filter {
+            filter
+                .expressions()
+                .into_iter()
+                .try_for_each(|nested| nested.validate_at(depth + 1, false))?;
+        }
+        by.validate_at(depth + 1, false)?;
+        value
+            .iter()
+            .try_for_each(|value| value.validate_at(depth + 1, true))
+    }
+
+    /// `paired` is whether the node lies within the `value` of a `pairs`
+    /// (and in no member scope nested within it), where `previous` and
+    /// `next` read the pair.
+    fn validate_at(&self, depth: usize, paired: bool) -> Result<(), ExpressionError> {
         if depth > MAX_EXPRESSION_DEPTH {
             return Err(ExpressionError::TooDeep);
         }
@@ -1236,17 +1334,26 @@ impl Expression {
             Self::Argmin { over, filter, .. } | Self::Argmax { over, filter, .. } => {
                 validate_source(kind, over, filter.is_some())?;
             }
+            Self::Pairs { .. } => return self.validate_pairs(depth),
+            Self::Previous { .. } | Self::Next { .. } if !paired => {
+                return Err(ExpressionError::OutsidePairs { kind });
+            }
+            Self::Previous { operand, .. } | Self::Next { operand, .. } => {
+                return operand.validate_at(depth + 1, false);
+            }
             _ => {}
         }
+        // A member scope nested within a pair's value reads its own members.
+        let paired = paired && !self.ranges_over_members();
         if let Some(filter) = self.member_filter() {
             filter
                 .expressions()
                 .into_iter()
-                .try_for_each(|nested| nested.validate_at(depth + 1))?;
+                .try_for_each(|nested| nested.validate_at(depth + 1, false))?;
         }
         self.children()
             .into_iter()
-            .try_for_each(|child| child.validate_at(depth + 1))
+            .try_for_each(|child| child.validate_at(depth + 1, paired))
     }
 }
 
@@ -1263,7 +1370,7 @@ fn validate_aggregate(
     validate_source("aggregate", over, has_filter)
 }
 
-/// The source of an aggregate, `argmin` or `argmax` (`kind`) names a path
+/// The source of an aggregate, `argmin`, `argmax` or `pairs` (`kind`) names a path
 /// of steps, a grouping, a selector or a measured member list, which takes
 /// no filter.
 fn validate_source(

@@ -191,7 +191,8 @@ pub(crate) fn reason_of(why: &NotEvaluated) -> NotEvaluatedReason {
         | Reason::UndecidedCondition(_)
         | Reason::Unreadable(_)
         | Reason::UndecidedMembers(_)
-        | Reason::UndecidedExtreme(_) => NotEvaluatedReason::IncompleteEvidence,
+        | Reason::UndecidedExtreme(_)
+        | Reason::UndecidedOrder(..) => NotEvaluatedReason::IncompleteEvidence,
         Reason::Mismatch(_) | Reason::Domain | Reason::ZeroDivisor | Reason::Overflow => {
             NotEvaluatedReason::InvalidEvidence
         }
@@ -271,8 +272,10 @@ fn read_values(evaluation: &Evaluation) -> String {
             axioval_engine::expression::Source::Lookup { table, column } => {
                 format!("{table}.{column}")
             }
-            // Its members' values are cited, not listed.
-            axioval_engine::expression::Source::Aggregate(_) => continue,
+            // Its members' values are cited, not listed; a value read within
+            // a pair is shown by the pair's.
+            axioval_engine::expression::Source::Aggregate(_)
+            | axioval_engine::expression::Source::Neighbour { .. } => continue,
             // The members it chose are named, its value is shown.
             axioval_engine::expression::Source::Extreme { greatest, chosen } => {
                 if chosen.is_empty() {
@@ -283,6 +286,17 @@ fn read_values(evaluation: &Evaluation) -> String {
                     if *greatest { "argmax" } else { "argmin" },
                     chosen.join(", ")
                 );
+                if !values.contains(&entry) {
+                    values.push(entry);
+                }
+                continue;
+            }
+            // The pairs that decide it are named, its value is shown.
+            axioval_engine::expression::Source::Pairs { chosen, .. } => {
+                if chosen.is_empty() {
+                    continue;
+                }
+                let entry = format!("pairs {}", chosen.join(", "));
                 if !values.contains(&entry) {
                     values.push(entry);
                 }

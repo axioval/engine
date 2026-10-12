@@ -1519,6 +1519,106 @@
         },
         {
           "additionalProperties": false,
+          "description": "`function` over the consecutive pairs of the members `over` reaches\nthat `filter` (`where`) selects, ordered by `by` ascending (a station,\nan elevation, a sequence number), evaluated with each member in\nscope. `value` is evaluated once per pair with the later member in\nscope; [`Expression::Previous`] reads the earlier one. A pair whose\norder the intervals of `by` leave undecided is not evaluated, never\nordered by a guess, and a finding names the pairs that decide it.",
+          "properties": {
+            "by": {
+              "$ref": "#/$defs/Expression"
+            },
+            "function": {
+              "$ref": "#/$defs/AggregateFunction"
+            },
+            "kind": {
+              "const": "pairs",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "over": {
+              "$ref": "#/$defs/AggregateSource"
+            },
+            "value": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Expression"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "where": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Selector"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "function",
+            "over",
+            "by"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "`operand` evaluated with the earlier member of the pair in scope;\nonly within the `value` of a [`Expression::Pairs`].",
+          "properties": {
+            "kind": {
+              "const": "previous",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "operand": {
+              "$ref": "#/$defs/Expression"
+            }
+          },
+          "required": [
+            "kind",
+            "operand"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "`operand` evaluated with the later member of the pair in scope (the\none a `pairs` value reads anyway), so a pair can be written\nsymmetrically; only within the `value` of a [`Expression::Pairs`].",
+          "properties": {
+            "kind": {
+              "const": "next",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "operand": {
+              "$ref": "#/$defs/Expression"
+            }
+          },
+          "required": [
+            "kind",
+            "operand"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
           "description": "How the rule `rule` of the same ruleset judged the object in scope:\ntrue when it passed it, false when it reported a finding about it,\n`null` when it did not select it, and not evaluated when it left it\nopen or could not decide whether it selected it. `null` decides no\nrequirement: guard a reading with [`Expression::Selected`].",
           "properties": {
             "kind": {

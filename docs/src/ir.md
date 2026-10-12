@@ -235,6 +235,8 @@ Every node may carry a `label`, which findings name in place of the node's rende
 | `inUnit` | `operand`, `unit` | the operand restated in a written unit of its dimension (`mm`, `cm`, `%`): the same value, shown in that unit |
 | `aggregate` | `function`, `over`, `where`?, `value`? | `count`, `sum`, `min`, `max`, `average`, `any`, `all`, `none` or `distinctCount` over the objects a `path`, a derived `group` or a `selector` reaches, filtered by `where`, `value` evaluated per member; see [Aggregates](./expressions.md#aggregates) |
 | `argmin`, `argmax` | `over`, `where`?, `by`, `value` | `value` of the member whose `by` is least (greatest), of every member that may be where intervals overlap, their values agreeing; a finding names them; see [The least and the greatest member](./expressions.md#the-least-and-the-greatest-member) |
+| `pairs` | `function`, `over`, `where`?, `by`, `value`? | an aggregate function over each member ordered by `by` and the one before it, `value` evaluated per pair; a pair whose order is undecided is not evaluated; see [Consecutive members](./expressions.md#consecutive-members) |
+| `previous`, `next` | `operand` | the operand read of the earlier (later) member of the pair, only within a `pairs` value |
 | `ruleOutcome`, `selected`, `findingCount`, `deviation` | `rule` | another rule's verdict, whether it selected the object in scope, its finding count or its greatest graded deviation about the object; see [Other rules' outcomes](./expressions.md#other-rules-outcomes) |
 | `concat` | `operands` | joined text |
 | `length`, `lower`, `upper`, `trim` | `operand` | text functions |

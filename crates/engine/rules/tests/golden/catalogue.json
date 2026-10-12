@@ -115707,6 +115707,173 @@
       ]
     },
     {
+      "kind": "pairs",
+      "category": "aggregate",
+      "fields": [
+        {
+          "name": "function",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "count",
+              "sum",
+              "min",
+              "max",
+              "average",
+              "any",
+              "all",
+              "none",
+              "distinctCount"
+            ]
+          },
+          "required": true
+        },
+        {
+          "name": "over",
+          "kind": {
+            "type": "aggregateSource"
+          },
+          "required": true
+        },
+        {
+          "name": "where",
+          "kind": {
+            "type": "selector"
+          },
+          "required": false
+        },
+        {
+          "name": "by",
+          "kind": {
+            "type": "expression",
+            "accepts": [
+              "integer",
+              "number",
+              "angle"
+            ]
+          },
+          "required": true
+        },
+        {
+          "name": "value",
+          "kind": {
+            "type": "expression",
+            "accepts": [
+              "any"
+            ]
+          },
+          "required": false
+        }
+      ],
+      "result": {
+        "type": "aggregate"
+      },
+      "label": [
+        {
+          "language": "en",
+          "text": "Consecutive pairs"
+        },
+        {
+          "language": "de",
+          "text": "Aufeinanderfolgende Paare"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "A count, sum, extreme, average or quantified truth over each member and the one before it, ordered by `by`, such as consecutive risers differing by at most 5 mm; a pair whose order is undecided is not evaluated, and a finding names the pairs that decide it."
+        },
+        {
+          "language": "de",
+          "text": "Anzahl, Summe, Extremwert, Mittelwert oder quantifizierte Aussage über jedes Glied und das vor ihm, geordnet nach `by`, etwa aufeinanderfolgende Steigungen, die höchstens 5 mm voneinander abweichen; ein Paar unentschiedener Reihenfolge bleibt ungeprüft, und ein Befund nennt die entscheidenden Paare."
+        }
+      ]
+    },
+    {
+      "kind": "previous",
+      "category": "aggregate",
+      "fields": [
+        {
+          "name": "operand",
+          "kind": {
+            "type": "expression",
+            "accepts": [
+              "any"
+            ]
+          },
+          "required": true
+        }
+      ],
+      "result": {
+        "type": "joined",
+        "fields": [
+          "operand"
+        ]
+      },
+      "label": [
+        {
+          "language": "en",
+          "text": "Of the previous"
+        },
+        {
+          "language": "de",
+          "text": "Des vorigen"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The operand read of the earlier member of the pair, within a `pairs` value."
+        },
+        {
+          "language": "de",
+          "text": "Der Operand, gelesen am früheren Glied des Paars, innerhalb eines `pairs`-Werts."
+        }
+      ]
+    },
+    {
+      "kind": "next",
+      "category": "aggregate",
+      "fields": [
+        {
+          "name": "operand",
+          "kind": {
+            "type": "expression",
+            "accepts": [
+              "any"
+            ]
+          },
+          "required": true
+        }
+      ],
+      "result": {
+        "type": "joined",
+        "fields": [
+          "operand"
+        ]
+      },
+      "label": [
+        {
+          "language": "en",
+          "text": "Of the next"
+        },
+        {
+          "language": "de",
+          "text": "Des nächsten"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The operand read of the later member of the pair, the one in scope, within a `pairs` value."
+        },
+        {
+          "language": "de",
+          "text": "Der Operand, gelesen am späteren Glied des Paars, dem im Geltungsbereich, innerhalb eines `pairs`-Werts."
+        }
+      ]
+    },
+    {
       "kind": "ruleOutcome",
       "category": "ruleOutcome",
       "fields": [

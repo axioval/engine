@@ -21424,6 +21424,157 @@ fn the_plot_ratio_of_a_parcel_with_two_buildings_is_judged() {
     assert!(finding.contains("0.183"), "{finding}");
 }
 
+/// Site #90 and the trees of parcel `P1` (x 0..30, y 0..20), each an
+/// `IfcGeographicElement` stating `Pset_Tree.Value`: #19 (2, a 1 m box at
+/// 5, 5), #29 (3, at 10, 12) and #59 (4, at 20, 15) stand on it, #39 (5,
+/// a 2 m box at 30, 6) straddles its eastern boundary and #49 (7, at 40,
+/// 6) stands beside it. With `unshaped`, #69 (100) is placed far beside
+/// it with no shape representation.
+fn parcel_trees(unshaped: bool) -> String {
+    let tree = "IFCGEOGRAPHICELEMENT('GID',$,'Tree',$,$,PL,REP,$,.NOTDEFINED.)";
+    let mut data = String::new();
+    for (first, centre, size) in [
+        (10, [5.0, 5.0], 1.0),
+        (20, [10.0, 12.0], 1.0),
+        (30, [30.0, 6.0], 2.0),
+        (40, [40.0, 6.0], 1.0),
+        (50, [20.0, 15.0], 1.0),
+    ] {
+        data.push_str(&placed_box(
+            first,
+            [centre[0], centre[1], 0.0],
+            [size, size, 4.0],
+            tree,
+        ));
+    }
+    data.push_str(
+        "#90=IFCSITE('0000000000000000000090',$,'Site',$,$,$,$,$,.ELEMENT.,$,$,$,$,$);\n",
+    );
+    let mut values = vec![(19, 2.0), (29, 3.0), (59, 4.0), (39, 5.0), (49, 7.0)];
+    if unshaped {
+        data.push_str(
+            "#60=IFCCARTESIANPOINT((60.,60.,0.));\n\
+             #61=IFCAXIS2PLACEMENT3D(#60,$,$);\n\
+             #62=IFCLOCALPLACEMENT($,#61);\n\
+             #69=IFCGEOGRAPHICELEMENT('0000000000000000000069',$,'Tree',$,$,#62,$,$,.NOTDEFINED.);\n",
+        );
+        values.push((69, 100.0));
+    }
+    for (tree, value) in values {
+        let _ = writeln!(
+            data,
+            "#{single}=IFCPROPERTYSINGLEVALUE('Value',$,IFCREAL({value:.1}),$);\n\
+             #{set}=IFCPROPERTYSET('{set:022}',$,'Pset_Tree',$,(#{single}));\n\
+             #{rel}=IFCRELDEFINESBYPROPERTIES('{rel:022}',$,$,$,(#{tree}),#{set});",
+            single = 100 + tree,
+            set = 200 + tree,
+            rel = 300 + tree,
+        );
+    }
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,#8);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCDIRECTION((0.,1.));\n\
+         #9=IFCPROJECT('0000000000000000000009',$,'P',$,$,$,$,(#5),#7);\n\
+         {data}\
+         ENDSEC;\nEND-ISO-10303-21;\n"
+    )
+}
+
+impl Case {
+    /// One expression rule over site #90 of [`parcel_trees`], with the
+    /// zones of [`PARCEL_ZONES`] supplied and `Pset_Tree.Value` bound as
+    /// `axioval:example.ifc.tree-value` in `axioval:example.ifc.pset-tree`.
+    fn tree_rule(&self, requirement: &Value, unshaped: bool) -> (Output, Value) {
+        self.write("model.ifc", &parcel_trees(unshaped));
+        let path = self.write("zones.geojson", PARCEL_ZONES);
+        let path = path.to_str().unwrap().to_owned();
+        let bound = |id: &str, name: &str| {
+            json!({
+                "id": format!("axioval:example.ifc.{id}"),
+                "name": {"default": name, "translations": {}},
+                "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": name}],
+                "citations": [],
+            })
+        };
+        let mut value = bound("tree-value", "Value");
+        value["valueKind"] = json!("number");
+        self.geometry_rule_with(
+            &["model.ifc"],
+            &[("site", "IfcSite")],
+            (
+                "axioval:capability.expression",
+                &registry_signature("axioval:capability.expression"),
+            ),
+            entity("site"),
+            json!({"requirement": {"type": "expression", "value": requirement}}),
+            &json!({
+                "definitions:propertySets":
+                    {"axioval:example.ifc.pset-tree": bound("pset-tree", "Pset_Tree")},
+                "definitions:properties": {"axioval:example.ifc.tree-value": value},
+            }),
+            &["--zones", &path],
+        )
+    }
+}
+
+/// engine#360: parcel P1 holds three trees and a fourth straddles its
+/// boundary: it counts 3 to 4 trees and sums their values to 9 to 14. A
+/// bound both ends meet holds or fails; one between them is not evaluated.
+/// A tree with no shape representation has an unknown extent: placed far
+/// beside the parcel, it still may lie in it, so it widens the count to 3
+/// to 5.
+#[test]
+fn the_trees_of_a_parcel_are_counted_and_summed_as_an_interval() {
+    let case = Case::new("zone-trees");
+    let count = "count_within;to=IfcGeographicElement;zone=P1";
+    let sum = "sum_within;to=IfcGeographicElement;\
+               value=axioval:example.ifc.pset-tree/axioval:example.ifc.tree-value;zone=P1";
+    let number = |value: f64| json!({"type": "number", "value": value});
+    for (name, operator, limit, code) in [
+        (count, "greaterThanOrEquals", 3.0, 0),
+        (count, "lessThanOrEquals", 4.0, 0),
+        (count, "lessThanOrEquals", 2.0, 3),
+        (count, "lessThanOrEquals", 3.0, 4),
+        (sum, "greaterThanOrEquals", 9.0, 0),
+        (sum, "lessThanOrEquals", 14.0, 0),
+        (sum, "lessThanOrEquals", 8.0, 3),
+        (sum, "lessThanOrEquals", 10.0, 4),
+    ] {
+        let (output, result) =
+            case.tree_rule(&measured_against(name, operator, &number(limit)), false);
+        assert_eq!(
+            output.status.code(),
+            Some(code),
+            "{name} {operator} {limit}: {}: {result:#}",
+            stderr(&output)
+        );
+        if code == 3 {
+            assert_eq!(finding_ids(&result), ["#90"], "{result:#}");
+        }
+    }
+    let (_, result) = case.tree_rule(
+        &measured_against(sum, "lessThanOrEquals", &number(8.0)),
+        false,
+    );
+    let message = result["report"]["findings"][0]["message"].to_string();
+    assert!(message.contains('9') && message.contains("14"), "{message}");
+
+    let (output, result) = case.tree_rule(
+        &measured_against(count, "lessThanOrEquals", &number(4.0)),
+        true,
+    );
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    let open = result["report"]["not_evaluated"].to_string();
+    assert!(open.contains("3..5"), "{result:#}");
+}
+
 /// engine#327: each building's distance from the building line along
 /// y = 15: 5 m for #19, 8 m for #29, and just over 5 m for #39 past the
 /// line's end.

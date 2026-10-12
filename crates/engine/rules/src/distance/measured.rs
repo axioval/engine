@@ -13,15 +13,18 @@
 //! to those the plan broad phase proposes within the radius, through the
 //! metric-routing service, between the representative points
 //! `space-distance` walks between. One over a shared derived group
-//! (`group=`) reads the run's groups and measures nothing.
+//! (`group=`) reads the run's groups and measures nothing. One over a
+//! context zone (`zone=`, also a reach of `count_within`) locates every
+//! counterpart against the zone by its footprint or, lacking one of any
+//! area, its placement point (`context_zone::locate`).
 
 use std::collections::BTreeMap;
 
 use axioval_engine::expression::{Interval, Value};
 use axioval_engine::{
-    CompiledRule, DerivedGroups, MeasuredProvider, Measurement, Membership, MetricRouteOutcome,
-    MetricRouteRequest, MetricRoutingServiceHandle, MobilityProfile, NotEvaluatedReason,
-    PropertyResolutionError, RuleContext,
+    Citation, CompiledRule, DerivedGroups, MeasuredProvider, Measurement, Membership,
+    MetricRouteOutcome, MetricRouteRequest, MetricRoutingServiceHandle, MobilityProfile,
+    NotEvaluatedReason, PropertyResolutionError, RuleContext,
 };
 use axioval_ir::contract::{ParameterValue, Selector, Severity};
 use axioval_ir::measured::{
@@ -371,6 +374,58 @@ impl<'c> Reached<'c> {
         }
         Ok(reached)
     }
+
+    /// Those lying in the context zone `call` names (#360), each located
+    /// as `context_zone::locate` locates it: one surely inside counts, one
+    /// straddling the boundary, or which neither its footprint nor its
+    /// placement locates, may or may not count, as a counterpart whose
+    /// distance straddles the radius or cannot be read; why each such one
+    /// cannot be located is noted.
+    fn zoned(
+        context: &RuleContext<'_>,
+        call: &MeasuredCall,
+        counterparts: &'c std::collections::BTreeSet<ObjectId>,
+    ) -> Result<(Self, Vec<String>), Unavailable> {
+        use crate::context_zone::{InZone, Location, locate};
+        let mut reached = Self {
+            counterparts: Vec::new(),
+            exact: true,
+        };
+        let mut notes = Vec::new();
+        for counterpart in counterparts {
+            match locate(context, call, counterpart)? {
+                Location::Located(InZone::Not, _) => {}
+                Location::Located(within, exact) => {
+                    reached.exact &= exact;
+                    reached
+                        .counterparts
+                        .push((counterpart, within == InZone::Surely));
+                }
+                Location::Unlocated(why) => {
+                    notes.push(format!("{counterpart} may lie in the zone: {why}"));
+                    reached.counterparts.push((counterpart, false));
+                }
+            }
+        }
+        Ok((reached, notes))
+    }
+
+    /// How many surely and possibly count, as `count_within` cites them.
+    fn count(&self) -> Measurement {
+        let sure = self
+            .counterparts
+            .iter()
+            .filter(|(_, surely)| *surely)
+            .count();
+        #[allow(clippy::cast_precision_loss)]
+        Measurement::Cited {
+            lower: sure as f64,
+            upper: self.counterparts.len() as f64,
+            dimension: None,
+            locator: String::new(),
+            exact: self.exact,
+        }
+    }
 }
 
 /// The walking body `measure=walking` states.
@@ -610,6 +665,38 @@ fn value_property(call: &MeasuredCall) -> Option<PropertyRef<'_>> {
     }
 }
 
+/// A value over the counterparts in the context zone `call` names, with
+/// why each counterpart that may lie in it could not be located.
+fn in_zone(
+    call: &MeasuredCall,
+    object: &ObjectId,
+    context: &RuleContext<'_>,
+) -> Result<(Measurement, Citation), PropertyResolutionError> {
+    let name = call.name();
+    let Some(MeasuredArgument::Text(zone)) = call.argument("zone") else {
+        return Err(PropertyResolutionError::InvalidRequest);
+    };
+    let refused = |(reason, why): Unavailable| {
+        crate::measured_kinds::resolution_error((reason, format!("`{name}` of {object}: {why}")))
+    };
+    let counterparts = crate::measured_kinds::objects_of_kinds(context, call, "to", object)?;
+    let (reached, notes) = Reached::zoned(context, call, &counterparts).map_err(refused)?;
+    let locator = format!("{name}:{object}:zone={zone}:{}", reached.counterparts.len());
+    let measurement = if name == COUNT_WITHIN {
+        reached.count()
+    } else {
+        let property = value_property(call).ok_or(PropertyResolutionError::InvalidRequest)?;
+        aggregate_within(name, context, &reached, property).map_err(refused)?
+    };
+    Ok((
+        located(measurement, locator),
+        Citation {
+            notes,
+            ..Citation::default()
+        },
+    ))
+}
+
 impl MeasuredProvider for DistanceMeasures {
     fn names(&self) -> &'static [&'static str] {
         &[
@@ -622,12 +709,27 @@ impl MeasuredProvider for DistanceMeasures {
         ]
     }
 
+    fn measure_cited(
+        &self,
+        call: &MeasuredCall,
+        object: &ObjectId,
+        context: &RuleContext<'_>,
+    ) -> Result<(Measurement, Citation), PropertyResolutionError> {
+        if call.argument("zone").is_some() {
+            return in_zone(call, object, context);
+        }
+        Ok((self.measure(call, object, context)?, Citation::default()))
+    }
+
     fn measure(
         &self,
         call: &MeasuredCall,
         object: &ObjectId,
         context: &RuleContext<'_>,
     ) -> Result<Measurement, PropertyResolutionError> {
+        if call.argument("zone").is_some() {
+            return in_zone(call, object, context).map(|(measurement, _)| measurement);
+        }
         let name = call.name();
         let unavailable = |why: String| {
             PropertyResolutionError::Unavailable(format!("`{name}` of {object}: {why}"))

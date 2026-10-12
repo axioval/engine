@@ -507,7 +507,7 @@ fn a_group_reach_states_no_distance() {
         (base.to_owned(), "`sum_within` needs `radius`"),
         (
             format!("{base};radius=15;group=compartments"),
-            "`sum_within` parameter `group`: either `radius` or `group` reaches the \
+            "`sum_within` parameter `group`: one of `radius`, `group`, `zone` reaches the \
              counterparts",
         ),
         (

@@ -496,6 +496,7 @@ ignoring ASCII case):
 | `sum_within`, `min_within`, `max_within`, `mean_within` `;to=<kinds>;value=<property>;radius=<m>[;from=<m>][;projection=…][;direction=…]` | the sum, least, greatest or mean of a plain number the counterparts within a radius state | built in, over `ProximityService` and the counterparts' properties |
 | the same `;to=<kinds>;value=<property>;radius=<m>[;from=<m>];measure=walking;walking_radius=<m>;walking_height=<m>;walking_step=<m>[;walking_slope=…]` | the same over the counterparts within a walk of `radius` | built in, over `ProximityService` (plan), `PlanSpanService`, `VerticalExtentService` and `MetricRoutingService::route` |
 | the same `;to=<kinds>;value=<property>;group=<grouping>` | the same over the counterparts sharing the object's derived group, or the members of the group it is | built in, over the run's [derived groups](#derived-groups) |
+| `count_within`, `sum_within`, `min_within`, `max_within`, `mean_within` `;to=<kinds>[;value=<property>];zone=<id>` | the count, sum, least, greatest or mean over the counterparts lying in a [context zone](./context-zones.md) | built in, over `PlanAreaService::measure_zone_area`, `ObjectFrameService` for a counterpart without a footprint of any area, `CoordinateSystemService` for a zone stated in a map system |
 | `duplicate_count`, `boundary_gap[;at_least=<m>][;measure=total\|longest][;elements=<kinds>]`, `intersection_count[;tolerance=<m>][;elements=<kinds>]`, `cap_coverage;cap=top\|bottom[;elements=<kinds>]`, `support_count[;of=slabs\|roofs]` | a space's `space-validation` aspects | `SpaceService` |
 | `largest_unallocated_region`, `unallocated_share` | a storey's floor no space covers | `SpaceService::measure_unallocated_regions` |
 | `facade_area`, `face_area` | the facade area, or the largest plane face's area | `FacadeAreaService` |
@@ -1301,7 +1302,40 @@ or walking profile, and either `radius` or `group` is stated.
   not derive, and a value read outside a run leave the value not
   evaluated.
 
-Context zones are not yet a reach of these values.
+With `zone=<id>` in place of `radius`, the reach is a
+[context zone](./context-zones.md) supplied beside the model: the
+counterparts lying in it. So the trees on a parcel are
+`count_within;to=IfcGeographicElement;zone=P1` and their stated values
+`sum_within;to=IfcGeographicElement;value=Pset_Tree/Value;zone=P1`, read
+of any object (the site); `count_within` takes a zone too. A zone reaches
+at no distance: it takes no `from`, `projection`, `direction`, `measure`
+or walking profile, and exactly one of `radius`, `group` and `zone` is
+stated. Each counterpart is located against the zone placed in its own
+source:
+
+- By its footprint (`PlanAreaService::measure_zone_area`): surely in
+  where some of it is surely inside and none of it possibly outside,
+  surely out where none of it is possibly inside, straddling otherwise.
+  A footprint within the zone's accuracy of its boundary, or a
+  tessellated one whose chord band reaches across it, straddles.
+- A counterpart with no geometry, a declared bodiless one, or a body
+  whose footprint encloses no area (a tree stated as a point or a
+  vertical plane) is never read as outside for having no area inside: it
+  is located by its placement point (`ObjectFrameService`), surely in or
+  out where the point lies farther than the zone's accuracy from its
+  boundary, straddling otherwise.
+- A straddling counterpart, and one neither its footprint nor its
+  placement locates (a body that could not be measured, such as an IFC
+  product with no shape representation, whose extent is unknown), may or
+  may not lie in the zone: it adds its value or nothing, as a straddling
+  distance does, and the value cites why it could not be located.
+- An unsupplied, unknown or unplaceable zone, a line zone, and a missing
+  plan-area service (or object-frame service, where a placement is read)
+  leave the value not evaluated, never zero.
+
+A parcel holding three trees, with a fourth straddling its boundary,
+counts 3 to 4 trees, and their values 2, 3 and 4 with the fourth's 5 sum
+to 9 to 14.
 
 A measured value without a dimension, such as a count, is a plain
 number. Known only to an interval, it is a `measured` value without a
@@ -1336,9 +1370,9 @@ sites that cite a value exact:
 
 | Provider | Exact when | The interval holds |
 | --- | --- | --- |
-| `distance`, `count_within` | every counterpart that may be the nearest (farthest) or may count was measured exactly | the undecided counterparts, as `distance` cites them (`Cited`) |
+| `distance`, `count_within` | every counterpart that may be the nearest (farthest) or may count was measured exactly (by zone: located against a zone stated exactly) | the undecided counterparts, as `distance` cites them (`Cited`) |
 | `distance_to_feature` | the body, the nearest lines' ends and the roofs' edges are exact | rounding; a line that may be of the class and may lie nearer leaves it not evaluated |
-| `sum_within`, `min_within`, `max_within`, `mean_within` | every counterpart that may count was measured (walking: walked, and both ends placed; by group: its membership cited) exactly and states its value exactly | the undecided counterparts' values or nothing, summed and divided outward |
+| `sum_within`, `min_within`, `max_within`, `mean_within` | every counterpart that may count was measured (walking: walked, and both ends placed; by group: its membership cited; by zone: located against a zone stated exactly) exactly and states its value exactly | the undecided counterparts' values or nothing, summed and divided outward |
 | `door_clear_width`, `door_clear_height`, `sill_height`, `threshold_step` | every extent, leaf and stated value read is exact | rounding of the differences, widened outward |
 | `leaf_count`, `leaf_width`, `swings_into`, `hinged_leaves` | the leaves (stated, exact by contract) and every probe are exact | a total width summed outward |
 | `swing_spaces` (members) | the leaves and every containment probe are exact (both exact by contract) | nothing |

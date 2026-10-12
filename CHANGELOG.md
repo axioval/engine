@@ -352,6 +352,18 @@ All notable changes are documented here. This project follows Semantic Versionin
   `LineProjection`), defaulted to refusing, which the Axiolid adapter
   answers from the body's triangles or footprint
   ([#330](https://github.com/axioval/engine/issues/330)).
+- **Context zones**: with `zone=<id>` in place of `radius`,
+  `count_within`, `sum_within`, `min_within`, `max_within` and
+  `mean_within` reach the counterparts lying in a context zone: the trees
+  on a parcel. Each is located by its footprint (surely in where some of
+  it is surely inside and none possibly outside, surely out where none is
+  possibly inside) or, with no footprint of any area, by its placement
+  point beyond the zone's accuracy from its boundary. One straddling the
+  boundary, or which neither locates, adds its value or nothing, so a
+  parcel of three trees with a fourth on its boundary counts 3 to 4. An
+  unsupplied, unknown or line zone is not evaluated, never zero; exactly
+  one of `radius`, `group` and `zone` is stated
+  ([#360](https://github.com/axioval/engine/issues/360)).
 
 ### Changed
 

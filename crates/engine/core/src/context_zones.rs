@@ -635,7 +635,8 @@ pub(crate) fn zone_reads(
             let Ok(call) = axioval_ir::measured::parse(text) else {
                 return;
             };
-            if !reads_zone(call.name()) {
+            // A value within a zone (`count_within;…;zone=…`) reads it too.
+            if !reads_zone(call.name()) && call.argument("zone").is_none() {
                 return;
             }
             reads.any = true;
@@ -867,7 +868,8 @@ mod tests {
         let value = serde_json::json!({
             "requirement": {"kind": "property", "propertySet": "axioval:measured",
                             "property": "zone_outside_area;zone=P1"},
-            "other": ["zone_inside_area;zone=@parcel", "area", "not;a=measured"],
+            "other": ["zone_inside_area;zone=@parcel", "area", "not;a=measured",
+                      "count_within;to=tree;zone=P3"],
         });
         let mut reads = ZoneReads::default();
         zone_reads(
@@ -878,7 +880,7 @@ mod tests {
         assert!(reads.any);
         assert_eq!(
             reads.zones.into_iter().collect::<Vec<_>>(),
-            ["P1".to_owned(), "P2".to_owned()]
+            ["P1".to_owned(), "P2".to_owned(), "P3".to_owned()]
         );
     }
 }

@@ -345,9 +345,10 @@ const WITHIN: &[MeasuredParameter] = &[
         required: false,
         default: None,
         help: &en_de(
-            "The greatest distance a counterpart counts at, in metres; either it or `group`.",
-            "Der größte Abstand, in dem ein Gegenstück zählt, in Metern; entweder er oder \
-             `group`.",
+            "The greatest distance a counterpart counts at, in metres; one of it, `group` or \
+             `zone`.",
+            "Der größte Abstand, in dem ein Gegenstück zählt, in Metern; einer von ihm, \
+             `group` oder `zone`.",
         ),
     },
     MeasuredParameter {
@@ -431,7 +432,33 @@ const WITHIN: &[MeasuredParameter] = &[
              das Objekt ist), anstelle von `radius`, etwa `compartments`.",
         ),
     },
+    WITHIN_ZONE,
 ];
+
+/// `zone` reaching the counterparts of a value within: those whose
+/// footprint lies in a context zone.
+const WITHIN_ZONE: MeasuredParameter = MeasuredParameter {
+    key: "zone",
+    kind: MeasuredParameterKind::Text,
+    required: false,
+    default: None,
+    help: &en_de(
+        "The context zone the counterparts lie in, in place of `radius`: its id among the \
+         zones supplied beside the model (`check --zones`), or `@` a text parameter of the \
+         rule naming it. A counterpart lies in it by its footprint, or, where it has none \
+         or one of no area, by its placement point.",
+        "Die Kontextzone, in der die Gegenstücke liegen, anstelle von `radius`: ihre \
+         Kennung unter den neben dem Modell gelieferten Zonen (`check --zones`), oder mit \
+         `@` ein Textparameter der Regel, der sie nennt. Ein Gegenstück liegt mit seiner \
+         Grundfläche darin, oder, wo es keine oder eine ohne Fläche hat, mit seinem \
+         Platzierungspunkt.",
+    ),
+};
+
+/// What leaves a value over the counterparts in a context zone not
+/// evaluated.
+const WITHIN_ZONE_UNREAD: &str = "by zone, the zone is not supplied, cannot be placed or is a \
+     line, or the plan-area or object-frame service is missing";
 
 /// What leaves a value over the counterparts within a radius not
 /// evaluated.
@@ -443,6 +470,7 @@ const WITHIN_NOT_EVALUATED: &[&str] = &[
     "walking, the object has no representative point, or a route, plan-span or vertical-extent \
      service is missing",
     "by group, the object's membership is undecided, or the run derives no groups",
+    WITHIN_ZONE_UNREAD,
 ];
 
 /// A value aggregated over the counterparts within a radius.
@@ -462,6 +490,9 @@ const fn within(
             "metric-routing",
             "plan-span",
             "vertical-extent",
+            "plan-area",
+            "coordinate-system",
+            "object-frame",
         ],
         exactness: MeasuredExactness::Measured,
         subject: MeasuredSubject::Object,
@@ -3878,11 +3909,11 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
             MeasuredParameter {
                 key: "radius",
                 kind: MeasuredParameterKind::Length { minimum: 0.0 },
-                required: true,
+                required: false,
                 default: None,
                 help: &en_de(
-                    "The greatest distance counted, in metres.",
-                    "Der größte gezählte Abstand, in Metern.",
+                    "The greatest distance counted, in metres; either it or `zone`.",
+                    "Der größte gezählte Abstand, in Metern; entweder er oder `zone`.",
                 ),
             },
             MeasuredParameter {
@@ -3897,18 +3928,27 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
             },
             PROJECTION,
             VERTICAL_DIRECTION,
+            WITHIN_ZONE,
         ],
         dimension: None,
-        services: PROXIMITY,
+        services: &[
+            "proximity",
+            "type-hierarchy",
+            "plan-area",
+            "coordinate-system",
+            "object-frame",
+        ],
         exactness: MeasuredExactness::Measured,
         subject: MeasuredSubject::Object,
-        not_evaluated: &[NO_GEOMETRY, UNDECIDED_KIND],
+        not_evaluated: &[NO_GEOMETRY, UNDECIDED_KIND, WITHIN_ZONE_UNREAD],
         label: &en_de("Count within", "Anzahl im Umkreis"),
         help: &en_de(
-            "How many counterparts lie within a radius: an interval from those surely \
-             within to those possibly within, a point when every one is decided.",
-            "Wie viele Gegenstücke im Umkreis liegen: ein Intervall von den sicher bis zu \
-             den möglicherweise darin liegenden, ein Punkt, wenn alle entschieden sind.",
+            "How many counterparts lie within a radius, or in a context zone: an interval \
+             from those surely within to those possibly within, a point when every one is \
+             decided.",
+            "Wie viele Gegenstücke im Umkreis oder in einer Kontextzone liegen: ein \
+             Intervall von den sicher bis zu den möglicherweise darin liegenden, ein Punkt, \
+             wenn alle entschieden sind.",
         ),
     },
     MeasuredDescriptor {

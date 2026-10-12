@@ -438,3 +438,141 @@ impl MeasuredProvider for ZoneMeasures {
         of_project(call, context).map_err(refused_project(call.name()))
     }
 }
+
+/// The memo key of where an object lies against a zone.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+struct LocatedKey;
+
+/// Whether an object lies in a context zone (#360).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum InZone {
+    /// Wholly inside under every boundary the zone's accuracy allows.
+    Surely,
+    /// Straddling the boundary, or within its accuracy of it.
+    Possibly,
+    /// Wholly outside under every boundary its accuracy allows.
+    Not,
+}
+
+/// Where an object lies against a context zone, or why it cannot be told.
+#[derive(Clone, Debug)]
+pub(crate) enum Location {
+    /// Located, with whether everything that placed it is exact.
+    Located(InZone, bool),
+    /// Neither its footprint nor its placement locates it.
+    Unlocated(String),
+}
+
+/// Where `object` lies against the zone `call` names: by its footprint
+/// (`PlanAreaServiceHandle::measure_zone_area`), surely in where some of it
+/// is surely inside and none of it possibly outside, surely out where none
+/// of it is possibly inside; or, where it has no footprint or one of no
+/// area (a tree stated as a point, an element placed without a body), by
+/// its placement point, surely in or out where the point lies farther than
+/// the zone's accuracy from its boundary. A zero-area footprint is never
+/// read as outside: it encloses nothing inside either.
+///
+/// # Errors
+///
+/// An unsupplied, unplaceable or line zone, and a missing plan-area or
+/// (where the placement is read) object-frame service: the value is not
+/// evaluated, never zero. An object neither its footprint nor its
+/// placement locates is [`Location::Unlocated`], left to the caller.
+pub(crate) fn locate(
+    context: &RuleContext<'_>,
+    call: &MeasuredCall,
+    object: &ObjectId,
+) -> Result<Location, Unavailable> {
+    let zone = placed(context, call, &object.source)?;
+    let zone_polygons = polygons(&zone)?.to_vec();
+    let key = (LocatedKey, object.clone(), zone.locator().to_owned());
+    MeasuredMemo::of(context.services, key, || {
+        let service = crate::plan_area::service(context)?;
+        let request = ZoneAreaRequest::try_new(
+            vec![object.clone()],
+            zone_polygons.clone(),
+            zone.accuracy_metres(),
+        )
+        .map_err(crate::plan_area::unavailable)?;
+        let footprint = match service.measure_zone_area(&request) {
+            Ok(area) if area.footprint_square_metres().1 > 0.0 => {
+                let exact = area.evidence().exact && zone.is_exact();
+                return Ok(Location::Located(by_area(&area), exact));
+            }
+            Ok(_) => "its footprint has no area",
+            Err(axioval_engine::PlanAreaError::UnknownObject(_)) => "it has no footprint",
+            Err(error) => {
+                return Ok(Location::Unlocated(format!(
+                    "its footprint cannot be measured: {error}"
+                )));
+            }
+        };
+        let frames = context
+            .services
+            .get::<axioval_engine::ObjectFrameServiceHandle>()
+            .ok_or_else(|| {
+                (
+                    NotEvaluatedReason::MissingService,
+                    format!(
+                        "{object}: {footprint}, and the object-frame service that places it \
+                         is not registered"
+                    ),
+                )
+            })?;
+        Ok(match frames.object_frame(object) {
+            Ok(frame) => {
+                let [x, y, _] = frame.frame().origin().coordinates_metres();
+                let exact = frame.evidence().exact && zone.is_exact();
+                Location::Located(by_point(&zone, &zone_polygons, [x, y]), exact)
+            }
+            Err(error) => Location::Unlocated(format!(
+                "{footprint}, and its placement cannot be read: {error}"
+            )),
+        })
+    })
+}
+
+/// Where a footprint of some area lies, from its areas inside and outside.
+fn by_area(area: &ZoneArea) -> InZone {
+    let (inside, outside) = (area.inside_square_metres(), area.outside_square_metres());
+    if inside.1 <= 0.0 {
+        InZone::Not
+    } else if inside.0 > 0.0 && outside.1 <= 0.0 {
+        InZone::Surely
+    } else {
+        InZone::Possibly
+    }
+}
+
+/// Where a point lies: inside the zone's polygons by the crossings of its
+/// rings, decided only farther than the zone's accuracy (and the rounding
+/// of these computations) from every boundary segment.
+fn by_point(zone: &PlacedZone, polygons: &[PlanPolygon], [x, y]: [f64; 2]) -> InZone {
+    let mut inside = false;
+    let mut nearest = f64::INFINITY;
+    let mut scale = x.abs() + y.abs();
+    for ring in polygons.iter().flat_map(PlanPolygon::rings) {
+        for (&[ax, ay], &[bx, by]) in ring.iter().zip(ring.iter().cycle().skip(1)) {
+            scale = scale.max(ax.abs() + ay.abs()).max(bx.abs() + by.abs());
+            if (ay > y) != (by > y) && x < ax + (y - ay) * (bx - ax) / (by - ay) {
+                inside = !inside;
+            }
+            let (dx, dy) = (bx - ax, by - ay);
+            let length = dx.mul_add(dx, dy * dy);
+            let along = if length > 0.0 {
+                ((x - ax).mul_add(dx, (y - ay) * dy) / length).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+            nearest = nearest.min((x - along.mul_add(dx, ax)).hypot(y - along.mul_add(dy, ay)));
+        }
+    }
+    let rounding = 64.0 * f64::EPSILON * scale;
+    if nearest.is_nan() || nearest <= zone.accuracy_metres() + rounding {
+        InZone::Possibly
+    } else if inside {
+        InZone::Surely
+    } else {
+        InZone::Not
+    }
+}

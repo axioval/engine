@@ -768,34 +768,34 @@ fn facing(
 /// measure states any of the profile. A measure a rule parameter names is
 /// checked once bound, by the code measuring it.
 ///
-/// Where it reaches them by a shared `group` instead, it states either
-/// `radius` or `group`, and with `group` nothing of a distance.
+/// Where it reaches them by a shared `group` or a context `zone`
+/// instead, it states exactly one of `radius`, `group` and `zone`, and
+/// with `group` or `zone` nothing of a distance.
 fn reach(
     descriptor: &MeasuredDescriptor,
     stated: &BTreeMap<&'static str, &str>,
     arguments: &BTreeMap<&'static str, MeasuredArgument>,
 ) -> Result<(), MeasuredError> {
-    if descriptor.parameter("walking_radius").is_none() {
-        return Ok(());
-    }
     let name = || descriptor.name.to_owned();
-    if descriptor.parameter("group").is_some() {
-        match (stated.contains_key("radius"), stated.contains_key("group")) {
-            (false, false) => {
+    let reaches: Vec<&str> = ["radius", "group", "zone"]
+        .into_iter()
+        .filter(|key| descriptor.parameter(key).is_some())
+        .collect();
+    if reaches.len() > 1 {
+        let named: Vec<&str> = reaches
+            .iter()
+            .copied()
+            .filter(|key| stated.contains_key(key))
+            .collect();
+        match named.as_slice() {
+            [] => {
                 return Err(MeasuredError::Missing {
                     name: name(),
                     key: "radius".to_owned(),
                 });
             }
-            (true, true) => {
-                return Err(MeasuredError::Invalid {
-                    name: name(),
-                    key: "group".to_owned(),
-                    detail: "either `radius` or `group` reaches the counterparts".into(),
-                });
-            }
-            (true, false) => {}
-            (false, true) => {
+            ["radius"] => {}
+            [reach] => {
                 let distance = [
                     "from",
                     "projection",
@@ -809,15 +809,37 @@ fn reach(
                 .into_iter()
                 .find(|key| stated.contains_key(key));
                 if let Some(key) = distance {
+                    let by = if *reach == "group" {
+                        "a shared `group`"
+                    } else {
+                        "a context `zone`"
+                    };
                     return Err(MeasuredError::Invalid {
                         name: name(),
                         key: key.to_owned(),
-                        detail: "a shared `group` reaches the counterparts at no distance".into(),
+                        detail: format!("{by} reaches the counterparts at no distance"),
                     });
                 }
                 return Ok(());
             }
+            [.., last] => {
+                return Err(MeasuredError::Invalid {
+                    name: name(),
+                    key: (*last).to_owned(),
+                    detail: format!(
+                        "one of {} reaches the counterparts",
+                        reaches
+                            .iter()
+                            .map(|key| format!("`{key}`"))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ),
+                });
+            }
         }
+    }
+    if descriptor.parameter("walking_radius").is_none() {
+        return Ok(());
     }
     let walking = match arguments.get("measure") {
         Some(MeasuredArgument::Choice(measure)) => *measure == "walking",

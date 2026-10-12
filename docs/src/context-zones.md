@@ -109,6 +109,14 @@ never exact.
 | `zone_footprint_area;zone=<id>;elements=<objects>` | the project | the area of the union of the elements' footprints inside the zone, overlaps counted once |
 | `zone_floor_area;zone=<id>;elements=<objects>` | the project | the sum of each element's footprint inside the zone, so floors stacked above one another each count |
 
+`count_within`, `sum_within`, `min_within`, `max_within` and
+`mean_within` take `zone=<id>` as their reach: the count of, or a value
+aggregated over, the counterparts lying in the zone, such as the trees
+on a parcel (see [the values within a reach](./derived.md)). A
+counterpart lies in it by its footprint as `zone_inside_area` and
+`zone_outside_area` tell, or, with no footprint of any area, by its
+placement point; one straddling the boundary may or may not count.
+
 `zone` may name a text parameter of the rule instead (`zone=@parcel`), so
 one rule package serves every project; `elements` takes source kinds or a
 selector parameter, and the elements must lie in one source.

@@ -6,6 +6,15 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Measured values**: `cover;host_path=<steps>[;faces=top,side,bottom]`
+  is the least distance from an embedded object, over its whole body, to
+  the chosen faces of the one host the path reaches (a bar's concrete
+  cover to its slab), from the proximity service's signed face distance;
+  leaving a class of faces out ignores those the object passes through.
+  A bar 35 mm above the soffit measures 35 mm, one falling to 25 mm at
+  its end the 25 mm. No host is `null`; several hosts, a body not wholly
+  inside its host (never a negative cover) and a tessellated host are not
+  evaluated ([#341](https://github.com/axioval/engine/issues/341)).
 - **Measured values**: `rate_along` reads how fast `of` changes along an
   alignment per metre of plan length: the derivative at `station` (both
   one-sided derivatives where two laws meet there), or with `over` the

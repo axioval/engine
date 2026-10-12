@@ -3659,6 +3659,57 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         ),
     },
     MeasuredDescriptor {
+        name: "cover",
+        parameters: &[
+            MeasuredParameter {
+                key: "host_path",
+                kind: MeasuredParameterKind::Path,
+                required: true,
+                default: None,
+                help: &en_de(
+                    "The relationship steps from the embedded object to its one host.",
+                    "Die Beziehungsschritte vom eingebetteten Objekt zu seinem einen Wirt.",
+                ),
+            },
+            MeasuredParameter {
+                key: "faces",
+                kind: MeasuredParameterKind::Choices {
+                    options: &["top", "side", "bottom"],
+                },
+                required: false,
+                default: Some("top,side,bottom"),
+                help: &en_de(
+                    "The host's faces measured to, by the direction they look: `top` \
+                     (within 45° of up), `side` or `bottom`, `,`-separated; the faces the \
+                     object is meant to pass through are left out.",
+                    "Die Seiten des Wirts, zu denen gemessen wird, nach ihrer Blickrichtung: \
+                     oben (`top`, bis 45° von der Senkrechten), seitlich (`side`) oder unten \
+                     (`bottom`), durch `,` getrennt; die Seiten, durch die das Objekt \
+                     hindurchgehen soll, bleiben weg.",
+                ),
+            },
+        ],
+        dimension: Some(QuantityDimension::Length),
+        services: &["proximity", "relationship-selection"],
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[
+            NO_GEOMETRY,
+            "the path reaches several hosts",
+            "the host is no exact closed solid",
+            "the object is not wholly inside its host, or that cannot be decided",
+        ],
+        label: &en_de("Cover", "Überdeckung"),
+        help: &en_de(
+            "The least distance from an embedded object, over its whole body, to the \
+             chosen faces of its host: the concrete cover of a bar or a duct; none \
+             where the path reaches no host.",
+            "Der kleinste Abstand eines eingebetteten Objekts, über seinen ganzen Körper, \
+             zu den gewählten Seiten seines Wirts: die Betondeckung eines Stabs oder \
+             Hüllrohrs; keiner, wo der Pfad keinen Wirt erreicht.",
+        ),
+    },
+    MeasuredDescriptor {
         name: CROSS_FALL,
         parameters: &[
             MeasuredParameter {

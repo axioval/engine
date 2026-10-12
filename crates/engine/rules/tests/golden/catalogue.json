@@ -71404,6 +71404,87 @@
       "available": true
     },
     {
+      "name": "cover",
+      "parameters": [
+        {
+          "key": "host_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps from the embedded object to its one host."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte vom eingebetteten Objekt zu seinem einen Wirt."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "faces",
+          "kind": {
+            "type": "choices",
+            "options": [
+              "top",
+              "side",
+              "bottom"
+            ]
+          },
+          "required": false,
+          "default": "top,side,bottom",
+          "help": [
+            {
+              "language": "en",
+              "text": "The host's faces measured to, by the direction they look: `top` (within 45° of up), `side` or `bottom`, `,`-separated; the faces the object is meant to pass through are left out."
+            },
+            {
+              "language": "de",
+              "text": "Die Seiten des Wirts, zu denen gemessen wird, nach ihrer Blickrichtung: oben (`top`, bis 45° von der Senkrechten), seitlich (`side`) oder unten (`bottom`), durch `,` getrennt; die Seiten, durch die das Objekt hindurchgehen soll, bleiben weg."
+            }
+          ],
+          "references": "stringList"
+        }
+      ],
+      "dimension": "length",
+      "services": [
+        "proximity",
+        "relationship-selection"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "the path reaches several hosts",
+        "the host is no exact closed solid",
+        "the object is not wholly inside its host, or that cannot be decided"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Cover"
+        },
+        {
+          "language": "de",
+          "text": "Überdeckung"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The least distance from an embedded object, over its whole body, to the chosen faces of its host: the concrete cover of a bar or a duct; none where the path reaches no host."
+        },
+        {
+          "language": "de",
+          "text": "Der kleinste Abstand eines eingebetteten Objekts, über seinen ganzen Körper, zu den gewählten Seiten seines Wirts: die Betondeckung eines Stabs oder Hüllrohrs; keiner, wo der Pfad keinen Wirt erreicht."
+        }
+      ],
+      "unit": "m",
+      "available": true
+    },
+    {
       "name": "cross_fall",
       "parameters": [
         {

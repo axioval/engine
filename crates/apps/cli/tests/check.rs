@@ -19797,3 +19797,122 @@ fn the_fall_of_pipes_is_measured_in_flow_direction() {
     let why = open[0]["message"].as_str().unwrap();
     assert!(why.contains("#221 is source-and-sink"), "{why}");
 }
+
+/// A slab #10, 2 m along x, 1 m across and 0.2 m deep from z 0, holding
+/// 20 mm square bars aggregated to it: #20 along x from 0.1 to 1.9 m, its
+/// underside 35 mm above the slab's soffit; #30 from the same height
+/// falling 10 mm over its length, its underside 25 mm up at its far end;
+/// #40 reaching 0.5 m past the slab's end. Bar #60 lies in no slab.
+fn reinforced_slab() -> String {
+    let bar = "IFCREINFORCINGBAR('GID',$,$,$,$,#3,REP,$,$,$,$,$,.MAIN.,$)";
+    let square = "IFCRECTANGLEPROFILEDEF(.AREA.,$,$,0.02,0.02)";
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         #9=IFCDIRECTION((1.,0.,0.));\n\
+         #70=IFCDIRECTION((0.,1.,0.));\n\
+         #71=IFCDIRECTION((1.8,0.,-0.01));\n\
+         {}{}{}{}{}\
+         #90=IFCRELAGGREGATES('0000000000000000000090',$,$,$,#10,(#20,#30,#40));\n\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        extruded(
+            10,
+            "IFCSLAB('GID',$,$,$,$,#3,REP,$,.FLOOR.)",
+            "IFCRECTANGLEPROFILEDEF(.AREA.,$,$,2.,1.)",
+            [1.0, 0.5, 0.0],
+            "$,$",
+            0.2,
+        ),
+        extruded(20, bar, square, [0.1, 0.5, 0.045], "#9,#70", 1.8),
+        extruded(30, bar, square, [0.1, 0.3, 0.045], "#71,#70", 1.8),
+        extruded(40, bar, square, [1.5, 0.7, 0.1], "#9,#70", 1.0),
+        extruded(60, bar, square, [5.0, 5.0, 0.1], "#9,#70", 1.0),
+    )
+}
+
+/// engine#341: the cover of a bar is its least distance to its slab's
+/// faces over its whole body: 35 mm for the bar parallel to the soffit,
+/// the 25 mm at its low end for the falling one. A bar reaching out of
+/// its slab has no cover and is not evaluated, never a negative cover; a
+/// bar in no slab has none (`null`).
+#[test]
+fn the_cover_of_bars_is_their_least_distance_to_the_slab_faces() {
+    let case = Case::new("embedded-cover");
+    let cover = |faces: &str| {
+        json!({"kind": "property", "propertySet": "axioval:measured",
+               "property": format!("cover;host_path=IfcRelAggregates:backward{faces}"),
+               "label": "cover"})
+    };
+    let at_least = |left: Value, minimum: f64| {
+        json!({"requirement": {"type": "expression", "value": {
+                "kind": "compare", "operator": "greaterThanOrEquals", "left": left,
+                "right": {"kind": "literal",
+                          "value": {"type": "quantity", "value": minimum, "unit": "m"}}}},
+               "message": {"type": "string", "value": "cover {cover}"}})
+    };
+    let rule = |parameters: Value| {
+        case.geometry_rule(
+            &reinforced_slab(),
+            &[("bar", "IfcReinforcingBar")],
+            "axioval:capability.expression",
+            &registry_signature("axioval:capability.expression"),
+            entity("bar"),
+            parameters,
+        )
+    };
+    let value = |message: &str| -> (f64, f64) {
+        let text = message.trim_start_matches("cover ").trim_end_matches(" m");
+        let mut bounds = text
+            .split("..")
+            .map(|bound| bound.trim().parse::<f64>().unwrap());
+        let lower = bounds.next().unwrap();
+        (lower, bounds.next().unwrap_or(lower))
+    };
+
+    // Asked for 36 mm, both bars fall short: #20 by its 35 mm, #30 by
+    // the 25 mm at its low end.
+    let (output, result) = rule(at_least(cover(""), 0.036));
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let found = finding_messages(&result);
+    assert_eq!(found.len(), 3, "{result:#}");
+    assert_eq!(found[0].0, "#20", "{result:#}");
+    let (lower, upper) = value(&found[0].1);
+    assert!(
+        (lower - 0.035).abs() < 1e-9 && (upper - 0.035).abs() < 1e-9,
+        "{found:?}"
+    );
+    assert_eq!(found[1].0, "#30", "{result:#}");
+    let (lower, upper) = value(&found[1].1);
+    assert!(
+        (lower - 0.025).abs() < 1e-4 && (upper - 0.025).abs() < 1e-4,
+        "{found:?}"
+    );
+    // The loose bar has no cover, which no minimum admits.
+    assert_eq!(found[2], ("#60".to_owned(), "cover null".to_owned()));
+    // The bar reaching out of the slab is not inside it, never a negative
+    // cover.
+    let open = result["report"]["not_evaluated"].as_array().unwrap();
+    let why = open
+        .iter()
+        .find(|outcome| outcome["object_id"]["local_id"] == "#40")
+        .and_then(|outcome| outcome["message"].as_str())
+        .unwrap_or_else(|| panic!("{result:#}"));
+    assert!(why.contains("not wholly inside its host"), "{why}");
+
+    // At 30 mm only the falling bar fails; measured to the top and bottom
+    // faces only, the same.
+    for faces in ["", ";faces=top,bottom"] {
+        let (_, result) = rule(at_least(cover(faces), 0.03));
+        let found = finding_messages(&result);
+        assert_eq!(found.len(), 2, "{result:#}");
+        assert_eq!(found[0].0, "#30", "{result:#}");
+        assert_eq!(found[1].0, "#60", "{result:#}");
+    }
+}

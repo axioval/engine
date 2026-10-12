@@ -528,6 +528,7 @@ ignoring ASCII case):
 | `band_uncovered_area;members=<kinds>;member_path=<steps>;angle_tolerance=<degrees>;maximum=<m>;footprints=<kinds>;footprint_path=<steps>` | the largest area of a reached footprint outside every band between parallel members at most `maximum` apart | built in, over `PlanSpanService`, `ProximityService`, `VerticalExtentService`, `PlanAreaService::measure_outside_bands` |
 | `plan_area[;measure=footprint\|facade]` | the object's own area as `plan-area` measures it, an empty footprint refused | built in, over `PlanAreaService` or `FacadeAreaService` |
 | `contact_gap[;with=<objects>][;side=…;gap=…;intersection=…;polygon=…]` | the distance to the nearest object named the contact service reports, none where it reports none; refused while the selection leaves an object undecided | built in, over `ContactService` |
+| `cover;host_path=<steps>[;faces=top,side,bottom]` | the least distance from an embedded object, over its whole body, to the chosen faces of the one host the path reaches; none where it reaches none | built in, over `ProximityService::measure_face_distance` and `RelationshipSelectionService` |
 | `level_rise;levels=<kinds>;order=<set/name>[;anchor=<steps>][;path=<steps>][;lowest=…][;highest=…][;contents=<steps>;content_kinds=<kinds>]`, `prevailing_rise;…[;tolerance=<m>]` | a level's rise to the next one up, and the prevailing rise among its anchor's levels, as `level-spacing` measures them | built in, over the order property and `VerticalExtentService` |
 | `prevailing_elevation;side=bottom\|top;spaces=<steps>[;kinds=<kinds>][;tolerance=<m>]` | the prevailing bottom or top elevation among the spaces of the space's level | built in, over `VerticalExtentService` |
 | `levels_above`, `levels_below` `;levels=<kinds>;path=<steps>` | how many storeys of the source lie above or below the object's one storey by their `Elevation` attribute | built in, over the property and relationship services |
@@ -817,6 +818,33 @@ floor.
 `clear_width` is measured between two heights above the pitch line
 (`band_from`, default 0, and `band_to`, in metres) along a stair flight,
 or with `along=runs` along each of a ramp's runs, the least over them.
+
+### Cover
+
+`cover;host_path=<steps>[;faces=…]` is how far an embedded object (a
+reinforcing bar, a duct, an anchor) keeps from its host's surface: the
+least distance from any point of its body to the host's faces, as the
+proximity service's signed face distance measures it. The host is the one
+object the path reaches, as the package states which relationship embeds
+its objects (an IFC bar aggregated to its slab is
+`IfcRelAggregates:backward`). `faces` names the host's faces measured to by
+the direction they look, `top` (within 45° of up), `side` and `bottom`,
+`,`-separated and every face by default; leaving a class out ignores the
+faces the object is meant to pass through, and several classes measure to
+their union, the least of each class's distance. So a bar 35 mm above a
+slab's soffit measures 35 mm, and one falling from there to 25 mm at its
+far end measures the 25 mm.
+
+- A path reaching no host is an exact absence (`null`); one reaching
+  several leaves the value not evaluated, since the host is unknown.
+- Only a body proven wholly inside its host has a cover. One reaching out
+  of it (through a face left out too) is not evaluated with
+  `invalid_evidence`, naming how far it reaches, never a negative cover;
+  one whose side the service cannot decide (touching the faces within its
+  rounding) with `incomplete_evidence`.
+- The host must be an exact closed solid: a tessellated host's faces are
+  not its true faces, and the service refuses it. A tessellated embedded
+  body is measured, widened by its chord deviation and cited inexact.
 
 ### Doors and windows
 
@@ -1168,6 +1196,7 @@ sites that cite a value exact:
 | `levels_above`, `levels_below`, `storey_end` | always: counted over stated elevations, which the property service answers exactly | nothing |
 | `contact_area`, `contact_gap`, `contact_share` | always: the contact service refuses inexact evidence | the share's division, rounded outward; the contact undecided candidates may add |
 | `undecided_count` | always: counted over the selection | nothing |
+| `cover` | the face distances are (a host is exact or refused; a tessellated body's are not) | the body's chord deviation |
 | `fall_in_flow` | always: the object-frame service refuses inexact placements | the arithmetic's rounding, eight ulps of the quotient outward |
 | `stack_distance`, `stack_prevailing`, `body_extent`, `plan_area`, `triangle_count` | every extent, frame, area or count is exact (for `stack_prevailing`, the prevailing pair's) | rounding |
 | `counterpart_uncovered_share`, `counterpart_uncovered`, `counterpart_whole` | every evidence is exact and every counterpart that may cover was read | the undecided cover, as `counterpart-coverage` cites it (`Cited`) |

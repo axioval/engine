@@ -309,6 +309,13 @@ const COVERED: &[(&str, &str, &str)] = &[
         "tests/external_wall_validation.rs",
         "an_envelope_cited_approximate_is_refused",
     ),
+    // A tessellated bar's cover is widened and cited approximate; a
+    // tessellated host is refused.
+    (
+        "cover",
+        "../../facade/axioval/tests/axiolid_cover_and_height.rs",
+        "a_cover_measured_on_a_tessellation_is_inexact",
+    ),
     // A port placement must be stated exactly: one cited approximate is
     // refused before it reaches a fall.
     (

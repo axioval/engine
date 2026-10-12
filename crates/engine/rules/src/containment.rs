@@ -558,7 +558,7 @@ impl Declaration {
     }
 }
 
-fn face_reason(error: FaceDistanceError) -> NotEvaluatedReason {
+pub(crate) fn face_reason(error: FaceDistanceError) -> NotEvaluatedReason {
     match error {
         FaceDistanceError::Unsupported => NotEvaluatedReason::BackendUnavailable,
         FaceDistanceError::InvalidMeasurement

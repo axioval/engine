@@ -36,6 +36,7 @@ mod levels;
 mod profile;
 pub(crate) mod provider;
 mod section;
+mod sight_distance;
 mod space;
 mod surface;
 
@@ -98,6 +99,8 @@ pub(crate) enum MeasuredName {
     Section(MeasuredCall),
     /// A value along a station range of an alignment.
     Profile(MeasuredCall),
+    /// The available sight distance along an alignment.
+    SightDistance(MeasuredCall),
     /// A value a registered provider measures.
     Provided(MeasuredCall),
 }
@@ -144,6 +147,7 @@ pub(crate) fn measured_by_core(name: &str) -> bool {
         || alignment::NAMES.contains(&name)
         || section::NAMES.contains(&name)
         || profile::NAMES.contains(&name)
+        || sight_distance::NAMES.contains(&name)
 }
 
 /// Parses a name in the measured set through the registry
@@ -214,6 +218,7 @@ fn of_call(call: MeasuredCall) -> Result<MeasuredName, String> {
         name if alignment::NAMES.contains(&name) => MeasuredName::Alignment(call),
         name if section::NAMES.contains(&name) => MeasuredName::Section(call),
         name if profile::NAMES.contains(&name) => MeasuredName::Profile(call),
+        name if sight_distance::NAMES.contains(&name) => MeasuredName::SightDistance(call),
         ANGLE_TO | BEARING | SKEW => {
             let steps = match call.argument("path") {
                 Some(MeasuredArgument::Path(steps)) => steps
@@ -966,6 +971,7 @@ impl Measures {
             MeasuredName::Alignment(call) => self.along_alignment(call, object),
             MeasuredName::Section(call) => self.along_section(call, object),
             MeasuredName::Profile(call) => self.along_profile(call, object),
+            MeasuredName::SightDistance(call) => self.sight_distance(call, object),
             MeasuredName::Provided(call) => self.provided(call, object),
         }
     }

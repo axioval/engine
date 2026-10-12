@@ -48,6 +48,22 @@ All notable changes are documented here. This project follows Semantic Versionin
   (`catalogue-not-supplied` in the CLI's integrity). The authoring
   catalogue lists the node (schema 1.5.0)
   ([#322](https://github.com/axioval/engine/issues/322)).
+- **Measured values**: `available_sight_distance;station=<m>;eye_height=<m>;
+  target_height=<m>[;eye_offset=<m>][;target_offset=<m>];range=<m>[;step=<m>]
+  [;obstacles=<kinds>]` is how far ahead along an alignment, in plan
+  distance up to `range`, a target stays in view from an eye at a station:
+  the sight line to every nearer target must stay above the gradient line
+  in the developed profile and clear of the selected bodies. It is proven
+  clear up to its lower bound and proven blocked at its upper one; an
+  obstruction neither cleared nor proven blocking widens it, and an
+  unmeasured obstacle refuses it. Terrain counts only as a selected body.
+  On a parabolic crest of radius 3000 m an eye 1 m and a target 0.15 m
+  high measure the closed-form 107.46 m; a wall inside a curve ends the
+  view at its nearest corner. `AlignmentService::measure_sight_distance`
+  (`SightDistanceRequest`, `SightDistance`, `SightObstruction`) refuses by
+  default; the CLI answers it, and the Axiolid adapter's `SightObstacles`
+  clears or proves blocked a sight line between two points
+  ([#340](https://github.com/axioval/engine/issues/340)).
 - **Measured values**: `height_above_surface;surface=<objects>[;edge=top|bottom]`
   is the least vertical distance from an object's faces looking up (or
   down) to the nearest selected surface beneath them, over the whole

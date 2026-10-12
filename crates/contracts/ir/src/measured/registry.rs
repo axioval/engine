@@ -2357,6 +2357,103 @@ const ENVELOPE_PARAMETERS: &[MeasuredParameter] = &[
     },
 ];
 
+/// Where the eye and the target stand and how far ahead the available
+/// sight distance is looked for.
+const SIGHT_DISTANCE_PARAMETERS: &[MeasuredParameter] = &[
+    MeasuredParameter {
+        key: "obstacles",
+        kind: MeasuredParameterKind::SourceKind,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The source kinds of the bodies the sight line must clear, `,`-separated; \
+             subtypes match. Every object of these kinds in the alignment's source; without \
+             it only the gradient line.",
+            "Die Quellarten der Körper, die die Sichtlinie meiden muss, durch `,` getrennt; \
+             Untertypen zählen mit. Jedes Objekt dieser Arten in der Quelle der Achse; ohne \
+             sie nur die Gradiente.",
+        ),
+    },
+    MeasuredParameter {
+        key: "station",
+        kind: MeasuredParameterKind::Length { minimum: -1.0e6 },
+        required: true,
+        default: None,
+        help: &en_de(
+            "The station the eye stands at, in metres.",
+            "Die Station des Augpunkts, in Metern.",
+        ),
+    },
+    MeasuredParameter {
+        key: "eye_height",
+        kind: MeasuredParameterKind::Length { minimum: 0.001 },
+        required: true,
+        default: None,
+        help: &en_de(
+            "How high the eye stands above the gradient line, in metres.",
+            "Wie hoch der Augpunkt über der Gradiente liegt, in Metern.",
+        ),
+    },
+    MeasuredParameter {
+        key: "eye_offset",
+        kind: MeasuredParameterKind::Length { minimum: -1.0e3 },
+        required: false,
+        default: Some("0"),
+        help: &en_de(
+            "How far the eye stands to the left of the centreline, in metres; negative to \
+             the right.",
+            "Wie weit der Augpunkt links der Achse liegt, in Metern; negativ rechts.",
+        ),
+    },
+    MeasuredParameter {
+        key: "target_height",
+        kind: MeasuredParameterKind::Length { minimum: 0.001 },
+        required: true,
+        default: None,
+        help: &en_de(
+            "How high the target stands above the gradient line, in metres.",
+            "Wie hoch der Zielpunkt über der Gradiente liegt, in Metern.",
+        ),
+    },
+    MeasuredParameter {
+        key: "target_offset",
+        kind: MeasuredParameterKind::Length { minimum: -1.0e3 },
+        required: false,
+        default: Some("0"),
+        help: &en_de(
+            "How far the target stands to the left of the centreline, in metres; negative \
+             to the right.",
+            "Wie weit der Zielpunkt links der Achse liegt, in Metern; negativ rechts.",
+        ),
+    },
+    MeasuredParameter {
+        key: "range",
+        kind: MeasuredParameterKind::Length { minimum: 0.001 },
+        required: true,
+        default: None,
+        help: &en_de(
+            "How far ahead the target is looked for, in metres of plan distance; the value \
+             is capped there.",
+            "Wie weit voraus das Ziel gesucht wird, in Metern der Lagelänge; der Wert endet \
+             dort.",
+        ),
+    },
+    MeasuredParameter {
+        key: "step",
+        kind: MeasuredParameterKind::Length { minimum: 0.001 },
+        required: false,
+        default: Some("10"),
+        help: &en_de(
+            "The greatest plan distance between two targets looked at, in metres. Between \
+             them the sight line is bounded, never interpolated, and refined where it comes \
+             near an obstruction.",
+            "Der größte Abstand zweier betrachteter Zielpunkte im Lageplan, in Metern. \
+             Dazwischen wird die Sichtlinie abgeschätzt, nie interpoliert, und nahe einem \
+             Hindernis verfeinert.",
+        ),
+    },
+];
+
 /// The parameter a station profile reads.
 const PROFILE_OF: MeasuredParameter = MeasuredParameter {
     key: "of",
@@ -2736,6 +2833,38 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
             "Die Fläche des Grundrisses des Objekts, Überlappungen einmal gezählt."
         )
     ),
+    MeasuredDescriptor {
+        name: "available_sight_distance",
+        parameters: SIGHT_DISTANCE_PARAMETERS,
+        dimension: Some(QuantityDimension::Length),
+        services: &["alignment", "type-hierarchy"],
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[
+            "the object is no alignment the service can read as a centreline, or no station or \
+             several distances along it carry the station",
+            "the station lies before the alignment's start or beyond its end",
+            "a selected obstacle is unmeasured",
+            "a segment of the alignment follows a law whose gradient the service cannot bound",
+        ],
+        label: &en_de("Available sight distance", "Vorhandene Sichtweite"),
+        help: &en_de(
+            "Of an alignment: how far ahead along it, in metres of plan distance up to \
+             `range`, the target stays in view from the eye at `station`: the greatest distance \
+             for which the straight sight line to every nearer target clears the gradient line \
+             (the road surface in the developed longitudinal profile) and the selected \
+             obstacles. Proven clear up to the lower bound and proven blocked at the upper one; \
+             an obstacle neither cleared nor proven blocking widens it. Terrain counts only as \
+             a selected body.",
+            "Einer Achse: wie weit voraus entlang der Achse, in Metern der Lagelänge bis \
+             `range`, das Ziel vom Augpunkt an `station` aus sichtbar bleibt: die größte \
+             Entfernung, für die die gerade Sichtlinie zu jedem näheren Ziel über der Gradiente \
+             (der Fahrbahn im abgewickelten Längsschnitt) bleibt und die ausgewählten \
+             Hindernisse meidet. Bis zur unteren Grenze als frei, an der oberen als verdeckt \
+             bewiesen; ein weder freies noch sicher verdeckendes Hindernis verbreitert sie. \
+             Gelände zählt nur als ausgewählter Körper.",
+        ),
+    },
     MeasuredDescriptor {
         name: "azimuth",
         parameters: &[NORTH_REFERENCE],

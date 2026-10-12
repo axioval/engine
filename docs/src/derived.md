@@ -558,6 +558,7 @@ ignoring ASCII case):
 | `rate_along;of=…;station=<m>[;over=<m>]` | of an alignment: how fast `of` changes per metre at a station, or over `over` metres from it | `AlignmentService::measure_alignment_profile` |
 | `station_section_area`, `station_section_thickness[;direction=lateral\|up]` `;alignment=<kinds>[;path=<steps>];station=<m>` | the area and the vertical or horizontal reach of the object's own body in the section normal to the alignment at a station | `AlignmentService::measure_section` |
 | `envelope_intrusions;bodies=<kinds>;envelope=<lateral:up,…>;from=<m>;to=<m>;step=<m>` | of an alignment: how many bodies of the kinds reach into a clearance envelope swept along it, a count from the sure to the possible intrusions | `AlignmentService::measure_envelope`, `TypeHierarchyService` |
+| `available_sight_distance;station=<m>;eye_height=<m>;target_height=<m>[;eye_offset=<m>][;target_offset=<m>];range=<m>[;step=<m>][;obstacles=<kinds>]` | of an alignment: how far ahead, in plan distance up to `range`, a target stays in view from the eye at a station, past the gradient line and the bodies of the kinds, a length | `AlignmentService::measure_sight_distance`, `TypeHierarchyService` |
 
 ### Names with parameters
 
@@ -2215,6 +2216,70 @@ bounded number of times; what stays undecided leaves the body possible with
 the reason. The trait's `measure_section` and `measure_envelope` refuse by
 default, so a service that cuts nothing never answers with empty sections
 or clear envelopes.
+
+#### Sight distances along alignments
+
+`available_sight_distance;station=<m>;eye_height=<m>;target_height=<m>[;eye_offset=<m>][;target_offset=<m>];range=<m>[;step=<m>][;obstacles=<kinds>]`
+is measured on an alignment (`sight_distance.rs` in the engine). The eye
+stands in the section at `station`, `eye_offset` metres to the left of the
+centreline (negative to the right) and `eye_height` above the gradient
+line; the target stands in the section at the plan distance `d` further
+along, at `target_offset` and `target_height`. The **available sight
+distance** is the greatest `d`, up to `range`, for which the straight sight
+line to every target up to `d` is clear of
+
+- **the gradient line**, the road surface as the developed longitudinal
+  profile states it: drawn over plan distance against height, the sight
+  line stays strictly above the gradient line between eye and target, as
+  the closed-form crest formula `sqrt(2 R) (sqrt(h_e) + sqrt(h_t))` takes
+  it. Cross-fall, cant and the plan's curvature neither raise nor lower
+  it, and the offsets do not enter this test;
+- **the selected bodies**, in space: the objects of the `obstacles` kinds
+  in the alignment's source (subtypes match), none without it.
+
+`d` is plan distance along the alignment, not a station difference.
+**Terrain** counts only as a selected body. A model whose ground is no
+body (the usual case until terrain is read as a surface of its own) states
+no terrain to this measurement, so the value says nothing about the ground
+beside the road; the evidence says what the sight line was measured
+against. Read it as the sight distance the gradient line and the selected
+bodies leave, an upper bound on what terrain and vegetation not in the
+model may leave.
+
+`AlignmentServiceHandle::measure_sight_distance` answers a
+`SightDistanceRequest` with a `SightDistance`: an interval sure to hold the
+value and what was proven to block the sight line at its upper bound
+(`SightObstruction::GradientLine` or `Body`). The sight line is **proven
+clear** to every target up to the lower bound and **proven blocked** at
+the upper bound, which is `range` when no blocked target was found before
+it: the measure is capped at `range` by definition, so a clear view is the
+exact value `range`. An obstruction that can be neither cleared nor proven
+to block (a body grazing the sight line, a tessellated body, whose mesh
+can clear but never prove a block, a gradient line within the evaluation's
+error of the sight line) leaves the interval open between the last clear
+and the first blocked target, never a clear sight line that was not proven
+so. A range reaching past the alignment's end leaves the value open from
+the end to `range`, said in the evidence. An eye station off the
+alignment, an unreadable alignment, a gradient law without a certified
+bound and an unmeasured obstacle refuse the value with the reason. The
+handle refuses an answer about another request or naming a body the
+request did not send, and the trait's method refuses by default.
+
+Targets are looked at in steps of at most `step` (10 m by default), and
+between two targets the sight line is bounded, never interpolated. Every
+target of a step lies within `h (B1 + |u| B2 / speed)` of the one at its
+middle (as for the clearance envelope), so the bodies are cleared for a
+step when none comes that near the sight line to the middle target. For
+the gradient line, moving the target by `δ` changes the height of the
+sight line at a share `t` of the way by at most `t δ Δg`, where `Δg` is
+the spread of the gradient over the stretch looked over, and the sight
+line's clearance above the gradient line is bounded piece by piece from
+the law's certified gradient. A step not proven clear is halved; the last
+clear and the first blocked target are brought within a millimetre where
+the proofs allow. On a synthetic parabolic crest of radius 3000 m, an eye
+1 m and a target 0.15 m high measure 107.46 m, the closed form; a wall on
+the inside of a level curve of radius 100 m ends the view where the chord
+to the target passes its nearest corner.
 
 ### Stated rather than measured
 

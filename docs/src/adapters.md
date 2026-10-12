@@ -1088,6 +1088,22 @@ horizon, and names the obstacles that may attain it. An obstacle whose box
 lies wholly behind the eye is skipped; one in front that is tessellated or
 unmeasured refuses, and a bodiless one is skipped.
 
+`SightObstacles` tests straight sight lines between two points against a
+set of bodies read once, for a host that samples many of them (the sight
+distance along an alignment). `near` names the obstacles that may come
+within a reach of the segment from an eye to a target: one is cleared when
+every triangle of its mesh lies farther than the reach, its chord deviation
+and a rounding bound from the segment (measured with `axiolid-measure`'s
+triangle distance against a sliver triangle holding the segment, never
+nearer than the true distance) and the eye lies outside its mesh by the
+kernel's exact winding number, so every segment from the eye to a point
+within the reach of the target misses it. `blocking` names the exact
+obstacles the kernel's `line_of_sight` proves to hide every ray from the
+eye to a small triangle across the sight line holding the target point
+within its stated accuracy. An unmeasured obstacle refuses, a bodiless one
+is skipped, and a tessellated one may be cleared by its deviation but
+never proves a block.
+
 `AxiolidProximityService` measures pairwise proximity for clash and distance checks. Hosts register curved parts with `with_tessellated_mesh` and a chord deviation, and measurements involving them are approximate; with `with_exact_boundary` beside the mesh, the distance in space, the horizontal distance, plan overlap and the footprint relation of vertical distances between two such objects are also certified on their exact boundaries. `exact_boundary(graph, node)` builds such a boundary from the Axiolid geometry graph a host meshes, for rigidly placed extrusions and revolutions of rectangle, circle, ellipse, section and line-and-arc profiles, disks swept along a segment or an arc, differences of placed extrusions (openings, round holes touching a beam's flange or root fillets included) and their clips by half-spaces (a wall under its roof planes), built at no tolerance first and within the kernel's tolerance only where that is refused, exact where the kernel's boolean reports no decision within its tolerance (an empty report at no tolerance always means exact, axiolid/kernel#251) and otherwise marked perturbed by what it reports (`ExactBody::perturbation_metres`), each widened by the rounding the boolean merges points within (`ExactBody::rounding_metres`), and bodies of several such items (`ExactBody`, `with_exact_body`), whose plan relations are measured over every item pair, and refuses everything else with the reason; `check_exact_boundary` compares it with the registered mesh before the host registers it. See [Clash, interference and distance](./clash.md#axiolid-measurement). Plan regions (free floor, unallocated floor, coverage, walkable plans) are overlay output and never pass through the kernel's ring triangulator, which since axiolid-construct 0.3.15 refuses rings touching at a point unless asked to accept them (axiolid/kernel#253, #262); such regions, two rooms meeting at a corner or a corridor narrowed to a point, are measured. Any mesh whose audit finds an open edge, such as the T-junction a B-rep face with touching rings can leave in its neighbour, is a surface to every service, never a closed solid. A mesh closed only with zero-area triangles (a T-junction closed by a sliver) is a closed solid to the proximity service, which measures each zero-area triangle as its edges and takes the winding number without it (#221; see [Zero-area triangles](./clash.md#axiolid-measurement)); the other services read the audit as it stands.
 
 The same service compares two revisions of a body, possibly from two

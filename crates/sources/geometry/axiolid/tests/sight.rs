@@ -3,7 +3,7 @@
 
 use axiolid_core::Point3;
 use axiolid_mesh::TriMesh;
-use axioval_axiolid::{AxiolidGeometry, AxiolidSightService};
+use axioval_axiolid::{AxiolidGeometry, AxiolidSightService, SightObstacles};
 use axioval_engine::{
     SightError, SightOutcome, SightRequest, SightService, SkyObstruction, SkyObstructionRequest,
 };
@@ -232,4 +232,53 @@ fn a_tessellated_or_unmeasured_obstacle_in_front_refuses() {
         1e-3,
     );
     assert!(obstruction(behind, 0.0, &["tower"]).is_ok());
+}
+
+/// A sight line from (0, 0, 1.5) along +x to a target point at x 5 meets
+/// the wall across it at x 2 first, which hides it; a sight line 5 m to
+/// the side passes the wall 2 m clear, so within a reach of 1 m nothing
+/// is near it and within 2.5 m the wall is.
+#[test]
+fn a_sight_line_between_points_is_blocked_by_a_wall_or_cleared_beside_it() {
+    let geometry = scene();
+    let all = [id("wall"), id("col"), id("far"), id("zone")];
+    let obstacles = SightObstacles::new(&geometry, &all).unwrap();
+    let (eye, target) = ([0.0, 0.0, 1.5], [5.0, 0.0, 1.0]);
+    let blocked = obstacles.blocking(eye, target, 1e-6).unwrap().unwrap();
+    assert!(blocked.contains(&id("wall")), "{blocked:?}");
+    assert!(!blocked.contains(&id("far")), "{blocked:?}");
+    assert_eq!(obstacles.near(eye, target, 0.0), [&id("wall"), &id("col")]);
+    let (eye, target) = ([0.0, 5.0, 1.5], [5.0, 5.0, 1.5]);
+    assert!(obstacles.near(eye, target, 1.0).is_empty());
+    assert_eq!(obstacles.near(eye, target, 2.5), [&id("wall")]);
+    assert_eq!(obstacles.blocking(eye, target, 1e-6).unwrap(), None);
+    // An eye inside a body is never cleared.
+    assert_eq!(
+        obstacles.near([2.1, 0.0, 1.0], [2.1, 0.5, 1.0], 0.0),
+        [&id("wall")]
+    );
+}
+
+#[test]
+fn a_tessellated_obstacle_never_blocks_and_an_unmeasured_one_refuses() {
+    let tessellated =
+        scene().with_tessellated_mesh(id("wall"), cuboid([2.0, -3.0, 0.0], [2.2, 3.0, 3.0]), 1e-3);
+    let obstacles = SightObstacles::new(&tessellated, &[id("wall")]).unwrap();
+    let (eye, target) = ([0.0, 0.0, 1.5], [5.0, 0.0, 1.0]);
+    assert_eq!(obstacles.blocking(eye, target, 1e-6).unwrap(), None);
+    assert_eq!(obstacles.near(eye, target, 0.0), [&id("wall")]);
+    // Its deviation is part of the clearance: 2 m from the line it is
+    // clear within 1.99 m only.
+    let (eye, target) = ([0.0, 5.0, 1.5], [5.0, 5.0, 1.5]);
+    assert!(obstacles.near(eye, target, 1.99).is_empty());
+    assert_eq!(obstacles.near(eye, target, 1.9995), [&id("wall")]);
+    let unmeasured = scene().with_unmeasured(id("pillar"), "no body representation");
+    assert!(matches!(
+        SightObstacles::new(&unmeasured, &[id("pillar")]),
+        Err(SightError::Unavailable(_))
+    ));
+    assert!(matches!(
+        SightObstacles::new(&scene(), &[id("ghost")]),
+        Err(SightError::UnknownObject(_))
+    ));
 }

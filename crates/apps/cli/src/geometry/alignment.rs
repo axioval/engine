@@ -83,6 +83,7 @@ use super::{PRODUCT_REPRESENTATION, Parsed, context_frame, entity_id, session, w
 mod elements;
 mod profile;
 mod section;
+mod sight;
 
 /// Width, in metres of plan distance, below which a bracket is no longer
 /// split.
@@ -1100,6 +1101,13 @@ impl AlignmentService for IfcAlignmentService {
         request: &axioval::engine::EnvelopeRequest,
     ) -> Result<axioval::engine::EnvelopeSweep, AlignmentError> {
         self.envelope(request)
+    }
+
+    fn measure_sight_distance(
+        &self,
+        request: &axioval::engine::SightDistanceRequest,
+    ) -> Result<axioval::engine::SightDistance, AlignmentError> {
+        self.sight_distance(request)
     }
 }
 

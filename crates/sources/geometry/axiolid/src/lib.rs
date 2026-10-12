@@ -60,7 +60,7 @@ pub use metric_routing::AxiolidMetricRoutingService;
 pub use plan_area::AxiolidPlanAreaService;
 pub use plan_span::AxiolidPlanSpanService;
 pub use proximity::AxiolidProximityService;
-pub use sight::AxiolidSightService;
+pub use sight::{AxiolidSightService, SightObstacles};
 pub use space::AxiolidSpaceService;
 pub use triangle_count::AxiolidTriangleCountService;
 pub use vertical_extent::AxiolidVerticalExtentService;

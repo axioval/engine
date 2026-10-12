@@ -89,12 +89,12 @@ const MAX_STEPS: f64 = 100_000.0;
 
 /// A section frame: origin on the centreline, horizontal unit tangent and
 /// left normal; up is `+Z`.
-struct Frame {
+pub(super) struct Frame {
     origin: [f64; 3],
     tangent: [f64; 3],
     lateral: [f64; 3],
     /// The plan speed `|c'|` there.
-    speed: f64,
+    pub(super) speed: f64,
 }
 
 impl Frame {
@@ -106,7 +106,7 @@ impl Frame {
     }
 
     /// The point at section coordinates `(u, v)`.
-    fn place(&self, [u, v]: [f64; 2]) -> [f64; 3] {
+    pub(super) fn place(&self, [u, v]: [f64; 2]) -> [f64; 3] {
         [
             self.origin[0] + u * self.lateral[0],
             self.origin[1] + u * self.lateral[1],
@@ -117,7 +117,7 @@ impl Frame {
 
 impl Centreline {
     /// The section frame at plan distance `at`.
-    fn frame_at(&self, at: f64) -> Result<Frame, String> {
+    pub(super) fn frame_at(&self, at: f64) -> Result<Frame, String> {
         let unevaluated = |error| format!("the centreline cannot be evaluated at {at} m ({error})");
         let point = elevated_point(self.elevated(), at).map_err(unevaluated)?;
         let derivative = elevated_derivative(self.elevated(), at).map_err(unevaluated)?;
@@ -138,7 +138,7 @@ impl Centreline {
 
     /// Bounds `(B1, B2)` on the centreline's first two derivatives over
     /// `[a, b]`, split at its continuity breaks.
-    fn derivative_bounds(&self, a: f64, b: f64) -> Result<(f64, f64), String> {
+    pub(super) fn derivative_bounds(&self, a: f64, b: f64) -> Result<(f64, f64), String> {
         let mut cuts = vec![a];
         cuts.extend(self.breaks.iter().copied().filter(|at| *at > a && *at < b));
         cuts.push(b);
@@ -194,7 +194,7 @@ impl Centreline {
     /// The numerical error of a section coordinate at a point `reach` from
     /// the centreline: the evaluator's accuracy and rounding on the origin
     /// and the axes, scaled by the curve's derivative bounds.
-    fn frame_error(&self, reach: f64, (first, second): (f64, f64)) -> f64 {
+    pub(super) fn frame_error(&self, reach: f64, (first, second): (f64, f64)) -> f64 {
         slack(self.length.max(reach)) * (4.0 + 2.0 * reach) * (1.0 + first + second)
     }
 }

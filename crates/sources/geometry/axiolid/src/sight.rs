@@ -23,9 +23,11 @@
 //! triangles, widened by a rounding bound, so a target is left unlooked-at
 //! only when it lies surely beyond the requested range.
 
-use axiolid_core::Point3;
-use axiolid_inspect::{Sight, line_of_sight};
-use axiolid_measure::{closest_point_on_triangle, closest_points_on_segments};
+use axiolid_core::{Point3, Vec3};
+use axiolid_inspect::{Sight, contains, line_of_sight};
+use axiolid_measure::{
+    closest_point_on_triangle, closest_points_on_segments, closest_points_on_triangles,
+};
 use axiolid_mesh::TriMesh;
 use axioval_engine::{
     SightError, SightEvidence, SightOutcome, SightRequest, SightService, SkyObstruction,
@@ -235,6 +237,248 @@ impl SightService for AxiolidSightService {
         };
         SkyObstruction::try_new(angle, highest, evidence)
     }
+}
+
+/// Bodies a straight sight line between two points is tested against,
+/// read once for the many sight lines of one measurement (a sight
+/// distance along an alignment samples many targets).
+///
+/// Two questions are answered, each a proof:
+///
+/// - [`Self::near`] names the obstacles that may come within a reach of
+///   the segment from an eye to a target. An obstacle is cleared when
+///   every triangle of its mesh lies farther than the reach, its chord
+///   deviation and a rounding bound from the segment (measured against a
+///   sliver triangle holding it, so never nearer than the true distance),
+///   and the eye lies outside its mesh by the kernel's exact winding
+///   number. Every segment from the eye to a point within the reach of
+///   the target then misses it.
+/// - [`Self::blocking`] names the exact obstacles the kernel's
+///   `line_of_sight` proves to hide the target point: they hide every ray
+///   from the eye to a small triangle across the sight line holding the
+///   target, so the ray to the target meets them before it.
+///
+/// An unmeasured obstacle may stand anywhere, so it refuses the whole
+/// question; a declared bodiless one is skipped. A tessellated obstacle
+/// may be cleared by its deviation but never proves a block.
+#[derive(Debug)]
+pub struct SightObstacles<'g> {
+    obstacles: Vec<Obstacle<'g>>,
+}
+
+#[derive(Debug)]
+struct Obstacle<'g> {
+    id: ObjectId,
+    mesh: &'g TriMesh,
+    triangles: Vec<Triangle>,
+    extent: Extent,
+    deviation: f64,
+}
+
+impl<'g> SightObstacles<'g> {
+    /// The obstacles among `objects` that have a body in `geometry`.
+    ///
+    /// # Errors
+    ///
+    /// [`SightError::Unavailable`] for an unmeasured obstacle or one whose
+    /// deviation is unusable, [`SightError::UnknownObject`] for one the
+    /// geometry holds nothing about.
+    pub fn new(geometry: &'g AxiolidGeometry, objects: &[ObjectId]) -> Result<Self, SightError> {
+        let mut obstacles = Vec::new();
+        for object in objects {
+            if geometry.has_no_body(object) {
+                continue;
+            }
+            if let Some((_, reason)) = geometry.unmeasured().find(|(id, _)| *id == object) {
+                return Err(SightError::Unavailable(format!(
+                    "obstacle {object} has a body that was not measured: {reason}"
+                )));
+            }
+            let mesh = geometry
+                .mesh(object)
+                .ok_or_else(|| SightError::UnknownObject(object.clone()))?;
+            let deviation = geometry
+                .fidelity(object)
+                .map_err(|error| SightError::Unavailable(format!("obstacle {object}: {error}")))?
+                .deviation_metres();
+            let Some(extent) = mesh_extent(mesh) else {
+                continue;
+            };
+            obstacles.push(Obstacle {
+                id: object.clone(),
+                mesh,
+                triangles: triangles(mesh),
+                extent,
+                deviation,
+            });
+        }
+        Ok(Self { obstacles })
+    }
+
+    /// The obstacles not proven to stay farther than `reach` from the
+    /// segment from `eye` to `target`, in the order given; none when every
+    /// segment from the eye to a point within `reach` of the target is
+    /// clear of every obstacle.
+    #[must_use]
+    pub fn near(&self, eye: [f64; 3], target: [f64; 3], reach: f64) -> Vec<&ObjectId> {
+        let (from, to) = (point(eye), point(target));
+        let sliver = sliver(from, to);
+        let scale = eye
+            .iter()
+            .chain(&target)
+            .fold(1.0_f64, |held, value| held.max(value.abs()));
+        let segment_box: Extent = (
+            std::array::from_fn(|axis| eye[axis].min(target[axis])),
+            std::array::from_fn(|axis| eye[axis].max(target[axis])),
+        );
+        let mut near = Vec::new();
+        for obstacle in &self.obstacles {
+            let margin =
+                (reach + obstacle.deviation) * (1.0 + DISTANCE_SLACK) + DISTANCE_SLACK * scale;
+            let grown: Extent = (
+                obstacle.extent.0.map(|value| value - margin),
+                obstacle.extent.1.map(|value| value + margin),
+            );
+            if !boxes_meet(&grown, &segment_box) {
+                continue;
+            }
+            let apart = obstacle.triangles.iter().all(|triangle| {
+                distance_to(sliver.as_ref(), (from, to), triangle).is_some_and(|gap| gap > margin)
+            });
+            // Farther than the margin from every face: the reach around the
+            // segment lies wholly inside the body or wholly outside it, as
+            // the eye does.
+            if !(apart && contains(obstacle.mesh, from) == Some(false)) {
+                near.push(&obstacle.id);
+            }
+        }
+        near
+    }
+
+    /// The exact obstacles proven to hide `target` from `eye`, sorted;
+    /// `None` when no such proof was found. The target is taken as known
+    /// within `within` metres: the proof covers every point that near it
+    /// across the sight line.
+    ///
+    /// # Errors
+    ///
+    /// [`SightError::InvalidRequest`] for a point that is not finite or a
+    /// target at the eye.
+    pub fn blocking(
+        &self,
+        eye: [f64; 3],
+        target: [f64; 3],
+        within: f64,
+    ) -> Result<Option<Vec<ObjectId>>, SightError> {
+        let (from, to) = (point(eye), point(target));
+        let along = to - from;
+        let length = along.length();
+        if !(length.is_finite() && length > 0.0 && within.is_finite()) {
+            return Err(SightError::InvalidRequest(
+                "the sight line has no finite length".into(),
+            ));
+        }
+        let segment_box: Extent = (
+            std::array::from_fn(|axis| eye[axis].min(target[axis]) - within),
+            std::array::from_fn(|axis| eye[axis].max(target[axis]) + within),
+        );
+        let candidates: Vec<&Obstacle<'_>> = self
+            .obstacles
+            .iter()
+            .filter(|obstacle| obstacle.deviation <= 0.0)
+            .filter(|obstacle| boxes_meet(&obstacle.extent, &segment_box))
+            .collect();
+        if candidates.is_empty() {
+            return Ok(None);
+        }
+        // A small triangle across the sight line whose inscribed circle
+        // (half its circumradius) holds every point within `within` of the
+        // target.
+        let radius = 2.0 * within.max(1e-9 * (1.0 + length));
+        let (u, v) = across(along * (1.0 / length));
+        let corners: Vec<Point3> = [0.0_f64, 1.0, 2.0]
+            .iter()
+            .map(|corner| {
+                let angle = corner * 2.0 * std::f64::consts::FRAC_PI_3;
+                to + u * (radius * angle.cos()) + v * (radius * angle.sin())
+            })
+            .collect();
+        let spot = TriMesh::new(corners, vec![0, 1, 2]);
+        let meshes: Vec<&TriMesh> = candidates.iter().map(|obstacle| obstacle.mesh).collect();
+        match line_of_sight(from, &spot, &meshes) {
+            Ok(Sight::Hidden { occluders }) => {
+                let mut named: Vec<ObjectId> = occluders
+                    .iter()
+                    .filter_map(|index| candidates.get(*index).map(|found| found.id.clone()))
+                    .collect();
+                named.sort();
+                named.dedup();
+                Ok((!named.is_empty()).then_some(named))
+            }
+            Ok(_) => Ok(None),
+            Err(error) => Err(SightError::InvalidRequest(format!(
+                "the sight line cannot be assessed: {error:?}"
+            ))),
+        }
+    }
+}
+
+fn point([x, y, z]: [f64; 3]) -> Point3 {
+    Point3::new(x, y, z)
+}
+
+/// Two unit vectors across the unit direction `along` and across each
+/// other.
+fn across(along: Vec3) -> (Vec3, Vec3) {
+    let helper = if along.x.abs() < 0.9 {
+        Vec3::new(1.0, 0.0, 0.0)
+    } else {
+        Vec3::new(0.0, 1.0, 0.0)
+    };
+    let u = along.cross(helper);
+    let u = u * (1.0 / u.length());
+    (u, along.cross(u))
+}
+
+/// A thin triangle holding the segment from `from` to `to`; `None` for a
+/// segment of no length.
+fn sliver(from: Point3, to: Point3) -> Option<Triangle> {
+    let along = to - from;
+    let length = along.length();
+    if !(length.is_finite() && length > 0.0) {
+        return None;
+    }
+    let (u, _) = across(along * (1.0 / length));
+    Some([from, to, to + u * (1e-6 * length)])
+}
+
+/// A lower bound on the distance from the segment `[from, to]` to
+/// `triangle`: its distance to `sliver`, which holds the segment, or the
+/// segment's own distance to a degenerate triangle's edges. `None` where
+/// none can be measured.
+fn distance_to(
+    sliver: Option<&Triangle>,
+    (from, to): (Point3, Point3),
+    triangle: &Triangle,
+) -> Option<f64> {
+    let whole = match sliver {
+        Some(sliver) => closest_points_on_triangles(*sliver, *triangle)
+            .ok()
+            .map(|pair| pair.distance_squared.sqrt()),
+        None => closest_point_on_triangle(from, *triangle)
+            .ok()
+            .map(|closest| (closest - from).length()),
+    };
+    whole.or_else(|| {
+        // A degenerate triangle is its edges.
+        (0..3)
+            .map(|i| {
+                closest_points_on_segments([triangle[i], triangle[(i + 1) % 3]], [from, to])
+                    .ok()
+                    .map(|pair| pair.distance_squared.sqrt())
+            })
+            .try_fold(f64::INFINITY, |held, gap| gap.map(|gap| held.min(gap)))
+    })
 }
 
 /// Bound on the rounding of a measured elevation angle, in radians.

@@ -998,6 +998,7 @@ mod section;
 mod services;
 mod side_distance;
 mod sight;
+mod sight_distance;
 mod source_metadata;
 mod space;
 mod station_profile;
@@ -1181,6 +1182,7 @@ pub use sight::{
     SightError, SightEvidence, SightOutcome, SightRequest, SightService, SightServiceHandle,
     SkyObstruction, SkyObstructionRequest,
 };
+pub use sight_distance::{SightDistance, SightDistanceRequest, SightObstruction};
 pub use source_metadata::{SourceMetadata, SourceMetadataIndex};
 pub use space::{
     BoundaryGap, BoundaryRequest, Cap, CapCoverage, CapRequest, ClearHeightEvidence, Containment,

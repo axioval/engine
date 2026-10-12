@@ -1563,6 +1563,22 @@ range, is a sure intrusion. Otherwise the step is halved, at most ten times
 and within 20 000 stretches per body, and a stretch still undecided leaves
 the body possible with that stretch named. A range holding more than
 100 000 steps is refused.
+
+The same service measures the available sight distance (see
+[Sight distances along alignments](./derived.md#sight-distances-along-alignments))
+along the same centreline, against the gradient line of its elevation law
+and the selected bodies the bridge meshed (through the adapter's
+`SightObstacles`). Targets are stepped forward from the eye; a step is
+proven clear of the gradient line when the sight line to its middle target
+stays above the line by more than the step's movement allows, bounded
+piece by piece from the law's certified gradient and halved where the
+bound does not suffice (at most 24 times, and never below the evaluation's
+error), and clear of the bodies when none comes within
+`h (B1 + |u| B2 / speed)` plus the frame's error of that sight line. A
+step not proven clear is halved, down to 1 µm; a target is proven blocked
+by a sampled point of the gradient line above its sight line or by the
+kernel's `line_of_sight`. The last clear and first blocked targets are
+brought within 1 mm, within 20 000 steps.
 The bridge reads
 the bytes with the session's own STEP reader (`read_ifc_step`), so a REAL
 written without its decimal point is measured too and reported once, as an

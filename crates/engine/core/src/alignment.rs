@@ -42,6 +42,7 @@ use thiserror::Error;
 
 use crate::alignment_element::{AlignmentElements, AlignmentElementsRequest};
 use crate::section::{EnvelopeRequest, EnvelopeSweep, Section, SectionRequest};
+use crate::sight_distance::{SightDistance, SightDistanceRequest, SightObstruction};
 use crate::station_profile::{AlignmentProfile, AlignmentProfileRequest};
 
 /// Failure to locate a point along an alignment or read its parameters.
@@ -431,6 +432,22 @@ pub trait AlignmentService: Send + Sync + 'static {
             "this alignment service sweeps no clearance envelope".into(),
         ))
     }
+
+    /// How far ahead along an alignment a target stays in view from an
+    /// eye at a station ([`SightDistance`]).
+    ///
+    /// The default refuses, so a service that measures no sight distance
+    /// fails closed rather than answering with an unobstructed view.
+    // gate: measures length
+    fn measure_sight_distance(
+        &self,
+        request: &SightDistanceRequest,
+    ) -> Result<SightDistance, AlignmentError> {
+        let _ = request;
+        Err(AlignmentError::Unavailable(
+            "this alignment service measures no sight distance".into(),
+        ))
+    }
 }
 
 /// Registry handle for an [`AlignmentService`].
@@ -517,6 +534,30 @@ impl AlignmentServiceHandle {
             return Err(AlignmentError::InvalidMeasurement);
         }
         Ok(sweep)
+    }
+
+    /// How far ahead along an alignment a target stays in view. An answer
+    /// about another request, or naming a body the request did not send,
+    /// is refused.
+    pub fn measure_sight_distance(
+        &self,
+        request: &SightDistanceRequest,
+    ) -> Result<SightDistance, AlignmentError> {
+        let sight = self.0.measure_sight_distance(request)?;
+        if sight.request() != request {
+            return Err(AlignmentError::InvalidMeasurement);
+        }
+        let stranger = sight
+            .blocked_by()
+            .iter()
+            .any(|obstruction| match obstruction {
+                SightObstruction::Body(body) => request.obstacles().binary_search(body).is_err(),
+                SightObstruction::GradientLine => false,
+            });
+        if stranger {
+            return Err(AlignmentError::InvalidMeasurement);
+        }
+        Ok(sight)
     }
 }
 

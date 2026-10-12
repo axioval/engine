@@ -3528,6 +3528,164 @@ fn with_geometry_a_crest_radius_and_the_element_sequence_are_judged() {
     );
 }
 
+/// An IFC4X3 alignment by its layouts: `horizontal` and `vertical` are
+/// its segments (each list ending with its zero-length segment), `extra`
+/// further entities.
+fn alignment_with(horizontal: &[&str], vertical: &[&str], extra: &str) -> String {
+    let mut data = String::from(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\n\
+         FILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4X3_ADD2'));\nENDSEC;\n\
+         DATA;\n#4=IFCCARTESIANPOINT((0.,0.,0.));\n#5=IFCAXIS2PLACEMENT3D(#4,$,$);\n\
+         #7=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-6,#5,$);\n",
+    );
+    let mut nest = |kind: &str, base: usize, segments: &[&str], parent: usize| {
+        use std::fmt::Write as _;
+        let mut members = Vec::new();
+        for (index, segment) in segments.iter().enumerate() {
+            let (design, wrapper) = (base + 2 * index, base + 2 * index + 1);
+            writeln!(
+                data,
+                "#{design}={segment};\n\
+                 #{wrapper}=IFCALIGNMENTSEGMENT('seg-{kind}-{index:016}',$,$,$,$,$,$,#{design});"
+            )
+            .unwrap();
+            members.push(format!("#{wrapper}"));
+        }
+        writeln!(
+            data,
+            "#{parent}=IFCALIGNMENT{}('align-{kind}-00000000000001',$,$,$,$,$,$);\n\
+             #{}=IFCRELNESTS('nest-{kind}-0000000000000001',$,$,$,#{parent},({}));",
+            if kind == "h" {
+                "HORIZONTAL"
+            } else {
+                "VERTICAL"
+            },
+            parent + 1,
+            members.join(",")
+        )
+        .unwrap();
+    };
+    nest("h", 100, horizontal, 190);
+    nest("v", 200, vertical, 290);
+    data.push_str(
+        "#401=IFCALIGNMENT('0000000000000000000401',$,$,$,$,$,$,$);\n\
+         #402=IFCRELNESTS('nest-a-000000000000001',$,$,$,#401,(#190,#290));\n",
+    );
+    data.push_str(extra);
+    data.push_str("ENDSEC;\nEND-ISO-10303-21;\n");
+    data
+}
+
+/// An `expression` rule on the alignment #401 of `model` comparing a
+/// length along it with `limit` metres.
+fn length_along_rule(
+    case: &Case,
+    model: &str,
+    name: &str,
+    operator: &str,
+    limit: f64,
+) -> (Output, Value) {
+    case.geometry_rule(
+        model,
+        &[("alignment", "IfcAlignment")],
+        "axioval:capability.expression",
+        &registry_signature("axioval:capability.expression"),
+        entity("alignment"),
+        json!({"requirement": {"type": "expression", "value": {
+            "kind": "compare", "operator": operator, "label": "value",
+            "left": {"kind": "property", "propertySet": "axioval:measured", "property": name},
+            "right": {"kind": "literal",
+                      "value": {"type": "quantity", "value": limit, "unit": "m"}}}}}),
+    )
+}
+
+/// engine#340 end to end: on a straight road over a parabolic crest of
+/// radius 3000 m (a grade of +4 % to -4 % over 240 m from 50 m on), an eye
+/// 1 m above the gradient line at station 100 sees a target 0.15 m high
+/// over `sqrt(2 R) (sqrt(1) + sqrt(0.15))`, 107.46 m: a required 110 m
+/// fails there, a required 105 m holds, and the evidence names the
+/// gradient line.
+#[test]
+fn with_geometry_the_sight_distance_over_a_crest_is_its_closed_form() {
+    let case = Case::new("geometry-alignment-sight-crest");
+    let model = alignment_with(
+        &[
+            "IFCALIGNMENTHORIZONTALSEGMENT($,$,#10,0.,0.,0.,400.,$,.LINE.)",
+            "IFCALIGNMENTHORIZONTALSEGMENT($,$,#11,0.,0.,0.,0.,$,.LINE.)",
+        ],
+        &[
+            "IFCALIGNMENTVERTICALSEGMENT($,$,0.,50.,50.,0.04,0.04,$,.CONSTANTGRADIENT.)",
+            "IFCALIGNMENTVERTICALSEGMENT($,$,50.,240.,52.,0.04,-0.04,-3000.,.PARABOLICARC.)",
+            "IFCALIGNMENTVERTICALSEGMENT($,$,290.,110.,52.,-0.04,-0.04,$,.CONSTANTGRADIENT.)",
+            "IFCALIGNMENTVERTICALSEGMENT($,$,400.,0.,47.6,-0.04,-0.04,$,.CONSTANTGRADIENT.)",
+        ],
+        "#10=IFCCARTESIANPOINT((0.,0.));\n#11=IFCCARTESIANPOINT((400.,0.));\n",
+    );
+    let name = "available_sight_distance;station=100;eye_height=1;target_height=0.15;range=250";
+    let (output, result) = length_along_rule(&case, &model, name, "greaterThanOrEquals", 110.0);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let finding = &result["report"]["findings"][0];
+    assert_eq!(finding["object_id"]["local_id"], "#401", "{result:#}");
+    let finding = finding.to_string();
+    assert!(
+        finding.contains("107.45") && finding.contains("by the gradient line"),
+        "{finding}"
+    );
+    let (output, result) = length_along_rule(&case, &model, name, "greaterThanOrEquals", 105.0);
+    assert_eq!(output.status.code(), Some(0), "{result:#}");
+}
+
+/// engine#340 end to end: on a level road turning left on a radius of
+/// 100 m, a wall 6 m high on the inside of the curve, its 20 m long face
+/// 4 m inside the centreline at 0.4 rad round, cuts the view from station
+/// 0 where the chord to the target passes its nearest corner, 53.25 m
+/// ahead: a required 60 m fails with the wall selected and holds without
+/// it, the view then reaching the 150 m range.
+#[test]
+fn with_geometry_a_wall_inside_a_curve_shortens_the_sight_distance() {
+    let case = Case::new("geometry-alignment-sight-wall");
+    let model = alignment_with(
+        &[
+            "IFCALIGNMENTHORIZONTALSEGMENT($,$,#10,0.,100.,100.,150.,$,.CIRCULARARC.)",
+            "IFCALIGNMENTHORIZONTALSEGMENT($,$,#11,1.5,0.,0.,0.,$,.LINE.)",
+        ],
+        &[
+            "IFCALIGNMENTVERTICALSEGMENT($,$,0.,150.,0.,0.,0.,$,.CONSTANTGRADIENT.)",
+            "IFCALIGNMENTVERTICALSEGMENT($,$,150.,0.,0.,0.,0.,$,.CONSTANTGRADIENT.)",
+        ],
+        "#10=IFCCARTESIANPOINT((0.,0.));\n\
+         #11=IFCCARTESIANPOINT((99.74949866040545,92.92627983322971));\n\
+         #600=IFCCARTESIANPOINT((37.189451690476126,12.038675072724473,-1.));\n\
+         #601=IFCDIRECTION((0.,0.,1.));\n\
+         #602=IFCDIRECTION((0.9210609940028851,0.3894183423086505,0.));\n\
+         #603=IFCAXIS2PLACEMENT3D(#600,#601,#602);\n\
+         #604=IFCLOCALPLACEMENT($,#603);\n\
+         #605=IFCRECTANGLEPROFILEDEF(.AREA.,$,#606,20.,1.);\n\
+         #606=IFCAXIS2PLACEMENT2D(#607,$);\n\
+         #607=IFCCARTESIANPOINT((0.,0.));\n\
+         #608=IFCEXTRUDEDAREASOLID(#605,#5,#601,6.);\n\
+         #610=IFCSHAPEREPRESENTATION(#7,'Body','SweptSolid',(#608));\n\
+         #611=IFCPRODUCTDEFINITIONSHAPE($,$,(#610));\n\
+         #612=IFCWALL('0000000000000000000612',$,$,$,$,#604,#611,$,$);\n",
+    );
+    let name = "available_sight_distance;station=0;eye_height=1;target_height=1;range=150";
+    let (output, result) = length_along_rule(
+        &case,
+        &model,
+        &format!("{name};obstacles=IfcWall"),
+        "greaterThanOrEquals",
+        60.0,
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let finding = result["report"]["findings"][0].to_string();
+    assert!(
+        finding.contains("53.25") && finding.contains("#612"),
+        "{finding}"
+    );
+    let (output, result) = length_along_rule(&case, &model, name, "greaterThanOrEquals", 60.0);
+    assert_eq!(output.status.code(), Some(0), "{result:#}");
+}
+
 /// engine#275 on real tessellated data: an `IfcEarthworksFill` of the
 /// buildingSMART IFC 4.3 sample scene (`fixtures/ifc4x3-earthworks`), one
 /// `IfcTriangulatedFaceSet` whose top is a level part, a ramp rising one in

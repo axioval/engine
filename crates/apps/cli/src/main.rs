@@ -29,8 +29,8 @@ mod export;
 mod geometry;
 mod ids;
 mod server;
-mod zones;
 mod terrain;
+mod zones;
 
 use axioval::{
     bcf, bcf_snapshot,
@@ -1137,13 +1137,14 @@ fn supply_inputs(plan: &mut ExecutionPlan, args: &CheckArgs) -> Result<Supplied,
     let mut unsupplied = unsupplied_relations(plan);
     unsupplied.extend(unsupplied_catalogues(plan));
     unsupplied.extend(unsupplied_zones);
-    let (terrain, terrain_files) = terrain::read_terrains(&args.terrains, args.terrain_in)?;
+    let terrain = terrain::read_terrains(&args.terrains, args.terrain_in, plan)?;
+    unsupplied.extend(terrain.warnings);
     Ok(Supplied {
         relation_files,
         catalogue_files,
         zone_files,
-        terrain_files,
-        terrain,
+        terrain_files: terrain.files,
+        terrain: terrain.service,
         unsupplied,
     })
 }

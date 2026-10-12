@@ -10,11 +10,20 @@
 use std::{error::Error, fs, path::PathBuf, sync::Arc};
 
 use axioval::engine::{
-    TERRAIN_FILE_LIMIT_BYTES, TerrainFrame, TerrainKind, TerrainServiceHandle, TerrainSurface,
-    TinTerrain,
+    ExecutionPlan, TERRAIN_FILE_LIMIT_BYTES, TERRAIN_LOCATOR_PREFIX, TerrainFrame, TerrainKind,
+    TerrainServiceHandle, TerrainSurface, TinTerrain, terrain_kinds_read,
 };
 
-use crate::digest::TerrainFileRecord;
+use crate::digest::{IntegrityRecord, TerrainFileRecord};
+
+/// What `--terrain` gave a check: the service the run measures against
+/// (`None` without any), what each file was, and a warning for each ground
+/// the plan reads but no file supplied.
+pub(crate) struct Terrains {
+    pub(crate) service: Option<TerrainServiceHandle>,
+    pub(crate) files: Vec<TerrainFileRecord>,
+    pub(crate) warnings: Vec<IntegrityRecord>,
+}
 
 /// One `--terrain` argument.
 #[derive(Clone, Debug, PartialEq)]
@@ -74,8 +83,9 @@ pub(crate) fn terrain_arg(value: &str) -> Result<TerrainArg, String> {
     })
 }
 
-/// Reads every `--terrain` file as a surface in `frame`: the service the
-/// run measures against, `None` without any, and what each file was.
+/// Reads every `--terrain` file as a surface in the frame `within`
+/// states, and warns of each ground `plan` reads that none supplies
+/// (`terrain-not-supplied`).
 ///
 /// # Errors
 ///
@@ -84,9 +94,28 @@ pub(crate) fn terrain_arg(value: &str) -> Result<TerrainArg, String> {
 pub(crate) fn read_terrains(
     args: &[TerrainArg],
     within: Option<TerrainIn>,
-) -> Result<(Option<TerrainServiceHandle>, Vec<TerrainFileRecord>), Box<dyn Error>> {
+    plan: &ExecutionPlan,
+) -> Result<Terrains, Box<dyn Error>> {
+    let supplied: Vec<TerrainKind> = args.iter().map(|arg| arg.kind).collect();
+    let warnings = terrain_kinds_read(plan)
+        .into_iter()
+        .filter(|kind| !supplied.contains(kind))
+        .map(|kind| IntegrityRecord {
+            code: "terrain-not-supplied".into(),
+            severity: "warning".into(),
+            message: format!(
+                "the rules measure heights above the {kind} terrain, and none was supplied \
+                 (`--terrain {kind}@ACCURACY=FILE`); every such value is not evaluated"
+            ),
+            locator: format!("{TERRAIN_LOCATOR_PREFIX};kind={kind}"),
+        })
+        .collect();
     if args.is_empty() {
-        return Ok((None, Vec::new()));
+        return Ok(Terrains {
+            service: None,
+            files: Vec::new(),
+            warnings,
+        });
     }
     let frame = within
         .ok_or("`--terrain` needs `--terrain-in model|map`: the coordinates its files are in")?
@@ -140,7 +169,11 @@ pub(crate) fn read_terrains(
         surfaces.push(surface);
     }
     let terrain = TinTerrain::try_new(surfaces).map_err(|error| error.to_string())?;
-    Ok((Some(TerrainServiceHandle::new(Arc::new(terrain))), records))
+    Ok(Terrains {
+        service: Some(TerrainServiceHandle::new(Arc::new(terrain))),
+        files: records,
+        warnings,
+    })
 }
 
 #[cfg(test)]

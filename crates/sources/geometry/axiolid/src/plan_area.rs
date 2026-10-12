@@ -41,8 +41,8 @@ use axiolid_core::Point2;
 use axiolid_mesh::TriMesh;
 use axiolid_overlay::{Polygon, Ring};
 use axioval_engine::{
-    CoverageEvidence, CoverageRequest, ElevationCover, ElevationRequest, FootprintPerimeter,
-    GeometryFidelity, PlanArea, PlanAreaError, PlanAreaService, PlanBand,
+    CoverageEvidence, CoverageRequest, ElevationCover, ElevationRequest, FootprintOutline,
+    FootprintPerimeter, GeometryFidelity, PlanArea, PlanAreaError, PlanAreaService, PlanBand,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
@@ -333,6 +333,53 @@ impl PlanAreaService for AxiolidPlanAreaService {
     /// The union's boundary, its rounding bounded; a tessellated body's
     /// true boundary lies within its chord deviation `d` of the measured
     /// one, which moves a convex ring's length by at most `2πd`.
+    /// The outer rings of the overlay's union of every object's plan
+    /// triangles (a declared group's members' included), holes left out.
+    /// The rings are the union's boundary as the overlay computes it, as a
+    /// perimeter is; a tessellated body's true boundary lies within the
+    /// largest chord deviation of them.
+    fn measure_footprint_outline(
+        &self,
+        objects: &[ObjectId],
+    ) -> Result<FootprintOutline, PlanAreaError> {
+        let mut soup = Vec::new();
+        let mut deviation = 0.0_f64;
+        for object in objects {
+            self.collect(object, None, &mut Vec::new(), &mut soup, &mut deviation)?;
+        }
+        let first = objects.first().ok_or(PlanAreaError::InvalidMeasurement)?;
+        let named = if objects.len() == 1 {
+            first.to_string()
+        } else {
+            format!("{first} and {} more", objects.len() - 1)
+        };
+        let polygons = footprint_polygons(&soup, tolerance()?).ok_or_else(|| {
+            PlanAreaError::Unavailable(format!("the footprint of {named} cannot be computed"))
+        })?;
+        if polygons.is_empty() {
+            return Err(PlanAreaError::Unavailable(format!(
+                "{named} has no footprint to trace"
+            )));
+        }
+        let rings = polygons
+            .iter()
+            .map(|polygon| {
+                polygon
+                    .outer
+                    .points
+                    .iter()
+                    .map(|point| [point.x, point.y])
+                    .collect()
+            })
+            .collect();
+        let evidence = Evidence {
+            source: self.source.clone(),
+            locator: format!("footprint-outline:{first}+{}", objects.len() - 1),
+            exact: deviation == 0.0,
+        };
+        FootprintOutline::try_new(objects.to_vec(), rings, deviation, evidence)
+    }
+
     fn measure_footprint_perimeter(
         &self,
         object: &ObjectId,

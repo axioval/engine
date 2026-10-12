@@ -28,7 +28,7 @@ use std::sync::Arc;
 
 use serde_json::Value;
 
-use crate::coordinate_system::SourceCoordinateSystem;
+use crate::coordinate_system::{MapPlacement, MapPlacementRefusal, SourceCoordinateSystem};
 use crate::zone_area::{PlanPolygon, signed_double_area};
 
 /// The locator prefix of a zone's statement:
@@ -38,10 +38,6 @@ pub const ZONE_LOCATOR_PREFIX: &str = "axioval:zone";
 /// The reference-system name stating coordinates in the model's own plan
 /// coordinates, in metres.
 pub const MODEL_REFERENCE: &str = "axioval:model";
-
-/// How far a map conversion's scale may differ from one and still be read
-/// as the map's own scale factor rather than a unit conversion.
-const SCALE_TOLERANCE: f64 = 1e-3;
 
 /// The coordinate reference system a file states its zones in.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -185,89 +181,36 @@ impl ContextZone {
                 self.id
             )
         })?;
-        let map = system.map().ok_or_else(|| {
-            format!(
-                "zone `{}` is stated in `{name}`, and the model states no map conversion",
+        let placement = MapPlacement::of(system, Some(name)).map_err(|refusal| match refusal {
+            MapPlacementRefusal::NoConversion
+            | MapPlacementRefusal::NoTarget
+            | MapPlacementRefusal::OtherTarget { .. } => {
+                format!("zone `{}` is stated in `{name}`, and {refusal}", self.id)
+            }
+            MapPlacementRefusal::WorldNotIdentity => format!(
+                "{refusal}, so zone `{}` cannot be placed through its map conversion",
                 self.id
-            )
+            ),
+            MapPlacementRefusal::UnitUnknown { .. } | MapPlacementRefusal::Scaled(_) => {
+                format!("{refusal}, so zone `{}` cannot be placed", self.id)
+            }
         })?;
-        let target = map.target().ok_or_else(|| {
-            format!(
-                "zone `{}` is stated in `{name}`, and the model's map conversion names no \
-                 reference system",
-                self.id
-            )
-        })?;
-        if reference_key(target) != reference_key(name) {
-            return Err(format!(
-                "zone `{}` is stated in `{name}`, and the model's map conversion is to `{target}`",
-                self.id
-            ));
-        }
-        let (Some(metres), Some(offset)) = (map.metres_per_map_unit(), map.offset_metres()) else {
-            return Err(format!(
-                "the unit of `{target}` is not known exactly, so zone `{}` cannot be placed",
-                self.id
-            ));
-        };
-        // The identity as stated, compared exactly.
-        #[allow(clippy::float_cmp)]
-        let identity = system.world().is_some_and(|world| {
-            let axes = world.axes().map(|axis| axis.components());
-            axes == [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
-                && world.origin_metres() == [0.0; 3]
-        });
-        if !identity {
-            return Err(format!(
-                "the model's world frame is not stated as the identity, so zone `{}` cannot be \
-                 placed through its map conversion",
-                self.id
-            ));
-        }
-        let scale = map.scale();
-        if (scale - 1.0).abs() > SCALE_TOLERANCE {
-            return Err(format!(
-                "the model's map conversion scales by {scale}, which may convert units, so \
-                 zone `{}` cannot be placed",
-                self.id
-            ));
-        }
-        let [cos, sin] = map.x_axis();
+        let (metres, offset, scale) = (
+            placement.metres_per_map_unit(),
+            placement.offset_metres(),
+            placement.scale(),
+        );
         let mut rounding = 0.0_f64;
         let shape = self.shape.map_points(|[east, north]| {
             let (east, north) = (east * metres, north * metres);
-            let (dx, dy) = (east - offset[0], north - offset[1]);
             // Every operation rounds once, relative to the largest operand.
             let size = east.abs() + north.abs() + offset[0].abs() + offset[1].abs();
             rounding = rounding.max(16.0 * f64::EPSILON * size / scale);
-            [
-                dx.mul_add(cos, dy * sin) / scale,
-                (-dx).mul_add(sin, dy * cos) / scale,
-            ]
+            placement.to_model([east, north])
         })?;
         let accuracy = (self.accuracy_metres + rounding).next_up();
         Ok(placed(shape, accuracy, false))
     }
-}
-
-/// The name of a coordinate reference system as compared: an EPSG code by
-/// its number, whatever form names it, anything else as written.
-fn reference_key(name: &str) -> String {
-    let upper = name.trim().to_ascii_uppercase();
-    if upper.contains("EPSG") {
-        let digits: String = upper
-            .chars()
-            .rev()
-            .take_while(char::is_ascii_digit)
-            .collect::<Vec<_>>()
-            .into_iter()
-            .rev()
-            .collect();
-        if !digits.is_empty() {
-            return format!("EPSG:{digits}");
-        }
-    }
-    upper
 }
 
 /// A zone in one source's model coordinates.

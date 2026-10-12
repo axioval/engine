@@ -39,6 +39,7 @@ mod section;
 mod sight_distance;
 mod space;
 mod surface;
+mod terrain;
 
 use axioval_ir::measured::{
     ANGLE_TO, BEARING, CROSS_FALL, EXTENT, GRADIENT_DIRECTION, INCLINATION, LENGTH,
@@ -101,6 +102,8 @@ pub(crate) enum MeasuredName {
     Profile(MeasuredCall),
     /// The available sight distance along an alignment.
     SightDistance(MeasuredCall),
+    /// A height above the terrain, or the mean terrain height.
+    Terrain(MeasuredCall),
     /// A value a registered provider measures.
     Provided(MeasuredCall),
 }
@@ -148,6 +151,7 @@ pub(crate) fn measured_by_core(name: &str) -> bool {
         || section::NAMES.contains(&name)
         || profile::NAMES.contains(&name)
         || sight_distance::NAMES.contains(&name)
+        || terrain::NAMES.contains(&name)
 }
 
 /// Parses a name in the measured set through the registry
@@ -219,6 +223,10 @@ fn of_call(call: MeasuredCall) -> Result<MeasuredName, String> {
         name if section::NAMES.contains(&name) => MeasuredName::Section(call),
         name if profile::NAMES.contains(&name) => MeasuredName::Profile(call),
         name if sight_distance::NAMES.contains(&name) => MeasuredName::SightDistance(call),
+        name if terrain::NAMES.contains(&name) => {
+            terrain::validate(&call)?;
+            MeasuredName::Terrain(call)
+        }
         ANGLE_TO | BEARING | SKEW => {
             let steps = match call.argument("path") {
                 Some(MeasuredArgument::Path(steps)) => steps
@@ -616,6 +624,7 @@ pub(crate) struct Measures {
     spaces: Option<SpaceServiceHandle>,
     coordinates: Option<CoordinateSystemServiceHandle>,
     alignments: Option<crate::alignment::AlignmentServiceHandle>,
+    terrain: Option<crate::terrain::TerrainServiceHandle>,
     host: Option<PropertyResolutionServiceHandle>,
     providers: Option<(provider::Providers, ServiceRegistry)>,
     kinds: Arc<BTreeMap<ObjectId, String>>,
@@ -646,6 +655,9 @@ impl Measures {
             coordinates: services.get::<CoordinateSystemServiceHandle>().cloned(),
             alignments: services
                 .get::<crate::alignment::AlignmentServiceHandle>()
+                .cloned(),
+            terrain: services
+                .get::<crate::terrain::TerrainServiceHandle>()
                 .cloned(),
             host: host.cloned(),
             providers: services
@@ -972,6 +984,7 @@ impl Measures {
             MeasuredName::Section(call) => self.along_section(call, object),
             MeasuredName::Profile(call) => self.along_profile(call, object),
             MeasuredName::SightDistance(call) => self.sight_distance(call, object),
+            MeasuredName::Terrain(call) => self.terrain_measure(call, object),
             MeasuredName::Provided(call) => self.provided(call, object),
         }
     }

@@ -2271,6 +2271,66 @@ const ALIGNMENT_UNREAD: &str = "the alignment cannot be read as a centreline, th
 const PARAMETER_UNBOUNDED: &str = "a segment of the alignment follows a law the service cannot \
      bound, such as a transition spiral of an unsupported family";
 
+const TERRAIN: MeasuredParameter = MeasuredParameter {
+    key: "terrain",
+    kind: MeasuredParameterKind::Choice {
+        options: &["original", "finished"],
+    },
+    required: true,
+    default: None,
+    help: &en_de(
+        "The ground measured against: the `original` terrain before construction or the \
+         `finished` terrain after it, as supplied beside the model.",
+        "Das Gelände, gegen das gemessen wird: das `original` Gelände vor dem Bau oder das \
+         `finished` Gelände danach, wie neben dem Modell geliefert.",
+    ),
+};
+
+const TERRAIN_OUTLINE: MeasuredParameter = MeasuredParameter {
+    key: "outline",
+    kind: MeasuredParameterKind::SourceKind,
+    required: false,
+    default: None,
+    help: &en_de(
+        "The source kinds of the objects whose footprints, united, make the outline, \
+         `,`-separated; subtypes match. Without it, the object's own footprint.",
+        "Die Quellarten der Objekte, deren vereinigte Grundrisse den Umriss bilden, durch \
+         `,` getrennt; Untertypen zählen mit. Ohne sie der eigene Grundriss des Objekts.",
+    ),
+};
+
+const TERRAIN_OUTLINE_PATH: MeasuredParameter = MeasuredParameter {
+    key: "outline_path",
+    kind: MeasuredParameterKind::Path,
+    required: false,
+    default: None,
+    help: &en_de(
+        "The relationship steps from the object to the outline's objects; without it, \
+         every object of the outline's kinds in the object's source.",
+        "Die Beziehungsschritte vom Objekt zu den Objekten des Umrisses; ohne sie jedes \
+         Objekt der Arten des Umrisses in der Quelle des Objekts.",
+    ),
+};
+
+const TERRAIN_SERVICES: &[&str] = &[
+    "terrain",
+    "plan-area",
+    "object-frame",
+    "vertical-extent",
+    "coordinate-system",
+    "relationship-selection",
+    "type-hierarchy",
+];
+const TERRAIN_UNSUPPLIED: &str = "no terrain of the named ground is supplied";
+const TERRAIN_OUTSIDE: &str = "a plan point measured, or part of the outline, lies outside the \
+     terrain surface, or the surface folds over it";
+const TERRAIN_UNPLACED: &str = "the terrain is in map coordinates and the object's source states \
+     no map conversion, states its map unit inexactly, does not state its world frame as the \
+     identity, scales by more than 0.1 % or maps onto another reference system than the \
+     terrain names";
+const TERRAIN_NO_OUTLINE: &str = "the outline's objects have no footprint the service can \
+     measure, or none is selected";
+
 /// The three positions along an alignment take the same parameters.
 const ALONG: &[MeasuredParameter] = &[ALIGNMENT, ALIGNMENT_PATH];
 
@@ -2594,6 +2654,82 @@ const fn along(
 
 /// Every measured value, sorted by name.
 pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
+    MeasuredDescriptor {
+        name: "above_terrain",
+        parameters: &[
+            TERRAIN,
+            MeasuredParameter {
+                key: "of",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["point", "bottom", "top", "level"],
+                },
+                required: true,
+                default: None,
+                help: &en_de(
+                    "What is measured above the terrain: the object's placement origin \
+                     (`point`), its lowest or highest point (`bottom`, `top`), or the elevation \
+                     of its level (`level`, the object itself or the one level `path` \
+                     reaches).",
+                    "Was über dem Gelände gemessen wird: der Platzierungsursprung des Objekts \
+                     (`point`), sein tiefster oder höchster Punkt (`bottom`, `top`) oder die \
+                     Höhe seines Geschosses (`level`, das Objekt selbst oder das eine \
+                     Geschoss, das `path` erreicht).",
+                ),
+            },
+            MeasuredParameter {
+                key: "reference",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["mean", "beneath"],
+                },
+                required: false,
+                default: Some("mean"),
+                help: &en_de(
+                    "The terrain height measured from: the mean terrain elevation along the \
+                     outline (`mean`), or, with `of=point`, the terrain directly beneath the \
+                     point (`beneath`).",
+                    "Die Geländehöhe, von der gemessen wird: die mittlere Geländehöhe entlang \
+                     des Umrisses (`mean`) oder, mit `of=point`, das Gelände direkt unter dem \
+                     Punkt (`beneath`).",
+                ),
+            },
+            MeasuredParameter {
+                key: "path",
+                kind: MeasuredParameterKind::Path,
+                required: false,
+                default: None,
+                help: &en_de(
+                    "With `of=level`, the relationship steps from the object to its level; \
+                     without it, the object is the level.",
+                    "Mit `of=level` die Beziehungsschritte vom Objekt zu seinem Geschoss; ohne \
+                     sie ist das Objekt das Geschoss.",
+                ),
+            },
+            TERRAIN_OUTLINE,
+            TERRAIN_OUTLINE_PATH,
+        ],
+        dimension: Some(QuantityDimension::Length),
+        services: TERRAIN_SERVICES,
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[
+            TERRAIN_UNSUPPLIED,
+            TERRAIN_OUTSIDE,
+            TERRAIN_UNPLACED,
+            TERRAIN_NO_OUTLINE,
+            "the object's placement, extent or level cannot be read exactly",
+        ],
+        label: &en_de("Height above terrain", "Höhe über Gelände"),
+        help: &en_de(
+            "The height of the object's placement origin, lowest or highest point, or level \
+             above the terrain: above the mean terrain elevation along the outline, or above \
+             the terrain beneath the point; an interval including the terrain's stated \
+             accuracy.",
+            "Die Höhe des Platzierungsursprungs, des tiefsten oder höchsten Punkts oder des \
+             Geschosses des Objekts über dem Gelände: über der mittleren Geländehöhe entlang \
+             des Umrisses oder über dem Gelände unter dem Punkt; ein Intervall einschließlich \
+             der angegebenen Genauigkeit des Geländes.",
+        ),
+    },
     MeasuredDescriptor {
         name: "alignment_cant",
         parameters: ALONG,
@@ -5542,6 +5678,30 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              liegendes Gegenstück keinen angibt oder keines darin liegt.",
         ),
     ),
+    MeasuredDescriptor {
+        name: "mean_terrain_height",
+        parameters: &[TERRAIN, TERRAIN_OUTLINE, TERRAIN_OUTLINE_PATH],
+        dimension: Some(QuantityDimension::Length),
+        services: TERRAIN_SERVICES,
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[
+            TERRAIN_UNSUPPLIED,
+            TERRAIN_OUTSIDE,
+            TERRAIN_UNPLACED,
+            TERRAIN_NO_OUTLINE,
+        ],
+        label: &en_de("Mean terrain height", "Mittlere Geländehöhe"),
+        help: &en_de(
+            "The mean terrain elevation along the outline of the object's footprint (or of \
+             the outline's objects, united), weighted by length, in the model's coordinates; \
+             an interval including the terrain's stated accuracy.",
+            "Die mittlere Geländehöhe entlang des Umrisses des Grundrisses des Objekts (oder \
+             der vereinigten Objekte des Umrisses), nach Länge gewichtet, in den Koordinaten \
+             des Modells; ein Intervall einschließlich der angegebenen Genauigkeit des \
+             Geländes.",
+        ),
+    },
     within(
         MEAN_WITHIN,
         &en_de("Mean within", "Mittelwert im Umkreis"),

@@ -254,7 +254,11 @@ linear unit, holds no such surface or several without one being named, or
 its surface is refused (not a TIN, a face naming a point it does not state,
 no triangle with plan area), and when one ground is given twice. An
 argument without an accuracy, and `--terrain` without `--terrain-in`, are
-usage errors (status 2).
+usage errors (status 2). A ground the rules measure against (any
+`above_terrain` or `mean_terrain_height` naming it, or both grounds where a
+rule binds `terrain` from a parameter) that no file supplies is listed in
+`integrity` as the warning `terrain-not-supplied` (locator
+`axioval:terrain;kind=<kind>`); every such value is not evaluated.
 
 The result's additive `terrain_files` records each surface supplied:
 

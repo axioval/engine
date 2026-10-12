@@ -27,6 +27,29 @@ All notable changes are documented here. This project follows Semantic Versionin
   `zones-not-supplied` and `zone-not-supplied` name zones the rules read
   and no file states
   ([#327](https://github.com/axioval/engine/issues/327)).
+- **Measured values**: `above_terrain;terrain=original|finished;of=point|bottom|top|level`
+  is the height of an object's placement origin, lowest or highest point,
+  or level above the mean terrain along an outline (`reference=mean`, the
+  default) or above the terrain beneath the point (`reference=beneath`,
+  `of=point` only), and
+  `mean_terrain_height;terrain=…[;outline=<kinds>][;outline_path=<steps>]`
+  the mean terrain elevation along the outline of the object's footprint,
+  or of the union of the outline objects' footprints. Both are intervals
+  including the terrain's stated accuracy. On a terrain rising 10 %, stated
+  to 0.05 m, a building's highest floor level 106.5 m stands 6 ± 0.05 m
+  above the mean of 100.5 m along its slab's outline; a building beyond the
+  terrain is not evaluated, naming the point outside it, and so is a
+  ground not supplied. A terrain in map coordinates is placed through the
+  source's map conversion through `MapPlacement` (`MapPlacement::of`,
+  `MapPlacementRefusal`, `same_reference_system`), which context zones now
+  share: refused where the source states none, states its map unit
+  inexactly, does not state its world frame as the identity, scales by
+  more than 0.1 %, or maps onto another named reference system.
+  `PlanAreaService::measure_footprint_outline` (`FootprintOutline`) traces
+  the outline, refused by default; Axiolid answers it from the overlay's
+  union. `terrain_kinds_read` lists the grounds a plan reads, and
+  `check` warns of one not supplied (`terrain-not-supplied`)
+  ([#325](https://github.com/axioval/engine/issues/325)).
 - **Terrain as context**: a terrain surface is read beside the model, the
   original and the finished ground each served on its own.
   `TerrainService` (`surfaces`, `measure_elevation`,

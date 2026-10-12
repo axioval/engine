@@ -22,7 +22,7 @@ pub(super) const NAMES: &[&str] = &["height_above_ground", "level_elevation", "l
 impl Measures {
     /// The level a call reads for `object`, and its elevation; `None` when
     /// the path reaches no level.
-    fn level(
+    pub(super) fn level(
         &self,
         call: &MeasuredCall,
         object: &ObjectId,

@@ -67499,6 +67499,174 @@
   ],
   "measuredValues": [
     {
+      "name": "above_terrain",
+      "parameters": [
+        {
+          "key": "terrain",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "original",
+              "finished"
+            ]
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The ground measured against: the `original` terrain before construction or the `finished` terrain after it, as supplied beside the model."
+            },
+            {
+              "language": "de",
+              "text": "Das Gelände, gegen das gemessen wird: das `original` Gelände vor dem Bau oder das `finished` Gelände danach, wie neben dem Modell geliefert."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "of",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "point",
+              "bottom",
+              "top",
+              "level"
+            ]
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "What is measured above the terrain: the object's placement origin (`point`), its lowest or highest point (`bottom`, `top`), or the elevation of its level (`level`, the object itself or the one level `path` reaches)."
+            },
+            {
+              "language": "de",
+              "text": "Was über dem Gelände gemessen wird: der Platzierungsursprung des Objekts (`point`), sein tiefster oder höchster Punkt (`bottom`, `top`) oder die Höhe seines Geschosses (`level`, das Objekt selbst oder das eine Geschoss, das `path` erreicht)."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "reference",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "mean",
+              "beneath"
+            ]
+          },
+          "required": false,
+          "default": "mean",
+          "help": [
+            {
+              "language": "en",
+              "text": "The terrain height measured from: the mean terrain elevation along the outline (`mean`), or, with `of=point`, the terrain directly beneath the point (`beneath`)."
+            },
+            {
+              "language": "de",
+              "text": "Die Geländehöhe, von der gemessen wird: die mittlere Geländehöhe entlang des Umrisses (`mean`) oder, mit `of=point`, das Gelände direkt unter dem Punkt (`beneath`)."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `of=level`, the relationship steps from the object to its level; without it, the object is the level."
+            },
+            {
+              "language": "de",
+              "text": "Mit `of=level` die Beziehungsschritte vom Objekt zu seinem Geschoss; ohne sie ist das Objekt das Geschoss."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "outline",
+          "kind": {
+            "type": "sourceKind"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The source kinds of the objects whose footprints, united, make the outline, `,`-separated; subtypes match. Without it, the object's own footprint."
+            },
+            {
+              "language": "de",
+              "text": "Die Quellarten der Objekte, deren vereinigte Grundrisse den Umriss bilden, durch `,` getrennt; Untertypen zählen mit. Ohne sie der eigene Grundriss des Objekts."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "outline_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps from the object to the outline's objects; without it, every object of the outline's kinds in the object's source."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte vom Objekt zu den Objekten des Umrisses; ohne sie jedes Objekt der Arten des Umrisses in der Quelle des Objekts."
+            }
+          ],
+          "references": "stringList"
+        }
+      ],
+      "dimension": "length",
+      "services": [
+        "terrain",
+        "plan-area",
+        "object-frame",
+        "vertical-extent",
+        "coordinate-system",
+        "relationship-selection",
+        "type-hierarchy"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "no terrain of the named ground is supplied",
+        "a plan point measured, or part of the outline, lies outside the terrain surface, or the surface folds over it",
+        "the terrain is in map coordinates and the object's source states no map conversion, states its map unit inexactly, does not state its world frame as the identity, scales by more than 0.1 % or maps onto another reference system than the terrain names",
+        "the outline's objects have no footprint the service can measure, or none is selected",
+        "the object's placement, extent or level cannot be read exactly"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Height above terrain"
+        },
+        {
+          "language": "de",
+          "text": "Höhe über Gelände"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The height of the object's placement origin, lowest or highest point, or level above the terrain: above the mean terrain elevation along the outline, or above the terrain beneath the point; an interval including the terrain's stated accuracy."
+        },
+        {
+          "language": "de",
+          "text": "Die Höhe des Platzierungsursprungs, des tiefsten oder höchsten Punkts oder des Geschosses des Objekts über dem Gelände: über der mittleren Geländehöhe entlang des Umrisses oder über dem Gelände unter dem Punkt; ein Intervall einschließlich der angegebenen Genauigkeit des Geländes."
+        }
+      ],
+      "unit": "m",
+      "available": true
+    },
+    {
       "name": "alignment_cant",
       "parameters": [
         {
@@ -79262,6 +79430,108 @@
         }
       ],
       "unit": "1",
+      "available": true
+    },
+    {
+      "name": "mean_terrain_height",
+      "parameters": [
+        {
+          "key": "terrain",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "original",
+              "finished"
+            ]
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The ground measured against: the `original` terrain before construction or the `finished` terrain after it, as supplied beside the model."
+            },
+            {
+              "language": "de",
+              "text": "Das Gelände, gegen das gemessen wird: das `original` Gelände vor dem Bau oder das `finished` Gelände danach, wie neben dem Modell geliefert."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "outline",
+          "kind": {
+            "type": "sourceKind"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The source kinds of the objects whose footprints, united, make the outline, `,`-separated; subtypes match. Without it, the object's own footprint."
+            },
+            {
+              "language": "de",
+              "text": "Die Quellarten der Objekte, deren vereinigte Grundrisse den Umriss bilden, durch `,` getrennt; Untertypen zählen mit. Ohne sie der eigene Grundriss des Objekts."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "outline_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps from the object to the outline's objects; without it, every object of the outline's kinds in the object's source."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte vom Objekt zu den Objekten des Umrisses; ohne sie jedes Objekt der Arten des Umrisses in der Quelle des Objekts."
+            }
+          ],
+          "references": "stringList"
+        }
+      ],
+      "dimension": "length",
+      "services": [
+        "terrain",
+        "plan-area",
+        "object-frame",
+        "vertical-extent",
+        "coordinate-system",
+        "relationship-selection",
+        "type-hierarchy"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "no terrain of the named ground is supplied",
+        "a plan point measured, or part of the outline, lies outside the terrain surface, or the surface folds over it",
+        "the terrain is in map coordinates and the object's source states no map conversion, states its map unit inexactly, does not state its world frame as the identity, scales by more than 0.1 % or maps onto another reference system than the terrain names",
+        "the outline's objects have no footprint the service can measure, or none is selected"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Mean terrain height"
+        },
+        {
+          "language": "de",
+          "text": "Mittlere Geländehöhe"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The mean terrain elevation along the outline of the object's footprint (or of the outline's objects, united), weighted by length, in the model's coordinates; an interval including the terrain's stated accuracy."
+        },
+        {
+          "language": "de",
+          "text": "Die mittlere Geländehöhe entlang des Umrisses des Grundrisses des Objekts (oder der vereinigten Objekte des Umrisses), nach Länge gewichtet, in den Koordinaten des Modells; ein Intervall einschließlich der angegebenen Genauigkeit des Geländes."
+        }
+      ],
+      "unit": "m",
       "available": true
     },
     {

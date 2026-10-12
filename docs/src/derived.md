@@ -536,6 +536,8 @@ ignoring ASCII case):
 | `contact_gap[;with=<objects>][;side=…;gap=…;intersection=…;polygon=…]` | the distance to the nearest object named the contact service reports, none where it reports none; refused while the selection leaves an object undecided | built in, over `ContactService` |
 | `cover;host_path=<steps>[;faces=top,side,bottom]` | the least distance from an embedded object, over its whole body, to the chosen faces of the one host the path reaches; none where it reaches none | built in, over `ProximityService::measure_face_distance` and `RelationshipSelectionService` |
 | `height_above_surface;surface=<objects>[;edge=top\|bottom]` | the least vertical distance from the object's top (or bottom) faces down to the nearest selected surface beneath them, over the whole edge | built in, over `ProximityService::measure_height_above` |
+| `above_terrain;terrain=original\|finished;of=point\|bottom\|top\|level[;reference=mean\|beneath][;path=<steps>][;outline=<kinds>][;outline_path=<steps>]` | the height of the object's placement origin, lowest or highest point, or level above the mean terrain along its outline, or above the terrain beneath the point (see [Heights above the terrain](#heights-above-the-terrain)) | built in, over `TerrainService`, `PlanAreaService::measure_footprint_outline`, `ObjectFrameService`, `VerticalExtentService`, `CoordinateSystemService` for a map terrain |
+| `mean_terrain_height;terrain=original\|finished[;outline=<kinds>][;outline_path=<steps>]` | the mean terrain elevation along the outline of the object's footprint, or of the outline's objects united | the same |
 | `level_rise;levels=<kinds>;order=<set/name>[;anchor=<steps>][;path=<steps>][;lowest=…][;highest=…][;contents=<steps>;content_kinds=<kinds>]`, `prevailing_rise;…[;tolerance=<m>]` | a level's rise to the next one up, and the prevailing rise among its anchor's levels, as `level-spacing` measures them | built in, over the order property and `VerticalExtentService` |
 | `prevailing_elevation;side=bottom\|top;spaces=<steps>[;kinds=<kinds>][;tolerance=<m>]` | the prevailing bottom or top elevation among the spaces of the space's level | built in, over `VerticalExtentService` |
 | `levels_above`, `levels_below` `;levels=<kinds>;path=<steps>` | how many storeys of the source lie above or below the object's one storey by their `Elevation` attribute | built in, over the property and relationship services |
@@ -960,6 +962,60 @@ and 0.12 m at the other measures 0.12 m.
   tessellation, whose chords do not state its true faces, and a face
   within rounding of 45°. The value is exact, widened only by the
   clipping's rounding.
+
+### Heights above the terrain
+
+`above_terrain` and `mean_terrain_height` measure against the terrain a
+check is given beside the model ([Terrain as context](./terrain.md)).
+`terrain` names the ground, `original` or `finished`, and is required: a
+ground not supplied leaves the value not evaluated (`no finished terrain is
+supplied`), never measured against the other one.
+
+`mean_terrain_height` is the mean terrain elevation along an outline,
+weighted by length, in the model's heights. The outline is the outer
+boundary of the object's footprint (holes left out), or, with `outline`,
+of the union of the footprints of the objects of those kinds that
+`outline_path` reaches from the object (all of them in the object's source
+without a path, and the object itself where it is of those kinds).
+`above_terrain;of=…` is the height above the terrain of:
+
+- `point`: the object's placement origin;
+- `bottom`, `top`: its lowest or highest point, as `bottom` and `top`
+  measure them;
+- `level`: the elevation of its level, the object itself or the one level
+  `path` reaches, as `level_elevation` reads it; none where the path
+  reaches no level.
+
+The terrain height it is measured from is the mean terrain height along
+the outline (`reference=mean`, the default), or, for `of=point`, the
+terrain directly beneath the point (`reference=beneath`, which takes no
+outline). A building class's "floor level of the highest storey above the
+mean terrain" is `above_terrain;terrain=original;of=level;outline=IfcSlab`
+on the highest storey, its outline the slabs of its source (or, with
+`outline_path`, of the building the storey belongs to): on a terrain
+rising 10 % across a 10 m square building, stated to 0.05 m, a storey at
+106.5 m stands 6 ± 0.05 m above the mean of 100.5 m.
+
+- Every value is an interval: the terrain's elevation widened by its
+  stated accuracy (and an outline's chord deviation times the steepest
+  gradient it crosses), against the object's, rounded outward. It is exact
+  only for a terrain stated exact and an exact object and outline.
+- A plan point, or a part of the outline, outside the terrain surface
+  leaves the value not evaluated naming the point, in the terrain's
+  coordinates, and the surface; so does a
+  surface folding over it. A building beyond the terrain is never
+  measured from the nearest edge.
+- A terrain in map coordinates is reached through the stated map
+  conversion of the object's source: `E = E0 + s (a x - b y)`,
+  `N = N0 + s (b x + a y)` and `H = z + H0` in metres, `(a, b)` the map
+  direction of the source's x axis and `s` its scale, heights unscaled,
+  as context zones are placed. A source stating no map conversion, its map
+  unit inexactly, a world frame not stated as the identity or a scale more
+  than 0.1 % from one (which may convert units), or one mapping onto
+  another coordinate reference system than the terrain names (`EPSG:25832`
+  against `EPSG:25833`), leaves the value not evaluated.
+- An outline whose objects have no footprint the plan-area service can
+  trace (bodiless, unmeasured, none selected) leaves it not evaluated.
 
 ### Doors and windows
 

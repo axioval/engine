@@ -25,6 +25,7 @@
 //! elevation, and so is a point the surface folds over with two different
 //! elevations ([`TerrainError::Folded`]).
 
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use thiserror::Error;
@@ -443,6 +444,62 @@ pub trait TerrainService: Send + Sync + 'static {
             "this terrain service does not measure along outlines".into(),
         ))
     }
+}
+
+/// The grounds `plan` may measure against: the `terrain` of every
+/// `above_terrain` and `mean_terrain_height` its rules and values read, and
+/// both grounds where a rule binds it from a parameter. A host warns of a
+/// ground read but not supplied, whose values are not evaluated.
+#[must_use]
+pub fn terrain_kinds_read(plan: &crate::ExecutionPlan) -> BTreeSet<TerrainKind> {
+    fn walk(value: &serde_json::Value, found: &mut BTreeSet<TerrainKind>) {
+        match value {
+            serde_json::Value::String(text) => {
+                let lowered = text.trim_start().to_ascii_lowercase();
+                if !(lowered.starts_with("above_terrain")
+                    || lowered.starts_with("mean_terrain_height"))
+                {
+                    return;
+                }
+                let Ok(call) = axioval_ir::measured::parse(text) else {
+                    return;
+                };
+                match call.choice("terrain").and_then(TerrainKind::parse) {
+                    Some(kind) => {
+                        found.insert(kind);
+                    }
+                    None => found.extend(TerrainKind::ALL),
+                }
+            }
+            serde_json::Value::Array(items) => {
+                for item in items {
+                    walk(item, found);
+                }
+            }
+            serde_json::Value::Object(fields) => {
+                for item in fields.values() {
+                    walk(item, found);
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut found = BTreeSet::new();
+    for rule in &plan.rules {
+        for value in [
+            serde_json::to_value(&rule.parameters),
+            serde_json::to_value(&rule.selector),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            walk(&value, &mut found);
+        }
+    }
+    if let Ok(values) = serde_json::to_value(&*plan.values) {
+        walk(&values, &mut found);
+    }
+    found
 }
 
 /// Registry handle for a [`TerrainService`].

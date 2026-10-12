@@ -105,6 +105,84 @@ impl PlanArea {
     }
 }
 
+/// The outline of the union of several objects' footprints: the outer
+/// boundary ring of each piece of the union, anticlockwise, holes left out,
+/// in canonical metres.
+///
+/// A tessellated body's true boundary lies within its chord deviation of
+/// the measured one, so the true outline lies within `deviation_metres` of
+/// the rings in plan; the evidence is exact exactly when that is zero.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FootprintOutline {
+    objects: Vec<ObjectId>,
+    rings: Vec<Vec<[f64; 2]>>,
+    deviation_metres: f64,
+    evidence: Evidence,
+}
+
+impl FootprintOutline {
+    /// The outline of `objects` (sorted, each once).
+    ///
+    /// # Errors
+    ///
+    /// [`PlanAreaError::InvalidMeasurement`] for no object, objects not
+    /// sorted or repeated, no ring, a ring of fewer than three points or a
+    /// point not finite, or a deviation not finite and non-negative;
+    /// [`PlanAreaError::InexactEvidence`] for evidence exact with a
+    /// deviation, or inexact without one.
+    pub fn try_new(
+        objects: Vec<ObjectId>,
+        rings: Vec<Vec<[f64; 2]>>,
+        deviation_metres: f64,
+        evidence: Evidence,
+    ) -> Result<Self, PlanAreaError> {
+        let valid = !objects.is_empty()
+            && objects.windows(2).all(|pair| pair[0] < pair[1])
+            && !rings.is_empty()
+            && rings.iter().all(|ring| {
+                ring.len() >= 3 && ring.iter().flatten().all(|value| value.is_finite())
+            })
+            && deviation_metres.is_finite()
+            && deviation_metres >= 0.0;
+        if !valid {
+            return Err(PlanAreaError::InvalidMeasurement);
+        }
+        if evidence.exact != (deviation_metres == 0.0) || evidence.locator.trim().is_empty() {
+            return Err(PlanAreaError::InexactEvidence);
+        }
+        Ok(Self {
+            objects,
+            rings,
+            deviation_metres,
+            evidence,
+        })
+    }
+
+    /// The objects whose footprints are united, sorted.
+    #[must_use]
+    pub fn objects(&self) -> &[ObjectId] {
+        &self.objects
+    }
+
+    /// The outer rings, each closed implicitly, in canonical metres.
+    #[must_use]
+    pub fn rings(&self) -> &[Vec<[f64; 2]>] {
+        &self.rings
+    }
+
+    /// How far the true outline may lie from the rings in plan, in metres.
+    #[must_use]
+    pub fn deviation_metres(&self) -> f64 {
+        self.deviation_metres
+    }
+
+    /// Reviewable provenance of the measurement.
+    #[must_use]
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+}
+
 /// The length of a footprint's boundary in plan, holes included, in
 /// metres, with its evidence.
 #[derive(Clone, Debug, PartialEq)]
@@ -429,6 +507,22 @@ pub trait PlanAreaService: Send + Sync + 'static {
             "this service does not measure perimeters".into(),
         ))
     }
+    /// The outer boundary rings of the union of `objects`' footprints
+    /// (sorted, each once, at least one): the outline a measurement along
+    /// a building's outline follows.
+    ///
+    /// A service that does not trace outlines refuses; it never answers
+    /// with a bounding box.
+    // gate: measures length
+    fn measure_footprint_outline(
+        &self,
+        objects: &[ObjectId],
+    ) -> Result<FootprintOutline, PlanAreaError> {
+        let _ = objects;
+        Err(PlanAreaError::Unavailable(
+            "this service does not trace footprint outlines".into(),
+        ))
+    }
     /// The area where the footprints of `first` and `second` overlap.
     // gate: measures area
     fn measure_plan_overlap(
@@ -542,6 +636,28 @@ impl PlanAreaServiceHandle {
             return Err(PlanAreaError::InvalidMeasurement);
         }
         Ok(perimeter)
+    }
+
+    /// The outline of the union of `objects`' footprints, sorted and
+    /// without repeats before the service is asked. No object is refused,
+    /// and so is an answer about other objects.
+    pub fn measure_footprint_outline(
+        &self,
+        objects: &[ObjectId],
+    ) -> Result<FootprintOutline, PlanAreaError> {
+        let mut objects = objects.to_vec();
+        objects.sort();
+        objects.dedup();
+        if objects.is_empty() {
+            return Err(PlanAreaError::Unavailable(
+                "an outline needs at least one object".into(),
+            ));
+        }
+        let outline = self.0.measure_footprint_outline(&objects)?;
+        if outline.objects() != objects.as_slice() {
+            return Err(PlanAreaError::InvalidMeasurement);
+        }
+        Ok(outline)
     }
 
     /// The footprint area of `object`.
@@ -765,6 +881,48 @@ mod tests {
 
     fn exact() -> Evidence {
         Evidence::exact(SourceId::new("cad", "m").unwrap(), "footprint:a")
+    }
+
+    #[test]
+    fn an_outline_is_of_sorted_objects_and_exact_only_without_a_deviation() {
+        use super::FootprintOutline;
+        let square = vec![vec![[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]];
+        let inexact = Evidence {
+            exact: false,
+            ..exact()
+        };
+        assert!(
+            FootprintOutline::try_new(vec![id("a"), id("b")], square.clone(), 0.0, exact()).is_ok()
+        );
+        assert!(
+            FootprintOutline::try_new(vec![id("a")], square.clone(), 0.01, inexact.clone()).is_ok()
+        );
+        assert_eq!(
+            FootprintOutline::try_new(vec![id("a")], square.clone(), 0.01, exact()),
+            Err(PlanAreaError::InexactEvidence)
+        );
+        for (objects, rings, deviation) in [
+            (vec![], square.clone(), 0.0),
+            (vec![id("b"), id("a")], square.clone(), 0.0),
+            (vec![id("a")], vec![], 0.0),
+            (vec![id("a")], vec![vec![[0.0, 0.0], [1.0, 0.0]]], 0.0),
+            (vec![id("a")], square.clone(), f64::NAN),
+        ] {
+            assert_eq!(
+                FootprintOutline::try_new(objects, rings, deviation, exact()),
+                Err(PlanAreaError::InvalidMeasurement)
+            );
+        }
+        // A service tracing no outlines refuses, never answering a box.
+        let handle = PlanAreaServiceHandle::new(Arc::new(FootprintsOnly::default()));
+        assert!(matches!(
+            handle.measure_footprint_outline(&[id("a")]),
+            Err(PlanAreaError::Unavailable(_))
+        ));
+        assert!(matches!(
+            handle.measure_footprint_outline(&[]),
+            Err(PlanAreaError::Unavailable(_))
+        ));
     }
 
     #[test]

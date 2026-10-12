@@ -125,6 +125,9 @@ CLI output and exit codes are public automation contracts. Parse packages fail c
   frame by `--terrain-in`: never default either. A second file for one
   ground, an unreadable, oversized or refused file fails with status 1 and
   writes nothing; each file is recorded in the additive `terrain_files`
-  (`digest::TerrainFileRecord`).
+  (`digest::TerrainFileRecord`). A ground the plan reads
+  (`terrain_kinds_read`) that no file supplies is the integrity warning
+  `terrain-not-supplied`; its values are not evaluated, never measured
+  against the other ground. `tests/terrain.rs` runs it end to end.
 - `check --timings` prints each phase's time on stderr as it ends (`geometry/timings.rs`, `Stopwatch`; rules through `Runtime::with_rule_observer`) and never changes the result or status; `tests/check.rs` pins it. Envelope declarations (`IsExternal` of every meshed object) are read on the first envelope membership request (`LazyEnvelope`), never eagerly: a ruleset without an envelope rule resolves none (the same test).
 - `check --rule-status` records `Report::rules`; the summary lists them bounded by `--top` (rules that did not pass first) and never changes the exit status.

@@ -62,9 +62,9 @@ elevations fold the surface over it (`TerrainError::Folded`), refused rather
 than one picked. Triangles without plan area (vertical faces) hold no point.
 
 A point no triangle holds is refused by name
-(`TerrainError::Outside`: `the plan point (60, 0) lies outside the original
-terrain surface `Ground``), never answered with the elevation of the
-nearest edge.
+(`TerrainError::Outside`, naming the point and the surface: the plan point
+(60, 0) lies outside the original terrain surface `Ground`), never answered
+with the elevation of the nearest edge.
 
 The mean along an outline is exact for the surface: each ring edge is cut
 where it crosses a triangle edge, the elevation is linear between two cuts,
@@ -102,6 +102,22 @@ A surface is given either in the models' own coordinates (`Model`) or in
 map coordinates (`Map`), and a service answers only in its own coordinates.
 Placing a model's point on a map surface is its reader's, through the
 stated map conversion of the model's source, and never guessed.
+
+## Heights above the terrain
+
+The measured values `above_terrain` (of a point, an object's bottom or top,
+or a level) and `mean_terrain_height` (the mean terrain elevation along a
+building's outline) read the terrain; see
+[Heights above the terrain](./derived.md#heights-above-the-terrain). The
+outline is traced by `PlanAreaService::measure_footprint_outline`
+(`FootprintOutline`: the outer rings of the union of objects' footprints,
+the chord deviation of the bodies they come from, exact evidence exactly
+when that is zero), whose default refuses rather than answering with a
+bounding box. A model point is placed on a map surface through its
+source's stated map conversion (`MapPlacement`, which context zones
+share), and every refusal to place it (no conversion, an inexact map unit,
+a world frame not stated as the identity, a scale more than 0.1 % from
+one, another named reference system) leaves the value not evaluated.
 
 ## Command line
 

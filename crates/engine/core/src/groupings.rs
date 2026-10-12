@@ -674,6 +674,14 @@ impl PlanAreaService for GroupAreas {
         self.inner.measure_footprint_perimeter(object)
     }
 
+    fn measure_footprint_outline(
+        &self,
+        objects: &[ObjectId],
+    ) -> Result<crate::FootprintOutline, PlanAreaError> {
+        self.refuse_groups(&objects.iter().collect::<Vec<_>>())?;
+        self.inner.measure_footprint_outline(objects)
+    }
+
     fn measure_plan_overlap(
         &self,
         first: &ObjectId,

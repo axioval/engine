@@ -362,6 +362,195 @@ impl SnapshotBoundService for CoordinateSystemServiceHandle {
     }
 }
 
+/// How far a map conversion's scale may differ from one and still be read
+/// as the map's own scale factor rather than a unit conversion.
+pub const MAP_SCALE_TOLERANCE: f64 = 1e-3;
+
+/// Why a source's map conversion cannot place map coordinates in its model
+/// coordinates ([`MapPlacement::of`]).
+#[derive(Clone, Debug, PartialEq)]
+pub enum MapPlacementRefusal {
+    /// The source states no map conversion.
+    NoConversion,
+    /// The conversion names no reference system, and one must match.
+    NoTarget,
+    /// The conversion maps onto another reference system than the one
+    /// stated.
+    OtherTarget { target: String },
+    /// The conversion's map unit is not known exactly.
+    UnitUnknown { target: Option<String> },
+    /// The source's world frame is not stated as the identity, so how the
+    /// conversion relates to its coordinates is not established.
+    WorldNotIdentity,
+    /// The conversion scales by more than [`MAP_SCALE_TOLERANCE`] from one,
+    /// which may convert units.
+    Scaled(f64),
+}
+
+impl std::fmt::Display for MapPlacementRefusal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NoConversion => f.write_str("the model states no map conversion"),
+            Self::NoTarget => f.write_str("the model's map conversion names no reference system"),
+            Self::OtherTarget { target } => {
+                write!(f, "the model's map conversion is to `{target}`")
+            }
+            Self::UnitUnknown { target } => match target {
+                Some(target) => write!(f, "the unit of `{target}` is not known exactly"),
+                None => f.write_str("the unit of the model's map is not known exactly"),
+            },
+            Self::WorldNotIdentity => {
+                f.write_str("the model's world frame is not stated as the identity")
+            }
+            Self::Scaled(scale) => write!(
+                f,
+                "the model's map conversion scales by {scale}, which may convert units"
+            ),
+        }
+    }
+}
+
+/// A source's map conversion, established for placing map coordinates in
+/// its model coordinates and back: `E = E0 + s (a x - b y)`,
+/// `N = N0 + s (b x + a y)`, `H = z + H0`, every length in metres, with
+/// `(a, b)` the map direction of the source's x axis and `s` its scale.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MapPlacement {
+    offset_metres: [f64; 3],
+    x_axis: [f64; 2],
+    scale: f64,
+    metres_per_map_unit: f64,
+}
+
+impl MapPlacement {
+    /// The placement through `system`'s map conversion, onto the reference
+    /// system `stated` names when it names one.
+    ///
+    /// # Errors
+    ///
+    /// Without a map conversion; with `stated`, a conversion naming no
+    /// reference system or another one; a map unit not known exactly; a
+    /// world frame not stated as the identity; and a scale more than
+    /// [`MAP_SCALE_TOLERANCE`] from one. Never placed by a guess.
+    pub fn of(
+        system: &SourceCoordinateSystem,
+        stated: Option<&str>,
+    ) -> Result<Self, MapPlacementRefusal> {
+        let map = system.map().ok_or(MapPlacementRefusal::NoConversion)?;
+        if let Some(stated) = stated {
+            let target = map.target().ok_or(MapPlacementRefusal::NoTarget)?;
+            if !same_reference_system(target, stated) {
+                return Err(MapPlacementRefusal::OtherTarget {
+                    target: target.to_owned(),
+                });
+            }
+        }
+        let (Some(metres_per_map_unit), Some(offset_metres)) =
+            (map.metres_per_map_unit(), map.offset_metres())
+        else {
+            return Err(MapPlacementRefusal::UnitUnknown {
+                target: map.target().map(str::to_owned),
+            });
+        };
+        // The identity as stated, compared exactly.
+        #[allow(clippy::float_cmp)]
+        let identity = system.world().is_some_and(|world| {
+            let axes = world.axes().map(|axis| axis.components());
+            axes == [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+                && world.origin_metres() == [0.0; 3]
+        });
+        if !identity {
+            return Err(MapPlacementRefusal::WorldNotIdentity);
+        }
+        let scale = map.scale();
+        if (scale - 1.0).abs() > MAP_SCALE_TOLERANCE {
+            return Err(MapPlacementRefusal::Scaled(scale));
+        }
+        Ok(Self {
+            offset_metres,
+            x_axis: map.x_axis(),
+            scale,
+            metres_per_map_unit,
+        })
+    }
+
+    /// The map offset (easting, northing, height), in metres.
+    #[must_use]
+    pub fn offset_metres(&self) -> [f64; 3] {
+        self.offset_metres
+    }
+
+    /// The map's scale from model to map lengths.
+    #[must_use]
+    pub fn scale(&self) -> f64 {
+        self.scale
+    }
+
+    /// Metres per map unit.
+    #[must_use]
+    pub fn metres_per_map_unit(&self) -> f64 {
+        self.metres_per_map_unit
+    }
+
+    /// A model plan point, in metres, on the map, in metres.
+    #[must_use]
+    pub fn to_map(&self, [x, y]: [f64; 2]) -> [f64; 2] {
+        let [a, b] = self.x_axis;
+        [
+            self.scale
+                .mul_add(a.mul_add(x, -(b * y)), self.offset_metres[0]),
+            self.scale
+                .mul_add(b.mul_add(x, a * y), self.offset_metres[1]),
+        ]
+    }
+
+    /// A map plan point, in metres, in the model's coordinates, in metres.
+    #[must_use]
+    pub fn to_model(&self, [east, north]: [f64; 2]) -> [f64; 2] {
+        let [cos, sin] = self.x_axis;
+        let (dx, dy) = (east - self.offset_metres[0], north - self.offset_metres[1]);
+        [
+            dx.mul_add(cos, dy * sin) / self.scale,
+            (-dx).mul_add(sin, dy * cos) / self.scale,
+        ]
+    }
+}
+
+/// Whether two names of coordinate reference systems name one: an EPSG
+/// code by its number, whatever form names it (a bare number too),
+/// anything else as written but for case and surrounding spaces.
+#[must_use]
+pub fn same_reference_system(first: &str, second: &str) -> bool {
+    reference_key(first) == reference_key(second)
+}
+
+/// The name of a coordinate reference system as compared.
+fn reference_key(name: &str) -> String {
+    let upper: String = name
+        .trim()
+        .to_ascii_uppercase()
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect();
+    if !upper.is_empty() && upper.chars().all(|c| c.is_ascii_digit()) {
+        return format!("EPSG:{upper}");
+    }
+    if upper.contains("EPSG") {
+        let digits: String = upper
+            .chars()
+            .rev()
+            .take_while(char::is_ascii_digit)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
+        if !digits.is_empty() {
+            return format!("EPSG:{digits}");
+        }
+    }
+    upper
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -394,6 +583,81 @@ mod tests {
             CoordinateFrame::try_new([f64::NAN, 0.0, 0.0], x, y, z),
             Err(CoordinateSystemError::InvalidMeasurement)
         );
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)] // Axis-aligned arithmetic on whole metres is exact.
+    fn a_map_placement_is_established_only_from_what_the_source_states() {
+        let [x, y, z] = identity();
+        let world = CoordinateFrame::try_new([0.0; 3], x, y, z).unwrap();
+        let system = |world: Option<CoordinateFrame>, map: Option<MapConversion>| {
+            SourceCoordinateSystem::try_new(
+                source("a"),
+                world,
+                None,
+                map,
+                Evidence::exact(source("a"), "crs"),
+            )
+            .unwrap()
+        };
+        let map = |scale: f64, unit: Option<f64>| {
+            MapConversion::try_new(
+                Some("EPSG:25832".into()),
+                [500_000.0, 5_600_000.0, 50.0],
+                [0.0, 1.0],
+                scale,
+                unit,
+            )
+            .unwrap()
+        };
+        let placed = MapPlacement::of(
+            &system(Some(world), Some(map(1.0, Some(1.0)))),
+            Some("25832"),
+        )
+        .unwrap();
+        // The source's x axis points north: x 10 is 10 m north, and back.
+        assert_eq!(placed.to_map([10.0, 0.0]), [500_000.0, 5_600_010.0]);
+        assert_eq!(placed.to_map([0.0, 10.0]), [499_990.0, 5_600_000.0]);
+        assert_eq!(placed.to_model([499_990.0, 5_600_000.0]), [0.0, 10.0]);
+        for (stated, map, world, refusal) in [
+            (None, None, Some(world), MapPlacementRefusal::NoConversion),
+            (
+                Some("EPSG:25833"),
+                Some(map(1.0, Some(1.0))),
+                Some(world),
+                MapPlacementRefusal::OtherTarget {
+                    target: "EPSG:25832".into(),
+                },
+            ),
+            (
+                None,
+                Some(map(1.0, None)),
+                Some(world),
+                MapPlacementRefusal::UnitUnknown {
+                    target: Some("EPSG:25832".into()),
+                },
+            ),
+            (
+                None,
+                Some(map(1.0, Some(1.0))),
+                None,
+                MapPlacementRefusal::WorldNotIdentity,
+            ),
+            (
+                None,
+                Some(map(0.001, Some(1.0))),
+                Some(world),
+                MapPlacementRefusal::Scaled(0.001),
+            ),
+        ] {
+            assert_eq!(MapPlacement::of(&system(world, map), stated), Err(refusal));
+        }
+        assert!(same_reference_system("EPSG:25832", "epsg: 25832"));
+        assert!(same_reference_system(
+            "25832",
+            "urn:ogc:def:crs:EPSG::25832"
+        ));
+        assert!(!same_reference_system("EPSG:25832", "EPSG:25833"));
     }
 
     #[test]

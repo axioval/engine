@@ -1093,7 +1093,8 @@ pub use context_zones::{
 };
 pub use coordinate_system::{
     CoordinateFrame, CoordinateSystemError, CoordinateSystemService, CoordinateSystemServiceHandle,
-    MapConversion, SitePlacement, SourceCoordinateSystem,
+    MAP_SCALE_TOLERANCE, MapConversion, MapPlacement, MapPlacementRefusal, SitePlacement,
+    SourceCoordinateSystem, same_reference_system,
 };
 pub use corridor_end::{CorridorEnd, CorridorEndRequest, CorridorEnds, EndWall, WallContact};
 pub use coverage::{CoverageEvidence, CoverageRequest, EffectMeets, EffectReach, Participant};
@@ -1172,8 +1173,8 @@ pub use pairwise::{
 };
 pub use path::PathSegment;
 pub use plan_area::{
-    ElevationCover, ElevationRequest, FootprintPerimeter, PlanArea, PlanAreaError, PlanAreaService,
-    PlanAreaServiceHandle, PlanBand,
+    ElevationCover, ElevationRequest, FootprintOutline, FootprintPerimeter, PlanArea,
+    PlanAreaError, PlanAreaService, PlanAreaServiceHandle, PlanBand,
 };
 pub use plan_region::ConvexPlanRegion;
 pub use plan_span::{
@@ -1249,7 +1250,7 @@ pub use table_files::{
 pub use terrain::{
     TERRAIN_FILE_LIMIT_BYTES, TERRAIN_LOCATOR_PREFIX, TerrainElevation, TerrainError, TerrainFrame,
     TerrainKind, TerrainOutlineRequest, TerrainPointRequest, TerrainService, TerrainServiceHandle,
-    TerrainSurface, TerrainSurfaceStatement, TinTerrain,
+    TerrainSurface, TerrainSurfaceStatement, TinTerrain, terrain_kinds_read,
 };
 pub use topology::{
     CompleteTopologyEvidence, ConnectivityGraph, RouteOutcome, TopologyError, VerifiedConnection,

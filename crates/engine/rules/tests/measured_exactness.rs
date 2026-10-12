@@ -310,6 +310,13 @@ const COVERED: &[(&str, &str, &str)] = &[
         "tests/measured_exactness.rs",
         "a_stated_value_cited_approximate_is_refused",
     ),
+    // Material layers are stated: the service's evidence must be exact
+    // and reviewable, and the adjacency deciding the inside is.
+    (
+        "layers",
+        "tests/material_layers.rs",
+        "layers_cited_approximate_are_refused",
+    ),
     // A contact service's evidence must be exact and reviewable: one
     // cited approximate is refused before it reaches a value.
     (

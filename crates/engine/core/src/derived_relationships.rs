@@ -638,6 +638,50 @@ pub fn across_side(locator: &str, element: &ObjectId, space: &ObjectId) -> Optio
     AdjacentSide::from_symbol(tail.chars().next()?)
 }
 
+/// The face an `axioval:derived.adjacent-across` edge evidence locator
+/// records for `space` beside `element`, with the outward unit normal of
+/// that face: the normal the record writes after the sign (`(nx,ny,nz)`),
+/// reversed for the `-` face, so it points from the element towards the
+/// space. `None` when the locator is no such edge record, or records no
+/// normal of unit length.
+#[must_use]
+pub fn across_face(
+    locator: &str,
+    element: &ObjectId,
+    space: &ObjectId,
+) -> Option<(AdjacentSide, [f64; 3])> {
+    let tail = side_record(locator, ADJACENT_ACROSS, element, Some(space))?;
+    let mut chars = tail.chars();
+    let side = AdjacentSide::from_symbol(chars.next()?)?;
+    let normal = chars.as_str().strip_prefix('(')?;
+    let (normal, _) = normal.split_once(')')?;
+    let mut components = normal
+        .split(',')
+        .map(|part| part.trim().parse::<f64>().ok());
+    let [Some(x), Some(y), Some(z), None] = [
+        components.next()?,
+        components.next()?,
+        components.next()?,
+        components.next().flatten(),
+    ] else {
+        return None;
+    };
+    let length = (x * x + y * y + z * z).sqrt();
+    // The record writes six decimals, so a unit normal reads within their
+    // rounding of length one.
+    if !length.is_finite() || (length - 1.0).abs() > 1e-5 {
+        return None;
+    }
+    let sign = match side {
+        AdjacentSide::Positive => 1.0,
+        AdjacentSide::Negative => -1.0,
+    };
+    Some((
+        side,
+        [sign * x / length, sign * y / length, sign * z / length],
+    ))
+}
+
 /// Whether an `axioval:derived.adjacent-across` evidence locator records
 /// that `element` was answered from the space boundaries its source
 /// states, not from geometry: `{identity}:stated:{element}`.
@@ -1169,6 +1213,24 @@ mod tests {
             Some(AdjacentSide::Negative)
         );
         assert_eq!(across_side(&edge, &room, &wall), None);
+        // The `-` face's outward normal is the written normal reversed.
+        assert_eq!(
+            across_face(&edge, &wall, &room),
+            Some((AdjacentSide::Negative, [-1.0, 0.0, 0.0]))
+        );
+        let top = format!("{identity}:{wall}->{room}:side=+(0.000000,0.000000,1.000000):overlap=4");
+        assert_eq!(
+            across_face(&top, &wall, &room),
+            Some((AdjacentSide::Positive, [0.0, 0.0, 1.0]))
+        );
+        for malformed in [
+            format!("{identity}:{wall}->{room}:side=+:overlap=4"),
+            format!("{identity}:{wall}->{room}:side=+(0.5,0.0,0.0):overlap=4"),
+            format!("{identity}:{wall}->{room}:side=+(1.0,0.0):overlap=4"),
+            format!("{identity}:{wall}->{room}:side=+(1.0,0.0,0.0,0.0):overlap=4"),
+        ] {
+            assert_eq!(across_face(&malformed, &wall, &room), None, "{malformed}");
+        }
         let opening = format!("axioval:derived.adjacent-space;reach=1:{wall}->{room}:side=+");
         assert_eq!(across_side(&opening, &wall, &room), None);
         assert!(across_stated(&format!("{identity}:stated:{wall}"), &wall));

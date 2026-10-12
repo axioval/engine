@@ -15,15 +15,15 @@ use crate::{
     ClassificationServiceHandle, CompleteRelationshipEdges, CompleteRelationshipSelection,
     CoordinateSystemError, CoordinateSystemService, CoordinateSystemServiceHandle,
     DistributionNetworkService, DistributionNetworkServiceHandle, DoorLeaves, DoorLeavesError,
-    EvidenceSessionError, IntegrityError, IntegrityIssue, NetworkServiceError, ObjectFrame,
-    ObjectFrameError, ObjectFrameService, ObjectFrameServiceHandle, PropertyEnumeration,
-    PropertyEnumerationRequest, PropertyRequest, PropertyResolution, PropertyResolutionError,
-    PropertyResolutionService, PropertyResolutionServiceHandle, RelationshipEdgesRequest,
-    RelationshipSelectionError, RelationshipSelectionRequest, RelationshipSelectionService,
-    RelationshipSelectionServiceHandle, ResourceError, ResourceRequest, ResourceService,
-    ResourceServiceHandle, ServiceRegistry, SnapshotBoundService, SourceCoordinateSystem,
-    SourceIntegrityService, SourceIntegrityServiceHandle, SourceSnapshot,
-    TypeHierarchyServiceHandle,
+    EvidenceSessionError, IntegrityError, IntegrityIssue, MaterialLayerError, MaterialLayerService,
+    MaterialLayerServiceHandle, MaterialLayers, NetworkServiceError, ObjectFrame, ObjectFrameError,
+    ObjectFrameService, ObjectFrameServiceHandle, PropertyEnumeration, PropertyEnumerationRequest,
+    PropertyRequest, PropertyResolution, PropertyResolutionError, PropertyResolutionService,
+    PropertyResolutionServiceHandle, RelationshipEdgesRequest, RelationshipSelectionError,
+    RelationshipSelectionRequest, RelationshipSelectionService, RelationshipSelectionServiceHandle,
+    ResourceError, ResourceRequest, ResourceService, ResourceServiceHandle, ServiceRegistry,
+    SnapshotBoundService, SourceCoordinateSystem, SourceIntegrityService,
+    SourceIntegrityServiceHandle, SourceSnapshot, TypeHierarchyServiceHandle,
 };
 
 /// How many of `registry`'s services federation can route.
@@ -41,6 +41,7 @@ pub(crate) fn routed(registry: &ServiceRegistry) -> usize {
         + usize::from(registry.get::<CoordinateSystemServiceHandle>().is_some())
         + usize::from(registry.get::<ResourceServiceHandle>().is_some())
         + usize::from(registry.get::<DistributionNetworkServiceHandle>().is_some())
+        + usize::from(registry.get::<MaterialLayerServiceHandle>().is_some())
 }
 
 /// Registers one router per semantic interface any member provides.
@@ -71,6 +72,9 @@ pub(crate) fn register(
     }
     if let Some(router) = Router::<DistributionNetworkServiceHandle>::of(members) {
         target.register(DistributionNetworkServiceHandle::new(Arc::new(router)))?;
+    }
+    if let Some(router) = Router::<MaterialLayerServiceHandle>::of(members) {
+        target.register(MaterialLayerServiceHandle::new(Arc::new(router)))?;
     }
     let hierarchies: Vec<&TypeHierarchyServiceHandle> = members
         .iter()
@@ -280,6 +284,18 @@ impl ObjectFrameService for Router<ObjectFrameServiceHandle> {
             .member(&door.source)
             .ok_or_else(|| DoorLeavesError::UncoveredSource(door.source.clone()))?;
         member.leaves(door)
+    }
+}
+
+impl MaterialLayerService for Router<MaterialLayerServiceHandle> {
+    fn source_snapshots(&self) -> &[SourceSnapshot] {
+        &self.snapshots
+    }
+    fn material_layers(&self, object: &ObjectId) -> Result<MaterialLayers, MaterialLayerError> {
+        let (_, member) = self
+            .member(&object.source)
+            .ok_or_else(|| MaterialLayerError::UncoveredSource(object.source.clone()))?;
+        member.material_layers(object)
     }
 }
 

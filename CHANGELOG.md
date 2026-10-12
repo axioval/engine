@@ -6,6 +6,29 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Material layers**: the member list `layers;spaces=<kinds>` lists a
+  wall's, roof's or slab's material layers as its source states them,
+  inside first, each with `layer`, `index` (the source's order),
+  `position` (from the inside), `material`, `layer_name`,
+  `layer_category`, `thickness`, `from_inside`, `ventilated` and
+  `priority`. The inside is the face beside which spaces of the named
+  kinds lie when none lies beside the other, placed by geometry
+  (`axioval:derived.adjacent-across`), and the layers' stated direction
+  decides which layer faces it; a partition with rooms on both faces, a
+  wall beside no room or a layer set without a usage leaves `position`
+  and `from_inside` not evaluated with the reason, never ordered by a
+  guess, while every stated field stands. A sum of `thickness / λ` with λ
+  from a catalogue gives the U-value with Rsi and Rse as rule parameters:
+  15 mm lime plaster, 175 mm clay brick and 140 mm foam board read
+  0.2269 W/(m²·K), and a layer whose material the catalogue lacks leaves
+  it not evaluated. `MaterialLayerService` (`MaterialLayers`,
+  `MaterialLayer`, `LayerDirection`, `LayerAxis`, `LayerSense`,
+  `MaterialLayerError`) states the layers, routed by source in a
+  federation; the IFC adapter answers it from `IfcMaterialLayerSetUsage`
+  and `IfcMaterialLayerSet` and refuses any other material by name.
+  `across_face` reads an `adjacent-across` edge's face with its outward
+  normal. `axioval:material` is unchanged
+  ([#334](https://github.com/axioval/engine/issues/334)).
 - **Context zones**: parcels, zoning areas, building limits and building
   lines supplied beside the model (`check --zones zones.geojson`, a
   GeoJSON feature collection naming its reference system, each zone with

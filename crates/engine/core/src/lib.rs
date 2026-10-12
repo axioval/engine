@@ -1022,6 +1022,7 @@ mod groupings;
 mod guard;
 mod integrity;
 mod linear_quantity;
+mod material_layers;
 mod measured;
 mod metric_routing;
 mod network;
@@ -1102,7 +1103,7 @@ pub use derived::{ClassOutcome, Classifications};
 pub use derived_relationships::{
     AdjacentSide, DERIVATIONS, DERIVED_RELATIONSHIP_PREFIX, Derivation, DerivationEntry,
     DerivationParameter, DerivedRelationshipService, DerivedRelationshipServiceHandle, LevelFacts,
-    LevelMatch, across_side, across_stated, adjacent_side,
+    LevelMatch, across_face, across_side, across_stated, adjacent_side,
 };
 pub use discipline_map::{
     DisciplineMap, DisciplineMapError, DisciplineOrigin, DisciplineRule, UnmappedReason,
@@ -1145,8 +1146,13 @@ pub use linear_quantity::{
     LinearInterval, LinearQuantityError, LinearQuantityEvidence, LinearQuantityKind,
     LinearQuantityRequest, LinearQuantityService, LinearQuantityServiceHandle, ShelfGeometry,
 };
+pub use material_layers::{
+    LayerAxis, LayerDirection, LayerSense, MaterialLayer, MaterialLayerError, MaterialLayerService,
+    MaterialLayerServiceHandle, MaterialLayers,
+};
 pub use measured::elements::AlignmentElementMeasures;
 pub use measured::faces::FacePieceMeasures;
+pub use measured::layers::MaterialLayerMeasures;
 pub use measured::provider::{
     ArgumentsKey, Citation, MeasuredMember, MeasuredMemo, MeasuredProvider, Measurement,
     MemberValue, measured_members, measured_members_bound, measured_members_cited,

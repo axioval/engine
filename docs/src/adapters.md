@@ -470,6 +470,28 @@ with no association, directly or through its type, has no material.
   `IfcMaterialLayer` no name or category. IFC2X3 has no constituent or
   profile sets.
 
+The same resolved association answers the material-layer service
+(`MaterialLayerServiceHandle`, `layer_sets.rs`), which the member list
+`layers` reads; `axioval:material` is unchanged by it. An
+`IfcMaterialLayerSet` reached through an `IfcMaterialLayerSetUsage` states
+the direction its layers stack in: `LayerSetDirection` `AXIS1`, `AXIS2` or
+`AXIS3` is the first, second or third axis of the element's
+`ObjectPlacement` (the frame `frames.rs` answers), and `DirectionSense`
+`POSITIVE` or `NEGATIVE` whether the layers run along it or against it,
+the first layer at the start. A layer set associated without a usage (a
+type's, with no usage on the occurrence) states no direction, so the
+inside of its element is never decided. Each `IfcMaterialLayer` (and
+`IfcMaterialLayerWithOffsets`) gives its material's name (none where
+`Material` is `$`, an air gap), `Name`, `Category`, `LayerThickness` in
+metres through the exact length unit (a unit that does not resolve refuses
+that thickness alone), `IsVentilated` (`.U.` read as unstated) and
+`Priority`; an attribute the release does not declare is unstated. The
+evidence names the association as `axioval:material` does
+(`material:#19:occurrence:#308:usage:#307:#306`). An element without
+material has no layers; a single material, a constituent set, a profile
+set (a tapering usage too) and a material list are refused by name, never
+read as layers, and two associations are a conflict.
+
 ### Bodies
 
 `axioval:body` is read from the product's body representation (`Body`,

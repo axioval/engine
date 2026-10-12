@@ -104175,6 +104175,326 @@
       "available": true
     },
     {
+      "name": "layers",
+      "parameters": [
+        {
+          "key": "spaces",
+          "kind": {
+            "type": "sourceKind"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The source kinds of the spaces the element bounds, `,`-separated; subtypes match. The inside is the face beside which such spaces lie when none lies beside the other; without it the inside is not decided."
+            },
+            {
+              "language": "de",
+              "text": "Die Quellarten der Räume, die das Bauteil begrenzt, durch `,` getrennt; Untertypen zählen mit. Innen ist die Seite, an der solche Räume liegen, wenn an der anderen keiner liegt; ohne Angabe ist innen nicht entschieden."
+            }
+          ],
+          "references": "string"
+        }
+      ],
+      "services": [
+        "material-layer",
+        "object-frame",
+        "relationship-selection",
+        "type-hierarchy"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the element's material is not a layer set (a constituent, profile or single material, or a list), or cannot be read",
+        "a layer's thickness is stated in a unit that cannot be resolved (its thickness and every distance from the inside it enters)",
+        "the inside is not decided: no space kinds are given, the layer set states no direction, the element's frame cannot be read, the spaces beside its faces cannot be derived, spaces lie beside both faces or beside neither, or the layers run along the faces (each layer's position and distance from the inside)"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Material layers"
+        },
+        {
+          "language": "de",
+          "text": "Materialschichten"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The material layers of the element as its source states them, inside first where the inside is decided, otherwise in the source's order: each with its material, thickness, place from the inside and distance from the inner face. Sum `thickness / λ` with λ from a catalogue for a thermal resistance; relate neighbouring layers with `pairs` by `position`."
+        },
+        {
+          "language": "de",
+          "text": "Die Materialschichten des Bauteils, wie seine Quelle sie angibt, von innen nach außen, wo innen entschieden ist, sonst in der Reihenfolge der Quelle: jede mit Material, Dicke, Platz von innen und Abstand von der Innenseite. Die Summe von `thickness / λ` mit λ aus einem Katalog ergibt einen Wärmedurchlasswiderstand; benachbarte Schichten verknüpft `pairs` nach `position`."
+        }
+      ],
+      "fields": [
+        {
+          "name": "layer",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Layer"
+            },
+            {
+              "language": "de",
+              "text": "Schicht"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The layer's identity in its source and its material, as findings name it."
+            },
+            {
+              "language": "de",
+              "text": "Die Identität der Schicht in ihrer Quelle und ihr Material, wie Befunde sie nennen."
+            }
+          ]
+        },
+        {
+          "name": "index",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Index"
+            },
+            {
+              "language": "de",
+              "text": "Nummer"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The layer's place in the source's order, from 1."
+            },
+            {
+              "language": "de",
+              "text": "Der Platz der Schicht in der Reihenfolge der Quelle, ab 1."
+            }
+          ]
+        },
+        {
+          "name": "position",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Position from inside"
+            },
+            {
+              "language": "de",
+              "text": "Platz von innen"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The layer's place counted from the inside, from 1; not evaluated where the inside is not decided."
+            },
+            {
+              "language": "de",
+              "text": "Der Platz der Schicht von innen gezählt, ab 1; nicht ausgewertet, wo innen nicht entschieden ist."
+            }
+          ]
+        },
+        {
+          "name": "material",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Material"
+            },
+            {
+              "language": "de",
+              "text": "Material"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The name of the layer's material; `null` where the layer states none, such as an air gap."
+            },
+            {
+              "language": "de",
+              "text": "Der Name des Materials der Schicht; `null`, wo die Schicht keines angibt, etwa eine Luftschicht."
+            }
+          ]
+        },
+        {
+          "name": "layer_name",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Layer name"
+            },
+            {
+              "language": "de",
+              "text": "Schichtname"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The layer's own name; `null` where it states none."
+            },
+            {
+              "language": "de",
+              "text": "Der eigene Name der Schicht; `null`, wo sie keinen angibt."
+            }
+          ]
+        },
+        {
+          "name": "layer_category",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Layer category"
+            },
+            {
+              "language": "de",
+              "text": "Schichtkategorie"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The layer's category, its role in the set (`LoadBearing`, `Insulation`); `null` where it states none."
+            },
+            {
+              "language": "de",
+              "text": "Die Kategorie der Schicht, ihre Rolle im Aufbau (`LoadBearing`, `Insulation`); `null`, wo sie keine angibt."
+            }
+          ]
+        },
+        {
+          "name": "thickness",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Thickness"
+            },
+            {
+              "language": "de",
+              "text": "Dicke"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The layer's stated thickness."
+            },
+            {
+              "language": "de",
+              "text": "Die angegebene Dicke der Schicht."
+            }
+          ]
+        },
+        {
+          "name": "from_inside",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Distance from inside"
+            },
+            {
+              "language": "de",
+              "text": "Abstand von innen"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The summed thickness of the layers between the inner face and this layer; zero for the innermost, not evaluated where the inside is not decided."
+            },
+            {
+              "language": "de",
+              "text": "Die Summe der Dicken der Schichten zwischen der Innenseite und dieser Schicht; null für die innerste, nicht ausgewertet, wo innen nicht entschieden ist."
+            }
+          ]
+        },
+        {
+          "name": "ventilated",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Ventilated"
+            },
+            {
+              "language": "de",
+              "text": "Belüftet"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the layer is a ventilated air gap; `null` where the source states neither, or that it is unknown."
+            },
+            {
+              "language": "de",
+              "text": "Ob die Schicht eine belüftete Luftschicht ist; `null`, wo die Quelle weder das eine noch das andere angibt oder es als unbekannt angibt."
+            }
+          ]
+        },
+        {
+          "name": "priority",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Priority"
+            },
+            {
+              "language": "de",
+              "text": "Priorität"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The layer's stated priority at connections (0 to 100); `null` where it states none."
+            },
+            {
+              "language": "de",
+              "text": "Die angegebene Priorität der Schicht an Anschlüssen (0 bis 100); `null`, wo sie keine angibt."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
       "name": "limit_row",
       "parameters": [
         {

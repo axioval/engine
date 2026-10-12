@@ -3,7 +3,9 @@
 #![allow(missing_docs)]
 
 use axioval_engine::{
-    PropertyRequest, PropertyResolution, PropertyResolutionError, PropertyResolutionServiceHandle,
+    LayerAxis, LayerDirection, LayerSense, MaterialLayerError, MaterialLayerServiceHandle,
+    MaterialLayers, PropertyRequest, PropertyResolution, PropertyResolutionError,
+    PropertyResolutionServiceHandle,
 };
 use axioval_ifc::import_ifc_session;
 use axioval_ir::{MATERIAL_SET, ObjectId, PropertyValue, QuantityDimension, SourceId};
@@ -384,4 +386,95 @@ fn names_list_every_name_and_category_the_material_goes_by() {
     assert_eq!(names("#6"), None);
     let found = locator("#3", "names");
     assert!(found.ends_with("material:#3:occurrence:#44:#44"), "{found}");
+}
+
+/// The material layers of `local` in DATA, as the material-layer service
+/// states them (#334).
+fn layers(local: &str) -> Result<MaterialLayers, MaterialLayerError> {
+    let bytes = format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n{DATA}ENDSEC;\nEND-ISO-10303-21;\n"
+    );
+    let session = import_ifc_session("model.ifc", bytes.as_bytes()).unwrap();
+    let object = ObjectId::new(SourceId::new("ifc-step", "model.ifc").unwrap(), local).unwrap();
+    session
+        .service::<MaterialLayerServiceHandle>()
+        .unwrap()
+        .material_layers(&object)
+}
+
+/// #334: a usage states the layers' direction along the element's
+/// placement axes; each layer's material, thickness in metres, name,
+/// category and ventilation are read as stated, an air gap without
+/// material too.
+#[test]
+fn a_layer_set_usage_states_its_layers_and_their_direction() {
+    let read = layers("#2").unwrap();
+    assert_eq!(
+        read.direction(),
+        Some(LayerDirection {
+            axis: LayerAxis::Second,
+            sense: LayerSense::Positive
+        })
+    );
+    let materials: Vec<Option<&str>> = read
+        .layers()
+        .iter()
+        .map(|layer| layer.material.as_deref())
+        .collect();
+    assert_eq!(
+        materials,
+        [Some("Gypsum"), Some("Mineral wool"), Some("Concrete"), None]
+    );
+    for (layer, expected) in read.layers().iter().zip([0.0125, 0.1, 0.2, 0.02]) {
+        let found = layer.thickness.clone().unwrap();
+        assert!((found - expected).abs() < 1e-12, "{layer:?}");
+    }
+    let [board, wool, core, air] = read.layers() else {
+        panic!("{read:?}")
+    };
+    assert_eq!(board.locator, "#30");
+    assert_eq!(board.name.as_deref(), Some("Board"));
+    assert_eq!(board.category.as_deref(), Some("Finish"));
+    assert_eq!(board.ventilated, None);
+    assert_eq!(wool.ventilated, Some(false));
+    assert_eq!(core.category.as_deref(), Some("LoadBearing"));
+    assert_eq!(air.ventilated, Some(true));
+    assert!(read.evidence().exact);
+    assert!(
+        read.evidence()
+            .locator
+            .ends_with("material:#2:occurrence:#43:usage:#36:#35"),
+        "{}",
+        read.evidence().locator
+    );
+    // The type's layer set, associated without a usage, states no
+    // direction.
+    let typed = layers("#1").unwrap();
+    assert_eq!(typed.layers().len(), 4);
+    assert_eq!(typed.direction(), None);
+    // No material: no layers.
+    assert!(layers("#6").unwrap().layers().is_empty());
+}
+
+/// Any other material is refused by name, never read as layers; two
+/// assignments are a conflict.
+#[test]
+fn a_material_that_is_no_layer_set_has_no_layers() {
+    for (local, kind) in [
+        ("#3", "material"),
+        ("#4", "constituent-set"),
+        ("#5", "profile-set"),
+        ("#7", "list"),
+    ] {
+        match layers(local) {
+            Err(MaterialLayerError::NotLayered { kind: found, .. }) => {
+                assert_eq!(found, kind, "{local}");
+            }
+            other => panic!("{local}: {other:?}"),
+        }
+    }
+    assert!(matches!(
+        layers("#8"),
+        Err(MaterialLayerError::Conflicting(_))
+    ));
 }

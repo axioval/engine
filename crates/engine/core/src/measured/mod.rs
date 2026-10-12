@@ -32,6 +32,7 @@ mod areas;
 mod clearance;
 pub(crate) mod elements;
 pub(crate) mod faces;
+pub(crate) mod layers;
 mod levels;
 mod profile;
 pub(crate) mod provider;

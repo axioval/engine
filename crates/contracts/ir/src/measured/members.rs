@@ -20,6 +20,7 @@ use super::{
 use crate::QuantityDimension;
 
 mod clash;
+mod materials;
 mod searches;
 mod walking;
 
@@ -3411,6 +3412,7 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
     walking::LANDING_DOORS,
     walking::LANDING_SWINGS,
     walking::LANDINGS,
+    materials::LAYERS,
     MemberDescriptor {
         list: MeasuredDescriptor {
             name: "limit_row",

@@ -942,6 +942,9 @@ pub(crate) fn session(
         model.clone(),
         snapshots.clone(),
     )));
+    let layer_sets = axioval_engine::MaterialLayerServiceHandle::new(Arc::new(
+        crate::layer_sets::IfcMaterialLayers::new(release, model.clone(), snapshots.clone()),
+    ));
     let network = axioval_engine::DistributionNetworkServiceHandle::new(Arc::new(
         crate::network::IfcNetworkService::new(release, model.clone(), snapshots.clone()),
     ));
@@ -961,6 +964,7 @@ pub(crate) fn session(
         .and_then(|session| session.with_service(coordinates))
         .and_then(|session| session.with_service(resources))
         .and_then(|session| session.with_service(network))
+        .and_then(|session| session.with_service(layer_sets))
         .and_then(|session| session.with_source_metadata(source, metadata))
         .map_err(|error| session_error(&error))
 }

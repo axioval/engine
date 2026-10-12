@@ -9042,6 +9042,162 @@ fn a_catalogue_supplied_beside_the_model_gives_walls_their_materials_lambda() {
     );
 }
 
+/// Walls in metres, 4 m long, 3 m high and 0.33 m thick across world y,
+/// each stating three layers outside first along its placement's second
+/// axis (foam board 0.14 m, clay brick 0.175 m, lime plaster 0.015 m; all
+/// invented materials). Room #29 lies against the `+y` face of #19; #39
+/// and #49 stand apart from any room, and #49's brick is a material no
+/// catalogue lists.
+fn layered_walls_beside_a_room() -> String {
+    let wall = "IFCWALL('GID',$,$,$,$,PL,REP,$,.STANDARD.)";
+    let space = "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,$,$)";
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         {}{}{}{}\
+         #300=IFCMATERIAL('ex-foam-board',$,$);\n\
+         #301=IFCMATERIAL('ex-clay-brick',$,$);\n\
+         #302=IFCMATERIAL('ex-lime-plaster',$,$);\n\
+         #303=IFCMATERIALLAYER(#300,0.14,$,$,$,$,$);\n\
+         #304=IFCMATERIALLAYER(#301,0.175,$,$,$,$,$);\n\
+         #305=IFCMATERIALLAYER(#302,0.015,$,$,$,$,$);\n\
+         #306=IFCMATERIALLAYERSET((#303,#304,#305),'ex-wall',$);\n\
+         #307=IFCMATERIALLAYERSETUSAGE(#306,.AXIS2.,.POSITIVE.,-0.165,$);\n\
+         #308=IFCRELASSOCIATESMATERIAL('0000000000000000000308',$,$,$,(#19,#39),#307);\n\
+         #310=IFCMATERIAL('ex-mystery-block',$,$);\n\
+         #311=IFCMATERIALLAYER(#310,0.175,$,$,$,$,$);\n\
+         #312=IFCMATERIALLAYERSET((#303,#311,#305),'ex-mystery-wall',$);\n\
+         #313=IFCMATERIALLAYERSETUSAGE(#312,.AXIS2.,.POSITIVE.,-0.165,$);\n\
+         #314=IFCRELASSOCIATESMATERIAL('0000000000000000000314',$,$,$,(#49),#313);\n\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        placed_box(10, [2.0, 0.0, 0.0], [4.0, 0.33, 3.0], wall),
+        placed_box(20, [2.0, 2.17, 0.0], [4.0, 4.0, 3.0], space),
+        placed_box(30, [20.0, 0.0, 0.0], [4.0, 0.33, 3.0], wall),
+        placed_box(40, [40.0, 0.0, 0.0], [4.0, 0.33, 3.0], wall),
+    )
+}
+
+/// engine#334 end to end: the layers of a wall, stated outside first,
+/// are listed inside first from the room beside it, and its U-value
+/// folded from the λ a catalogue supplies matches the hand calculation
+/// 1 / (0.13 + 0.015/0.70 + 0.175/0.81 + 0.14/0.035 + 0.04) = 0.22689
+/// W/(m²·K). A wall beside no room is judged by its U-value, which needs
+/// no order, but its innermost layer is not evaluated; a layer whose
+/// material the catalogue has no λ for leaves the U-value not evaluated.
+#[test]
+fn layers_are_read_inside_first_and_fold_into_a_u_value() {
+    let case = Case::new("layers-u-value");
+    case.write("model.ifc", &layered_walls_beside_a_room());
+    case.write(
+        "materials.csv",
+        "material,lambda\n\
+         ex-lime-plaster,0.70\n\
+         ex-clay-brick,0.81\n\
+         ex-foam-board,0.035\n",
+    );
+    let catalogues = json!({"materials": {
+        "id": "materials",
+        "name": {"default": "Materials", "translations": {}},
+        "key": "name",
+        "columns": [
+            {"id": "name", "header": "material", "kind": "string"},
+            {"id": "lambda", "kind": "quantity", "unit": "W/m·K"},
+        ],
+    }});
+    let mut signature = registry_signature("axioval:capability.expression");
+    for id in ["rsi", "rse", "maximum"] {
+        signature[id] = json!({"id": id, "name": {"default": id, "translations": {}},
+            "kind": "quantity", "required": true, "allowedValues": [], "citations": []});
+    }
+    let member = |field: &str| json!({"kind": "property", "propertySet": "axioval:member", "property": field});
+    let layers = json!({"kind": "measured", "name": "layers;spaces=IfcSpace"});
+    let resistances = json!({"kind": "aggregate", "function": "sum", "over": layers,
+        "value": {"kind": "divide", "left": member("thickness"),
+                  "right": {"kind": "catalogue", "catalogue": "materials", "column": "lambda",
+                            "key": member("material")}}});
+    let u_value = json!({"kind": "divide",
+        "left": {"kind": "literal", "value": {"type": "number", "value": 1.0}},
+        "right": {"kind": "add",
+                  "left": {"kind": "add", "left": {"kind": "parameter", "name": "rsi"},
+                           "right": resistances},
+                  "right": {"kind": "parameter", "name": "rse"}}});
+    let run = |requirement: Value, maximum: f64| {
+        let resistance = |value: f64| json!({"type": "quantity", "value": value, "unit": "m²·K/W"});
+        case.geometry_rule_with(
+            &["model.ifc"],
+            &[("wall", "IfcWall"), ("space", "IfcSpace")],
+            ("axioval:capability.expression", &signature),
+            entity("wall"),
+            json!({"requirement": {"type": "expression", "value": requirement},
+                   "rsi": resistance(0.13), "rse": resistance(0.04),
+                   "maximum": {"type": "quantity", "value": maximum, "unit": "W/m²·K"}}),
+            &json!({"ruleset:catalogues": catalogues}),
+            &["--catalogue", "materials@2026-1=materials.csv"],
+        )
+    };
+    let hand = 1.0 / (0.13 + 0.015 / 0.70 + 0.175 / 0.81 + 0.14 / 0.035 + 0.04);
+    let at_most = json!({"kind": "compare", "operator": "lessThanOrEquals",
+        "left": u_value, "right": {"kind": "parameter", "name": "maximum"}});
+    let open = |result: &Value| -> Vec<(String, String)> {
+        result["report"]["not_evaluated"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|outcome| {
+                (
+                    outcome["object_id"]["local_id"]
+                        .as_str()
+                        .unwrap()
+                        .to_owned(),
+                    outcome["message"].as_str().unwrap().to_owned(),
+                )
+            })
+            .collect()
+    };
+    // Just below the hand calculation both readable walls fail, just
+    // above they pass; the order never enters the sum.
+    let (output, result) = run(at_most.clone(), hand - 1e-6);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(finding_ids(&result), ["#19", "#39"], "{result:#}");
+    let (output, result) = run(at_most, hand + 1e-6);
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    let open_walls = open(&result);
+    assert_eq!(open_walls.len(), 1, "{result:#}");
+    assert_eq!(open_walls[0].0, "#49");
+    assert!(
+        open_walls[0]
+            .1
+            .contains("has no entry whose `name` is `ex-mystery-block`"),
+        "{open_walls:?}"
+    );
+
+    // The innermost layer of #19 is the plaster its source states last:
+    // the room lies on that side. Beside no room the order is open.
+    let innermost = json!({"kind": "compare", "operator": "equals",
+        "left": {"kind": "argmin", "over": layers, "by": member("position"),
+                 "value": member("material")},
+        "right": {"kind": "literal", "value": {"type": "string", "value": "ex-lime-plaster"}}});
+    let (output, result) = run(innermost, hand);
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    assert!(finding_ids(&result).is_empty(), "{result:#}");
+    let open_walls = open(&result);
+    let walls: Vec<&str> = open_walls.iter().map(|(wall, _)| wall.as_str()).collect();
+    assert_eq!(walls, ["#39", "#49"], "{result:#}");
+    for (_, message) in &open_walls {
+        assert!(
+            message.contains("no space of the kinds lies beside either face"),
+            "{message}"
+        );
+    }
+}
+
 #[test]
 fn with_geometry_a_wall_body_is_measured_against_its_layer_thickness() {
     let case = Case::new("geometry-layer-thickness");

@@ -1582,6 +1582,7 @@ and declare their parameters and typed fields:
 | `parking_bay` (every `parking-bay` parameter under its own name, `selection`) | what `parking-bay` judges of a bay, in its order | `counting`, `count`, `allowed`, `found_words`, `open_words`, `related`; `sized`, `size` (undecided for why it cannot be measured), `measured`, `low`, `high`, `suffix`, `doubtful`, `applies_why`, `later`; `judged`, `found`, `message` |
 | `parallel_pairs` (`members`, `member_path`, `angle_tolerance`, `reach`) | the parallel pairs of members the object reaches, as `wall-spacing` pairs them | `distance` |
 | `alignment_elements` (`layout`) | of an alignment: the elements of its plan or gradient line, in order ([Alignment elements](#alignment-elements)) | `index`, `kind`, `type`, `element`, `from`, `to`, `length`, `start_curvature`, `end_curvature`, `start_radius`, `end_radius` (not evaluated where straight), `radius` (`null` for a transition), `clothoid_parameter` (`null` but for a clothoid), `start_gradient`, `end_gradient` (`null` in plan) |
+| `layers` (`spaces`) | an element's material layers as its source states them, inside first where the inside is decided ([Material layers](#material-layers)) | `layer`, `index`, `position` (not evaluated where the inside is not decided), `material` (`null` for none), `layer_name`, `layer_category`, `thickness`, `from_inside` (not evaluated where the inside is not decided), `ventilated`, `priority` |
 | `line_spacing` (`members`, `member_path`, `direction`, `gap`) | the members the object reaches along a straight line through it, ordered by station ([Spacing along a line](#spacing-along-a-line)) | `member`, `what`, `station`, `from`, `to`, `gap` (`null` on the first), `start_gap`, `end_gap` (`null` but on the first and the last), `first`, `last` |
 | `roof_features` (`feature`, `tolerance`, `level_path`) | the lines where a roof body's upper faces meet or end, classified ([Roof feature lines](#roof-feature-lines)) | `feature` (undecided where it cannot be told), `what`, `length`, `low`, `high` |
 | `swing_spaces` (`path`, `kinds`) | the spaces a door opens onto, probed as `door-swing` probes them | `into`, `away` |
@@ -1680,6 +1681,83 @@ Expressions over these values reach `stair-geometry`'s and
 goings, step lengths, the riser count and spread, the rise, the width,
 landings, winders, open risers, ramp slope limits and spread, handrail
 heights, extensions, gaps and sides.
+
+### Material layers
+
+U-values and layer rules read a wall's, roof's or slab's material layers
+in order from the inside out: the minimum insulation thickness, the
+vapour barrier on the warm side, `U = 1 / (Rsi + Σ d/λ + Rse)`. The
+member list `layers;spaces=<kinds>` lists them as the element's source
+states them (`MaterialLayerServiceHandle`, see
+[Typed host services](./services.md)), each with:
+
+| Field | Value |
+|---|---|
+| `layer` | its identity in the source and its material, as findings name it (`layer #305 (ex-lime-plaster)`) |
+| `index` | its place in the source's order, from 1 |
+| `position` | its place counted from the inside, from 1 |
+| `material` | the name of its material; `null` for a layer stating none, such as an air gap |
+| `layer_name`, `layer_category` | its own name and its category (its role in the set); `null` where unstated |
+| `thickness` | its stated thickness |
+| `from_inside` | the summed thickness of the layers between the inner face and it; zero for the innermost |
+| `ventilated` | whether it is a ventilated air gap; `null` where the source states neither, or that it is unknown |
+| `priority` | its stated priority at connections; `null` where unstated |
+
+The inside is decided from the spaces the element bounds, never guessed
+from its type, its name or the order the source happens to list. The
+source states the direction its layers stack in (an IFC
+`IfcMaterialLayerSetUsage`: `LayerSetDirection` an axis of the element's
+placement, `DirectionSense` along or against it, from the first layer to
+the last). Geometry places each object of the `spaces` kinds in the
+element's source beside a face of it, as `axioval:derived.adjacent-across`
+with its default tolerances (0.05 m, along at least 0.3 m) does, asked of
+the derived service directly, since only geometry records which face a
+space lies on. The inside is the face beside which such spaces lie when
+none lies beside the other. Where the layers stack away from that face the
+first layer is the innermost; where they stack towards it, the last; where
+they run along the faces (more than 45° from the face's normal) nothing is
+decided. A partition with rooms on both faces, a wall beside no room, a
+layer set without a usage, an element whose frame cannot be read, a run
+without geometry and a list without `spaces` leave the inside undecided:
+the layers are listed in the source's order, every stated field stands,
+and `position` and `from_inside` are not evaluated with the reason. So an
+order-dependent rule (the innermost layer, consecutive layers by
+`position`) is not evaluated there, while a sum over the layers, which no
+order enters, is judged.
+
+An element without material lists no layers. A material that is not a
+layer set (a single material, a constituent set, a profile set, a list) is
+refused by name, so the list and every expression reading it are not
+evaluated; its parts have no order or thickness. A thickness stated in a
+unit the source cannot resolve leaves that layer's `thickness`, and the
+`from_inside` of every layer outside it, not evaluated.
+
+The U-value folds the layers with a [catalogue](./expressions.md#catalogues)'s
+thermal conductivities, joined by each layer's material, the surface
+resistances `rsi` and `rse` declared as rule parameters (a definition's
+authored parameters):
+
+```json
+{"kind": "divide",
+ "left": {"kind": "literal", "value": {"type": "number", "value": 1}},
+ "right": {"kind": "add",
+   "left": {"kind": "add", "left": {"kind": "parameter", "name": "rsi"},
+     "right": {"kind": "aggregate", "function": "sum",
+       "over": {"kind": "measured", "name": "layers;spaces=IfcSpace"},
+       "value": {"kind": "divide",
+         "left": {"kind": "property", "propertySet": "axioval:member", "property": "thickness"},
+         "right": {"kind": "catalogue", "catalogue": "materials", "column": "lambda",
+                   "key": {"kind": "property", "propertySet": "axioval:member", "property": "material"}}}}},
+   "right": {"kind": "parameter", "name": "rse"}}}
+```
+
+A wall of 15 mm lime plaster (λ = 0.70 W/(m·K)), 175 mm clay brick (0.81)
+and 140 mm foam board (0.035), with Rsi = 0.13 and Rse = 0.04 m²·K/W,
+reads 1 / (0.13 + 0.0214 + 0.2160 + 4.0 + 0.04) = 0.2269 W/(m²·K). A layer
+whose material the catalogue has no entry for leaves the U-value not
+evaluated, naming the material; one without material reads a `null` λ, so
+the U-value is `null`, which the author guards where an air gap belongs
+in the sum. `null` and not evaluated never mix.
 
 ### Parking bays
 

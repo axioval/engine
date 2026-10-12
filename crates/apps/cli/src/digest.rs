@@ -107,7 +107,8 @@ pub struct ZoneFileRecord {
     pub reference: String,
     /// The zones it states, by id, in the file's order.
     pub zones: Vec<String>,
-    /// The exchange it was read as: `geojson` or `cadastre-gml`.
+    /// The exchange it was read as: `geojson`, `cadastre-gml` or
+    /// `xplan-gml`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub format: Option<String>,
     /// The accuracy of its boundaries the argument stated, in metres, for

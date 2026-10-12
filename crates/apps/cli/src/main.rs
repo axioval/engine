@@ -212,7 +212,8 @@ struct CheckArgs {
     /// coordinates, or a map system the model's map conversion names), each
     /// feature a zone with an `id`, a `kind`, an `accuracy` in metres and a
     /// polygon, multipolygon or line string; or a GML document of cadastral
-    /// parcels and public traffic areas, which states no accuracy, so the
+    /// parcels and public traffic areas, or a zoning plan (`XPlanGML`) with
+    /// the values its areas state, which states no accuracy, so the
     /// argument does: `ACCURACY=FILE`, in metres. Repeat for several files.
     /// A file that cannot be read, or a zone id two files state, stops the
     /// check before anything runs; a zone the rules read and no file states

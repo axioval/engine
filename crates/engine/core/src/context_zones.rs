@@ -25,14 +25,18 @@
 //! accuracy is refused when read.
 //!
 //! Besides `GeoJSON`, cadastral parcels and public traffic areas are read
-//! from a GML subset ([`ContextZones::read_cadastre_gml`], #319), through
-//! the GML 3 geometry subset of [`gml`]. A rule names a zone by its id, or
+//! from a GML subset ([`ContextZones::read_cadastre_gml`], #319), and the
+//! regulating areas and lines of a zoning plan from an `XPlanGML` subset
+//! with the values they state ([`ContextZones::read_xplan_gml`], #321),
+//! both through the GML 3 geometry subset of [`gml`]. A rule names a zone by its id, or
 //! by the kind of zone the object stands in (`stands_in`), which the rules
 //! crate resolves per object by plan containment, never by a guess.
 
 mod cadastre;
 mod gml;
+mod xplan;
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use serde_json::Value;
@@ -113,6 +117,34 @@ pub struct ContextZone {
     shape: ZoneShape,
     accuracy_metres: f64,
     feature: usize,
+    values: BTreeMap<String, ZoneValue>,
+}
+
+/// A value a zone states (#321), such as a zoning area's greatest coverage
+/// ratio, by its key ([`axioval_ir::measured::ZONE_NUMBERS`],
+/// [`axioval_ir::measured::ZONE_LENGTHS`] or
+/// [`axioval_ir::measured::ZONE_ANGLES`]). A key a zone does not hold is a
+/// value its file does not state: `null`, never a default.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ZoneValue {
+    /// Stated: a plain number, a length in metres, or an angle in
+    /// `degrees` (else radians), as the file states it, with the name of
+    /// what stated it (`GRZ`, `hoehenangabe[TH].hMax`).
+    Stated {
+        /// The value, in the unit stated.
+        value: f64,
+        /// Whether an angle is stated in degrees.
+        degrees: bool,
+        /// What in the file stated it.
+        statement: String,
+    },
+    /// Stated in a way the reader does not read (a height above another
+    /// reference, a value stated twice differently): reading it is not
+    /// evaluated, naming why, never `null`.
+    Unread {
+        /// Why it is not read.
+        why: String,
+    },
 }
 
 impl ContextZone {
@@ -150,7 +182,31 @@ impl ContextZone {
             shape,
             accuracy_metres,
             feature,
+            values: BTreeMap::new(),
         })
+    }
+
+    /// The same zone stating `values`, by key.
+    #[must_use]
+    pub fn with_values(mut self, values: BTreeMap<String, ZoneValue>) -> Self {
+        self.values = values;
+        self
+    }
+
+    /// The values it states, by key.
+    #[must_use]
+    pub fn values(&self) -> &BTreeMap<String, ZoneValue> {
+        &self.values
+    }
+
+    /// Where it is stated in `file`, for evidence:
+    /// `axioval:zone;id=<id>;kind=<kind>;sha256=<digest>#feature=<n>`.
+    #[must_use]
+    pub fn locator(&self, file: &ContextZones) -> String {
+        format!(
+            "{ZONE_LOCATOR_PREFIX};id={};kind={};sha256={}#feature={}",
+            self.id, self.kind, file.sha256, self.feature
+        )
     }
 
     /// The zone's id, unique among the zones supplied to a run.
@@ -199,10 +255,7 @@ impl ContextZone {
         file: &ContextZones,
         system: Option<&SourceCoordinateSystem>,
     ) -> Result<PlacedZone, String> {
-        let locator = format!(
-            "{ZONE_LOCATOR_PREFIX};id={};kind={};sha256={}#feature={}",
-            self.id, self.kind, file.sha256, self.feature
-        );
+        let locator = self.locator(file);
         let placed = |shape: ZoneShape, accuracy_metres: f64, exact: bool| PlacedZone {
             id: self.id.clone(),
             kind: self.kind.clone(),
@@ -611,6 +664,7 @@ impl ContextZones {
                 shape,
                 accuracy_metres,
                 feature: number,
+                values: BTreeMap::new(),
             });
         }
         Self::new(
@@ -623,14 +677,18 @@ impl ContextZones {
     }
 
     /// Reads the zones of a GML document, the file `name`, whose
-    /// boundaries are stated within `accuracy_metres` (GML states none):
-    /// cadastral parcels ([`Self::read_cadastre_gml`]).
+    /// boundaries are stated within `accuracy_metres` (GML states none): a
+    /// zoning plan, rooted in `XPlanAuszug` ([`Self::read_xplan_gml`]), or
+    /// else cadastral parcels ([`Self::read_cadastre_gml`]).
     ///
     /// # Errors
     ///
     /// As the reader of its exchange.
     pub fn read_gml(bytes: &[u8], name: &str, accuracy_metres: f64) -> Result<Self, String> {
         let root = gml::parse(bytes, "GML")?;
+        if root.name == "XPlanAuszug" {
+            return Self::xplan_from(&root, bytes, name, accuracy_metres);
+        }
         Self::cadastre_from(&root, bytes, name, accuracy_metres)
     }
 

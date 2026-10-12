@@ -5,7 +5,7 @@ use super::{
     DISTANCE, EXTENT, GRADIENT_DIRECTION, HEADROOM, INCLINATION, LENGTH, LocalizedText, MAX_WITHIN,
     MEAN_WITHIN, MIN_WITHIN, MeasuredDescriptor, MeasuredExactness, MeasuredParameter,
     MeasuredParameterKind, MeasuredSubject, PERIMETER, SKEW, SLOPE, SLOPE_ALONG, SUM_WITHIN,
-    THICKNESS,
+    THICKNESS, ZONE_ANGLES, ZONE_LENGTHS, ZONE_NUMBERS,
 };
 use crate::{
     MEASURED_AREA, MEASURED_BOTTOM, MEASURED_BOTTOM_ABOVE_LEVEL, MEASURED_BOUNDARY_AREA,
@@ -8072,6 +8072,41 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         )
     ),
     MeasuredDescriptor {
+        name: "zone_angle",
+        parameters: &[
+            ZONE_OF_OBJECT[0],
+            ZONE_OF_OBJECT[1],
+            MeasuredParameter {
+                key: "value",
+                kind: MeasuredParameterKind::Choice {
+                    options: ZONE_ANGLES,
+                },
+                required: true,
+                default: None,
+                help: &en_de(
+                    "Which angle: `roof_pitch`, `roof_pitch_min` or `roof_pitch_max`.",
+                    "Welcher Winkel: `roof_pitch`, `roof_pitch_min` oder `roof_pitch_max`.",
+                ),
+            },
+        ],
+        dimension: Some(QuantityDimension::PlaneAngle),
+        services: ZONE_SERVICES,
+        exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[ZONE_UNSUPPLIED, ZONE_STANDS_UNDECIDED, ZONE_VALUE_UNREAD],
+        label: &en_de("Angle a zone states", "Winkel einer Zone"),
+        help: &en_de(
+            "The value a context zone states, such as a zoning area of a zoning plan: as \
+             stated (a `null` where the zone states none, never a default), cited as the \
+             zone's statement. An angle: the roof pitch required (`roof_pitch`), or the least and \
+             greatest allowed.",
+            "Der Wert, den eine Kontextzone angibt, etwa eine Baugebietsfläche eines \
+             Bebauungsplans: wie angegeben (`null`, wo die Zone keinen angibt, nie ein \
+             Vorgabewert), belegt als Angabe der Zone. Ein Winkel: die vorgeschriebene Dachneigung (`roof_pitch`) oder die \
+             kleinste und größte zulässige.",
+        ),
+    },
+    MeasuredDescriptor {
         name: "zone_area",
         parameters: &ZONE_OF_OBJECT,
         dimension: Some(QuantityDimension::Area),
@@ -8198,6 +8233,46 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         ),
     },
     MeasuredDescriptor {
+        name: "zone_length",
+        parameters: &[
+            ZONE_OF_OBJECT[0],
+            ZONE_OF_OBJECT[1],
+            MeasuredParameter {
+                key: "value",
+                kind: MeasuredParameterKind::Choice {
+                    options: ZONE_LENGTHS,
+                },
+                required: true,
+                default: None,
+                help: &en_de(
+                    "Which height: `eaves_height`, `ridge_height` or `top_height`, each also `_min` or \
+                     `_max`.",
+                    "Welche Höhe: `eaves_height`, `ridge_height` oder `top_height`, jede auch mit \
+                     `_min` oder `_max`.",
+                ),
+            },
+        ],
+        dimension: Some(QuantityDimension::Length),
+        services: ZONE_SERVICES,
+        exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[ZONE_UNSUPPLIED, ZONE_STANDS_UNDECIDED, ZONE_VALUE_UNREAD],
+        label: &en_de("Length a zone states", "Länge einer Zone"),
+        help: &en_de(
+            "The value a context zone states, such as a zoning area of a zoning plan: as \
+             stated (a `null` where the zone states none, never a default), cited as the \
+             zone's statement. A height above the terrain: of the eaves, the ridge or the top, \
+             required, least or greatest. A height the zone states above another \
+             reference is not evaluated, never read as above the terrain.",
+            "Der Wert, den eine Kontextzone angibt, etwa eine Baugebietsfläche eines \
+             Bebauungsplans: wie angegeben (`null`, wo die Zone keinen angibt, nie ein \
+             Vorgabewert), belegt als Angabe der Zone. Eine Höhe über dem Gelände: der Traufe, des Firsts oder der Oberkante, \
+             vorgeschrieben, kleinste oder größte. Eine Höhe, die die Zone über einem \
+             anderen Bezug angibt, wird nicht ausgewertet, nie als Höhe über dem Gelände \
+             gelesen.",
+        ),
+    },
+    MeasuredDescriptor {
         name: "zone_outside_area",
         parameters: &ZONE_OF_OBJECT,
         dimension: Some(QuantityDimension::Area),
@@ -8224,6 +8299,47 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              Baugrenze, außerhalb ihres Flurstücks), bei jedem Rand, den die angegebene \
              Genauigkeit der Zone zulässt: bei null liegt die Grundfläche innerhalb, und eine, \
              die den Rand innerhalb dieser Genauigkeit überspannt, liegt nie sicher innerhalb.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "zone_value",
+        parameters: &[
+            ZONE_OF_OBJECT[0],
+            ZONE_OF_OBJECT[1],
+            MeasuredParameter {
+                key: "value",
+                kind: MeasuredParameterKind::Choice {
+                    options: ZONE_NUMBERS,
+                },
+                required: true,
+                default: None,
+                help: &en_de(
+                    "Which number: `coverage_ratio_min`, `coverage_ratio_max`, `floor_area_ratio_min`, \
+                     `floor_area_ratio_max`, `storeys`, `storeys_min` or `storeys_max`.",
+                    "Welche Zahl: `coverage_ratio_min`, `coverage_ratio_max`, `floor_area_ratio_min`, \
+                     `floor_area_ratio_max`, `storeys`, `storeys_min` oder `storeys_max`.",
+                ),
+            },
+        ],
+        dimension: None,
+        services: ZONE_SERVICES,
+        exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[ZONE_UNSUPPLIED, ZONE_STANDS_UNDECIDED, ZONE_VALUE_UNREAD],
+        label: &en_de("Number a zone states", "Zahl einer Zone"),
+        help: &en_de(
+            "The value a context zone states, such as a zoning area of a zoning plan: as \
+             stated (a `null` where the zone states none, never a default), cited as the \
+             zone's statement. A plain number: the least or greatest coverage ratio (GRZ) or \
+             floor area ratio (GFZ), or the full storeys required, least or greatest. \
+             Compare a measured GRZ, `zone_inside_area` over `zone_area` of the parcel, \
+             with `coverage_ratio_max`.",
+            "Der Wert, den eine Kontextzone angibt, etwa eine Baugebietsfläche eines \
+             Bebauungsplans: wie angegeben (`null`, wo die Zone keinen angibt, nie ein \
+             Vorgabewert), belegt als Angabe der Zone. Eine reine Zahl: die kleinste oder größte Grundflächenzahl (GRZ) oder \
+             Geschossflächenzahl (GFZ), oder die vorgeschriebene, kleinste oder größte \
+             Zahl der Vollgeschosse. Eine gemessene GRZ, `zone_inside_area` durch \
+             `zone_area` des Flurstücks, wird mit `coverage_ratio_max` verglichen.",
         ),
     },
 ];
@@ -8285,6 +8401,10 @@ pub(super) const ZONE_OF_OBJECT: [MeasuredParameter; 2] = [
 
 /// What leaves a value reading the zone an object stands in not
 /// evaluated.
+/// What leaves a value a zone states not evaluated.
+const ZONE_VALUE_UNREAD: &str = "the zone states the value in a way that is not read (a height \
+     above another reference, two different statements of it)";
+
 pub(super) const ZONE_STANDS_UNDECIDED: &str = "by `stands_in`, the object may lie in several \
      zones of the kind, straddles a boundary within its accuracy, lies in none, or a zone of \
      the kind cannot be placed";

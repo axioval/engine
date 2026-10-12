@@ -6,6 +6,25 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Zoning plans as context**: `ContextZones::read_xplan_gml` (through
+  `read_gml` for a document rooted in `XPlanAuszug`, so `check --zones
+  0.05=plan.gml`) reads the regulating areas and lines of an XPlanGML
+  subset: `BP_BaugebietsTeilFlaeche` as `use-area`,
+  `BP_UeberbaubareGrundstuecksFlaeche` as `buildable-area`,
+  `BP_BaugrenzeLinie` as `building-limit` and `BP_BaulinieLinie` as
+  `building-line`, passing over the plan, its sections and presentation
+  objects and refusing any other feature by name. Areas carry their stated
+  values (`ZoneValue`, `ContextZone::values`) by neutral keys: the
+  least and greatest coverage ratio (GRZ) and floor area ratio (GFZ), the
+  full storeys, the roof pitch and the eaves, ridge and top heights above
+  the terrain, each required, least or greatest. The measured values
+  `zone_value`, `zone_length` and `zone_angle` (`zone=<id>` or
+  `stands_in=<kind>`, `value=<key>`) read them as stated and cited
+  (`…;value=<key>;stated=<element>`): a value the plan does not state is
+  `null`, one stated above another height reference or twice differently
+  is not evaluated, never defaulted. A building's GRZ on its own parcel
+  compares with the one the use area it stands in states
+  ([#321](https://github.com/axioval/engine/issues/321)).
 - **Cadastral parcels as context**: `ContextZones::read_cadastre_gml`
   (and `read_gml`) reads the parcels and public traffic areas of a
   cadastral GML subset as context zones: `AX_Flurstueck` as `parcel` by

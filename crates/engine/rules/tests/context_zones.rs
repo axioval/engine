@@ -297,6 +297,11 @@ fn cadastre(accuracy: f64) -> ContextZones {
 /// Buildings beside [`cadastre`]: `house` on parcel `0002`, `straddler`
 /// across the boundary of `0001` and `0002`, `afar` on no parcel.
 fn on_parcels(accuracy: f64) -> (Project, ServiceRegistry) {
+    on_parcels_with(accuracy, Vec::new())
+}
+
+/// [`on_parcels`] with the zones of `more` supplied after the cadastre.
+fn on_parcels_with(accuracy: f64, more: Vec<ContextZones>) -> (Project, ServiceRegistry) {
     let model = Model::default()
         .object("house", "building")
         .object("straddler", "building")
@@ -311,7 +316,7 @@ fn on_parcels(accuracy: f64) -> (Project, ServiceRegistry) {
         .register(PlanAreaServiceHandle::new(Arc::new(Rectangles(rectangles))))
         .unwrap();
     services
-        .register(SuppliedZones::try_from_files(vec![cadastre(accuracy)]).unwrap())
+        .register(SuppliedZones::try_from_files([vec![cadastre(accuracy)], more].concat()).unwrap())
         .unwrap();
     let project = model.project();
     axioval_rules::register_builtins(CapabilityRegistry::new())
@@ -406,5 +411,112 @@ fn a_zone_is_named_by_id_or_by_kind_never_both() {
     }
     assert!(
         axioval_ir::measured::parse("zone_footprint_area;stands_in=parcel;elements=x").is_err()
+    );
+}
+
+/// A zoning plan (#321) beside [`cadastre`], in the model's coordinates:
+/// the use area `WA1` over the three parcels (x 0..60, y 0..30) stating a
+/// greatest coverage ratio of 0.4, roof pitches of 30 to 45 degrees, an
+/// eaves height of at most 6.5 m above the terrain and a ridge height
+/// above sea level, which is not read.
+const PLAN: &str = r#"<xplan:XPlanAuszug xmlns:xplan="http://www.xplanung.de/xplangml/6/0"
+    xmlns:gml="http://www.opengis.net/gml/3.2" gml:id="A">
+  <gml:boundedBy><gml:Envelope srsName="axioval:model"/></gml:boundedBy>
+  <gml:featureMember><xplan:BP_Plan gml:id="P"/></gml:featureMember>
+  <gml:featureMember>
+    <xplan:BP_BaugebietsTeilFlaeche gml:id="WA1">
+      <xplan:position><gml:Polygon><gml:exterior><gml:LinearRing>
+        <gml:posList>0 0 60 0 60 30 0 30 0 0</gml:posList>
+      </gml:LinearRing></gml:exterior></gml:Polygon></xplan:position>
+      <xplan:GRZ>0.4</xplan:GRZ>
+      <xplan:dachgestaltung><xplan:BP_Dachgestaltung>
+        <xplan:DNmin uom="grad">30</xplan:DNmin><xplan:DNmax uom="grad">45</xplan:DNmax>
+      </xplan:BP_Dachgestaltung></xplan:dachgestaltung>
+      <xplan:hoehenangabe><xplan:XP_Hoehenangabe>
+        <xplan:hoehenbezug>2000</xplan:hoehenbezug><xplan:bezugspunkt>1000</xplan:bezugspunkt>
+        <xplan:hMax uom="m">6.5</xplan:hMax>
+      </xplan:XP_Hoehenangabe></xplan:hoehenangabe>
+      <xplan:hoehenangabe><xplan:XP_Hoehenangabe>
+        <xplan:hoehenbezug>1000</xplan:hoehenbezug><xplan:bezugspunkt>2000</xplan:bezugspunkt>
+        <xplan:h uom="m">62.0</xplan:h>
+      </xplan:XP_Hoehenangabe></xplan:hoehenangabe>
+    </xplan:BP_BaugebietsTeilFlaeche>
+  </gml:featureMember>
+</xplan:XPlanAuszug>"#;
+
+/// [`on_parcels`] with the zoning plan [`PLAN`] supplied too.
+fn zoned() -> (Project, ServiceRegistry) {
+    let plan = ContextZones::read_gml(PLAN.as_bytes(), "plan.gml", 0.0).unwrap();
+    on_parcels_with(0.0, vec![plan])
+}
+
+/// engine#321: a building reads the values the use area it stands in
+/// states, exactly as stated; a value the plan does not state is `null`,
+/// one it states above another reference is not evaluated, and a building
+/// in no use area is not evaluated.
+#[test]
+fn a_building_reads_the_values_of_the_use_area_it_stands_in() {
+    let site = zoned();
+    let grz = value(
+        &site,
+        "house",
+        "zone_value;stands_in=use-area;value=coverage_ratio_max",
+    )
+    .unwrap();
+    assert_eq!(grz, (0.4, 0.4, true));
+    let eaves = value(
+        &site,
+        "house",
+        "zone_length;stands_in=use-area;value=eaves_height_max",
+    )
+    .unwrap();
+    assert_eq!(eaves, (6.5, 6.5, true));
+    let (lower, upper, exact) = value(
+        &site,
+        "house",
+        "zone_angle;stands_in=use-area;value=roof_pitch_max",
+    )
+    .unwrap();
+    assert!(lower <= 45_f64.to_radians() && 45_f64.to_radians() <= upper && upper - lower < 1e-12);
+    assert!(exact, "a stated pitch, rounded only");
+    // By id, the same value; the building's measured coverage ratio of its
+    // parcel, 100 of 600 m², is within it.
+    let by_id = value(
+        &site,
+        "house",
+        "zone_value;zone=WA1;value=coverage_ratio_max",
+    )
+    .unwrap();
+    assert_eq!(by_id, (0.4, 0.4, true));
+    let footprint = value(&site, "house", "zone_inside_area;stands_in=parcel").unwrap();
+    let parcel = value(&site, "house", "zone_area;stands_in=parcel").unwrap();
+    assert!(footprint.1 / parcel.0 <= grz.0, "{footprint:?} {parcel:?}");
+    let why = value(
+        &site,
+        "house",
+        "zone_value;stands_in=use-area;value=coverage_ratio_min",
+    )
+    .unwrap_err();
+    assert_eq!(why, "absent", "a value the plan does not state is null");
+    let why = value(
+        &site,
+        "house",
+        "zone_length;stands_in=use-area;value=ridge_height_max",
+    )
+    .unwrap_err();
+    assert!(why.contains("reference `1000`"), "{why}");
+    let why = value(
+        &site,
+        "afar",
+        "zone_value;stands_in=use-area;value=coverage_ratio_max",
+    )
+    .unwrap_err();
+    assert!(
+        why.contains("stands in no supplied context zone of kind `use-area`"),
+        "{why}"
+    );
+    assert!(
+        axioval_ir::measured::parse("zone_length;zone=WA1;value=coverage_ratio_max").is_err(),
+        "a ratio is no length"
     );
 }

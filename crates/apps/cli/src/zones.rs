@@ -1,5 +1,6 @@
 //! `check --zones`: context zones supplied beside the model (#327), read
-//! from `GeoJSON` files or GML documents (cadastral parcels, #319) and
+//! from `GeoJSON` files or GML documents (cadastral parcels, #319; zoning
+//! plans, #321) and
 //! supplied to the plan before anything runs; once the models are read,
 //! each file's reference system and coordinates are compared with each
 //! model's (#319).

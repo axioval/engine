@@ -1091,7 +1091,7 @@ pub use contact::{
 };
 pub use context_zones::{
     ContextZone, ContextZones, MODEL_REFERENCE, PlacedZone, SuppliedZones, ZONE_LOCATOR_PREFIX,
-    ZoneReads, ZoneReference, ZoneShape, reads_zone,
+    ZoneReads, ZoneReference, ZoneShape, ZoneValue, reads_zone,
 };
 pub use coordinate_system::{
     CoordinateFrame, CoordinateSystemError, CoordinateSystemService, CoordinateSystemServiceHandle,

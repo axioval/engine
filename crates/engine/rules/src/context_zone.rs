@@ -24,6 +24,7 @@ use axioval_engine::{
     MeasuredMemo, MeasuredProvider, Measurement, MemberValue, NotEvaluatedReason, PlacedZone,
     PlanPolygon, PropertyResolutionError, ProximityError, ProximityServiceHandle, RuleContext,
     SuppliedZones, ZONE_LOCATOR_PREFIX, ZoneArea, ZoneAreaRequest, ZoneReference, ZoneShape,
+    ZoneValue,
 };
 use axioval_ir::measured::{MeasuredArgument, MeasuredCall};
 use axioval_ir::{Evidence, ObjectId, QuantityDimension, SourceId};
@@ -38,6 +39,9 @@ const ZONE_FOOTPRINT_AREA: &str = "zone_footprint_area";
 const ZONE_INSIDE_AREA: &str = "zone_inside_area";
 const ZONE_OUTSIDE_AREA: &str = "zone_outside_area";
 const ZONE_NEIGHBOURS: &str = "zone_neighbours";
+const ZONE_ANGLE: &str = "zone_angle";
+const ZONE_LENGTH: &str = "zone_length";
+const ZONE_VALUE: &str = "zone_value";
 
 /// Measures the values of context zones.
 pub(crate) struct ZoneMeasures;
@@ -601,6 +605,104 @@ fn of_project(
     ))
 }
 
+/// The id of the zone `call` names for `object`, without placing it where
+/// it is named by id, with the evidence of the choice where it is the zone
+/// of a kind the object stands in.
+fn zone_id_for(
+    context: &RuleContext<'_>,
+    call: &MeasuredCall,
+    object: &ObjectId,
+) -> Result<(String, Option<Evidence>), Unavailable> {
+    if let Some(argument) = call.argument("stands_in") {
+        let MeasuredArgument::Text(kind) = argument else {
+            return Err((
+                NotEvaluatedReason::InvalidDeclaration,
+                "no kind of context zone is named".to_owned(),
+            ));
+        };
+        let (id, evidence) = stands_in(context, kind, object)?;
+        return Ok((id, Some(evidence)));
+    }
+    Ok((zone_id(call)?.to_owned(), None))
+}
+
+/// A value the zone `call` names states (`zone_value`, `zone_length`,
+/// `zone_angle`, #321): as stated and cited as the zone's statement, an
+/// angle stated in degrees in radians rounded outward; `null` where the
+/// zone states none; not evaluated where it states it in a way that is
+/// not read.
+fn stated(
+    call: &MeasuredCall,
+    object: &ObjectId,
+    context: &RuleContext<'_>,
+) -> Result<(Measurement, Citation), Unavailable> {
+    let key = call.choice("value").ok_or_else(|| {
+        (
+            NotEvaluatedReason::InvalidDeclaration,
+            "no stated value is named".to_owned(),
+        )
+    })?;
+    let (id, chosen) = zone_id_for(context, call, object)?;
+    let supplied = supplied(context, &format!("`{id}`"))?;
+    let (file, zone) = supplied.zone(&id).ok_or_else(|| {
+        (
+            NotEvaluatedReason::IncompleteEvidence,
+            format!("no supplied context zone is `{id}`"),
+        )
+    })?;
+    let mut locator = format!("{};value={key}", zone.locator(file));
+    let mut evidence = Vec::new();
+    evidence.extend(chosen);
+    let (value, degrees) = match zone.values().get(key) {
+        None => {
+            return Ok((
+                Measurement::Absent { locator },
+                Citation {
+                    evidence,
+                    ..Citation::default()
+                },
+            ));
+        }
+        Some(ZoneValue::Unread { why }) => {
+            return Err((
+                NotEvaluatedReason::IncompleteEvidence,
+                format!("zone `{id}` states `{key}` in a way that is not read: {why}"),
+            ));
+        }
+        Some(ZoneValue::Stated {
+            value,
+            degrees,
+            statement,
+        }) => {
+            locator.push_str(";stated=");
+            locator.push_str(statement);
+            (*value, *degrees)
+        }
+    };
+    let dimension = call.descriptor.dimension;
+    let bounds = if degrees && dimension == Some(QuantityDimension::PlaneAngle) {
+        let radians = value.to_radians();
+        let slack = 4.0 * f64::EPSILON * radians.abs();
+        ((radians - slack).next_down(), (radians + slack).next_up())
+    } else {
+        (value, value)
+    };
+    evidence.push(Evidence {
+        source: object.source.clone(),
+        locator: locator.clone(),
+        exact: true,
+    });
+    Ok((
+        interval(bounds, dimension, true, locator),
+        Citation {
+            related: Vec::new(),
+            evidence,
+            notes: Vec::new(),
+            sources: Vec::new(),
+        },
+    ))
+}
+
 /// A refusal of `name` of the project, as a property resolution states it.
 fn refused_project(name: &str) -> impl Fn(Unavailable) -> PropertyResolutionError + '_ {
     move |(reason, why)| resolution_error((reason, format!("`{name}` of the project: {why}")))
@@ -769,6 +871,9 @@ impl MeasuredProvider for ZoneMeasures {
             ZONE_FOOTPRINT_AREA,
             ZONE_INSIDE_AREA,
             ZONE_OUTSIDE_AREA,
+            ZONE_ANGLE,
+            ZONE_LENGTH,
+            ZONE_VALUE,
         ]
     }
 
@@ -804,6 +909,9 @@ impl MeasuredProvider for ZoneMeasures {
         match call.name() {
             ZONE_FLOOR_AREA | ZONE_FOOTPRINT_AREA => {
                 of_project(call, context).map_err(refused(call.name(), object))
+            }
+            ZONE_ANGLE | ZONE_LENGTH | ZONE_VALUE => {
+                stated(call, object, context).map_err(refused(call.name(), object))
             }
             _ => of_object(call, object, context).map_err(refused(call.name(), object)),
         }

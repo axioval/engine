@@ -118,8 +118,9 @@ CLI output and exit codes are public automation contracts. Parse packages fail c
   names that no file states `zone-not-supplied` (locator
   `axioval:zone;id=<id>`); the values reading them are not evaluated.
   `[ACCURACY=]FILE` (`zone_arg`): a file opening with `{` is GeoJSON and
-  takes no accuracy, one opening with `<` is GML (`ContextZones::read_gml`)
-  and needs it; the record adds `format` and `accuracy_metres`, and a kind
+  takes no accuracy, one opening with `<` is GML (`ContextZones::read_gml`:
+  an `XPlanAuszug` is a zoning plan, #321, anything else a cadastre) and
+  needs it; the record adds `format` and `accuracy_metres`, and a kind
   read by `stands_in` that no file states is `zone-kind-not-supplied`.
   After the models are read (`check_placements`, before the run) each
   file's `placements` record per source whether `ContextZones::placed_extent`

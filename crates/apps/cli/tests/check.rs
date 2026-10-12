@@ -21931,3 +21931,147 @@ fn a_rule_measures_the_area_of_the_parcel_a_building_stands_on() {
         "{result:#}"
     );
 }
+
+/// A synthetic zoning plan in EPSG:25832 beside [`cadastre_gml`]: the use
+/// area `WA1` over the three parcels (x 0..50, y 0..20) states a greatest
+/// coverage ratio `grz` and an eaves height of at most 6.5 m above the
+/// terrain; the buildable area `UGF1` (x 1..48, y 1..19) is enclosed by
+/// the building limit `BG1`, a closed line, and the building line `BL1`
+/// runs along y = 1.
+fn zoning_plan(grz: f64) -> String {
+    let point = |x: f64, y: f64| format!("{} {}", 500_000.0 + x, 5_600_000.0 + y);
+    let ring = |x0: f64, y0: f64, x1: f64, y1: f64| {
+        [(x0, y0), (x1, y0), (x1, y1), (x0, y1), (x0, y0)]
+            .map(|(x, y)| point(x, y))
+            .join(" ")
+    };
+    let polygon = |ring: String| {
+        format!(
+            "<xplan:position><gml:Polygon gml:id=\"g{}\"><gml:exterior><gml:LinearRing>\
+             <gml:posList>{ring}</gml:posList></gml:LinearRing></gml:exterior></gml:Polygon>\
+             </xplan:position>",
+            ring.len()
+        )
+    };
+    let line = |points: String| {
+        format!(
+            "<xplan:position><gml:LineString><gml:posList>{points}</gml:posList>\
+             </gml:LineString></xplan:position>"
+        )
+    };
+    format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+         <xplan:XPlanAuszug xmlns:xplan=\"http://www.xplanung.de/xplangml/6/0\" \
+         xmlns:gml=\"http://www.opengis.net/gml/3.2\" gml:id=\"auszug\">\
+         <gml:boundedBy><gml:Envelope srsName=\"EPSG:25832\"><gml:lowerCorner>{}</gml:lowerCorner>\
+         <gml:upperCorner>{}</gml:upperCorner></gml:Envelope></gml:boundedBy>\
+         <gml:featureMember><xplan:BP_Plan gml:id=\"plan\"><xplan:name>Example</xplan:name>\
+         </xplan:BP_Plan></gml:featureMember>\
+         <gml:featureMember><xplan:BP_BaugebietsTeilFlaeche gml:id=\"WA1\">{}\
+         <xplan:GRZ>{grz}</xplan:GRZ><xplan:hoehenangabe><xplan:XP_Hoehenangabe>\
+         <xplan:hoehenbezug>2000</xplan:hoehenbezug><xplan:bezugspunkt>1000</xplan:bezugspunkt>\
+         <xplan:hMax uom=\"m\">6.5</xplan:hMax></xplan:XP_Hoehenangabe></xplan:hoehenangabe>\
+         </xplan:BP_BaugebietsTeilFlaeche></gml:featureMember>\
+         <gml:featureMember><xplan:BP_UeberbaubareGrundstuecksFlaeche gml:id=\"UGF1\">{}\
+         </xplan:BP_UeberbaubareGrundstuecksFlaeche></gml:featureMember>\
+         <gml:featureMember><xplan:BP_BaugrenzeLinie gml:id=\"BG1\">{}</xplan:BP_BaugrenzeLinie>\
+         </gml:featureMember>\
+         <gml:featureMember><xplan:BP_BaulinieLinie gml:id=\"BL1\">{}</xplan:BP_BaulinieLinie>\
+         </gml:featureMember></xplan:XPlanAuszug>\n",
+        point(0.0, 0.0),
+        point(50.0, 20.0),
+        polygon(ring(0.0, 0.0, 50.0, 20.0)),
+        polygon(ring(1.0, 1.0, 48.0, 19.0)),
+        line(ring(1.0, 1.0, 48.0, 19.0)),
+        line(format!("{} {}", point(1.0, 1.0), point(48.0, 1.0))),
+    )
+}
+
+impl Case {
+    /// One expression rule over every building of [`parcel_buildings`]
+    /// georeferenced onto EPSG:25832, beside [`cadastre_gml`] and
+    /// [`zoning_plan`] stating `grz`, both within 5 cm.
+    fn zoning_rule(&self, requirement: &Value, grz: f64) -> (Output, Value) {
+        self.write("model.ifc", &georeferenced(&parcel_buildings(), 500_000.0));
+        let cadastre = self.write("alkis.xml", &cadastre_gml());
+        let plan = self.write("plan.gml", &zoning_plan(grz));
+        let cadastre = format!("0.05={}", cadastre.to_str().unwrap());
+        let plan = format!("0.05={}", plan.to_str().unwrap());
+        self.geometry_rule_with(
+            &["model.ifc"],
+            &[("building", "IfcBuildingElementProxy")],
+            (
+                "axioval:capability.expression",
+                &registry_signature("axioval:capability.expression"),
+            ),
+            entity("building"),
+            json!({"requirement": {"type": "expression", "value": requirement}}),
+            &json!({}),
+            &["--zones", &cadastre, "--zones", &plan],
+        )
+    }
+}
+
+/// engine#321: a zoning plan with a building limit, a building line, a
+/// buildable area and a use area stating GRZ 0.4 and an eaves height of at
+/// most 6.5 m is read beside a cadastre; each building's measured GRZ on
+/// its own parcel (0.29, 0.09 and 0.20) is compared with the GRZ the use
+/// area it stands in states, and its height with the eaves height. A plan
+/// stating GRZ 0.25 finds #19, 80 m² on a parcel of 280 m².
+#[test]
+fn a_rule_compares_a_measured_grz_with_the_one_the_zoning_plan_states() {
+    let case = Case::new("zoning-plan-grz");
+    let measured = |name: &str| json!({"kind": "property", "propertySet": "axioval:measured", "property": name});
+    let grz = json!({"kind": "compare", "operator": "lessThanOrEquals", "label": "value",
+        "left": {"kind": "divide",
+                 "left": measured("zone_inside_area;stands_in=parcel"),
+                 "right": measured("zone_area;stands_in=parcel")},
+        "right": measured("zone_value;stands_in=use-area;value=coverage_ratio_max")});
+    let (output, result) = case.zoning_rule(&grz, 0.4);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}: {result:#}",
+        stderr(&output)
+    );
+    let plan = &result["zone_files"][1];
+    assert_eq!(plan["format"], "xplan-gml", "{result:#}");
+    assert_eq!(plan["zones"], json!(["WA1", "UGF1", "BG1", "BL1"]));
+    assert_eq!(plan["placements"][0]["reference"], "matches", "{plan:#}");
+    assert_eq!(plan["placements"][0]["coordinates"], "overlap", "{plan:#}");
+
+    let (output, result) = case.zoning_rule(&grz, 0.25);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(finding_ids(&result), ["#19"], "{result:#}");
+
+    let eaves = json!({"kind": "compare", "operator": "lessThanOrEquals", "label": "value",
+        "left": measured("extent_z"),
+        "right": measured("zone_length;stands_in=use-area;value=eaves_height_max")});
+    let (output, result) = case.zoning_rule(&eaves, 0.4);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}: {result:#}",
+        stderr(&output)
+    );
+    // A value the plan does not state is null: a comparison with it is
+    // not a pass.
+    let ridge = json!({"kind": "compare", "operator": "lessThanOrEquals", "label": "value",
+        "left": measured("extent_z"),
+        "right": measured("zone_length;stands_in=use-area;value=ridge_height_max")});
+    let (output, result) = case.zoning_rule(&ridge, 0.4);
+    assert_ne!(output.status.code(), Some(0), "{result:#}");
+    // Every building keeps to the buildable area.
+    let kept = measured_against(
+        "zone_outside_area;zone=UGF1",
+        "lessThanOrEquals",
+        &json!({"type": "quantity", "value": 0.0, "unit": "m2"}),
+    );
+    let (output, result) = case.zoning_rule(&kept, 0.4);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}: {result:#}",
+        stderr(&output)
+    );
+}

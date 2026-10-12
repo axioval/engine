@@ -82,6 +82,39 @@ pub const FACING: &str = "facing";
 /// A face's pieces, one by one: the measured member list.
 pub const FACE_PIECES: &str = "face_pieces";
 
+/// The plain numbers a context zone may state (#321), read by
+/// `zone_value`: the least and greatest coverage ratio (GRZ) and floor
+/// area ratio (GFZ), and the number of full storeys required, least and
+/// greatest.
+pub const ZONE_NUMBERS: &[&str] = &[
+    "coverage_ratio_min",
+    "coverage_ratio_max",
+    "floor_area_ratio_min",
+    "floor_area_ratio_max",
+    "storeys",
+    "storeys_min",
+    "storeys_max",
+];
+
+/// The lengths a context zone may state (#321), read by `zone_length`:
+/// the eaves, ridge and top heights above the terrain required, least and
+/// greatest.
+pub const ZONE_LENGTHS: &[&str] = &[
+    "eaves_height",
+    "eaves_height_min",
+    "eaves_height_max",
+    "ridge_height",
+    "ridge_height_min",
+    "ridge_height_max",
+    "top_height",
+    "top_height_min",
+    "top_height_max",
+];
+
+/// The angles a context zone may state (#321), read by `zone_angle`: the
+/// roof pitch required, least and greatest.
+pub const ZONE_ANGLES: &[&str] = &["roof_pitch", "roof_pitch_min", "roof_pitch_max"];
+
 use crate::{MEASURED_SET, QuantityDimension};
 
 /// One measured value the engine answers in [`MEASURED_SET`].

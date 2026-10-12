@@ -29,14 +29,16 @@ Each zone has:
   within that distance of the stated one. It must be stated; a zone
   without one is refused, never read as exact;
 - its **provenance**: the file's name and SHA-256 and the feature's
-  position in it.
+  position in it;
+- the **values** it states, if any (a zoning area's coverage ratio, see
+  [Stated values](#stated-values)).
 
 The engine holds these as `ContextZones` (one file: origin, digest,
 reference system and its `ContextZone`s) and a run's `SuppliedZones`
 (every file, by id). Every reader, the cadastral one below or a host's
 own through `ContextZone::try_new` and `ContextZones::new`, produces the
-same `ContextZones` (recording its `format`: `geojson` or
-`cadastre-gml`), so every measured value reads zones one way whatever
+same `ContextZones` (recording its `format`: `geojson`, `cadastre-gml`
+or `xplan-gml`), so every measured value reads zones one way whatever
 they were read from.
 
 ## The file
@@ -76,8 +78,8 @@ A GeoJSON `FeatureCollection` names its reference system in the member
 - The geometry is a `Polygon`, a `MultiPolygon` or a `LineString`; a third
   coordinate is ignored. A ring needs three points enclosing an area, a
   line two points, and no point may repeat beside itself.
-- Other properties are kept in the file and never read. Stated values a
-  zone carries, such as a zoning area's GRZ, are #321's.
+- Other properties are kept in the file and never read; a GeoJSON zone
+  states no [values](#stated-values).
 
 ## Cadastral parcels (GML)
 
@@ -100,7 +102,7 @@ Every other feature (a building, a boundary point, a use other than
 traffic) is refused by its name, as is a feature without its id or an
 area: a cadastre read in part is never taken for the whole one.
 
-The GML 3 geometry subset read for it (and for the zoning plans of #321):
+The GML 3 geometry subset read for it (and for [zoning plans](#zoning-plans-xplangml)):
 
 - areas: `Polygon`, `Surface` of `PolygonPatch` patches, `MultiSurface`
   and `CompositeSurface` of them; rings as `LinearRing`, or `Ring` of
@@ -127,6 +129,92 @@ conversion names that system.
 
 The exchange states no accuracy of the boundaries, so the caller states
 it, never a default: `check --zones 0.05=alkis.xml`.
+
+## Zoning plans (XPlanGML)
+
+`ContextZones::read_xplan_gml` (`check --zones ACCURACY=FILE` on a
+document rooted in `XPlanAuszug`) reads the regulating areas and lines of
+a zoning plan from a subset of XPlanGML, versions 5 and 6, through the
+same GML subset as the cadastre (reference systems included):
+
+| Feature | Kind | Shape |
+| --- | --- | --- |
+| `BP_BaugebietsTeilFlaeche` | `use-area` | area, stating values |
+| `BP_UeberbaubareGrundstuecksFlaeche` | `buildable-area` | area, stating values |
+| `BP_BaugrenzeLinie` | `building-limit` | line |
+| `BP_BaulinieLinie` | `building-line` | line |
+
+each by its `gml:id`, its geometry its `position`. The plan and its
+sections (`BP_Plan`, `BP_Bereich`), text sections and presentation objects
+(`XP_PPO`, `XP_PTO`, `XP_LPO`, `XP_LTO`, `XP_FPO`, `XP_TPO`,
+`XP_Nutzungsschablone`, `XP_Praesentationsobjekt`,
+`XP_Rasterdarstellung`) state no zone and are passed over; any other
+feature is refused by its name.
+
+The footprint is kept within the buildable area with
+`zone_outside_area;zone=<id> <= 0 m²` (or `stands_in=buildable-area`), and
+on a building line with `zone_distance`.
+
+## Stated values
+
+An area may state values: a zoning area's coverage ratio, roof pitches,
+heights. Each zone holds them by a neutral key, with what in the file
+stated it, as a `ZoneValue` (`ContextZone::values`, `with_values` for a
+host's own reader). A value is **stated, never defaulted**: a key a zone
+does not hold is a value its file does not state, read as `null`, and a
+key the file states in a way the reader does not read is not evaluated
+with the reason, never `null`.
+
+| Key | XPlanGML |
+| --- | --- |
+| `coverage_ratio_max`, `coverage_ratio_min` | `GRZ` or `GRZmax`, `GRZmin` |
+| `floor_area_ratio_max`, `floor_area_ratio_min` | `GFZ` or `GFZmax`, `GFZmin` |
+| `storeys`, `storeys_max`, `storeys_min` | `Zzwingend`, `Z` or `Zmax`, `Zmin` |
+| `roof_pitch`, `roof_pitch_max`, `roof_pitch_min` | `DNZwingend`, `DN` or `DNmax`, `DNmin`, on the feature or in its `dachgestaltung` |
+| `eaves_height`, `eaves_height_max`, `eaves_height_min` | a `hoehenangabe` with `bezugspunkt` 1000 (eaves): `hZwingend`, `h` or `hMax`, `hMin` |
+| `ridge_height…` | the same with `bezugspunkt` 2000 (ridge) |
+| `top_height…` | the same with `bezugspunkt` 3000 (top) |
+
+- A height is read only above the terrain (`hoehenbezug` 2000); one above
+  sea level, a street or another reference, or stating none, leaves its
+  keys unread, never read as a height above the terrain. A height of
+  another reference point, or without one (a vertical restriction of the
+  area), is no eaves, ridge or top height.
+- A key stated twice with different values (`GRZ` 0.4 and `GRZmax` 0.5,
+  or the pitches of two roof forms) is unread, naming both.
+- A length is read in metres (`uom="m"`), an angle in degrees
+  (`grad`, `deg`) or `rad`; another unit, or a value that is no number,
+  refuses the file.
+
+Three measured values of an object read them, one per dimension, the
+zone named by `zone=<id>` or `stands_in=<kind>` and the key by `value`:
+
+| Name | Value |
+| --- | --- |
+| `zone_value;value=<key>` | a plain number: `coverage_ratio_…`, `floor_area_ratio_…`, `storeys…` |
+| `zone_length;value=<key>` | a length: `eaves_height…`, `ridge_height…`, `top_height…` |
+| `zone_angle;value=<key>` | an angle: `roof_pitch…` (degrees converted to radians, rounded outward) |
+
+A value is exact as stated and cites the statement:
+`axioval:zone;id=<id>;kind=<kind>;sha256=<digest>#feature=<n>;value=<key>;stated=<element>`.
+A key of another dimension is refused when the rule is compiled.
+
+A building's GRZ on its parcel compared with the one the use area it
+stands in states is
+
+```json
+{ "kind": "compare", "operator": "lessThanOrEquals",
+  "left": { "kind": "divide",
+            "left":  { "kind": "property", "propertySet": "axioval:measured",
+                       "property": "zone_inside_area;stands_in=parcel" },
+            "right": { "kind": "property", "propertySet": "axioval:measured",
+                       "property": "zone_area;stands_in=parcel" } },
+  "right": { "kind": "property", "propertySet": "axioval:measured",
+             "property": "zone_value;stands_in=use-area;value=coverage_ratio_max" } }
+```
+
+A plan that states no greatest coverage ratio there leaves it `null`, and
+the comparison is not a pass.
 
 ## The zone an object stands in
 

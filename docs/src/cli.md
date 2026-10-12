@@ -220,7 +220,9 @@ conversion names), each feature a zone with an `id`, a `kind`, an
 `accuracy` in metres and a polygon, multipolygon or line string.
 `--zones 0.05=alkis.xml` supplies a GML document instead: cadastral
 parcels and public traffic areas (see
-[Cadastral parcels](./context-zones.md#cadastral-parcels-gml)). GML states
+[Cadastral parcels](./context-zones.md#cadastral-parcels-gml)), or a
+zoning plan rooted in `XPlanAuszug` with the values its areas state (see
+[Zoning plans](./context-zones.md#zoning-plans-xplangml)). GML states
 no accuracy of its boundaries, so the argument states it before the first
 `=`, in metres (a trailing `m` is allowed); a GeoJSON file given an
 accuracy, and a GML document given none, are refused. Repeat it for

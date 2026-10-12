@@ -666,6 +666,14 @@ impl PlanAreaService for GroupAreas {
         PlanArea::try_new(lower, upper, evidence)
     }
 
+    fn measure_footprint_perimeter(
+        &self,
+        object: &ObjectId,
+    ) -> Result<crate::FootprintPerimeter, PlanAreaError> {
+        self.refuse_groups(&[object])?;
+        self.inner.measure_footprint_perimeter(object)
+    }
+
     fn measure_plan_overlap(
         &self,
         first: &ObjectId,
@@ -758,6 +766,17 @@ mod tests {
         fn measure_footprint(&self, object: &ObjectId) -> Result<PlanArea, PlanAreaError> {
             self.measure_uncovered_area(object, &[], 0.0)
         }
+        fn measure_footprint_perimeter(
+            &self,
+            object: &ObjectId,
+        ) -> Result<crate::FootprintPerimeter, PlanAreaError> {
+            crate::FootprintPerimeter::try_new(
+                object.clone(),
+                16.0,
+                16.0,
+                Evidence::exact(source(), "perimeter"),
+            )
+        }
         fn measure_plan_overlap(
             &self,
             _: &ObjectId,
@@ -835,6 +854,23 @@ mod tests {
         assert!(matches!(
             undecided.measure_footprint(&id("axioval:group/flats/1")),
             Err(PlanAreaError::Unavailable(_))
+        ));
+    }
+
+    #[test]
+    fn a_members_perimeter_is_measured_by_the_host_and_a_groups_refused() {
+        let areas = GroupAreas {
+            inner: PlanAreaServiceHandle::new(Arc::new(Rooms)),
+            groups: grouping(false),
+        };
+        let perimeter = areas.measure_footprint_perimeter(&id("a")).unwrap();
+        assert_eq!(
+            (perimeter.lower_metres(), perimeter.upper_metres()),
+            (16.0, 16.0)
+        );
+        assert!(matches!(
+            areas.measure_footprint_perimeter(&id("axioval:group/flats/1")),
+            Err(PlanAreaError::Unavailable(why)) if why.contains("derived group")
         ));
     }
 

@@ -114,6 +114,18 @@ All notable changes are documented here. This project follows Semantic Versionin
   sure member's `null` `by` makes it `null`. `ExpressionContext` gains
   `sequenced_members`, `pair_value` and `neighbour`, all defaulted
   ([#350](https://github.com/axioval/engine/issues/350)).
+- **Measured members**: `line_spacing` lists the members an object
+  reaches (expansion joints, fixings, studs, bollards) along a straight
+  line through it in a world `direction`, placed by their directional
+  extents and ordered by station: each with its `station`, `from` and
+  `to`, the `gap` from the member before it (between centres, or with
+  `gap=clear` between faces), and on the first and the last the gap from
+  the object's ends. Five posts with gaps of 2.0, 2.0, 2.4 and 2.0 m list
+  those gaps; `pairs` by `station` relates them, its `max` the largest gap
+  of 2.4 m. Two members whose stations may come either way round leave the
+  gap between them undecided. Along an alignment, `pairs` by the `station`
+  measured value gives the gaps as station differences
+  ([#342](https://github.com/axioval/engine/issues/342)).
 
 ### Changed
 

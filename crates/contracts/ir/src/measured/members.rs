@@ -3414,6 +3414,174 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
     },
     MemberDescriptor {
         list: MeasuredDescriptor {
+            name: "line_spacing",
+            parameters: &[
+                MeasuredParameter {
+                    key: "members",
+                    kind: MeasuredParameterKind::SourceKind,
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The source kinds of the repeated members, such as posts, studs or \
+                         joints, `,`-separated.",
+                        "Die Quellarten der wiederholten Glieder, etwa Pfosten, Ständer oder \
+                         Fugen, durch `,` getrennt.",
+                    ),
+                },
+                MEMBER_PATH,
+                MeasuredParameter {
+                    key: "direction",
+                    kind: MeasuredParameterKind::Vector,
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The direction of the line, `x,y,z` in world coordinates: stations \
+                         run along it from where the object begins.",
+                        "Die Richtung der Linie, `x,y,z` in Weltkoordinaten: die Stationen \
+                         laufen entlang ihr ab dem Anfang des Objekts.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "gap",
+                    kind: MeasuredParameterKind::Choice {
+                        options: &["centre", "clear"],
+                    },
+                    required: false,
+                    default: Some("centre"),
+                    help: &en_de(
+                        "`centre` measures a gap between members' centres, `clear` between \
+                         their faces; at an end, from the object's end to the member's centre \
+                         or face.",
+                        "`centre` misst einen Abstand zwischen den Mitten der Glieder, `clear` \
+                         zwischen ihren Flächen; an einem Ende vom Ende des Objekts bis zur \
+                         Mitte oder Fläche des Glieds.",
+                    ),
+                },
+            ],
+            dimension: None,
+            services: &[
+                "vertical-extent",
+                "relationship-selection",
+                "type-hierarchy",
+            ],
+            exactness: MeasuredExactness::Measured,
+            subject: MeasuredSubject::Object,
+            not_evaluated: &[
+                "a service is not registered",
+                "the path to the members cannot be read",
+                "the object's or a member's extent along the direction cannot be measured",
+                "which of two members comes first along the line is undecided",
+            ],
+            label: &en_de("Spacing along a line", "Abstände entlang einer Linie"),
+            help: &en_de(
+                "The members the object reaches along a straight line through it, ordered by \
+                 station: each with its station, where it begins and ends along the line, the \
+                 gap from the member before it, and on the first and the last the gap from the \
+                 object's ends. Relate consecutive gaps with `pairs` by `station`.",
+                "Die Glieder, die das Objekt erreicht, entlang einer Geraden durch es, nach \
+                 Station geordnet: jedes mit seiner Station, wo es entlang der Linie beginnt \
+                 und endet, dem Abstand vom Glied davor, und am ersten und letzten dem Abstand \
+                 von den Enden des Objekts. Aufeinanderfolgende Abstände verknüpft `pairs` nach \
+                 `station`.",
+            ),
+        },
+        fields: &[
+            field(
+                "member",
+                MemberFieldKind::Objects,
+                &en_de("Member", "Glied"),
+                &en_de("The member, in order.", "Das Glied, in der Reihenfolge."),
+            ),
+            field(
+                "what",
+                MemberFieldKind::Text,
+                &en_de("Words", "Worte"),
+                &en_de(
+                    "The member's identity, as findings name it.",
+                    "Die Identität des Glieds, wie Befunde es nennen.",
+                ),
+            ),
+            field(
+                "station",
+                LENGTH,
+                &en_de("Station", "Station"),
+                &en_de(
+                    "The member's centre along the line, from where the object begins.",
+                    "Die Mitte des Glieds entlang der Linie, ab dem Anfang des Objekts.",
+                ),
+            ),
+            field(
+                "from",
+                LENGTH,
+                &en_de("From", "Von"),
+                &en_de(
+                    "Where the member begins along the line, from where the object begins.",
+                    "Wo das Glied entlang der Linie beginnt, ab dem Anfang des Objekts.",
+                ),
+            ),
+            field(
+                "to",
+                LENGTH,
+                &en_de("To", "Bis"),
+                &en_de(
+                    "Where the member ends along the line, from where the object begins.",
+                    "Wo das Glied entlang der Linie endet, ab dem Anfang des Objekts.",
+                ),
+            ),
+            field(
+                "gap",
+                LENGTH,
+                &en_de("Gap", "Abstand"),
+                &en_de(
+                    "The gap from the member before it, centre or clear as `gap` says; `null` \
+                     on the first, not evaluated where which comes first is undecided.",
+                    "Der Abstand vom Glied davor, Mitte oder lichter Abstand nach `gap`; \
+                     `null` am ersten, ungeprüft, wo unentschieden ist, welches zuerst kommt.",
+                ),
+            ),
+            field(
+                "start_gap",
+                LENGTH,
+                &en_de("Gap at the start", "Abstand am Anfang"),
+                &en_de(
+                    "On the first member, the gap from where the object begins; `null` on the \
+                     others.",
+                    "Am ersten Glied der Abstand vom Anfang des Objekts; `null` an den anderen.",
+                ),
+            ),
+            field(
+                "end_gap",
+                LENGTH,
+                &en_de("Gap at the end", "Abstand am Ende"),
+                &en_de(
+                    "On the last member, the gap to where the object ends; `null` on the \
+                     others.",
+                    "Am letzten Glied der Abstand bis zum Ende des Objekts; `null` an den \
+                     anderen.",
+                ),
+            ),
+            field(
+                "first",
+                TRUTH,
+                &en_de("First", "Erstes"),
+                &en_de(
+                    "Whether the member comes first along the line.",
+                    "Ob das Glied entlang der Linie zuerst kommt.",
+                ),
+            ),
+            field(
+                "last",
+                TRUTH,
+                &en_de("Last", "Letztes"),
+                &en_de(
+                    "Whether the member comes last along the line.",
+                    "Ob das Glied entlang der Linie zuletzt kommt.",
+                ),
+            ),
+        ],
+    },
+    MemberDescriptor {
+        list: MeasuredDescriptor {
             name: "name_sequence",
             parameters: &[
                 MeasuredParameter {

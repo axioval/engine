@@ -49,6 +49,7 @@ mod level_spacing;
 mod levels;
 mod light_area;
 mod light_well;
+mod line_spacing;
 mod local_circulation;
 mod location;
 mod manual_issue;
@@ -381,5 +382,6 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(measured_kinds::SelectionMeasures))
         .and_then(|registry| registry.register_measured(coordinate_consistency::CoordinateMeasures))
         .and_then(|registry| registry.register_measured(external_wall_validation::EnvelopeMeasures))
+        .and_then(|registry| registry.register_measured(line_spacing::LineSpacingMeasures))
         .map(|registry| registry.with_refiner(Refiner))
 }

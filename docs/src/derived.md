@@ -1051,6 +1051,7 @@ sites that cite a value exact:
 | `free_floor_fit` (members) | the fit is found, or proven absent on exact evidence (the proof, the merged spaces, the swings and the entrances read) | nothing; an open search is never exact |
 | `rectangle_side`, `obstruction_count`, `axes_within` | the rectangles and every obstacle measured are exact | the undecided obstacles |
 | `band_uncovered_area`, `parallel_pairs` | every pair and area is exact and every member was read | the possible bands |
+| `line_spacing` (members) | the object's and the members' directional extents are exact | rounding |
 | `level_rise`, `prevailing_rise`, `prevailing_elevation` | the heights' or extent's evidence is exact (points decide the prevailing value, as `level-spacing` decides it) | rounding |
 | `shelf_length`, `shelf_clear_height` | always: the linear-quantity service refuses inexact evidence | nothing |
 | `levels_above`, `levels_below`, `storey_end` | always: counted over stated elevations, which the property service answers exactly | nothing |
@@ -1227,6 +1228,7 @@ and declare their parameters and typed fields:
 | `axes_within` (`of`, `reach`) | the objects of the kinds named within reach of the footprint in plan | `angle`, `centre_angle` |
 | `parking_bay` (every `parking-bay` parameter under its own name, `selection`) | what `parking-bay` judges of a bay, in its order | `counting`, `count`, `allowed`, `found_words`, `open_words`, `related`; `sized`, `size` (undecided for why it cannot be measured), `measured`, `low`, `high`, `suffix`, `doubtful`, `applies_why`, `later`; `judged`, `found`, `message` |
 | `parallel_pairs` (`members`, `member_path`, `angle_tolerance`, `reach`) | the parallel pairs of members the object reaches, as `wall-spacing` pairs them | `distance` |
+| `line_spacing` (`members`, `member_path`, `direction`, `gap`) | the members the object reaches along a straight line through it, ordered by station ([Spacing along a line](#spacing-along-a-line)) | `member`, `what`, `station`, `from`, `to`, `gap` (`null` on the first), `start_gap`, `end_gap` (`null` but on the first and the last), `first`, `last` |
 | `swing_spaces` (`path`, `kinds`) | the spaces a door opens onto, probed as `door-swing` probes them | `into`, `away` |
 | `connected_spaces` (`host_path`, `host_selector`, `external_property`, `space_path`, `space_selector`) | one item: an element's host walls and their exposure, how many spaces it relates to against how many the exposure needs, and whether the derived adjacency places them on the faces it needs, as `opening-spaces` reads them | `relates`, `count`, `possible`, `expected`, `known`, `sides`, `placed`, `wall`, `hosts`, `requirement`, `related` |
 | `zone_checks` (every `opening-zone` parameter by its own name, `openings`) | what `opening-zone` checks of an opening in each host its path reaches, in its order, host by host: the placement, the allowed zone it misses least, each row of `dimensions`, each requirement on the supports, and the nearest other opening closer than `opening_spacing` | `check`, `placed`, `host`, `inside`, `outside`, `end`, `edge`, `bottom`, `top`, `far_open`, `zone`, `needed`, `distance`, `minimum`, `maximum`, `slack`, `words`, `required`, `label`, `open`, `fails`, `message`, `spacing`, `related`, `reason` and the words findings show |
@@ -1388,6 +1390,50 @@ the sure bands leave, at least what every possible band leaves, and at
 least nothing while a member is undecided. A storey reaching no footprint
 is not evaluated. Expressions over both reach `wall-spacing`'s minimum
 spacing and coverage verdicts on its fixtures.
+
+### Spacing along a line
+
+`line_spacing;members=<kinds>;member_path=<steps>;direction=<x,y,z>[;gap=centre|clear]`
+lists the members of the source kinds `members` an object (a fence, a
+kerb, a wall, a rafter plate) reaches along `member_path`, placed along a
+straight line through it in `direction` by the vertical-extent service's
+directional extents, and ordered by station: expansion joints, fixings,
+studs, rafters, bollards or lights. A station runs from where the object
+begins along the direction (the low end of its own extent) to a member's
+centre (the middle of its extent); `from` and `to` are where the member
+begins and ends. Each member states the `gap` from the member before it
+(`null` on the first): between centres, or with `gap=clear` between the
+faces its extent and the previous one's bound. The first states the
+`start_gap` from where the object begins, the last the `end_gap` to where
+it ends (to the centre, or with `gap=clear` the face); both are `null` on
+the other members. Five posts with gaps of 2.0, 2.0, 2.4 and 2.0 m list
+those gaps, and the largest is 2.4 m.
+
+The gaps compose with [`pairs`](./expressions.md#consecutive-members) by
+`station`, so a consecutive pair whose order is undecided stays undecided
+in both: "no gap between consecutive posts exceeds 2.2 m", and the
+largest gap and the gap at the start:
+
+```json
+{"kind": "pairs", "function": "all",
+ "over": {"kind": "measured", "name": "line_spacing;members=IfcMember;member_path=IfcRelAggregates:forward;direction=1,0,0"},
+ "by": {"kind": "property", "propertySet": "axioval:member", "property": "station"},
+ "value": {"kind": "compare", "operator": "lessThanOrEquals",
+           "left": {"kind": "property", "propertySet": "axioval:member", "property": "gap"},
+           "right": {"kind": "literal", "value": {"type": "quantity", "value": 2.2, "unit": "m"}}}}
+```
+
+`pairs` with `max` of `gap` is the largest gap; `argmin` by `station` of
+`start_gap` (`argmax` of `end_gap`) the gap at an end. Each value is an
+interval holding the exact one, rounded outward, exact only where every
+extent it comes from is. Two members are consecutive only where every
+order their station intervals allow keeps them so (as `pairs` decides
+it); otherwise the later's `gap` is undecided, and so are `first`, `last`
+and the end gaps of a member not surely at an end. An object or member
+whose extent cannot be measured, or a path the source cannot answer,
+refuses the list. Along a curved alignment, read the `station` measured
+value of each member ([Alignments](#alignments)) as the `by` of a
+`pairs` instead; its gaps are station differences between centres.
 
 ### Levels
 

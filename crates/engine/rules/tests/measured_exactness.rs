@@ -50,6 +50,11 @@ const COVERED: &[(&str, &str, &str)] = &[
         "a_gap_and_a_different_prefix_are_reported_per_storey",
     ),
     (
+        "line_spacing",
+        "tests/line_spacing.rs",
+        "a_spacing_measured_on_a_tessellation_is_inexact",
+    ),
+    (
         "name_sequence",
         "tests/semantic.rs",
         "members_without_an_order_value_are_ordered_by_their_placement_height",

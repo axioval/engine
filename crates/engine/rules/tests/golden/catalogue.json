@@ -103112,6 +103112,388 @@
       "available": true
     },
     {
+      "name": "line_spacing",
+      "parameters": [
+        {
+          "key": "members",
+          "kind": {
+            "type": "sourceKind"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The source kinds of the repeated members, such as posts, studs or joints, `,`-separated."
+            },
+            {
+              "language": "de",
+              "text": "Die Quellarten der wiederholten Glieder, etwa Pfosten, Ständer oder Fugen, durch `,` getrennt."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "member_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps from the object to its members."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte vom Objekt zu seinen Bauteilen."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "direction",
+          "kind": {
+            "type": "vector"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The direction of the line, `x,y,z` in world coordinates: stations run along it from where the object begins."
+            },
+            {
+              "language": "de",
+              "text": "Die Richtung der Linie, `x,y,z` in Weltkoordinaten: die Stationen laufen entlang ihr ab dem Anfang des Objekts."
+            }
+          ]
+        },
+        {
+          "key": "gap",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "centre",
+              "clear"
+            ]
+          },
+          "required": false,
+          "default": "centre",
+          "help": [
+            {
+              "language": "en",
+              "text": "`centre` measures a gap between members' centres, `clear` between their faces; at an end, from the object's end to the member's centre or face."
+            },
+            {
+              "language": "de",
+              "text": "`centre` misst einen Abstand zwischen den Mitten der Glieder, `clear` zwischen ihren Flächen; an einem Ende vom Ende des Objekts bis zur Mitte oder Fläche des Glieds."
+            }
+          ],
+          "references": "string"
+        }
+      ],
+      "services": [
+        "vertical-extent",
+        "relationship-selection",
+        "type-hierarchy"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "a service is not registered",
+        "the path to the members cannot be read",
+        "the object's or a member's extent along the direction cannot be measured",
+        "which of two members comes first along the line is undecided"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Spacing along a line"
+        },
+        {
+          "language": "de",
+          "text": "Abstände entlang einer Linie"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The members the object reaches along a straight line through it, ordered by station: each with its station, where it begins and ends along the line, the gap from the member before it, and on the first and the last the gap from the object's ends. Relate consecutive gaps with `pairs` by `station`."
+        },
+        {
+          "language": "de",
+          "text": "Die Glieder, die das Objekt erreicht, entlang einer Geraden durch es, nach Station geordnet: jedes mit seiner Station, wo es entlang der Linie beginnt und endet, dem Abstand vom Glied davor, und am ersten und letzten dem Abstand von den Enden des Objekts. Aufeinanderfolgende Abstände verknüpft `pairs` nach `station`."
+        }
+      ],
+      "fields": [
+        {
+          "name": "member",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Member"
+            },
+            {
+              "language": "de",
+              "text": "Glied"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The member, in order."
+            },
+            {
+              "language": "de",
+              "text": "Das Glied, in der Reihenfolge."
+            }
+          ]
+        },
+        {
+          "name": "what",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Words"
+            },
+            {
+              "language": "de",
+              "text": "Worte"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The member's identity, as findings name it."
+            },
+            {
+              "language": "de",
+              "text": "Die Identität des Glieds, wie Befunde es nennen."
+            }
+          ]
+        },
+        {
+          "name": "station",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Station"
+            },
+            {
+              "language": "de",
+              "text": "Station"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The member's centre along the line, from where the object begins."
+            },
+            {
+              "language": "de",
+              "text": "Die Mitte des Glieds entlang der Linie, ab dem Anfang des Objekts."
+            }
+          ]
+        },
+        {
+          "name": "from",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "From"
+            },
+            {
+              "language": "de",
+              "text": "Von"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Where the member begins along the line, from where the object begins."
+            },
+            {
+              "language": "de",
+              "text": "Wo das Glied entlang der Linie beginnt, ab dem Anfang des Objekts."
+            }
+          ]
+        },
+        {
+          "name": "to",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "To"
+            },
+            {
+              "language": "de",
+              "text": "Bis"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Where the member ends along the line, from where the object begins."
+            },
+            {
+              "language": "de",
+              "text": "Wo das Glied entlang der Linie endet, ab dem Anfang des Objekts."
+            }
+          ]
+        },
+        {
+          "name": "gap",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Gap"
+            },
+            {
+              "language": "de",
+              "text": "Abstand"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The gap from the member before it, centre or clear as `gap` says; `null` on the first, not evaluated where which comes first is undecided."
+            },
+            {
+              "language": "de",
+              "text": "Der Abstand vom Glied davor, Mitte oder lichter Abstand nach `gap`; `null` am ersten, ungeprüft, wo unentschieden ist, welches zuerst kommt."
+            }
+          ]
+        },
+        {
+          "name": "start_gap",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Gap at the start"
+            },
+            {
+              "language": "de",
+              "text": "Abstand am Anfang"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "On the first member, the gap from where the object begins; `null` on the others."
+            },
+            {
+              "language": "de",
+              "text": "Am ersten Glied der Abstand vom Anfang des Objekts; `null` an den anderen."
+            }
+          ]
+        },
+        {
+          "name": "end_gap",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Gap at the end"
+            },
+            {
+              "language": "de",
+              "text": "Abstand am Ende"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "On the last member, the gap to where the object ends; `null` on the others."
+            },
+            {
+              "language": "de",
+              "text": "Am letzten Glied der Abstand bis zum Ende des Objekts; `null` an den anderen."
+            }
+          ]
+        },
+        {
+          "name": "first",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "First"
+            },
+            {
+              "language": "de",
+              "text": "Erstes"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the member comes first along the line."
+            },
+            {
+              "language": "de",
+              "text": "Ob das Glied entlang der Linie zuerst kommt."
+            }
+          ]
+        },
+        {
+          "name": "last",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Last"
+            },
+            {
+              "language": "de",
+              "text": "Letztes"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the member comes last along the line."
+            },
+            {
+              "language": "de",
+              "text": "Ob das Glied entlang der Linie zuletzt kommt."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
       "name": "name_sequence",
       "parameters": [
         {

@@ -2377,6 +2377,45 @@ const PROFILE_RANGE: &[MeasuredParameter] = &[
         ),
     },
     PROFILE_STEP,
+    MeasuredParameter {
+        key: "rate",
+        kind: MeasuredParameterKind::Truth,
+        required: false,
+        default: None,
+        help: &en_de(
+            "`true`: the extreme of the value's rate of change along plan distance (per metre) \
+             instead of the value, such as the steepest cant ramp of a transition.",
+            "`true`: das Extrem der Änderungsrate des Werts entlang der Lagelänge (je Meter) \
+             statt des Werts, etwa die steilste Rampe einer Überhöhungsrampe.",
+        ),
+    },
+];
+
+/// A rate of change at a station, or over a stated length from it.
+const PROFILE_RATE: &[MeasuredParameter] = &[
+    PROFILE_OF,
+    MeasuredParameter {
+        key: "station",
+        kind: MeasuredParameterKind::Length { minimum: -1.0e6 },
+        required: true,
+        default: None,
+        help: &en_de(
+            "The station the rate is read at, in metres.",
+            "Die Station, an der die Rate gelesen wird, in Metern.",
+        ),
+    },
+    MeasuredParameter {
+        key: "over",
+        kind: MeasuredParameterKind::Length { minimum: 0.001 },
+        required: false,
+        default: None,
+        help: &en_de(
+            "A length in metres: the change from `station` to the station `over` further on, \
+             over the plan length between them; without it the derivative at `station`.",
+            "Eine Länge in Metern: die Änderung von `station` bis zur Station `over` weiter, \
+             über der Lagelänge dazwischen; ohne sie die Ableitung an `station`.",
+        ),
+    },
 ];
 
 const PROFILE_SERVICES: &[&str] = &["alignment"];
@@ -4953,12 +4992,13 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
             "Of an alignment: the greatest value of `of` along it from station `from` to `to`, \
              in its own unit. Where the value changes monotonically over a piece of the law it \
              is read at the piece's ends, exactly; elsewhere it is bounded by how fast it can \
-             change. The evidence names the stations where it may be attained.",
+             change. With `rate=true` the greatest rate of change per metre instead. The \
+             evidence names the stations where it may be attained.",
             "Einer Achse: der größte Wert von `of` entlang der Achse von Station `from` bis \
              `to`, in seiner eigenen Einheit. Wo sich der Wert über ein Stück des Gesetzes \
              monoton ändert, wird er an dessen Enden exakt gelesen; sonst über seine \
-             Änderungsrate abgeschätzt. Der Nachweis nennt die Stationen, an denen er \
-             erreicht werden kann.",
+             Änderungsrate abgeschätzt. Mit `rate=true` stattdessen die größte Änderungsrate \
+             je Meter. Der Nachweis nennt die Stationen, an denen er erreicht werden kann.",
         ),
     ),
     within(
@@ -5708,6 +5748,26 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         help: &en_de(
             "How many times a rail of a ramp, or a rail joined to one, reaches over an accessible surface in plan.",
             "Wie oft ein Handlauf einer Rampe oder ein damit verbundener über eine barrierefreie Fläche im Grundriss reicht.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "rate_along",
+        parameters: PROFILE_RATE,
+        dimension: None,
+        services: PROFILE_SERVICES,
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: PROFILE_NOT_EVALUATED,
+        label: &en_de("Rate of change along", "Änderungsrate entlang"),
+        help: &en_de(
+            "Of an alignment: how fast `of` changes along it per metre of plan length, the \
+             derivative at `station` (both one-sided derivatives where two laws meet there), \
+             or with `over` its change from `station` to the station `over` further on over \
+             the plan length between them.",
+            "Einer Achse: wie schnell sich `of` je Meter Lagelänge entlang der Achse ändert, \
+             die Ableitung an `station` (beide einseitigen Ableitungen, wo dort zwei Gesetze \
+             aneinanderstoßen), oder mit `over` die Änderung von `station` bis zur Station \
+             `over` weiter über der Lagelänge dazwischen.",
         ),
     },
     MeasuredDescriptor {

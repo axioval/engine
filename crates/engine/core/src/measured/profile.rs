@@ -1,11 +1,13 @@
 //! Values along a station range of an alignment, read off the profile the
 //! alignment service measures ([`crate::station_profile`]): the greatest
-//! and least value of a parameter between two stations, with the stations
-//! where it may be attained.
+//! and least value of a parameter, or of its rate of change, between two
+//! stations, with the stations where it may be attained, and the rate of
+//! change at a station or over a length from it.
 //!
 //! They are measured on the alignment itself: `of` names the parameter,
 //! `from` and `to` the stations (the alignment's start and end where not
-//! stated) and `step` the greatest width of a sampled stretch.
+//! stated) and `step` the greatest width of a sampled stretch; `station`
+//! and `over` the point or stretch a rate is read over.
 
 use axioval_ir::ObjectId;
 use axioval_ir::measured::{MeasuredArgument, MeasuredCall};
@@ -20,8 +22,11 @@ pub(super) const MAX_ALONG: &str = "max_along";
 /// The least value along a station range.
 pub(super) const MIN_ALONG: &str = "min_along";
 
+/// The rate of change at a station or over a length.
+pub(super) const RATE_ALONG: &str = "rate_along";
+
 /// The names measured here.
-pub(super) const NAMES: &[&str] = &[MAX_ALONG, MIN_ALONG];
+pub(super) const NAMES: &[&str] = &[MAX_ALONG, MIN_ALONG, RATE_ALONG];
 
 /// At most this many station stretches are named in a value's evidence.
 const NAMED: usize = 5;
@@ -78,7 +83,14 @@ impl Measures {
             .as_ref()
             .ok_or_else(|| Self::missing(name, "alignment"))?;
         let parameter = parameter(call)?;
-        let (from, to) = (length(call, "from")?, length(call, "to")?);
+        let (from, to) = if name == RATE_ALONG {
+            let station =
+                length(call, "station")?.ok_or(PropertyResolutionError::InvalidRequest)?;
+            let over = length(call, "over")?;
+            (Some(station), Some(station + over.unwrap_or(0.0)))
+        } else {
+            (length(call, "from")?, length(call, "to")?)
+        };
         if let (Some(from), Some(to)) = (from, to)
             && from > to
         {
@@ -88,14 +100,14 @@ impl Measures {
                 &format!("the range runs backwards, from station {from} to station {to}"),
             ));
         }
-        let request = AlignmentProfileRequest::try_new(
-            alignment.clone(),
-            parameter,
-            from,
-            to,
-            length(call, "step")?,
-        )
-        .map_err(|_| PropertyResolutionError::InvalidRequest)?;
+        let step = if name == RATE_ALONG {
+            None
+        } else {
+            length(call, "step")?
+        };
+        let request =
+            AlignmentProfileRequest::try_new(alignment.clone(), parameter, from, to, step)
+                .map_err(|_| PropertyResolutionError::InvalidRequest)?;
         let profile = service
             .measure_alignment_profile(&request)
             .map_err(|error| match error {
@@ -105,27 +117,56 @@ impl Measures {
                 other => Self::unavailable(name, alignment, &other.to_string()),
             })?;
         let locator = profile.evidence().locator.clone();
-        let which = if name == MAX_ALONG {
-            ProfileExtreme::Greatest
-        } else {
+        let which = if name == MIN_ALONG {
             ProfileExtreme::Least
+        } else {
+            ProfileExtreme::Greatest
         };
-        let Some(extreme) = profile.extreme(which) else {
+        let rate = matches!(call.argument("rate"), Some(MeasuredArgument::Truth(true)));
+        let (extreme, word) = if name == RATE_ALONG {
+            if call.argument("over").is_some() {
+                match profile.difference_rate() {
+                    None => (None, ""),
+                    Some(Ok(change)) => (Some(change), "change over"),
+                    Some(Err(_)) => {
+                        return Err(Self::unavailable(
+                            name,
+                            alignment,
+                            &format!(
+                                "the stretch from station {} on has no plan length ({locator})",
+                                from.unwrap_or_default()
+                            ),
+                        ));
+                    }
+                }
+            } else {
+                (profile.rates(), "rate at")
+            }
+        } else {
+            let word = match (which, rate) {
+                (ProfileExtreme::Greatest, false) => "greatest at",
+                (ProfileExtreme::Least, false) => "least at",
+                (ProfileExtreme::Greatest, true) => "greatest rate at",
+                (ProfileExtreme::Least, true) => "least rate at",
+            };
+            let extreme = if rate {
+                profile.rate_extreme(which)
+            } else {
+                profile.extreme(which)
+            };
+            (extreme, word)
+        };
+        let Some(extreme) = extreme else {
             return Ok(Answer::Absent(format!(
                 "{alignment} states no cant ({locator})"
             )));
-        };
-        let word = if which == ProfileExtreme::Greatest {
-            "greatest"
-        } else {
-            "least"
         };
         let value = extreme.value();
         Ok(Answer::Value(
             value.lower(),
             value.upper(),
             None,
-            format!("{locator}; {word} at {}", stretches(extreme.stations())),
+            format!("{locator}; {word} {}", stretches(extreme.stations())),
             extreme.is_exact(),
         ))
     }
@@ -201,7 +242,7 @@ mod tests {
             for (a, b, start, end) in grades {
                 let (a, b, start, end): (f64, f64, f64, f64) = (a, b, start, end);
                 let (low, high) = (a.max(from), b.min(to));
-                if low >= high {
+                if low > high || (low >= high && from < to) {
                     continue;
                 }
                 let rate = (end - start) / (b - a);
@@ -270,6 +311,35 @@ mod tests {
             locator.contains("least at stations 1000.000000 to 1100.0000"),
             "{locator}"
         );
+    }
+
+    #[test]
+    fn rates_are_read_at_a_station_over_a_length_and_at_their_extreme() {
+        // On the sag the gradient grows by 0.07 % per metre, exactly.
+        let (lower, upper, locator, exact) =
+            read(&value("rate_along;of=gradient;station=1130").unwrap());
+        assert!((lower - 0.0007).abs() < 1e-15 && lower == upper && exact);
+        assert!(locator.contains("rate at station 1130"), "{locator}");
+        // At the peak both one-sided rates.
+        let (lower, upper, _, exact) = read(&value("rate_along;of=gradient;station=1160").unwrap());
+        assert!(lower < -0.0003 && upper > 0.0006 && !exact);
+        // Over 30 m from the sag's start, the change over the length.
+        let (lower, upper, locator, _) =
+            read(&value("rate_along;of=gradient;station=1100;over=30").unwrap());
+        assert!(lower <= 0.0007 && upper >= 0.0007 && upper - lower < 1e-15);
+        assert!(
+            locator.contains("change over stations 1100.000000 to 1130.000000"),
+            "{locator}"
+        );
+        // The steepest change of gradient is the sag's, from 1100 to 1160.
+        let (lower, upper, locator, _) = read(&value("max_along;of=gradient;rate=true").unwrap());
+        assert!((lower - 0.0007).abs() < 1e-15 && (upper - 0.0007).abs() < 1e-15);
+        assert!(
+            locator.contains("greatest rate at stations 1100.000000 to 1160.000000"),
+            "{locator}"
+        );
+        let (lower, _, _, _) = read(&value("min_along;of=gradient;rate=true").unwrap());
+        assert!((lower + 0.0004).abs() < 1e-15);
     }
 
     #[test]

@@ -437,7 +437,8 @@ ignoring ASCII case):
 | `any_external;host_selector=<objects>;external_property=<set/name>`, `host_walls`, `undeclared_hosts`, `possible_hosts` (the same arguments) | of a source, as `opening-spaces` reads it: whether any of its walls declares itself external (1, 0, or between where a wall declaring nothing or an object that may be a wall could; read in identity order up to the first that does); how many walls it holds; how many declare nothing usable where none declares itself external; how many more objects may be walls. `any_external` cites the walls where none does | built in, over the property resolution |
 | `station`, `offset[;side=left\|right]`, `height_above_gradient` `;alignment=<kinds>[;path=<steps>]` | the reference point's station along an alignment, its signed plan offset from it and its height above the gradient line, each a length | `AlignmentService::measure_alignment_position`, `TypeHierarchyService`, `RelationshipSelectionService` for a path |
 | `alignment_curvature`, `alignment_radius`, `alignment_gradient`, `alignment_cant`, `alignment_cant_ratio` `;alignment=<kinds>[;path=<steps>]` | the alignment's plan curvature (per metre) and radius, gradient, cant and cant over the rail head distance at the reference point's station | `AlignmentService::measure_alignment_parameter` |
-| `max_along`, `min_along` `;of=gradient\|curvature\|cant\|cant_ratio[;from=<m>][;to=<m>][;step=<m>]` | of an alignment: the greatest or least value of `of` from station `from` to `to`, the stations where it may be attained in the evidence | `AlignmentService::measure_alignment_profile` |
+| `max_along`, `min_along` `;of=gradient\|curvature\|cant\|cant_ratio[;from=<m>][;to=<m>][;step=<m>][;rate=true]` | of an alignment: the greatest or least value of `of` (with `rate=true` its rate of change per metre) from station `from` to `to`, the stations where it may be attained in the evidence | `AlignmentService::measure_alignment_profile` |
+| `rate_along;of=…;station=<m>[;over=<m>]` | of an alignment: how fast `of` changes per metre at a station, or over `over` metres from it | `AlignmentService::measure_alignment_profile` |
 | `station_section_area`, `station_section_thickness[;direction=lateral\|up]` `;alignment=<kinds>[;path=<steps>];station=<m>` | the area and the vertical or horizontal reach of the object's own body in the section normal to the alignment at a station | `AlignmentService::measure_section` |
 | `envelope_intrusions;bodies=<kinds>;envelope=<lateral:up,…>;from=<m>;to=<m>;step=<m>` | of an alignment: how many bodies of the kinds reach into a clearance envelope swept along it, a count from the sure to the possible intrusions | `AlignmentService::measure_envelope`, `TypeHierarchyService` |
 
@@ -1671,6 +1672,24 @@ no cant has none (an exact absence), a range running backwards, a station
 no distance or several distances carry, one beyond the alignment's end or
 a law without a rate bound leave the value not evaluated with the reason.
 The trait's `measure_alignment_profile` refuses by default.
+
+Rates of change along the alignment read the same profile, per metre of
+plan length (the cant ramp of a transition, the change of gradient):
+
+- `rate_along;of=…;station=<m>` is the derivative at the station: the
+  rate of the piece holding it, and where two laws meet there the hull of
+  both one-sided derivatives, which never claims a derivative the value
+  does not have;
+- `rate_along;of=…;station=<m>;over=<m>` is the change from the station to
+  the station `over` further on, over the plan length between them (the
+  same length unless a station equation lies between);
+- `max_along` and `min_along` with `rate=true` are the greatest and least
+  rate over a range: at most the greatest upper bound of any piece's rate
+  and at least every piece's lower bound and mean slope, with the pieces
+  whose rate may reach it as the stations.
+
+A linear cant transition from 2.5 % to 6 % over 50 m changes by 0.07 % per
+metre, within the rounding of its values.
 
 #### Sections and clearance envelopes
 

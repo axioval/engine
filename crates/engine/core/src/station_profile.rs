@@ -525,6 +525,120 @@ impl AlignmentProfile {
             exact: self.evidence.exact && value.is_exact(),
         })
     }
+
+    /// Every rate of change along plan distance over the stretch, the hull
+    /// of its pieces' rates: at a station, the derivative there, and where
+    /// two pieces meet at it both one-sided derivatives; `None` when the
+    /// alignment states none.
+    #[must_use]
+    pub fn rates(&self) -> Option<ProfileExtremeValue> {
+        let pieces = self.pieces.as_deref()?;
+        let lower = pieces
+            .iter()
+            .map(|piece| piece.rate.lower())
+            .fold(f64::INFINITY, f64::min);
+        let upper = pieces
+            .iter()
+            .map(|piece| piece.rate.upper())
+            .fold(f64::NEG_INFINITY, f64::max);
+        let value = AlignmentInterval::try_new(lower, upper).ok()?;
+        let first = pieces.first()?;
+        let last = pieces.last()?;
+        let end = last.station + last.width();
+        Some(ProfileExtremeValue {
+            value,
+            stations: vec![(first.station, end.max(first.station))],
+            exact: self.evidence.exact && value.is_exact(),
+        })
+    }
+
+    /// The change of the value from the stretch's start to its end over
+    /// the plan length between them; `None` when the alignment states
+    /// none, and refused for a stretch of no length.
+    pub fn difference_rate(&self) -> Option<Result<ProfileExtremeValue, AlignmentError>> {
+        let pieces = self.pieces.as_deref()?;
+        let (first, last) = (pieces.first()?, pieces.last()?);
+        let length = last.distance.upper() - first.distance.lower();
+        if length.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater) {
+            return Some(Err(AlignmentError::InvalidMeasurement));
+        }
+        let (start, end) = (first.start, last.end);
+        let exact = self.evidence.exact
+            && start.is_exact()
+            && end.is_exact()
+            && start.lower().to_bits() == end.lower().to_bits();
+        let value = if exact {
+            interval(0.0, 0.0)
+        } else {
+            interval(
+                down(down(end.lower() - start.upper()) / length),
+                up(up(end.upper() - start.lower()) / length),
+            )
+        };
+        let end_station = last.station + last.width();
+        Some(value.map(|value| ProfileExtremeValue {
+            value,
+            stations: vec![(first.station, end_station)],
+            exact,
+        }))
+    }
+
+    /// The greatest or least rate of change over the stretch and the
+    /// station stretches it may be attained in: the pieces whose rate may
+    /// reach the greatest lower bound of any piece's; `None` when the
+    /// alignment states none.
+    #[must_use]
+    pub fn rate_extreme(&self, which: ProfileExtreme) -> Option<ProfileExtremeValue> {
+        let pieces = self.pieces.as_deref()?;
+        let flip = which == ProfileExtreme::Least;
+        let rate = |piece: &ProfilePiece| {
+            if flip {
+                negated(piece.rate)
+            } else {
+                piece.rate
+            }
+        };
+        // Over every piece the greatest rate is at least the lower bound of
+        // its rate, and at least its mean slope from end to end.
+        let least = pieces
+            .iter()
+            .map(|piece| {
+                let (start, end) = if flip {
+                    (negated(piece.start), negated(piece.end))
+                } else {
+                    (piece.start, piece.end)
+                };
+                let width = piece.width();
+                let mean = if width > 0.0 {
+                    down(down(end.lower() - start.upper()) / width)
+                } else {
+                    f64::NEG_INFINITY
+                };
+                rate(piece).lower().max(mean)
+            })
+            .fold(f64::NEG_INFINITY, f64::max);
+        let most = pieces
+            .iter()
+            .map(|piece| rate(piece).upper())
+            .fold(f64::NEG_INFINITY, f64::max);
+        let stations = merged(
+            pieces
+                .iter()
+                .filter(|piece| rate(piece).upper() >= least)
+                .map(|piece| (piece.station, piece.station + piece.width())),
+        );
+        let value = if flip {
+            AlignmentInterval::try_new(-most, -least)
+        } else {
+            AlignmentInterval::try_new(least, most)
+        }
+        .ok()?;
+        Some(ProfileExtremeValue {
+            value,
+            stations,
+            exact: self.evidence.exact && value.is_exact(),
+        })
+    }
 }
 
 /// Station stretches sorted and joined where they touch.
@@ -588,6 +702,103 @@ mod tests {
                 linear(240.0, 300.0, 0.03, 0.03),
             ],
         )
+    }
+
+    /// #338: a cant ratio of 2.5 % held to 100 m, a linear transition to
+    /// 6 % over 50 m, and 6 % on, with every value and rate widened
+    /// outward as a service computes them.
+    fn ramp() -> Vec<ProfilePiece> {
+        let around = |value: f64| span(down(value), up(value));
+        let piece = |a: f64, b: f64, start: f64, end: f64, rate: f64| {
+            ProfilePiece::try_new(span(a, b), a, around(start), around(end), around(rate)).unwrap()
+        };
+        vec![
+            piece(0.0, 100.0, 0.025, 0.025, 0.0),
+            piece(100.0, 150.0, 0.025, 0.06, (0.06 - 0.025) / 50.0),
+            piece(150.0, 200.0, 0.06, 0.06, 0.0),
+        ]
+    }
+
+    fn holds(value: AlignmentInterval, expected: f64, width: f64) {
+        assert!(
+            value.lower() <= expected
+                && expected <= value.upper()
+                && value.upper() - value.lower() <= width,
+            "{value:?} must hold {expected} within {width}"
+        );
+    }
+
+    #[test]
+    fn a_cant_transition_changes_by_its_rate() {
+        let ramp = ramp();
+        // At a station inside the transition: 0.07 % per metre.
+        let at = |piece: ProfilePiece, at: f64| {
+            let point = span(at, at);
+            ProfilePiece::try_new(point, at, piece.start(), piece.start(), piece.rate()).unwrap()
+        };
+        let inside = profile(AlignmentParameter::CantRatio, vec![at(ramp[1], 125.0)]);
+        let rates = inside.rates().unwrap();
+        holds(rates.value(), 0.0007, 1e-15);
+        assert!(!rates.is_exact());
+        // Where it starts, both one-sided rates.
+        let seam = profile(
+            AlignmentParameter::CantRatio,
+            vec![at(ramp[0], 100.0), at(ramp[1], 100.0)],
+        );
+        let rates = seam.rates().unwrap().value();
+        assert!(rates.lower() <= 0.0 && rates.upper() >= 0.0007);
+        // Over the 50 m of the transition, and over 100 m from 75 m on.
+        let whole = profile(AlignmentParameter::CantRatio, vec![ramp[1]]);
+        holds(
+            whole.difference_rate().unwrap().unwrap().value(),
+            0.0007,
+            1e-15,
+        );
+        let half = |piece: ProfilePiece, from: f64, to: f64| {
+            let value = |x: f64| {
+                let v = piece.start().lower() + piece.rate().lower() * (x - 100.0);
+                span(down(v.clamp(0.025, 0.06)), up(v.clamp(0.025, 0.06)))
+            };
+            ProfilePiece::try_new(span(from, to), from, value(from), value(to), piece.rate())
+                .unwrap()
+        };
+        let longer = profile(
+            AlignmentParameter::CantRatio,
+            vec![
+                ProfilePiece::try_new(
+                    span(75.0, 100.0),
+                    75.0,
+                    ramp[0].start(),
+                    ramp[0].end(),
+                    ramp[0].rate(),
+                )
+                .unwrap(),
+                half(ramp[1], 100.0, 150.0),
+                ProfilePiece::try_new(
+                    span(150.0, 175.0),
+                    150.0,
+                    ramp[2].start(),
+                    ramp[2].end(),
+                    ramp[2].rate(),
+                )
+                .unwrap(),
+            ],
+        );
+        holds(
+            longer.difference_rate().unwrap().unwrap().value(),
+            0.00035,
+            1e-12,
+        );
+        // The steepest ramp along all of it is the transition's.
+        let all = profile(AlignmentParameter::CantRatio, ramp.clone());
+        let steepest = all.rate_extreme(ProfileExtreme::Greatest).unwrap();
+        holds(steepest.value(), 0.0007, 1e-15);
+        assert_eq!(steepest.stations(), &[(100.0, 150.0)]);
+        let flattest = all.rate_extreme(ProfileExtreme::Least).unwrap();
+        holds(flattest.value(), 0.0, 1e-15);
+        // A stretch of no length has no difference quotient.
+        let point = profile(AlignmentParameter::CantRatio, vec![at(ramp[1], 125.0)]);
+        assert!(point.difference_rate().unwrap().is_err());
     }
 
     #[test]

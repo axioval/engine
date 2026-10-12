@@ -1458,7 +1458,7 @@ elevation law (polynomials and circular arcs), and the cant from the
 along a segment. A sinusoidal spiral, a cubic parabola given as a
 parametric plan piece and another elevation law are refused by name.
 
-Profiles along a station range (`max_along`, `min_along`) read the same
+Profiles along a station range (`max_along`, `min_along`, `rate_along`) read the same
 laws piece by piece, each piece's rate proven from its law: the derivative
 of a polynomial curvature or gradient by interval evaluation; a vertical
 circular arc's `(1 + grade^2)^(3/2) / R`, bounded by the grades at the

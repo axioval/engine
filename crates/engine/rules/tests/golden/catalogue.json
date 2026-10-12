@@ -77979,6 +77979,24 @@
             }
           ],
           "references": "length"
+        },
+        {
+          "key": "rate",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "`true`: the extreme of the value's rate of change along plan distance (per metre) instead of the value, such as the steepest cant ramp of a transition."
+            },
+            {
+              "language": "de",
+              "text": "`true`: das Extrem der Änderungsrate des Werts entlang der Lagelänge (je Meter) statt des Werts, etwa die steilste Rampe einer Überhöhungsrampe."
+            }
+          ],
+          "references": "boolean"
         }
       ],
       "services": [
@@ -78004,11 +78022,11 @@
       "help": [
         {
           "language": "en",
-          "text": "Of an alignment: the greatest value of `of` along it from station `from` to `to`, in its own unit. Where the value changes monotonically over a piece of the law it is read at the piece's ends, exactly; elsewhere it is bounded by how fast it can change. The evidence names the stations where it may be attained."
+          "text": "Of an alignment: the greatest value of `of` along it from station `from` to `to`, in its own unit. Where the value changes monotonically over a piece of the law it is read at the piece's ends, exactly; elsewhere it is bounded by how fast it can change. With `rate=true` the greatest rate of change per metre instead. The evidence names the stations where it may be attained."
         },
         {
           "language": "de",
-          "text": "Einer Achse: der größte Wert von `of` entlang der Achse von Station `from` bis `to`, in seiner eigenen Einheit. Wo sich der Wert über ein Stück des Gesetzes monoton ändert, wird er an dessen Enden exakt gelesen; sonst über seine Änderungsrate abgeschätzt. Der Nachweis nennt die Stationen, an denen er erreicht werden kann."
+          "text": "Einer Achse: der größte Wert von `of` entlang der Achse von Station `from` bis `to`, in seiner eigenen Einheit. Wo sich der Wert über ein Stück des Gesetzes monoton ändert, wird er an dessen Enden exakt gelesen; sonst über seine Änderungsrate abgeschätzt. Mit `rate=true` stattdessen die größte Änderungsrate je Meter. Der Nachweis nennt die Stationen, an denen er erreicht werden kann."
         }
       ],
       "unit": "1",
@@ -78749,6 +78767,24 @@
             }
           ],
           "references": "length"
+        },
+        {
+          "key": "rate",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "`true`: the extreme of the value's rate of change along plan distance (per metre) instead of the value, such as the steepest cant ramp of a transition."
+            },
+            {
+              "language": "de",
+              "text": "`true`: das Extrem der Änderungsrate des Werts entlang der Lagelänge (je Meter) statt des Werts, etwa die steilste Rampe einer Überhöhungsrampe."
+            }
+          ],
+          "references": "boolean"
         }
       ],
       "services": [
@@ -81157,6 +81193,105 @@
         {
           "language": "de",
           "text": "Wie oft ein Handlauf einer Rampe oder ein damit verbundener über eine barrierefreie Fläche im Grundriss reicht."
+        }
+      ],
+      "unit": "1",
+      "available": true
+    },
+    {
+      "name": "rate_along",
+      "parameters": [
+        {
+          "key": "of",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "gradient",
+              "curvature",
+              "cant",
+              "cant_ratio"
+            ]
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The value along the alignment: `gradient` (rise over plan run), `curvature` (plan curvature per metre, positive turning left), `cant` (metres, unsigned) or `cant_ratio` (the cant over the rail head distance, unsigned)."
+            },
+            {
+              "language": "de",
+              "text": "Der Wert entlang der Achse: `gradient` (Steigung über der Lagelänge), `curvature` (Krümmung im Lageplan je Meter, positiv nach links), `cant` (Meter, ohne Vorzeichen) oder `cant_ratio` (die Überhöhung über dem Schienenkopfabstand, ohne Vorzeichen)."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "station",
+          "kind": {
+            "type": "length",
+            "minimum": -1000000.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The station the rate is read at, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Die Station, an der die Rate gelesen wird, in Metern."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "over",
+          "kind": {
+            "type": "length",
+            "minimum": 0.001
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "A length in metres: the change from `station` to the station `over` further on, over the plan length between them; without it the derivative at `station`."
+            },
+            {
+              "language": "de",
+              "text": "Eine Länge in Metern: die Änderung von `station` bis zur Station `over` weiter, über der Lagelänge dazwischen; ohne sie die Ableitung an `station`."
+            }
+          ],
+          "references": "length"
+        }
+      ],
+      "services": [
+        "alignment"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object is no alignment the service can read as a centreline",
+        "a station of the range is carried by no distance or by several, or lies before the alignment's start or beyond its end",
+        "a piece of the alignment follows a law whose rate the service cannot bound",
+        "the range runs backwards"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Rate of change along"
+        },
+        {
+          "language": "de",
+          "text": "Änderungsrate entlang"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "Of an alignment: how fast `of` changes along it per metre of plan length, the derivative at `station` (both one-sided derivatives where two laws meet there), or with `over` its change from `station` to the station `over` further on over the plan length between them."
+        },
+        {
+          "language": "de",
+          "text": "Einer Achse: wie schnell sich `of` je Meter Lagelänge entlang der Achse ändert, die Ableitung an `station` (beide einseitigen Ableitungen, wo dort zwei Gesetze aneinanderstoßen), oder mit `over` die Änderung von `station` bis zur Station `over` weiter über der Lagelänge dazwischen."
         }
       ],
       "unit": "1",

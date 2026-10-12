@@ -3350,6 +3350,44 @@ fn with_geometry_the_steepest_gradient_along_an_alignment_is_judged_at_its_stati
     assert!(reason.contains("1400"), "{reason}");
 }
 
+/// engine#338 end to end: the cant ratio of the alignment by its layouts
+/// changes by 0.07 % per metre in its 50 m transition from 2.5 % to 6 %,
+/// at a station inside it, over its length and at its steepest, so a
+/// 0.06 % per metre limit fails there and holds where the cant is
+/// constant.
+#[test]
+fn with_geometry_the_cant_ramp_along_an_alignment_is_judged_by_its_rate() {
+    let case = Case::new("geometry-alignment-rate-along");
+    for name in [
+        "rate_along;of=cant_ratio;station=1125",
+        "rate_along;of=cant_ratio;station=1100;over=50",
+        "max_along;of=cant_ratio;rate=true",
+    ] {
+        let (output, result) = along_rule(&case, name, "lessThanOrEquals", 0.0006);
+        assert_eq!(output.status.code(), Some(3), "{name}: {}", stderr(&output));
+        let finding = result["report"]["findings"][0].to_string();
+        assert!(finding.contains("0.0007"), "{name}: {finding}");
+    }
+    let (_, result) = along_rule(
+        &case,
+        "max_along;of=cant_ratio;rate=true",
+        "lessThanOrEquals",
+        0.0006,
+    );
+    let finding = result["report"]["findings"][0].to_string();
+    assert!(
+        finding.contains("greatest rate at stations 1100.000000 to 1150.000000"),
+        "{finding}"
+    );
+    let (output, result) = along_rule(
+        &case,
+        "rate_along;of=cant_ratio;station=1200",
+        "lessThanOrEquals",
+        0.0006,
+    );
+    assert_eq!(output.status.code(), Some(0), "{result:#}");
+}
+
 /// engine#275 on real tessellated data: an `IfcEarthworksFill` of the
 /// buildingSMART IFC 4.3 sample scene (`fixtures/ifc4x3-earthworks`), one
 /// `IfcTriangulatedFaceSet` whose top is a level part, a ramp rising one in

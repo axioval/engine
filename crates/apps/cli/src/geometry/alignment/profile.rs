@@ -871,6 +871,73 @@ mod tests {
         }
     }
 
+    /// #338: the linear cant transition from 2.5 % to 6 % over 50 m
+    /// changes by 0.07 % per metre, at a station inside it and over it.
+    #[test]
+    fn the_cant_transition_changes_by_its_rate() {
+        let (service, alignment) = service("LINEARTRANSITION");
+        let holds = |value: AlignmentInterval, expected: f64, width: f64| {
+            assert!(
+                value.lower() <= expected
+                    && expected <= value.upper()
+                    && value.upper() - value.lower() <= width,
+                "{value:?} must hold {expected} within {width}"
+            );
+        };
+        let at = |station: f64| {
+            profile(
+                &service,
+                &alignment,
+                AlignmentParameter::CantRatio,
+                (Some(station), Some(station)),
+            )
+            .unwrap()
+            .rates()
+            .unwrap()
+            .value()
+        };
+        holds(at(1125.0), 0.0007, 1e-14);
+        // In metres of cant over the 1.5 m rail head distance.
+        let cant = profile(
+            &service,
+            &alignment,
+            AlignmentParameter::Cant,
+            (Some(1125.0), Some(1125.0)),
+        )
+        .unwrap();
+        holds(cant.rates().unwrap().value(), 0.00105, 1e-14);
+        // Where the transition starts, both one-sided rates.
+        let seam = at(1100.0);
+        assert!(seam.lower() <= 0.0 && seam.upper() >= 0.0007, "{seam:?}");
+        // Over the transition's 50 m.
+        let over = profile(
+            &service,
+            &alignment,
+            AlignmentParameter::CantRatio,
+            (Some(1100.0), Some(1150.0)),
+        )
+        .unwrap();
+        holds(
+            over.difference_rate().unwrap().unwrap().value(),
+            0.0007,
+            1e-14,
+        );
+        // The steepest ramp anywhere along it is the transition's.
+        let whole = profile(
+            &service,
+            &alignment,
+            AlignmentParameter::CantRatio,
+            (None, None),
+        )
+        .unwrap();
+        let steepest = whole.rate_extreme(ProfileExtreme::Greatest).unwrap();
+        holds(steepest.value(), 0.0007, 1e-14);
+        let [(from, to)] = steepest.stations() else {
+            panic!("one stretch: {:?}", steepest.stations());
+        };
+        assert!((from - 1100.0).abs() < 1e-9 && (to - 1150.0).abs() < 1e-9);
+    }
+
     /// Every transition shape's rate bound holds the slope between the ends
     /// of every sampled stretch, so no sample can escape it.
     #[test]

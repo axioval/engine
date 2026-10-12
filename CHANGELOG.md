@@ -6,6 +6,16 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Measured values**: `rate_along` reads how fast `of` changes along an
+  alignment per metre of plan length: the derivative at `station` (both
+  one-sided derivatives where two laws meet there), or with `over` the
+  change to the station that much further on over the plan length
+  between. `max_along` and `min_along` take `rate=true` for the steepest
+  and flattest rate over a range, the pieces whose rate may reach it named
+  as the stations. A linear cant transition from 2.5 % to 6 % over 50 m
+  measures 0.07 % per metre; `AlignmentProfile` gains `rates`,
+  `difference_rate` and `rate_extreme`
+  ([#338](https://github.com/axioval/engine/issues/338)).
 - **Measured values**: `max_along` and `min_along` read the greatest or
   least `gradient`, `curvature`, `cant` or `cant_ratio` of an alignment
   from station `from` to `to` (all of it without them). They read a

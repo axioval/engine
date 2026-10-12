@@ -107,6 +107,40 @@ pub struct ZoneFileRecord {
     pub reference: String,
     /// The zones it states, by id, in the file's order.
     pub zones: Vec<String>,
+    /// The exchange it was read as: `geojson` or `cadastre-gml`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub format: Option<String>,
+    /// The accuracy of its boundaries the argument stated, in metres, for
+    /// an exchange stating none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accuracy_metres: Option<f64>,
+    /// Per model, whether the zones' reference system and coordinates
+    /// match the model's, in source order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub placements: Vec<ZonePlacementRecord>,
+}
+
+/// Whether one file's zones match one model's coordinates (#319).
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ZonePlacementRecord {
+    /// The model's source-qualified identity.
+    pub source: String,
+    /// Whether the reference systems match: `model` (the zones are stated
+    /// in the model's own coordinates), `matches` (the model's map
+    /// conversion maps onto the zones' system and places them) or
+    /// `refused` (`reason` says why they cannot be placed).
+    pub reference: String,
+    /// Whether the placed zones lie over the model: `overlap` (their
+    /// extent meets the model's), `apart` (`gap_metres` between the two
+    /// extents) or `unchecked` (`reason` says why).
+    pub coordinates: String,
+    /// The plan gap between the zones' extent and the model's, in metres,
+    /// where they lie apart.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gap_metres: Option<f64>,
+    /// Why the zones cannot be placed, or their coordinates not checked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
 }
 
 /// One terrain surface supplied as context at check time.

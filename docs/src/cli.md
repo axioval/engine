@@ -63,7 +63,7 @@ axioval check --model building.ifc[:DISCIPLINE] [--model other.ifc[:DISCIPLINE] 
   (--definitions definitions.json --ruleset ruleset.json [--ruleset other.json ...] \
    | --ids rules.ids [--ids-filter selector.json]) \
   [--relations RELATION=FILE[#SHEET] ...] [--catalogue CATALOGUE[@VERSION]=FILE[#SHEET] ...] \
-  [--zones zones.geojson ...] \
+  [--zones [ACCURACY=]FILE ...] \
   [--terrain KIND@ACCURACY=FILE[#SURFACE] ... --terrain-in model|map] \
   [--geometry [--no-exact-boundaries]] [--locate storeys|containers|geometry] \
   [--rule-status] [--timings] [--report result.json] \
@@ -206,6 +206,9 @@ Every value read cites the catalogue, the version and the entry (see
 "catalogue_files": [
   { "catalogue": "materials", "version": "2026-1", "file": "materials.csv",
     "sha256": "4be1…", "entries": 3 }
+]
+```
+
 ### Context zones supplied beside the model
 
 Parcels, zoning areas, building limits and building lines are not part of
@@ -214,27 +217,55 @@ a model. `--zones zones.geojson` supplies them for this check as
 its reference system in `crs` (`axioval:model` for the model's own plan
 coordinates, or a map system such as `EPSG:25832` that the model's map
 conversion names), each feature a zone with an `id`, a `kind`, an
-`accuracy` in metres and a polygon, multipolygon or line string. Repeat it
-for several files; a zone id may be stated once only.
+`accuracy` in metres and a polygon, multipolygon or line string.
+`--zones 0.05=alkis.xml` supplies a GML document instead: cadastral
+parcels and public traffic areas (see
+[Cadastral parcels](./context-zones.md#cadastral-parcels-gml)). GML states
+no accuracy of its boundaries, so the argument states it before the first
+`=`, in metres (a trailing `m` is allowed); a GeoJSON file given an
+accuracy, and a GML document given none, are refused. Repeat it for
+several files; a zone id may be stated once only.
 
 Before any model is read, the check fails with status 1, writing nothing,
 when a file cannot be read, is larger than 64 MB, names no reference
 system, states a zone without an id, kind, accuracy or readable geometry,
-or states an id an earlier file states. A rule reading context zones when
-no file was given leaves every value reading them not evaluated, and
-`integrity` lists the warning `zones-not-supplied`; a zone the rules name
-(in a measured value or the rule's text parameter it binds) that no file
-states is the warning `zone-not-supplied`, located at
-`axioval:zone;id=<id>`.
+states a feature or geometry outside a reader's subset, or states an id an
+earlier file states. A rule reading context zones when no file was given
+leaves every value reading them not evaluated, and `integrity` lists the
+warning `zones-not-supplied`; a zone the rules name (in a measured value
+or the rule's text parameter it binds) that no file states is the warning
+`zone-not-supplied`, located at `axioval:zone;id=<id>`, and a kind they
+read as the zone an object stands in (`stands_in=<kind>`) that no file
+states is `zone-kind-not-supplied`, at `axioval:zone;stands_in=<kind>`.
 
-The result's additive `zone_files` records each file supplied, its
-reference system and its zones, so the run can be reproduced; every value
-read from a zone cites the same digest:
+Once the models are read, each file is compared with each model: whether
+the model's coordinate system places the zones (`reference`: `model` for
+zones in the model's own coordinates, `matches` where the model's map
+conversion maps onto the zones' system and places them, `refused`
+otherwise, with the `reason`), and, with `--geometry`, whether the placed
+zones lie over the model (`coordinates`: `overlap` where their extent meets
+the extent of the model's measured bodies, `apart` with the `gap_metres`
+between the two, `unchecked` with the `reason` otherwise). A refused
+placement is the integrity warning `zone-reference-mismatch`, zones lying
+apart `zones-apart-from-model`, both located at
+`axioval:zone;sha256=<digest>`.
+
+The result's additive `zone_files` records each file supplied, its format,
+reference system, the accuracy its argument stated, its zones and those
+placements, so the run can be reproduced; every value read from a zone
+cites the same digest:
 
 ```json
 "zone_files": [
-  { "file": "zones.geojson", "sha256": "4b1e…", "reference": "axioval:model",
-    "zones": ["P1", "B1", "L1"] }
+  { "file": "alkis.xml", "sha256": "4b1e…", "reference": "EPSG:25832",
+    "zones": ["0001", "0002", "0003", "S1"], "format": "cadastre-gml",
+    "accuracy_metres": 0.05,
+    "placements": [
+      { "source": "ifc-step:model.ifc", "reference": "matches", "coordinates": "overlap" }
+    ] }
+]
+```
+
 ### Terrain beside the model
 
 `--terrain original@0.05=dgm.xml --terrain-in map` supplies a terrain
@@ -433,8 +464,12 @@ As `catalogue-not-supplied` warnings it lists every
 [catalogue](./expressions.md#catalogues) given no `--catalogue` file; the
 objects whose expressions read it are not evaluated.
 It lists as `zones-not-supplied` a ruleset reading context zones given no
-`--zones` file, and as `zone-not-supplied` every zone it names that no
-file states (see [Context zones](#context-zones-supplied-beside-the-model)).
+`--zones` file, as `zone-not-supplied` every zone it names that no file
+states, as `zone-kind-not-supplied` every kind it reads as the zone an
+object stands in that no file states, and as `zone-reference-mismatch`
+and `zones-apart-from-model` a file whose zones a model cannot place or
+which lie apart from it (see
+[Context zones](#context-zones-supplied-beside-the-model)).
 With `--geometry` it lists, as `shape.no-representation` warnings, every
 physical product with no shape representation and no parts, and as
 `shape.self-intersecting-face` warnings every product unmeasured for a face

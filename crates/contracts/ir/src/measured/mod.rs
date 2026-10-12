@@ -707,6 +707,7 @@ fn parse_in(
     }
     facing(descriptor, &arguments)?;
     reach(descriptor, &stated, &arguments)?;
+    zone_or_kind(descriptor, &stated)?;
     Ok(MeasuredCall {
         descriptor,
         arguments,
@@ -760,6 +761,32 @@ fn facing(
         });
     }
     Ok(())
+}
+
+/// Where a value names its context zone by id (`zone`) or by the kind of
+/// zone the object stands in (`stands_in`), it states exactly one.
+fn zone_or_kind(
+    descriptor: &MeasuredDescriptor,
+    stated: &BTreeMap<&'static str, &str>,
+) -> Result<(), MeasuredError> {
+    if descriptor.parameter("stands_in").is_none() || descriptor.parameter("zone").is_none() {
+        return Ok(());
+    }
+    match (
+        stated.contains_key("zone"),
+        stated.contains_key("stands_in"),
+    ) {
+        (false, false) => Err(MeasuredError::Missing {
+            name: descriptor.name.to_owned(),
+            key: "zone".to_owned(),
+        }),
+        (true, true) => Err(MeasuredError::Invalid {
+            name: descriptor.name.to_owned(),
+            key: "stands_in".to_owned(),
+            detail: "it names the zone in place of `zone`; state one of them".to_owned(),
+        }),
+        _ => Ok(()),
+    }
 }
 
 /// Where a value reaches its counterparts by a walking profile

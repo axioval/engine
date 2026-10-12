@@ -117,6 +117,16 @@ CLI output and exit codes are public automation contracts. Parse packages fail c
   with no file is the integrity warning `zones-not-supplied`, a zone it
   names that no file states `zone-not-supplied` (locator
   `axioval:zone;id=<id>`); the values reading them are not evaluated.
+  `[ACCURACY=]FILE` (`zone_arg`): a file opening with `{` is GeoJSON and
+  takes no accuracy, one opening with `<` is GML (`ContextZones::read_gml`)
+  and needs it; the record adds `format` and `accuracy_metres`, and a kind
+  read by `stands_in` that no file states is `zone-kind-not-supplied`.
+  After the models are read (`check_placements`, before the run) each
+  file's `placements` record per source whether `ContextZones::placed_extent`
+  places it (`model`/`matches`/`refused`, warning `zone-reference-mismatch`)
+  and whether the placed extent meets the extent of the source's measured
+  bodies (`overlap`/`apart` with `gap_metres`, warning
+  `zones-apart-from-model`, or `unchecked` with the reason) (#319).
 - `check --terrain KIND@ACCURACY=FILE[#SURFACE]` with `--terrain-in
   model|map` (`src/terrain.rs`: `terrain_arg`, `read_terrains`) reads each
   LandXML surface with `TerrainSurface::read_landxml` before any model is

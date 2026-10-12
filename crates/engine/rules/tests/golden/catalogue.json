@@ -83362,15 +83362,33 @@
           "kind": {
             "type": "text"
           },
-          "required": true,
+          "required": false,
           "help": [
             {
               "language": "en",
-              "text": "The id of the context zone, among the zones supplied beside the model (`check --zones`), or `@` a text parameter of the rule naming it."
+              "text": "The id of the context zone, among the zones supplied beside the model (`check --zones`), or `@` a text parameter of the rule naming it; either it or `stands_in`."
             },
             {
               "language": "de",
-              "text": "Die Kennung der Kontextzone unter den neben dem Modell gelieferten Zonen (`check --zones`), oder mit `@` ein Textparameter der Regel, der sie nennt."
+              "text": "Die Kennung der Kontextzone unter den neben dem Modell gelieferten Zonen (`check --zones`), oder mit `@` ein Textparameter der Regel, der sie nennt; entweder sie oder `stands_in`."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "stands_in",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "In place of `zone`: the kind of the zone the object stands in, such as `parcel`, or `@` a text parameter of the rule naming it. Of the supplied areas of that kind, it is the one the object's footprint surely lies in (by its placement point where it has no footprint of any area); an object that may lie in several, straddles a boundary within its accuracy, or lies in none is not evaluated, never given one."
+            },
+            {
+              "language": "de",
+              "text": "Anstelle von `zone`: die Art der Zone, in der das Objekt steht, etwa `parcel`, oder mit `@` ein Textparameter der Regel, der sie nennt. Von den gelieferten Flächen dieser Art ist es die, in der die Grundfläche des Objekts sicher liegt (mit seinem Platzierungspunkt, wo es keine Grundfläche mit Fläche hat); ein Objekt, das in mehreren liegen kann, eine Grenze innerhalb ihrer Genauigkeit überschreitet oder in keiner liegt, wird nicht ausgewertet, nie einer zugeordnet."
             }
           ],
           "references": "string"
@@ -83398,6 +83416,7 @@
         "the wall is a tessellation, so the directions it looks out along are approximate",
         "no zone of that id was supplied beside the model",
         "the zone's coordinates cannot be placed in the model's (another reference system, a map conversion not stated exactly)",
+        "by `stands_in`, the object may lie in several zones of the kind, straddles a boundary within its accuracy, lies in none, or a zone of the kind cannot be placed",
         "the zone is a line, which encloses no area"
       ],
       "label": [
@@ -87107,15 +87126,33 @@
           "kind": {
             "type": "text"
           },
-          "required": true,
+          "required": false,
           "help": [
             {
               "language": "en",
-              "text": "The id of the context zone, among the zones supplied beside the model (`check --zones`), or `@` a text parameter of the rule naming it."
+              "text": "The id of the context zone, among the zones supplied beside the model (`check --zones`), or `@` a text parameter of the rule naming it; either it or `stands_in`."
             },
             {
               "language": "de",
-              "text": "Die Kennung der Kontextzone unter den neben dem Modell gelieferten Zonen (`check --zones`), oder mit `@` ein Textparameter der Regel, der sie nennt."
+              "text": "Die Kennung der Kontextzone unter den neben dem Modell gelieferten Zonen (`check --zones`), oder mit `@` ein Textparameter der Regel, der sie nennt; entweder sie oder `stands_in`."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "stands_in",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "In place of `zone`: the kind of the zone the object stands in, such as `parcel`, or `@` a text parameter of the rule naming it. Of the supplied areas of that kind, it is the one the object's footprint surely lies in (by its placement point where it has no footprint of any area); an object that may lie in several, straddles a boundary within its accuracy, or lies in none is not evaluated, never given one."
+            },
+            {
+              "language": "de",
+              "text": "Anstelle von `zone`: die Art der Zone, in der das Objekt steht, etwa `parcel`, oder mit `@` ein Textparameter der Regel, der sie nennt. Von den gelieferten Flächen dieser Art ist es die, in der die Grundfläche des Objekts sicher liegt (mit seinem Platzierungspunkt, wo es keine Grundfläche mit Fläche hat); ein Objekt, das in mehreren liegen kann, eine Grenze innerhalb ihrer Genauigkeit überschreitet oder in keiner liegt, wird nicht ausgewertet, nie einer zugeordnet."
             }
           ],
           "references": "string"
@@ -87129,6 +87166,7 @@
       "notEvaluated": [
         "no zone of that id was supplied beside the model",
         "the zone's coordinates cannot be placed in the model's (another reference system, a map conversion not stated exactly)",
+        "by `stands_in`, the object may lie in several zones of the kind, straddles a boundary within its accuracy, lies in none, or a zone of the kind cannot be placed",
         "the zone is a line, which encloses no area"
       ],
       "label": [
@@ -87162,15 +87200,33 @@
           "kind": {
             "type": "text"
           },
-          "required": true,
+          "required": false,
           "help": [
             {
               "language": "en",
-              "text": "The id of the context zone, among the zones supplied beside the model (`check --zones`), or `@` a text parameter of the rule naming it."
+              "text": "The id of the context zone, among the zones supplied beside the model (`check --zones`), or `@` a text parameter of the rule naming it; either it or `stands_in`."
             },
             {
               "language": "de",
-              "text": "Die Kennung der Kontextzone unter den neben dem Modell gelieferten Zonen (`check --zones`), oder mit `@` ein Textparameter der Regel, der sie nennt."
+              "text": "Die Kennung der Kontextzone unter den neben dem Modell gelieferten Zonen (`check --zones`), oder mit `@` ein Textparameter der Regel, der sie nennt; entweder sie oder `stands_in`."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "stands_in",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "In place of `zone`: the kind of the zone the object stands in, such as `parcel`, or `@` a text parameter of the rule naming it. Of the supplied areas of that kind, it is the one the object's footprint surely lies in (by its placement point where it has no footprint of any area); an object that may lie in several, straddles a boundary within its accuracy, or lies in none is not evaluated, never given one."
+            },
+            {
+              "language": "de",
+              "text": "Anstelle von `zone`: die Art der Zone, in der das Objekt steht, etwa `parcel`, oder mit `@` ein Textparameter der Regel, der sie nennt. Von den gelieferten Flächen dieser Art ist es die, in der die Grundfläche des Objekts sicher liegt (mit seinem Platzierungspunkt, wo es keine Grundfläche mit Fläche hat); ein Objekt, das in mehreren liegen kann, eine Grenze innerhalb ihrer Genauigkeit überschreitet oder in keiner liegt, wird nicht ausgewertet, nie einer zugeordnet."
             }
           ],
           "references": "string"
@@ -87185,7 +87241,8 @@
       "notEvaluated": [
         "the object has no body the service can measure",
         "no zone of that id was supplied beside the model",
-        "the zone's coordinates cannot be placed in the model's (another reference system, a map conversion not stated exactly)"
+        "the zone's coordinates cannot be placed in the model's (another reference system, a map conversion not stated exactly)",
+        "by `stands_in`, the object may lie in several zones of the kind, straddles a boundary within its accuracy, lies in none, or a zone of the kind cannot be placed"
       ],
       "label": [
         {
@@ -87372,15 +87429,33 @@
           "kind": {
             "type": "text"
           },
-          "required": true,
+          "required": false,
           "help": [
             {
               "language": "en",
-              "text": "The id of the context zone, among the zones supplied beside the model (`check --zones`), or `@` a text parameter of the rule naming it."
+              "text": "The id of the context zone, among the zones supplied beside the model (`check --zones`), or `@` a text parameter of the rule naming it; either it or `stands_in`."
             },
             {
               "language": "de",
-              "text": "Die Kennung der Kontextzone unter den neben dem Modell gelieferten Zonen (`check --zones`), oder mit `@` ein Textparameter der Regel, der sie nennt."
+              "text": "Die Kennung der Kontextzone unter den neben dem Modell gelieferten Zonen (`check --zones`), oder mit `@` ein Textparameter der Regel, der sie nennt; entweder sie oder `stands_in`."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "stands_in",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "In place of `zone`: the kind of the zone the object stands in, such as `parcel`, or `@` a text parameter of the rule naming it. Of the supplied areas of that kind, it is the one the object's footprint surely lies in (by its placement point where it has no footprint of any area); an object that may lie in several, straddles a boundary within its accuracy, or lies in none is not evaluated, never given one."
+            },
+            {
+              "language": "de",
+              "text": "Anstelle von `zone`: die Art der Zone, in der das Objekt steht, etwa `parcel`, oder mit `@` ein Textparameter der Regel, der sie nennt. Von den gelieferten Flächen dieser Art ist es die, in der die Grundfläche des Objekts sicher liegt (mit seinem Platzierungspunkt, wo es keine Grundfläche mit Fläche hat); ein Objekt, das in mehreren liegen kann, eine Grenze innerhalb ihrer Genauigkeit überschreitet oder in keiner liegt, wird nicht ausgewertet, nie einer zugeordnet."
             }
           ],
           "references": "string"
@@ -87396,6 +87471,7 @@
         "the object has no body the service can measure",
         "no zone of that id was supplied beside the model",
         "the zone's coordinates cannot be placed in the model's (another reference system, a map conversion not stated exactly)",
+        "by `stands_in`, the object may lie in several zones of the kind, straddles a boundary within its accuracy, lies in none, or a zone of the kind cannot be placed",
         "the zone is a line, which encloses no area"
       ],
       "label": [
@@ -87429,15 +87505,33 @@
           "kind": {
             "type": "text"
           },
-          "required": true,
+          "required": false,
           "help": [
             {
               "language": "en",
-              "text": "The id of the context zone, among the zones supplied beside the model (`check --zones`), or `@` a text parameter of the rule naming it."
+              "text": "The id of the context zone, among the zones supplied beside the model (`check --zones`), or `@` a text parameter of the rule naming it; either it or `stands_in`."
             },
             {
               "language": "de",
-              "text": "Die Kennung der Kontextzone unter den neben dem Modell gelieferten Zonen (`check --zones`), oder mit `@` ein Textparameter der Regel, der sie nennt."
+              "text": "Die Kennung der Kontextzone unter den neben dem Modell gelieferten Zonen (`check --zones`), oder mit `@` ein Textparameter der Regel, der sie nennt; entweder sie oder `stands_in`."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "stands_in",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "In place of `zone`: the kind of the zone the object stands in, such as `parcel`, or `@` a text parameter of the rule naming it. Of the supplied areas of that kind, it is the one the object's footprint surely lies in (by its placement point where it has no footprint of any area); an object that may lie in several, straddles a boundary within its accuracy, or lies in none is not evaluated, never given one."
+            },
+            {
+              "language": "de",
+              "text": "Anstelle von `zone`: die Art der Zone, in der das Objekt steht, etwa `parcel`, oder mit `@` ein Textparameter der Regel, der sie nennt. Von den gelieferten Flächen dieser Art ist es die, in der die Grundfläche des Objekts sicher liegt (mit seinem Platzierungspunkt, wo es keine Grundfläche mit Fläche hat); ein Objekt, das in mehreren liegen kann, eine Grenze innerhalb ihrer Genauigkeit überschreitet oder in keiner liegt, wird nicht ausgewertet, nie einer zugeordnet."
             }
           ],
           "references": "string"
@@ -87453,6 +87547,7 @@
         "the object has no body the service can measure",
         "no zone of that id was supplied beside the model",
         "the zone's coordinates cannot be placed in the model's (another reference system, a map conversion not stated exactly)",
+        "by `stands_in`, the object may lie in several zones of the kind, straddles a boundary within its accuracy, lies in none, or a zone of the kind cannot be placed",
         "the zone is a line, which encloses no area"
       ],
       "label": [
@@ -117175,6 +117270,179 @@
             {
               "language": "de",
               "text": "Warum das Element unentschieden ist, wo nicht wegen unvollständiger Belege, wie ein Bericht es schreibt (`missing_service`)."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
+      "name": "zone_neighbours",
+      "parameters": [
+        {
+          "key": "zone",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The id of the context zone, among the zones supplied beside the model (`check --zones`), or `@` a text parameter of the rule naming it; either it or `stands_in`."
+            },
+            {
+              "language": "de",
+              "text": "Die Kennung der Kontextzone unter den neben dem Modell gelieferten Zonen (`check --zones`), oder mit `@` ein Textparameter der Regel, der sie nennt; entweder sie oder `stands_in`."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "stands_in",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "In place of `zone`: the kind of the zone the object stands in, such as `parcel`, or `@` a text parameter of the rule naming it. Of the supplied areas of that kind, it is the one the object's footprint surely lies in (by its placement point where it has no footprint of any area); an object that may lie in several, straddles a boundary within its accuracy, or lies in none is not evaluated, never given one."
+            },
+            {
+              "language": "de",
+              "text": "Anstelle von `zone`: die Art der Zone, in der das Objekt steht, etwa `parcel`, oder mit `@` ein Textparameter der Regel, der sie nennt. Von den gelieferten Flächen dieser Art ist es die, in der die Grundfläche des Objekts sicher liegt (mit seinem Platzierungspunkt, wo es keine Grundfläche mit Fläche hat); ein Objekt, das in mehreren liegen kann, eine Grenze innerhalb ihrer Genauigkeit überschreitet oder in keiner liegt, wird nicht ausgewertet, nie einer zugeordnet."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "kinds",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The kinds of the neighbours listed, `,`-separated, such as `street,way,square` for the public areas beside a parcel; without it, every kind."
+            },
+            {
+              "language": "de",
+              "text": "Die Arten der aufgeführten Nachbarn, durch `,` getrennt, etwa `street,way,square` für die öffentlichen Flächen neben einem Flurstück; ohne Angabe jede Art."
+            }
+          ],
+          "references": "string"
+        }
+      ],
+      "services": [
+        "plan-area",
+        "coordinate-system"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "no zone of that id was supplied beside the model",
+        "the zone's coordinates cannot be placed in the model's (another reference system, a map conversion not stated exactly)",
+        "by `stands_in`, the object may lie in several zones of the kind, straddles a boundary within its accuracy, lies in none, or a zone of the kind cannot be placed",
+        "the zone is a line, which encloses no area",
+        "a zone of the kinds listed cannot be placed"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Neighbouring zones"
+        },
+        {
+          "language": "de",
+          "text": "Benachbarte Zonen"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The supplied areas beside a context zone (the one the object stands in, or one named by id), in the order supplied: a zone whose stated boundary shares a stretch with the zone's is surely a neighbour, one whose boundary only comes within their accuracies of it possibly one, and one farther away none. Count `kinds=street,way,square` for the public areas a parcel borders."
+        },
+        {
+          "language": "de",
+          "text": "Die gelieferten Flächen neben einer Kontextzone (der, in der das Objekt steht, oder einer mit Kennung genannten), in der gelieferten Reihenfolge: eine Zone, deren angegebener Rand ein Stück mit dem der Zone teilt, ist sicher ein Nachbar, eine, deren Rand ihr nur innerhalb ihrer Genauigkeiten nahekommt, möglicherweise, und eine weiter entfernte keiner. `kinds=street,way,square` zählt die öffentlichen Flächen, an die ein Flurstück grenzt."
+        }
+      ],
+      "fields": [
+        {
+          "name": "zone",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Zone"
+            },
+            {
+              "language": "de",
+              "text": "Zone"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The neighbour's id, as its file states it."
+            },
+            {
+              "language": "de",
+              "text": "Die Kennung des Nachbarn, wie seine Datei sie angibt."
+            }
+          ]
+        },
+        {
+          "name": "kind",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Kind"
+            },
+            {
+              "language": "de",
+              "text": "Art"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The neighbour's kind, such as `parcel` or `street`."
+            },
+            {
+              "language": "de",
+              "text": "Die Art des Nachbarn, etwa `parcel` oder `street`."
+            }
+          ]
+        },
+        {
+          "name": "area",
+          "kind": {
+            "type": "number",
+            "dimension": "area"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Area"
+            },
+            {
+              "language": "de",
+              "text": "Fläche"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The neighbour's area, an interval holding every boundary its accuracy allows."
+            },
+            {
+              "language": "de",
+              "text": "Die Fläche des Nachbarn, ein Intervall, das jeden Rand hält, den seine Genauigkeit zulässt."
             }
           ]
         }

@@ -480,7 +480,7 @@ fn asked(
     locator: &str,
 ) -> Result<Result<Asked, (Measurement, Citation)>, Unavailable> {
     let zone = if call.name() == OUTSIDE {
-        Some(crate::context_zone::placed(context, call, &wall.source)?)
+        Some(crate::context_zone::placed(context, call, wall)?)
     } else {
         None
     };

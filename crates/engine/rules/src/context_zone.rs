@@ -16,14 +16,14 @@
 //! that cannot be placed and a footprint that cannot be read are not
 //! evaluated, never inside.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use axioval_engine::PointBox;
 use axioval_engine::{
-    Citation, CoordinateSystemServiceHandle, LineDistanceRequest, LineProjection, MeasuredMemo,
-    MeasuredProvider, Measurement, NotEvaluatedReason, PlacedZone, PlanPolygon,
-    PropertyResolutionError, ProximityError, ProximityServiceHandle, RuleContext, SuppliedZones,
-    ZoneArea, ZoneAreaRequest, ZoneReference, ZoneShape,
+    Citation, CoordinateSystemServiceHandle, LineDistanceRequest, LineProjection, MeasuredMember,
+    MeasuredMemo, MeasuredProvider, Measurement, MemberValue, NotEvaluatedReason, PlacedZone,
+    PlanPolygon, PropertyResolutionError, ProximityError, ProximityServiceHandle, RuleContext,
+    SuppliedZones, ZONE_LOCATOR_PREFIX, ZoneArea, ZoneAreaRequest, ZoneReference, ZoneShape,
 };
 use axioval_ir::measured::{MeasuredArgument, MeasuredCall};
 use axioval_ir::{Evidence, ObjectId, QuantityDimension, SourceId};
@@ -37,6 +37,7 @@ const ZONE_FLOOR_AREA: &str = "zone_floor_area";
 const ZONE_FOOTPRINT_AREA: &str = "zone_footprint_area";
 const ZONE_INSIDE_AREA: &str = "zone_inside_area";
 const ZONE_OUTSIDE_AREA: &str = "zone_outside_area";
+const ZONE_NEIGHBOURS: &str = "zone_neighbours";
 
 /// Measures the values of context zones.
 pub(crate) struct ZoneMeasures;
@@ -53,7 +54,7 @@ struct AreaKey;
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 struct DistanceKey;
 
-/// The zone a call names.
+/// The zone a call names by id.
 fn zone_id(call: &MeasuredCall) -> Result<&str, Unavailable> {
     match call.argument("zone") {
         Some(MeasuredArgument::Text(id)) => Ok(id),
@@ -64,30 +65,32 @@ fn zone_id(call: &MeasuredCall) -> Result<&str, Unavailable> {
     }
 }
 
-/// The zone `call` names, placed in the model coordinates of `source`.
-pub(crate) fn placed(
+/// The run's supplied zones, or why there are none.
+fn supplied<'a>(context: &RuleContext<'a>, wanted: &str) -> Result<&'a SuppliedZones, Unavailable> {
+    context
+        .services
+        .get::<SuppliedZones>()
+        .filter(|supplied| supplied.is_supplied())
+        .ok_or_else(|| {
+            (
+                NotEvaluatedReason::IncompleteEvidence,
+                format!("no context zones were supplied beside the model, so {wanted} is unknown"),
+            )
+        })
+}
+
+/// The zone `id`, placed in the model coordinates of `source`.
+pub(crate) fn placed_id(
     context: &RuleContext<'_>,
-    call: &MeasuredCall,
+    id: &str,
     source: &SourceId,
 ) -> Result<PlacedZone, Unavailable> {
-    let id = zone_id(call)?.to_owned();
     MeasuredMemo::of(
         context.services,
-        (PlacedKey, id.clone(), source.clone()),
+        (PlacedKey, id.to_owned(), source.clone()),
         || {
-            let supplied = context
-                .services
-                .get::<SuppliedZones>()
-                .filter(|supplied| supplied.is_supplied())
-                .ok_or_else(|| {
-                    (
-                        NotEvaluatedReason::IncompleteEvidence,
-                        format!(
-                            "no context zones were supplied beside the model, so `{id}` is unknown"
-                        ),
-                    )
-                })?;
-            let (file, zone) = supplied.zone(&id).ok_or_else(|| {
+            let supplied = supplied(context, &format!("`{id}`"))?;
+            let (file, zone) = supplied.zone(id).ok_or_else(|| {
                 (
                     NotEvaluatedReason::IncompleteEvidence,
                     format!("no supplied context zone is `{id}`"),
@@ -120,6 +123,214 @@ pub(crate) fn placed(
                 .map_err(|why| (NotEvaluatedReason::IncompleteEvidence, why))
         },
     )
+}
+
+/// The zone `call` names for `object`, placed in its source's model
+/// coordinates: the zone of id `zone`, or the zone of kind `stands_in` the
+/// object stands in ([`stands_in`]), with the evidence of that choice.
+pub(crate) fn zone_for(
+    context: &RuleContext<'_>,
+    call: &MeasuredCall,
+    object: &ObjectId,
+) -> Result<(PlacedZone, Option<Evidence>), Unavailable> {
+    if let Some(argument) = call.argument("stands_in") {
+        let MeasuredArgument::Text(kind) = argument else {
+            return Err((
+                NotEvaluatedReason::InvalidDeclaration,
+                "no kind of context zone is named".to_owned(),
+            ));
+        };
+        let (id, evidence) = stands_in(context, kind, object)?;
+        return Ok((placed_id(context, &id, &object.source)?, Some(evidence)));
+    }
+    Ok((placed_id(context, zone_id(call)?, &object.source)?, None))
+}
+
+/// The zone `call` names for `object`, placed in its source's model
+/// coordinates ([`zone_for`]).
+pub(crate) fn placed(
+    context: &RuleContext<'_>,
+    call: &MeasuredCall,
+    object: &ObjectId,
+) -> Result<PlacedZone, Unavailable> {
+    zone_for(context, call, object).map(|(zone, _)| zone)
+}
+
+/// The memo key of the zone of a kind an object stands in.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+struct StandsKey;
+
+/// The memo key of an object's footprint extent.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+struct ExtentKey;
+
+/// The plan extent `[west, south, east, north]` of `object`'s footprint,
+/// grown by its outline's deviation; `None` where the plan-area service
+/// traces no outline of it, so nothing is ruled out by it.
+fn footprint_extent(context: &RuleContext<'_>, object: &ObjectId) -> Option<[f64; 4]> {
+    MeasuredMemo::of(context.services, (ExtentKey, object.clone()), || {
+        let outline = crate::plan_area::service(context).ok().and_then(|service| {
+            service
+                .measure_footprint_outline(std::slice::from_ref(object))
+                .ok()
+        });
+        Ok::<_, Unavailable>(outline.map(|outline| {
+            let grow = outline.deviation_metres();
+            outline.rings().iter().flatten().fold(
+                [
+                    f64::INFINITY,
+                    f64::INFINITY,
+                    f64::NEG_INFINITY,
+                    f64::NEG_INFINITY,
+                ],
+                |[west, south, east, north], [x, y]| {
+                    [
+                        west.min(x - grow),
+                        south.min(y - grow),
+                        east.max(x + grow),
+                        north.max(y + grow),
+                    ]
+                },
+            )
+        }))
+    })
+    .ok()
+    .flatten()
+}
+
+/// Whether `zone` surely lies apart from the extent `[west, south, east,
+/// north]`: every boundary its accuracy allows keeps clear of it.
+fn apart(zone: &PlacedZone, polygons: &[PlanPolygon], extent: [f64; 4]) -> bool {
+    let mut scale = extent
+        .iter()
+        .fold(0.0_f64, |scale, value| scale.max(value.abs()));
+    let [mut west, mut south, mut east, mut north] = [
+        f64::INFINITY,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        f64::NEG_INFINITY,
+    ];
+    for [x, y] in polygons.iter().flat_map(PlanPolygon::rings).flatten() {
+        scale = scale.max(x.abs()).max(y.abs());
+        west = west.min(*x);
+        south = south.min(*y);
+        east = east.max(*x);
+        north = north.max(*y);
+    }
+    let margin = zone.accuracy_metres() + 64.0 * f64::EPSILON * scale;
+    west - margin > extent[2]
+        || east + margin < extent[0]
+        || south - margin > extent[3]
+        || north + margin < extent[1]
+}
+
+/// The ids of `ids`, quoted and joined.
+fn named(ids: &[&str]) -> String {
+    ids.iter()
+        .map(|id| format!("`{id}`"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// The id of the supplied area of `kind` that `object` stands in, and the
+/// evidence of that choice: of every supplied area of the kind, the one
+/// it surely lies in by [`locate_in`] while surely lying in no other.
+/// Areas surely apart from its footprint's traced extent are ruled out
+/// before anything else is measured.
+///
+/// # Errors
+///
+/// No zones supplied or none of the kind; a zone of the kind that cannot
+/// be placed, or that the object may or may not lie in, or which does not
+/// locate it; an object surely lying in several or in none. Which zone it
+/// stands in is never guessed.
+pub(crate) fn stands_in(
+    context: &RuleContext<'_>,
+    kind: &str,
+    object: &ObjectId,
+) -> Result<(String, Evidence), Unavailable> {
+    let key = (StandsKey, kind.to_owned(), object.clone());
+    MeasuredMemo::of(context.services, key, || {
+        let supplied = supplied(context, &format!("the zone of kind `{kind}` it stands in"))?;
+        let candidates: Vec<String> = supplied
+            .of_kind(kind)
+            .filter(|(_, zone)| matches!(zone.shape(), ZoneShape::Area(_)))
+            .map(|(_, zone)| zone.id().to_owned())
+            .collect();
+        if candidates.is_empty() {
+            return Err((
+                NotEvaluatedReason::IncompleteEvidence,
+                format!("no supplied context zone is an area of kind `{kind}`"),
+            ));
+        }
+        let extent = footprint_extent(context, object);
+        let (mut surely, mut possibly, mut unlocated) = (Vec::new(), Vec::new(), Vec::new());
+        let mut exact = true;
+        for id in &candidates {
+            let zone = placed_id(context, id, &object.source).map_err(|(reason, why)| {
+                (
+                    reason,
+                    format!("which zone of kind `{kind}` it stands in is undecided: {why}"),
+                )
+            })?;
+            if extent.is_some_and(|extent| apart(&zone, polygons(&zone).unwrap_or(&[]), extent)) {
+                continue;
+            }
+            match locate_in(context, &zone, object)? {
+                Location::Located(InZone::Surely, sure) => {
+                    exact &= sure;
+                    surely.push(id.as_str());
+                }
+                Location::Located(InZone::Possibly, _) => possibly.push(id.as_str()),
+                Location::Located(InZone::Not, sure) => exact &= sure,
+                Location::Unlocated(why) => unlocated.push(format!("`{id}`: {why}")),
+            }
+        }
+        if !unlocated.is_empty() {
+            return Err((
+                NotEvaluatedReason::IncompleteEvidence,
+                format!(
+                    "which zone of kind `{kind}` it stands in is undecided, since it cannot be \
+                     located against {}",
+                    unlocated.join("; ")
+                ),
+            ));
+        }
+        match (surely.as_slice(), possibly.as_slice()) {
+            ([one], []) => Ok((
+                (*one).to_owned(),
+                Evidence {
+                    source: object.source.clone(),
+                    locator: format!("{ZONE_LOCATOR_PREFIX};stands_in={kind};id={one}:{object}"),
+                    exact,
+                },
+            )),
+            ([], []) => Err((
+                NotEvaluatedReason::IncompleteEvidence,
+                format!("it stands in no supplied context zone of kind `{kind}`"),
+            )),
+            (_, []) => Err((
+                NotEvaluatedReason::IncompleteEvidence,
+                format!(
+                    "it stands in {} zones of kind `{kind}`, {}, so which one is undecided",
+                    surely.len(),
+                    named(&surely)
+                ),
+            )),
+            _ => {
+                let all: Vec<&str> = surely.iter().chain(&possibly).copied().collect();
+                Err((
+                    NotEvaluatedReason::IncompleteEvidence,
+                    format!(
+                        "it may stand in {} of kind `{kind}`: its footprint straddles a \
+                         boundary or lies within its accuracy of one, so which zone it stands \
+                         in is undecided",
+                        named(&all)
+                    ),
+                ))
+            }
+        }
+    })
 }
 
 /// The zone's polygons; a line encloses no area.
@@ -241,7 +452,7 @@ fn of_object(
     object: &ObjectId,
     context: &RuleContext<'_>,
 ) -> Result<(Measurement, Citation), Unavailable> {
-    let zone = placed(context, call, &object.source)?;
+    let (zone, chosen) = zone_for(context, call, object)?;
     let zone_evidence = statement(&zone, &object.source);
     let locator = format!("{}:{object}:zone={}", call.name(), zone.id());
     let (bounds, dimension, exact, mut evidence) = match call.name() {
@@ -274,6 +485,7 @@ fn of_object(
         }
     };
     evidence.push(zone_evidence);
+    evidence.extend(chosen);
     Ok((
         interval(bounds, Some(dimension), exact, locator),
         Citation {
@@ -333,7 +545,7 @@ fn of_project(
             ));
         }
     };
-    let zone = placed(context, call, &source)?;
+    let zone = placed_id(context, id, &source)?;
     let mut evidence = vec![statement(&zone, &source)];
     let mut exact = zone.is_exact() && picked.undecided.is_empty();
     let (mut lower, mut upper) = (0.0_f64, 0.0_f64);
@@ -394,6 +606,160 @@ fn refused_project(name: &str) -> impl Fn(Unavailable) -> PropertyResolutionErro
     move |(reason, why)| resolution_error((reason, format!("`{name}` of the project: {why}")))
 }
 
+/// How `other` borders `zone`, both placed in one source: `Some(true)`
+/// where their stated boundaries share a stretch of some length (the
+/// stretch is one statement of both), `Some(false)` where they share none
+/// but come within the sum of their accuracies of each other, `None`
+/// where they lie farther apart, or both are exact and meet at points
+/// only.
+fn borders(zone: &PlacedZone, other: &PlacedZone) -> Option<bool> {
+    let (ours, theirs) = (zone.shape().segments(), other.shape().segments());
+    let scale = ours
+        .iter()
+        .chain(&theirs)
+        .flat_map(|(start, end)| [start, end])
+        .fold(0.0_f64, |scale, [x, y]| scale.max(x.abs()).max(y.abs()));
+    let tolerance = 64.0 * f64::EPSILON * scale;
+    let reach = zone.accuracy_metres() + other.accuracy_metres();
+    let mut nearest = f64::INFINITY;
+    for &(p, q) in &ours {
+        for &(r, s) in &theirs {
+            if shares_stretch((p, q), (r, s), tolerance) {
+                return Some(true);
+            }
+            nearest = nearest.min(segment_distance((p, q), (r, s)));
+        }
+    }
+    (reach > 0.0 && nearest <= reach + tolerance).then_some(false)
+}
+
+/// Whether segment `r s` lies along segment `p q`, within `tolerance`,
+/// overlapping it by more than `tolerance`.
+fn shares_stretch(
+    ([px, py], [qx, qy]): ([f64; 2], [f64; 2]),
+    ([rx, ry], [sx, sy]): ([f64; 2], [f64; 2]),
+    tolerance: f64,
+) -> bool {
+    let length = (qx - px).hypot(qy - py);
+    if length <= tolerance {
+        return false;
+    }
+    let (ux, uy) = ((qx - px) / length, (qy - py) / length);
+    let across = |x: f64, y: f64| (ux * (y - py) - uy * (x - px)).abs();
+    let along = |x: f64, y: f64| ux.mul_add(x - px, uy * (y - py));
+    if across(rx, ry) > tolerance || across(sx, sy) > tolerance {
+        return false;
+    }
+    let (a, b) = (along(rx, ry), along(sx, sy));
+    length.min(a.max(b)) - a.min(b).max(0.0) > tolerance
+}
+
+/// The least plan distance between two segments.
+fn segment_distance((p, q): ([f64; 2], [f64; 2]), (r, s): ([f64; 2], [f64; 2])) -> f64 {
+    let turn = |[ax, ay]: [f64; 2], [bx, by]: [f64; 2], [cx, cy]: [f64; 2]| {
+        (bx - ax).mul_add(cy - ay, -((by - ay) * (cx - ax)))
+    };
+    let crossing = turn(p, q, r) * turn(p, q, s) < 0.0 && turn(r, s, p) * turn(r, s, q) < 0.0;
+    if crossing {
+        return 0.0;
+    }
+    let to_segment = |[x, y]: [f64; 2], [ax, ay]: [f64; 2], [bx, by]: [f64; 2]| {
+        let (dx, dy) = (bx - ax, by - ay);
+        let length = dx.mul_add(dx, dy * dy);
+        let along = if length > 0.0 {
+            ((x - ax).mul_add(dx, (y - ay) * dy) / length).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        (x - along.mul_add(dx, ax)).hypot(y - along.mul_add(dy, ay))
+    };
+    to_segment(p, r, s)
+        .min(to_segment(q, r, s))
+        .min(to_segment(r, p, q))
+        .min(to_segment(s, p, q))
+}
+
+/// The supplied areas beside the zone `call` names for `object`
+/// (`zone_neighbours`, #319), in the order supplied, of the `kinds` it
+/// lists: surely beside where [`borders`] finds a shared stretch, possibly
+/// beside where it finds them within their accuracies. Every zone of the
+/// kinds is placed in the object's source, and one that cannot be leaves
+/// the whole list not evaluated, never shorter.
+fn neighbours(
+    call: &MeasuredCall,
+    object: &ObjectId,
+    context: &RuleContext<'_>,
+) -> Result<(Vec<MeasuredMember>, Vec<Evidence>), Unavailable> {
+    let (zone, chosen) = zone_for(context, call, object)?;
+    polygons(&zone)?;
+    let kinds: Option<Vec<&str>> = match call.argument("kinds") {
+        Some(MeasuredArgument::Text(kinds)) => Some(
+            kinds
+                .split(',')
+                .map(str::trim)
+                .filter(|kind| !kind.is_empty())
+                .collect(),
+        ),
+        _ => None,
+    };
+    let candidates: Vec<String> = supplied(context, "a neighbouring zone")?
+        .all()
+        .filter(|(_, other)| {
+            other.id() != zone.id()
+                && matches!(other.shape(), ZoneShape::Area(_))
+                && kinds
+                    .as_ref()
+                    .is_none_or(|kinds| kinds.contains(&other.kind()))
+        })
+        .map(|(_, other)| other.id().to_owned())
+        .collect();
+    let mut members = Vec::new();
+    for id in candidates {
+        let other = placed_id(context, &id, &object.source)?;
+        let Some(sure) = borders(&zone, &other) else {
+            continue;
+        };
+        let exact = zone.is_exact() && other.is_exact();
+        let area = other.area_square_metres().ok_or_else(|| {
+            (
+                NotEvaluatedReason::InvalidDeclaration,
+                format!("zone `{id}` encloses no area"),
+            )
+        })?;
+        let locator = format!(
+            "{ZONE_NEIGHBOURS}:{object}:zone={}:neighbour={id}",
+            zone.id()
+        );
+        let fields = BTreeMap::from([
+            ("zone", MemberValue::Text { text: id.clone() }),
+            (
+                "kind",
+                MemberValue::Text {
+                    text: other.kind().to_owned(),
+                },
+            ),
+            (
+                "area",
+                MemberValue::Measured(interval(
+                    area,
+                    Some(QuantityDimension::Area),
+                    exact,
+                    locator,
+                )),
+            ),
+        ]);
+        members.push(MeasuredMember {
+            certain: sure,
+            exact,
+            fields,
+            evidence: vec![statement(&other, &object.source)],
+        });
+    }
+    let mut evidence = vec![statement(&zone, &object.source)];
+    evidence.extend(chosen);
+    Ok((members, evidence))
+}
+
 impl MeasuredProvider for ZoneMeasures {
     fn names(&self) -> &'static [&'static str] {
         &[
@@ -404,6 +770,29 @@ impl MeasuredProvider for ZoneMeasures {
             ZONE_INSIDE_AREA,
             ZONE_OUTSIDE_AREA,
         ]
+    }
+
+    fn member_lists(&self) -> &'static [&'static str] {
+        &[ZONE_NEIGHBOURS]
+    }
+
+    fn members_cited(
+        &self,
+        call: &MeasuredCall,
+        object: &ObjectId,
+        context: &RuleContext<'_>,
+    ) -> Result<(Vec<MeasuredMember>, Vec<Evidence>), PropertyResolutionError> {
+        neighbours(call, object, context).map_err(refused(call.name(), object))
+    }
+
+    fn members(
+        &self,
+        call: &MeasuredCall,
+        object: &ObjectId,
+        context: &RuleContext<'_>,
+    ) -> Result<Vec<MeasuredMember>, PropertyResolutionError> {
+        self.members_cited(call, object, context)
+            .map(|(members, _)| members)
     }
 
     fn measure_cited(
@@ -483,8 +872,21 @@ pub(crate) fn locate(
     call: &MeasuredCall,
     object: &ObjectId,
 ) -> Result<Location, Unavailable> {
-    let zone = placed(context, call, &object.source)?;
-    let zone_polygons = polygons(&zone)?.to_vec();
+    locate_in(context, &placed(context, call, object)?, object)
+}
+
+/// Where `object` lies against `zone`, placed in its source, as
+/// [`locate`] locates it.
+///
+/// # Errors
+///
+/// As [`locate`].
+pub(crate) fn locate_in(
+    context: &RuleContext<'_>,
+    zone: &PlacedZone,
+    object: &ObjectId,
+) -> Result<Location, Unavailable> {
+    let zone_polygons = polygons(zone)?.to_vec();
     let key = (LocatedKey, object.clone(), zone.locator().to_owned());
     MeasuredMemo::of(context.services, key, || {
         let service = crate::plan_area::service(context)?;
@@ -523,7 +925,7 @@ pub(crate) fn locate(
             Ok(frame) => {
                 let [x, y, _] = frame.frame().origin().coordinates_metres();
                 let exact = frame.evidence().exact && zone.is_exact();
-                Location::Located(by_point(&zone, &zone_polygons, [x, y]), exact)
+                Location::Located(by_point(zone, &zone_polygons, [x, y]), exact)
             }
             Err(error) => Location::Unlocated(format!(
                 "{footprint}, and its placement cannot be read: {error}"

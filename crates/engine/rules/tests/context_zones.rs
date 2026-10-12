@@ -6,12 +6,13 @@
 mod common;
 
 use std::collections::BTreeMap;
+use std::fmt::Write as _;
 use std::sync::Arc;
 
 use axioval_engine::{
-    CapabilityRegistry, ContextZones, PlanArea, PlanAreaError, PlanAreaService,
-    PlanAreaServiceHandle, PropertyResolution, ServiceRegistry, SuppliedZones, ZoneArea,
-    ZoneAreaRequest, measured_value,
+    CapabilityRegistry, ContextZones, Measurement, MemberValue, PlanArea, PlanAreaError,
+    PlanAreaService, PlanAreaServiceHandle, PropertyResolution, ServiceRegistry, SuppliedZones,
+    ZoneArea, ZoneAreaRequest, measured_members, measured_value,
 };
 use axioval_ir::{Evidence, ObjectId, Project, PropertyValue};
 use common::{Model, id, source};
@@ -252,4 +253,158 @@ fn a_zone_that_is_not_supplied_or_encloses_nothing_is_not_evaluated() {
     )
     .unwrap_err();
     assert!(why.contains("no context zones were supplied"), "{why}");
+}
+
+/// A cadastral GML subset (#319) in the model's coordinates: parcels
+/// `0001`, `0002` and `0003` side by side (x 0..20, 20..40, 40..60, y
+/// 0..30) and the street `S1` along their south edge (y -10..0), stated
+/// within `accuracy` metres.
+fn cadastre(accuracy: f64) -> ContextZones {
+    let ring = |x0: f64, y0: f64, x1: f64, y1: f64| {
+        format!("{x0} {y0} {x1} {y0} {x1} {y1} {x0} {y1} {x0} {y0}")
+    };
+    let polygon = |ring: String| {
+        format!(
+            "<position><gml:Polygon><gml:exterior><gml:LinearRing><gml:posList>{ring}\
+             </gml:posList></gml:LinearRing></gml:exterior></gml:Polygon></position>"
+        )
+    };
+    let mut members = String::new();
+    for (number, x0) in [(1, 0.0), (2, 20.0), (3, 40.0)] {
+        let _ = write!(
+            members,
+            "<gml:featureMember><AX_Flurstueck gml:id=\"F{number}\">\
+             <flurstueckskennzeichen>000{number}</flurstueckskennzeichen>{}\
+             </AX_Flurstueck></gml:featureMember>",
+            polygon(ring(x0, 0.0, x0 + 20.0, 30.0))
+        );
+    }
+    let _ = write!(
+        members,
+        "<gml:featureMember><AX_Strassenverkehr gml:id=\"S1\">{}</AX_Strassenverkehr>\
+         </gml:featureMember>",
+        polygon(ring(0.0, -10.0, 60.0, 0.0))
+    );
+    let text = format!(
+        "<wfs:FeatureCollection xmlns:wfs=\"http://www.opengis.net/wfs\" \
+         xmlns:gml=\"http://www.opengis.net/gml/3.2\"><gml:boundedBy>\
+         <gml:Envelope srsName=\"axioval:model\"/></gml:boundedBy>{members}\
+         </wfs:FeatureCollection>"
+    );
+    ContextZones::read_cadastre_gml(text.as_bytes(), "alkis.xml", accuracy).unwrap()
+}
+
+/// Buildings beside [`cadastre`]: `house` on parcel `0002`, `straddler`
+/// across the boundary of `0001` and `0002`, `afar` on no parcel.
+fn on_parcels(accuracy: f64) -> (Project, ServiceRegistry) {
+    let model = Model::default()
+        .object("house", "building")
+        .object("straddler", "building")
+        .object("afar", "building");
+    let rectangles = BTreeMap::from([
+        (id("house"), ([24.0, 5.0, 34.0, 15.0], false)),
+        (id("straddler"), ([15.0, 5.0, 25.0, 12.0], false)),
+        (id("afar"), ([70.0, 5.0, 75.0, 10.0], false)),
+    ]);
+    let mut services = ServiceRegistry::new();
+    services
+        .register(PlanAreaServiceHandle::new(Arc::new(Rectangles(rectangles))))
+        .unwrap();
+    services
+        .register(SuppliedZones::try_from_files(vec![cadastre(accuracy)]).unwrap())
+        .unwrap();
+    let project = model.project();
+    axioval_rules::register_builtins(CapabilityRegistry::new())
+        .unwrap()
+        .install_measured(&mut services, &project);
+    (project, services)
+}
+
+/// engine#319: the parcel a building stands on is selected by its kind,
+/// not its id, and its area measured; a building straddling two parcels,
+/// and one on none, is not evaluated, never given one.
+#[test]
+fn the_parcel_a_building_stands_on_is_selected_by_kind() {
+    let site = on_parcels(0.0);
+    let parcel = value(&site, "house", "zone_area;stands_in=parcel").unwrap();
+    assert!(holds(parcel, 600.0), "{parcel:?}");
+    let outside = value(&site, "house", "zone_outside_area;stands_in=parcel").unwrap();
+    assert!(holds(outside, 0.0), "{outside:?}");
+    let why = value(&site, "straddler", "zone_area;stands_in=parcel").unwrap_err();
+    assert!(
+        why.contains("may stand in `0001`, `0002` of kind `parcel`"),
+        "{why}"
+    );
+    let why = value(&site, "afar", "zone_area;stands_in=parcel").unwrap_err();
+    assert!(
+        why.contains("stands in no supplied context zone of kind `parcel`"),
+        "{why}"
+    );
+    let why = value(&site, "house", "zone_area;stands_in=garden").unwrap_err();
+    assert!(
+        why.contains("no supplied context zone is an area of kind `garden`"),
+        "{why}"
+    );
+    // Within its accuracy of a boundary, a building may stand on either.
+    let near = on_parcels(5.0);
+    let why = value(&near, "house", "zone_area;stands_in=parcel").unwrap_err();
+    assert!(why.contains("may stand in `0001`, `0002`"), "{why}");
+}
+
+/// engine#319: the neighbours of the parcel a building stands on are its
+/// two neighbouring parcels and the street; by kind, the street alone.
+#[test]
+fn the_neighbours_of_a_buildings_parcel_are_listed_by_kind() {
+    let (_, services) = on_parcels(0.0);
+    let listed = |name: &str| -> Vec<(String, bool)> {
+        measured_members(&services, &id("house"), name)
+            .unwrap()
+            .into_iter()
+            .map(|member| match &member.fields["zone"] {
+                MemberValue::Text { text } => (text.clone(), member.certain),
+                other => panic!("{other:?}"),
+            })
+            .collect()
+    };
+    assert_eq!(
+        listed("zone_neighbours;stands_in=parcel"),
+        [
+            ("0001".to_owned(), true),
+            ("0003".to_owned(), true),
+            ("S1".to_owned(), true)
+        ]
+    );
+    assert_eq!(
+        listed("zone_neighbours;stands_in=parcel;kinds=street,way,square"),
+        [("S1".to_owned(), true)]
+    );
+    assert_eq!(
+        listed("zone_neighbours;zone=0001"),
+        [("0002".to_owned(), true), ("S1".to_owned(), true)]
+    );
+    // Within their accuracies of each other, a parcel apart may border it.
+    let (_, services) = on_parcels(0.5);
+    let far: Vec<bool> = measured_members(&services, &id("house"), "zone_neighbours;zone=0001")
+        .unwrap()
+        .iter()
+        .map(|member| member.certain)
+        .collect();
+    assert_eq!(far, [true, true]);
+    let area = &measured_members(&services, &id("house"), "zone_neighbours;zone=0001").unwrap()[0]
+        .fields["area"];
+    let MemberValue::Measured(Measurement::Cited { lower, upper, .. }) = area else {
+        panic!("{area:?}");
+    };
+    assert!(*lower < 600.0 && *upper > 600.0, "{lower} {upper}");
+}
+
+#[test]
+fn a_zone_is_named_by_id_or_by_kind_never_both() {
+    for name in ["zone_area", "zone_area;zone=0001;stands_in=parcel"] {
+        let error = axioval_ir::measured::parse(name).unwrap_err().to_string();
+        assert!(error.contains("zone"), "{name}: {error}");
+    }
+    assert!(
+        axioval_ir::measured::parse("zone_footprint_area;stands_in=parcel;elements=x").is_err()
+    );
 }

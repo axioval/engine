@@ -211,13 +211,16 @@ struct CheckArgs {
     /// reference system in `crs` (`axioval:model` for the model's own plan
     /// coordinates, or a map system the model's map conversion names), each
     /// feature a zone with an `id`, a `kind`, an `accuracy` in metres and a
-    /// polygon, multipolygon or line string. Repeat for several files. A file
-    /// that cannot be read, or a zone id two files state, stops the check
-    /// before anything runs; a zone the rules read and no file states leaves
-    /// every value reading it not evaluated. The result records each file's
-    /// SHA-256.
-    #[arg(long = "zones", value_name = "FILE")]
-    zones: Vec<PathBuf>,
+    /// polygon, multipolygon or line string; or a GML document of cadastral
+    /// parcels and public traffic areas, which states no accuracy, so the
+    /// argument does: `ACCURACY=FILE`, in metres. Repeat for several files.
+    /// A file that cannot be read, or a zone id two files state, stops the
+    /// check before anything runs; a zone the rules read and no file states
+    /// leaves every value reading it not evaluated. The result records each
+    /// file's SHA-256, its format, and per model whether its reference
+    /// system and coordinates match the model's.
+    #[arg(long = "zones", value_name = "[ACCURACY=]FILE", value_parser = zones::zone_arg)]
+    zones: Vec<zones::ZoneArg>,
     /// Supply a terrain surface as context beside the models: which ground
     /// it is (`original` or `finished`), its vertical accuracy in metres
     /// (the most any of its elevations may differ from the true ground;
@@ -1041,6 +1044,8 @@ fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     } else {
         (session, None)
     };
+    let placements = zones::check_placements(&session, &plan, &mut supplied.zone_files);
+    supplied.unsupplied.extend(placements);
     let runtime = check_runtime(registry, &args, &clock, supplied.terrain.take());
     let unknown_pairs = axioval::engine::unknown_relation_objects(&plan, session.project());
     let mut result = runtime.run_session(&session, plan)?;

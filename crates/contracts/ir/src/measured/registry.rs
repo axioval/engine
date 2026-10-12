@@ -6839,7 +6839,8 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
             SETBACK_MINIMUM,
             SETBACK_ROOF,
             SETBACK_ROOF_SHARE,
-            ZONE,
+            ZONE_OF_OBJECT[0],
+            ZONE_OF_OBJECT[1],
         ],
         dimension: Some(QuantityDimension::Area),
         services: SETBACK_SERVICES,
@@ -6857,6 +6858,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
             SETBACK_TESSELLATED,
             ZONE_UNSUPPLIED,
             ZONE_UNPLACED,
+            ZONE_STANDS_UNDECIDED,
             ZONE_LINE,
         ],
         label: &en_de(
@@ -8071,12 +8073,17 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
     ),
     MeasuredDescriptor {
         name: "zone_area",
-        parameters: &[ZONE],
+        parameters: &ZONE_OF_OBJECT,
         dimension: Some(QuantityDimension::Area),
         services: COORDINATES,
         exactness: MeasuredExactness::Measured,
         subject: MeasuredSubject::Object,
-        not_evaluated: &[ZONE_UNSUPPLIED, ZONE_UNPLACED, ZONE_LINE],
+        not_evaluated: &[
+            ZONE_UNSUPPLIED,
+            ZONE_UNPLACED,
+            ZONE_STANDS_UNDECIDED,
+            ZONE_LINE,
+        ],
         label: &en_de("Zone area", "Zonenfläche"),
         help: &en_de(
             "The area of a context zone supplied beside the model (a parcel, a zoning area), \
@@ -8090,12 +8097,17 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
     },
     MeasuredDescriptor {
         name: "zone_distance",
-        parameters: &[ZONE],
+        parameters: &ZONE_OF_OBJECT,
         dimension: Some(QuantityDimension::Length),
         services: &["proximity", "coordinate-system"],
         exactness: MeasuredExactness::Measured,
         subject: MeasuredSubject::Object,
-        not_evaluated: &[NO_GEOMETRY, ZONE_UNSUPPLIED, ZONE_UNPLACED],
+        not_evaluated: &[
+            NO_GEOMETRY,
+            ZONE_UNSUPPLIED,
+            ZONE_UNPLACED,
+            ZONE_STANDS_UNDECIDED,
+        ],
         label: &en_de("Distance to a zone's line", "Abstand zur Linie einer Zone"),
         help: &en_de(
             "The least plan distance from the object's footprint to a context zone's line (a \
@@ -8161,12 +8173,18 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
     },
     MeasuredDescriptor {
         name: "zone_inside_area",
-        parameters: &[ZONE],
+        parameters: &ZONE_OF_OBJECT,
         dimension: Some(QuantityDimension::Area),
         services: ZONE_SERVICES,
         exactness: MeasuredExactness::Measured,
         subject: MeasuredSubject::Object,
-        not_evaluated: &[NO_GEOMETRY, ZONE_UNSUPPLIED, ZONE_UNPLACED, ZONE_LINE],
+        not_evaluated: &[
+            NO_GEOMETRY,
+            ZONE_UNSUPPLIED,
+            ZONE_UNPLACED,
+            ZONE_STANDS_UNDECIDED,
+            ZONE_LINE,
+        ],
         label: &en_de(
             "Footprint inside a zone",
             "Grundfläche innerhalb einer Zone",
@@ -8181,12 +8199,18 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
     },
     MeasuredDescriptor {
         name: "zone_outside_area",
-        parameters: &[ZONE],
+        parameters: &ZONE_OF_OBJECT,
         dimension: Some(QuantityDimension::Area),
         services: ZONE_SERVICES,
         exactness: MeasuredExactness::Measured,
         subject: MeasuredSubject::Object,
-        not_evaluated: &[NO_GEOMETRY, ZONE_UNSUPPLIED, ZONE_UNPLACED, ZONE_LINE],
+        not_evaluated: &[
+            NO_GEOMETRY,
+            ZONE_UNSUPPLIED,
+            ZONE_UNPLACED,
+            ZONE_STANDS_UNDECIDED,
+            ZONE_LINE,
+        ],
         label: &en_de(
             "Footprint outside a zone",
             "Grundfläche außerhalb einer Zone",
@@ -8218,6 +8242,53 @@ const ZONE: MeasuredParameter = MeasuredParameter {
     ),
 };
 
+/// `zone` or `stands_in`: the context zone a value of an object reads,
+/// named by its id or by the kind of zone the object stands in; exactly
+/// one of them.
+pub(super) const ZONE_OF_OBJECT: [MeasuredParameter; 2] = [
+    MeasuredParameter {
+        key: "zone",
+        kind: MeasuredParameterKind::Text,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The id of the context zone, among the zones supplied beside the model (`check \
+             --zones`), or `@` a text parameter of the rule naming it; either it or \
+             `stands_in`.",
+            "Die Kennung der Kontextzone unter den neben dem Modell gelieferten Zonen (`check \
+             --zones`), oder mit `@` ein Textparameter der Regel, der sie nennt; entweder sie \
+             oder `stands_in`.",
+        ),
+    },
+    MeasuredParameter {
+        key: "stands_in",
+        kind: MeasuredParameterKind::Text,
+        required: false,
+        default: None,
+        help: &en_de(
+            "In place of `zone`: the kind of the zone the object stands in, such as `parcel`, \
+             or `@` a text parameter of the rule naming it. Of the supplied areas of that \
+             kind, it is the one the object's footprint surely lies in (by its placement \
+             point where it has no footprint of any area); an object that may lie in \
+             several, straddles a boundary within its accuracy, or lies in none is not \
+             evaluated, never given one.",
+            "Anstelle von `zone`: die Art der Zone, in der das Objekt steht, etwa `parcel`, \
+             oder mit `@` ein Textparameter der Regel, der sie nennt. Von den gelieferten \
+             Flächen dieser Art ist es die, in der die Grundfläche des Objekts sicher liegt \
+             (mit seinem Platzierungspunkt, wo es keine Grundfläche mit Fläche hat); ein \
+             Objekt, das in mehreren liegen kann, eine Grenze innerhalb ihrer Genauigkeit \
+             überschreitet oder in keiner liegt, wird nicht ausgewertet, nie einer \
+             zugeordnet.",
+        ),
+    },
+];
+
+/// What leaves a value reading the zone an object stands in not
+/// evaluated.
+pub(super) const ZONE_STANDS_UNDECIDED: &str = "by `stands_in`, the object may lie in several \
+     zones of the kind, straddles a boundary within its accuracy, lies in none, or a zone of \
+     the kind cannot be placed";
+
 /// `elements`: the objects whose footprints a zone's aggregate takes.
 const ZONE_ELEMENTS: MeasuredParameter = selected(
     "elements",
@@ -8231,9 +8302,9 @@ const ZONE_ELEMENTS: MeasuredParameter = selected(
     ),
 );
 
-const ZONE_SERVICES: &[&str] = &["plan-area", "coordinate-system"];
-const ZONE_UNSUPPLIED: &str = "no zone of that id was supplied beside the model";
-const ZONE_UNPLACED: &str = "the zone's coordinates cannot be placed in the model's (another \
+pub(super) const ZONE_SERVICES: &[&str] = &["plan-area", "coordinate-system"];
+pub(super) const ZONE_UNSUPPLIED: &str = "no zone of that id was supplied beside the model";
+pub(super) const ZONE_UNPLACED: &str = "the zone's coordinates cannot be placed in the model's (another \
      reference system, a map conversion not stated exactly)";
-const ZONE_LINE: &str = "the zone is a line, which encloses no area";
+pub(super) const ZONE_LINE: &str = "the zone is a line, which encloses no area";
 const ZONE_SOURCES: &str = "the elements lie in several sources";

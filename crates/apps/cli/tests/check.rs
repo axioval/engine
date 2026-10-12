@@ -21760,3 +21760,174 @@ fn the_distance_of_buildings_from_a_building_line_is_measured() {
     assert_eq!(finding_ids(&result), ["#29"], "{result:#}");
     assert!(result["report"]["findings"][0].to_string().contains('8'));
 }
+
+/// A synthetic cadastral GML extract in EPSG:25832 beside
+/// [`parcel_buildings`] georeferenced at easting 500 000, northing
+/// 5 600 000: parcels `0001` (x 0..14), `0002` (x 14..30) and `0003` (x
+/// 30..50), each y 0..20, holding buildings #19, #29 and #39 in turn, and
+/// the street `S1` (y -10..0) along their south edge, in a NAS-like
+/// `AX_Bestandsdatenauszug`.
+fn cadastre_gml() -> String {
+    let surface = |x0: f64, y0: f64, x1: f64, y1: f64| {
+        let [e0, e1] = [500_000.0 + x0, 500_000.0 + x1];
+        let [n0, n1] = [5_600_000.0 + y0, 5_600_000.0 + y1];
+        format!(
+            "<position><gml:Surface srsName=\"urn:ogc:def:crs:EPSG::25832\"><gml:patches>\
+             <gml:PolygonPatch><gml:exterior><gml:Ring><gml:curveMember><gml:Curve>\
+             <gml:segments><gml:LineStringSegment><gml:posList>{e0} {n0} {e1} {n0} {e1} {n1} \
+             {e0} {n1} {e0} {n0}</gml:posList></gml:LineStringSegment></gml:segments>\
+             </gml:Curve></gml:curveMember></gml:Ring></gml:exterior></gml:PolygonPatch>\
+             </gml:patches></gml:Surface></position>"
+        )
+    };
+    let mut members = String::new();
+    for (number, x0, x1) in [(1, 0.0, 14.0), (2, 14.0, 30.0), (3, 30.0, 50.0)] {
+        let _ = write!(
+            members,
+            "<gml:featureMember><AX_Flurstueck gml:id=\"DEXX000{number}\">\
+             <flurstueckskennzeichen>000{number}</flurstueckskennzeichen>{}\
+             </AX_Flurstueck></gml:featureMember>",
+            surface(x0, 0.0, x1, 20.0)
+        );
+    }
+    let _ = write!(
+        members,
+        "<gml:featureMember><AX_Strassenverkehr gml:id=\"S1\">{}</AX_Strassenverkehr>\
+         </gml:featureMember>",
+        surface(0.0, -10.0, 50.0, 0.0)
+    );
+    format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+         <AX_Bestandsdatenauszug xmlns=\"http://www.adv-online.de/namespaces/adv/gid/7.1\" \
+         xmlns:gml=\"http://www.opengis.net/gml/3.2\" \
+         xmlns:wfs=\"http://www.opengis.net/wfs\"><enthaelt><wfs:FeatureCollection>\
+         {members}</wfs:FeatureCollection></enthaelt></AX_Bestandsdatenauszug>\n"
+    )
+}
+
+impl Case {
+    /// One expression rule over every building of [`parcel_buildings`]
+    /// georeferenced at `easting` (or not at all), the cadastre of
+    /// [`cadastre_gml`] supplied within 5 cm.
+    fn cadastre_rule(&self, requirement: &Value, easting: Option<f64>) -> (Output, Value) {
+        let model = parcel_buildings();
+        let model = easting.map_or(model.clone(), |easting| georeferenced(&model, easting));
+        self.write("model.ifc", &model);
+        let path = self.write("alkis.xml", &cadastre_gml());
+        let path = format!("0.05={}", path.to_str().unwrap());
+        self.geometry_rule_with(
+            &["model.ifc"],
+            &[("building", "IfcBuildingElementProxy")],
+            (
+                "axioval:capability.expression",
+                &registry_signature("axioval:capability.expression"),
+            ),
+            entity("building"),
+            json!({"requirement": {"type": "expression", "value": requirement}}),
+            &json!({}),
+            &["--zones", &path],
+        )
+    }
+}
+
+/// engine#319: a cadastre of three parcels and a street is read beside a
+/// georeferenced model; a rule selects the parcel each building stands on
+/// by its kind and measures its area (280, 320 and 400 m², within 5 cm of
+/// each boundary), and the result reports that the reference systems and
+/// coordinates match. A model not georeferenced, or georeferenced
+/// elsewhere, is reported, and its values are not evaluated.
+#[test]
+fn a_rule_measures_the_area_of_the_parcel_a_building_stands_on() {
+    let case = Case::new("cadastre-own-parcel");
+    let rule = measured_against(
+        "zone_area;stands_in=parcel",
+        "lessThanOrEquals",
+        &json!({"type": "quantity", "value": 300.0, "unit": "m2"}),
+    );
+    let (output, result) = case.cadastre_rule(&rule, Some(500_000.0));
+    assert_eq!(
+        output.status.code(),
+        Some(3),
+        "{}: {result:#}",
+        stderr(&output)
+    );
+    assert_eq!(finding_ids(&result), ["#29", "#39"], "{result:#}");
+    let findings = result["report"]["findings"].to_string();
+    assert!(
+        findings.contains("zone_area;stands_in=parcel = 31"),
+        "{findings}"
+    );
+    assert!(
+        findings.contains("zone_area;stands_in=parcel = 39"),
+        "{findings}"
+    );
+    let file = &result["zone_files"][0];
+    assert_eq!(file["file"], "alkis.xml", "{result:#}");
+    assert_eq!(file["format"], "cadastre-gml");
+    assert_eq!(file["reference"], "urn:ogc:def:crs:EPSG::25832");
+    assert_eq!(file["accuracy_metres"], 0.05);
+    assert_eq!(file["zones"], json!(["0001", "0002", "0003", "S1"]));
+    assert_eq!(file["placements"][0]["reference"], "matches", "{file:#}");
+    assert_eq!(file["placements"][0]["coordinates"], "overlap", "{file:#}");
+    assert!(
+        !result["integrity"].to_string().contains("zone"),
+        "{result:#}"
+    );
+
+    // The building's own parcel against its neighbours: two parcels and
+    // the street for the middle one.
+    let neighbours = json!({"kind": "compare", "operator": "equals", "label": "value",
+        "left": {"kind": "aggregate", "function": "count",
+                 "over": {"kind": "measured",
+                          "name": "zone_neighbours;stands_in=parcel;kinds=street"}},
+        "right": {"kind": "literal", "value": {"type": "number", "value": 1}}});
+    let (output, result) = case.cadastre_rule(&neighbours, Some(500_000.0));
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}: {result:#}",
+        stderr(&output)
+    );
+
+    // Not georeferenced: the zones cannot be placed.
+    let (output, result) = case.cadastre_rule(&rule, None);
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    let file = &result["zone_files"][0];
+    assert_eq!(file["placements"][0]["reference"], "refused", "{file:#}");
+    assert!(
+        file["placements"][0]["reason"]
+            .as_str()
+            .unwrap()
+            .contains("no map conversion"),
+        "{file:#}"
+    );
+    assert!(
+        result["integrity"]
+            .to_string()
+            .contains("zone-reference-mismatch"),
+        "{result:#}"
+    );
+
+    // Georeferenced 1 km east: the parcels lie apart from the model.
+    let (output, result) = case.cadastre_rule(&rule, Some(501_000.0));
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    let placement = &result["zone_files"][0]["placements"][0];
+    assert_eq!(placement["reference"], "matches", "{placement:#}");
+    assert_eq!(placement["coordinates"], "apart", "{placement:#}");
+    assert!(
+        placement["gap_metres"].as_f64().unwrap() > 900.0,
+        "{placement:#}"
+    );
+    assert!(
+        result["integrity"]
+            .to_string()
+            .contains("zones-apart-from-model"),
+        "{result:#}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .to_string()
+            .contains("stands in no supplied context zone of kind `parcel`"),
+        "{result:#}"
+    );
+}

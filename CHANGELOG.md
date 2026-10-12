@@ -6,6 +6,29 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Cadastral parcels as context**: `ContextZones::read_cadastre_gml`
+  (and `read_gml`) reads the parcels and public traffic areas of a
+  cadastral GML subset as context zones: `AX_Flurstueck` as `parcel` by
+  its `flurstueckskennzeichen`, `AX_Strassenverkehr`, `AX_Weg` and
+  `AX_Platz` as `street`, `way` and `square` by `gml:id`, each its
+  `position` area, over a GML 3 geometry subset of straight segments in a
+  reference system read easting first (ETRS89 / UTM or `axioval:model`).
+  Every other feature, geometry or reference system is refused by name,
+  never skipped or approximated, and the accuracy is the caller's:
+  `check --zones 0.05=alkis.xml`. The zone values of an object
+  (`zone_area`, `zone_inside_area`, `zone_outside_area`, `zone_distance`,
+  `setback_outside_area`) take `stands_in=<kind>` in place of
+  `zone=<id>`: the one area of that kind the object surely stands in,
+  never picked where it straddles, stands in several or in none. The
+  member list `zone_neighbours` lists the areas beside such a zone
+  (`zone`, `kind`, `area`), sure where their stated boundaries share a
+  stretch. `check` records per model whether each file's reference system
+  and coordinates match it (`zone_files[].placements`, warnings
+  `zone-reference-mismatch` and `zones-apart-from-model`) and warns of a
+  kind no file states (`zone-kind-not-supplied`). `ContextZone::try_new`,
+  `ContextZones::format`, `placed_extent`, `SuppliedZones::of_kind` and
+  `all` are public; `ZoneReads::kinds` lists the kinds read
+  ([#319](https://github.com/axioval/engine/issues/319)).
 - **Material layers**: the member list `layers;spaces=<kinds>` lists a
   wall's, roof's or slab's material layers as its source states them,
   inside first, each with `layer`, `index` (the source's order),

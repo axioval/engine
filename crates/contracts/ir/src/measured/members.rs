@@ -23,6 +23,7 @@ mod clash;
 mod materials;
 mod searches;
 mod walking;
+mod zones;
 
 /// One list of measured members.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
@@ -6495,6 +6496,7 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             ),
         ],
     },
+    zones::ZONE_NEIGHBOURS,
 ];
 
 /// The member list `name` (without parameters), ignoring ASCII case.

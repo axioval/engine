@@ -23,6 +23,15 @@
 //! unit factor) refuses the placement, and the value reading the zone is
 //! not evaluated. Nothing is ever defaulted: a zone without a stated
 //! accuracy is refused when read.
+//!
+//! Besides `GeoJSON`, cadastral parcels and public traffic areas are read
+//! from a GML subset ([`ContextZones::read_cadastre_gml`], #319), through
+//! the GML 3 geometry subset of [`gml`]. A rule names a zone by its id, or
+//! by the kind of zone the object stands in (`stands_in`), which the rules
+//! crate resolves per object by plan containment, never by a guess.
+
+mod cadastre;
+mod gml;
 
 use std::sync::Arc;
 
@@ -107,6 +116,43 @@ pub struct ContextZone {
 }
 
 impl ContextZone {
+    /// A zone a reader made: its `id`, its `kind` (lowercase letters,
+    /// digits and `-`), its shape, the accuracy its boundary is stated
+    /// within, in metres, and its `feature` position in its file, from one.
+    ///
+    /// # Errors
+    ///
+    /// An id unusable in a measured name, a kind of other characters, or
+    /// an accuracy not finite and non-negative.
+    pub fn try_new(
+        id: impl Into<String>,
+        kind: impl Into<String>,
+        shape: ZoneShape,
+        accuracy_metres: f64,
+        feature: usize,
+    ) -> Result<Self, String> {
+        let (id, kind) = (id.into(), kind.into());
+        check_id(&id)?;
+        if !check_kind(&kind) {
+            return Err(format!(
+                "zone `{id}`: the kind `{kind}` is not lowercase letters, digits and `-`"
+            ));
+        }
+        if !accuracy_metres.is_finite() || accuracy_metres < 0.0 {
+            return Err(format!(
+                "zone `{id}`: the accuracy {accuracy_metres} is not a non-negative number of \
+                 metres"
+            ));
+        }
+        Ok(Self {
+            id,
+            kind,
+            shape,
+            accuracy_metres,
+            feature,
+        })
+    }
+
     /// The zone's id, unique among the zones supplied to a run.
     #[must_use]
     pub fn id(&self) -> &str {
@@ -301,6 +347,7 @@ pub struct ContextZones {
     sha256: String,
     reference: ZoneReference,
     zones: Vec<ContextZone>,
+    format: Option<&'static str>,
 }
 
 /// A zone id usable in a measured name and a locator.
@@ -317,6 +364,14 @@ fn check_id(id: &str) -> Result<(), String> {
         ));
     }
     Ok(())
+}
+
+/// Whether `kind` is a zone kind: lowercase letters, digits and `-`.
+fn check_kind(kind: &str) -> bool {
+    !kind.is_empty()
+        && kind
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
 /// A non-negative finite accuracy in metres.
@@ -423,7 +478,58 @@ impl ContextZones {
             sha256: sha256.into(),
             reference,
             zones,
+            format: None,
         })
+    }
+
+    /// The same zones, read from the exchange `format`.
+    pub(crate) fn read_as(mut self, format: &'static str) -> Self {
+        self.format = Some(format);
+        self
+    }
+
+    /// The exchange the zones were read from: `geojson`, `cadastre-gml`
+    /// or `xplan-gml`; `None` for zones a host reader made with
+    /// [`Self::new`].
+    #[must_use]
+    pub fn format(&self) -> Option<&'static str> {
+        self.format
+    }
+
+    /// The plan extent `[west, south, east, north]` of every zone placed
+    /// in the model coordinates of a source whose coordinate system is
+    /// `system` ([`ContextZone::place`]), grown by each zone's accuracy:
+    /// what a host compares with the model's extent to tell whether the
+    /// coordinates match (#319). `None` for a file stating no zone.
+    ///
+    /// # Errors
+    ///
+    /// Why the first zone that cannot be placed cannot: the reference
+    /// systems do not match, or the map conversion cannot place them.
+    pub fn placed_extent(
+        &self,
+        system: Option<&SourceCoordinateSystem>,
+    ) -> Result<Option<[f64; 4]>, String> {
+        let mut extent: Option<[f64; 4]> = None;
+        for zone in &self.zones {
+            let placed = zone.place(self, system)?;
+            let grow = placed.accuracy_metres();
+            for (start, end) in placed.shape().segments() {
+                for [x, y] in [start, end] {
+                    let [west, south, east, north] = extent.get_or_insert([
+                        f64::INFINITY,
+                        f64::INFINITY,
+                        f64::NEG_INFINITY,
+                        f64::NEG_INFINITY,
+                    ]);
+                    *west = west.min(x - grow);
+                    *south = south.min(y - grow);
+                    *east = east.max(x + grow);
+                    *north = north.max(y + grow);
+                }
+            }
+        }
+        Ok(extent)
     }
 
     /// Reads the zones of a `GeoJSON` `FeatureCollection`, the file `name`.
@@ -479,12 +585,7 @@ impl ContextZones {
             check_id(&id).map_err(refuse)?;
             let kind = properties["kind"]
                 .as_str()
-                .filter(|kind| {
-                    !kind.is_empty()
-                        && kind
-                            .chars()
-                            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
-                })
+                .filter(|kind| check_kind(kind))
                 .ok_or_else(|| {
                     refuse(format!(
                         "zone `{id}` states no `kind` of lowercase letters, digits and `-` (such \
@@ -518,6 +619,19 @@ impl ContextZones {
             reference,
             zones,
         )
+        .map(|zones| zones.read_as("geojson"))
+    }
+
+    /// Reads the zones of a GML document, the file `name`, whose
+    /// boundaries are stated within `accuracy_metres` (GML states none):
+    /// cadastral parcels ([`Self::read_cadastre_gml`]).
+    ///
+    /// # Errors
+    ///
+    /// As the reader of its exchange.
+    pub fn read_gml(bytes: &[u8], name: &str, accuracy_metres: f64) -> Result<Self, String> {
+        let root = gml::parse(bytes, "GML")?;
+        Self::cadastre_from(&root, bytes, name, accuracy_metres)
     }
 
     /// Where the zones came from.
@@ -589,6 +703,23 @@ impl SuppliedZones {
         })
     }
 
+    /// Every zone of `kind` with the file stating it, in the order the
+    /// files were supplied and each file's order.
+    pub fn of_kind<'a>(
+        &'a self,
+        kind: &'a str,
+    ) -> impl Iterator<Item = (&'a ContextZones, &'a ContextZone)> + 'a {
+        self.all().filter(move |(_, zone)| zone.kind == kind)
+    }
+
+    /// Every zone with the file stating it, in the order the files were
+    /// supplied and each file's order.
+    pub fn all(&self) -> impl Iterator<Item = (&ContextZones, &ContextZone)> {
+        self.files
+            .iter()
+            .flat_map(|file| file.zones.iter().map(move |zone| (file.as_ref(), zone)))
+    }
+
     /// Adds the zones of one more file.
     pub(crate) fn supply(&mut self, zones: ContextZones) -> Result<(), String> {
         if let Some(zone) = zones
@@ -613,6 +744,9 @@ impl SuppliedZones {
 pub struct ZoneReads {
     /// The zone ids read, sorted.
     pub zones: std::collections::BTreeSet<String>,
+    /// The kinds of zone read as the zone an object stands in
+    /// (`stands_in`), sorted.
+    pub kinds: std::collections::BTreeSet<String>,
     /// Whether any measured value reads a zone at all.
     pub any: bool,
 }
@@ -632,24 +766,31 @@ pub(crate) fn zone_reads(
 ) {
     match value {
         Value::String(text) => {
-            let Ok(call) = axioval_ir::measured::parse(text) else {
+            let Ok(call) = axioval_ir::measured::parse(text)
+                .or_else(|_| axioval_ir::measured::parse_members(text))
+            else {
                 return;
             };
             // A value within a zone (`count_within;…;zone=…`) reads it too.
-            if !reads_zone(call.name()) && call.argument("zone").is_none() {
+            if !reads_zone(call.name())
+                && call.argument("zone").is_none()
+                && call.argument("stands_in").is_none()
+            {
                 return;
             }
             reads.any = true;
-            match call.argument("zone") {
-                Some(axioval_ir::measured::MeasuredArgument::Text(id)) => {
-                    reads.zones.insert(id.clone());
-                }
-                Some(axioval_ir::measured::MeasuredArgument::Parameter(parameter)) => {
-                    if let Some(id) = parameters(parameter) {
-                        reads.zones.insert(id);
+            for (key, read) in [("zone", &mut reads.zones), ("stands_in", &mut reads.kinds)] {
+                match call.argument(key) {
+                    Some(axioval_ir::measured::MeasuredArgument::Text(id)) => {
+                        read.insert(id.clone());
                     }
+                    Some(axioval_ir::measured::MeasuredArgument::Parameter(parameter)) => {
+                        if let Some(id) = parameters(parameter) {
+                            read.insert(id);
+                        }
+                    }
+                    _ => {}
                 }
-                _ => {}
             }
         }
         Value::Array(items) => {

@@ -20464,12 +20464,12 @@ fn with_geometry_stations_on_an_offset_basis_lower() {
 }
 
 /// A deck sectioned along an `IfcOffsetCurve2D` beside an `IfcEllipse`.
-/// Since ifc-geometry 0.22 a single station on such a basis lowers through
-/// Axiolid's seam window (openbimrs/ifc#423), but a run of sections along it
-/// stays refused by name (openbimrs/ifc#429), so the deck is unmeasured
-/// with that reason and never bounded.
+/// Since ifc-geometry 0.23 a run of sections along such a basis lowers with
+/// seam windows (openbimrs/ifc#429), where it was refused by name: the deck
+/// reaches the mesh compiler, which certifies no bound between stations, so
+/// it is unmeasured for that and never bounded.
 #[test]
-fn with_geometry_a_run_along_an_offset_ellipse_stays_refused() {
+fn with_geometry_a_run_along_an_offset_ellipse_lowers() {
     let deck = "#86=IFCCARTESIANPOINT((30.,0.));\n\
                 #87=IFCAXIS2PLACEMENT2D(#86,$);\n\
                 #84=IFCELLIPSE(#87,10.,6.);\n\
@@ -20495,7 +20495,7 @@ fn with_geometry_a_run_along_an_offset_ellipse_stays_refused() {
         .remove("#53")
         .unwrap_or_else(|| panic!("{result:#}"));
     assert!(
-        reason.contains("not yet interpreted") && reason.contains("seam-snapping window"),
+        reason.contains("certifies no bound") && reason.contains("stationed sections"),
         "{reason}"
     );
 }

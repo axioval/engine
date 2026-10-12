@@ -456,6 +456,13 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **IFC**: moved to `openbim-ifc` 0.29 and `ifc-geometry` 0.23. Sectioned
+  runs along offsets of gradient, spiral, B-spline and elliptical bases now
+  lower with seam windows (openbimrs/ifc#429), so such a deck reaches the
+  mesh compiler and is unmeasured only for want of a bound between stations;
+  linear placements derived on those bases work through open-ended path
+  pieces (openbimrs/ifc#427). Runs of offsets by distances along them stay
+  refused (openbimrs/ifc#433).
 - **Geometry**: moved to `axiolid-mesh-compile` 0.3.22 and through it
   `axiolid-triangulate` 0.3.4, which covers the exact convex hull
   (axiolid/kernel#299) and merges coincident input points instead of

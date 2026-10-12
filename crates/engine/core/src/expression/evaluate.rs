@@ -801,6 +801,34 @@ struct Evaluator<'c> {
     traced: bool,
 }
 
+/// `parts` joined into one string allocated at its exact length. The
+/// evaluator builds a path for every node it evaluates, so it skips the
+/// formatting machinery, which grows a string piece by piece (#363).
+fn joined(parts: &[&str]) -> String {
+    let mut text = String::with_capacity(parts.iter().map(|part| part.len()).sum());
+    for part in parts {
+        text.push_str(part);
+    }
+    text
+}
+
+/// `index` in decimal, written into `buffer`.
+fn decimal(mut index: usize, buffer: &mut [u8; 20]) -> &str {
+    let mut start = buffer.len();
+    loop {
+        start -= 1;
+        // A digit, below ten.
+        #[allow(clippy::cast_possible_truncation)]
+        let digit = (index % 10) as u8;
+        buffer[start] = b'0' + digit;
+        index /= 10;
+        if index == 0 {
+            break;
+        }
+    }
+    std::str::from_utf8(&buffer[start..]).unwrap_or_default()
+}
+
 fn fail(expression: &Expression, path: &str, reason: Reason) -> NotEvaluated {
     NotEvaluated {
         path: path.to_owned(),
@@ -858,8 +886,9 @@ impl Evaluator<'_> {
     #[allow(clippy::too_many_lines)]
     fn eval_node(&mut self, expression: &Expression, path: &str) -> Outcome {
         let kind = expression.kind();
-        let child = |field: &str| format!("{path}.{kind}.{field}");
-        let item = |index: usize| format!("{path}.{kind}[{index}]");
+        let child = |field: &str| joined(&[path, ".", kind, ".", field]);
+        let item =
+            |index: usize| joined(&[path, ".", kind, "[", decimal(index, &mut [0; 20]), "]"]);
         let here = |reason: Reason| fail(expression, path, reason);
         match expression {
             Expression::Literal { value, .. } => {
@@ -904,7 +933,7 @@ impl Evaluator<'_> {
             } => {
                 let mut values = BTreeMap::new();
                 for (key, operand) in keys {
-                    let value = self.eval(operand, &format!("{path}.lookup.keys[{key}]"))?;
+                    let value = self.eval(operand, &joined(&[path, ".lookup.keys[", key, "]"]))?;
                     values.insert(key.clone(), value);
                 }
                 let leaf = self.context.lookup(table, &values, column);
@@ -1058,8 +1087,17 @@ impl Evaluator<'_> {
                 let value = self.eval(operand, &child("operand"))?;
                 let mut truths = Vec::new();
                 for (index, candidate) in values.iter().enumerate() {
-                    let candidate =
-                        self.eval(candidate, &format!("{path}.{kind}.values[{index}]"))?;
+                    let candidate = self.eval(
+                        candidate,
+                        &joined(&[
+                            path,
+                            ".",
+                            kind,
+                            ".values[",
+                            decimal(index, &mut [0; 20]),
+                            "]",
+                        ]),
+                    )?;
                     truths.push(
                         compare(
                             ExpressionComparison::Equals,
@@ -1249,7 +1287,7 @@ impl Evaluator<'_> {
                 value,
                 ..
             } => {
-                let value_path = format!("{path}.aggregate.value");
+                let value_path = joined(&[path, ".aggregate.value"]);
                 // A numeric aggregate is unreadable at its first unreadable
                 // member, so the members after it need not be read.
                 let members = match function {
@@ -1621,10 +1659,11 @@ impl Evaluator<'_> {
         path: &str,
     ) -> Outcome {
         let Some(branch) = branches.get(from) else {
-            return self.eval(otherwise, &format!("{path}.if.else"));
+            return self.eval(otherwise, &joined(&[path, ".if.else"]));
         };
-        let when = format!("{path}.if.branches[{from}].when");
-        let then = format!("{path}.if.branches[{from}].then");
+        let index = decimal(from, &mut [0; 20]).to_owned();
+        let when = joined(&[path, ".if.branches[", &index, "].when"]);
+        let then = joined(&[path, ".if.branches[", &index, "].then"]);
         match self.truth(&branch.when, &when) {
             Ok(Some(true)) => self.eval(&branch.then, &then),
             Ok(Some(false)) => self.choose(branches, from + 1, otherwise, path),
@@ -1946,5 +1985,22 @@ fn operator_name(operator: ExpressionComparison) -> &'static str {
         C::Like => "like",
         C::Matches => "matches",
         C::Contains => "contains",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{decimal, joined};
+
+    #[test]
+    fn paths_are_joined_as_formatted() {
+        for index in [0, 7, 10, 99, 100, 4_096, usize::MAX] {
+            assert_eq!(decimal(index, &mut [0; 20]), index.to_string());
+            assert_eq!(
+                joined(&["$", ".", "and", "[", decimal(index, &mut [0; 20]), "]"]),
+                format!("$.and[{index}]")
+            );
+        }
+        assert_eq!(joined(&[]), "");
     }
 }

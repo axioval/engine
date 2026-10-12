@@ -21,6 +21,7 @@
 - [Composing rules](./composing-rules.md)
 - [Derived properties and measured values](./derived.md)
 - [Context zones](./context-zones.md)
+- [Terrain as context](./terrain.md)
 - [Expressions](./expressions.md)
 - [Capability templates](./templates.md)
 - [Gated rules](./gates.md)

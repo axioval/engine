@@ -1048,6 +1048,7 @@ mod space;
 mod station_profile;
 mod table_files;
 pub mod template;
+mod terrain;
 mod topology;
 mod triangle_count;
 mod values;
@@ -1245,6 +1246,11 @@ pub use table_files::{
     PackageDirectory, PackageFiles, TABLE_FILE_LIMIT_BYTES, TableFileError,
     load_definition_table_files, load_table_files, read_table_file,
 };
+pub use terrain::{
+    TERRAIN_FILE_LIMIT_BYTES, TERRAIN_LOCATOR_PREFIX, TerrainElevation, TerrainError, TerrainFrame,
+    TerrainKind, TerrainOutlineRequest, TerrainPointRequest, TerrainService, TerrainServiceHandle,
+    TerrainSurface, TerrainSurfaceStatement, TinTerrain,
+};
 pub use topology::{
     CompleteTopologyEvidence, ConnectivityGraph, RouteOutcome, TopologyError, VerifiedConnection,
 };
@@ -1386,6 +1392,7 @@ pub struct Runtime {
     summaries: bool,
     evaluation_budget: u64,
     observer: Option<RuleObserver>,
+    terrain: Option<TerrainServiceHandle>,
 }
 impl Runtime {
     /// Creates a runtime from a host-controlled registry.
@@ -1397,6 +1404,7 @@ impl Runtime {
             summaries: false,
             evaluation_budget: expression::DEFAULT_EVALUATION_BUDGET,
             observer: None,
+            terrain: None,
         }
     }
     /// Installs what a run's expressions need: the plan's derived values
@@ -1446,6 +1454,16 @@ impl Runtime {
     #[must_use]
     pub fn with_rule_observer(mut self, observer: RuleObserver) -> Self {
         self.observer = Some(observer);
+        self
+    }
+    /// Serves `terrain` to every run as context beside the model: the
+    /// ground surfaces heights above the terrain are measured against. It
+    /// replaces any terrain a host registered among a session's services,
+    /// so a run measures against the one the runtime was given. Without
+    /// one, every value reading the terrain is not evaluated.
+    #[must_use]
+    pub fn with_terrain(mut self, terrain: TerrainServiceHandle) -> Self {
+        self.terrain = Some(terrain);
         self
     }
     /// Adds adapter-provided host services to subsequent evaluations.
@@ -1678,6 +1696,10 @@ impl Runtime {
         services.replace(metadata);
         // So are the sources: a host copy could hide an empty source.
         services.replace(sources);
+        // The terrain is context the host gave the runtime.
+        if let Some(terrain) = &self.terrain {
+            services.replace(terrain.clone());
+        }
         // And the resource objects the rules name: a host copy could claim
         // resource objects the session never listed.
         resources::install(&mut services, project, &plan.rules);

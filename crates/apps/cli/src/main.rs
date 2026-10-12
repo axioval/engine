@@ -30,6 +30,7 @@ mod geometry;
 mod ids;
 mod server;
 mod zones;
+mod terrain;
 
 use axioval::{
     bcf, bcf_snapshot,
@@ -217,6 +218,28 @@ struct CheckArgs {
     /// SHA-256.
     #[arg(long = "zones", value_name = "FILE")]
     zones: Vec<PathBuf>,
+    /// Supply a terrain surface as context beside the models: which ground
+    /// it is (`original` or `finished`), its vertical accuracy in metres
+    /// (the most any of its elevations may differ from the true ground;
+    /// `LandXML` states none, so the argument must), and a `LandXML` file with
+    /// one TIN surface, or the one named after `#`. Repeat for the other
+    /// ground. Heights above the terrain are measured against it as
+    /// intervals widened by the accuracy. A file that cannot be read stops
+    /// the check before anything runs; the result records each file's
+    /// SHA-256.
+    #[arg(
+        long = "terrain",
+        value_name = "KIND@ACCURACY=FILE[#SURFACE]",
+        value_parser = terrain::terrain_arg,
+        requires = "terrain_in"
+    )]
+    terrains: Vec<terrain::TerrainArg>,
+    /// The coordinates the `--terrain` files are in: the models' own
+    /// (`model`), or the map each model's stated map conversion maps onto
+    /// (`map`); a model stating no map conversion then leaves every height
+    /// above the terrain not evaluated.
+    #[arg(long = "terrain-in", value_enum, requires = "terrains")]
+    terrain_in: Option<terrain::TerrainIn>,
     /// Mesh the model's bodies so geometric rules can run. Off by default:
     /// meshing costs time and purely semantic rulesets do not need it.
     #[arg(long)]
@@ -1018,7 +1041,7 @@ fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     } else {
         (session, None)
     };
-    let runtime = check_runtime(registry, &args, &clock);
+    let runtime = check_runtime(registry, &args, &clock, supplied.terrain.take());
     let unknown_pairs = axioval::engine::unknown_relation_objects(&plan, session.project());
     let mut result = runtime.run_session(&session, plan)?;
     clock.lap("run (all rules)");
@@ -1081,6 +1104,9 @@ struct Supplied {
     relation_files: Vec<digest::RelationFileRecord>,
     catalogue_files: Vec<digest::CatalogueFileRecord>,
     zone_files: Vec<digest::ZoneFileRecord>,
+    terrain_files: Vec<digest::TerrainFileRecord>,
+    /// The terrain the run measures against, `None` without any.
+    terrain: Option<axioval::engine::TerrainServiceHandle>,
     unsupplied: Vec<IntegrityRecord>,
 }
 
@@ -1091,16 +1117,19 @@ impl Supplied {
             .with_relation_files(self.relation_files)
             .with_catalogue_files(self.catalogue_files)
             .with_zone_files(self.zone_files)
+            .with_terrain_files(self.terrain_files)
     }
 }
 
 /// Supplies `plan` with the relation pairs, catalogue entries and context
-/// zones `args` name, before any model is read.
+/// zones `args` name, and reads the terrain surfaces, before any model is
+/// read.
 ///
 /// # Errors
 ///
 /// Any file refused (see [`supply_relations`], [`supply_catalogues`] and
-/// [`zones::supply`]).
+/// [`zones::supply`]), and any terrain file refused
+/// ([`terrain::read_terrains`]).
 fn supply_inputs(plan: &mut ExecutionPlan, args: &CheckArgs) -> Result<Supplied, Box<dyn Error>> {
     let relation_files = supply_relations(plan, &args.relations)?;
     let catalogue_files = supply_catalogues(plan, &args.catalogues)?;
@@ -1108,10 +1137,13 @@ fn supply_inputs(plan: &mut ExecutionPlan, args: &CheckArgs) -> Result<Supplied,
     let mut unsupplied = unsupplied_relations(plan);
     unsupplied.extend(unsupplied_catalogues(plan));
     unsupplied.extend(unsupplied_zones);
+    let (terrain, terrain_files) = terrain::read_terrains(&args.terrains, args.terrain_in)?;
     Ok(Supplied {
         relation_files,
         catalogue_files,
         zone_files,
+        terrain_files,
+        terrain,
         unsupplied,
     })
 }
@@ -1122,8 +1154,12 @@ fn check_runtime(
     registry: axioval::engine::CapabilityRegistry,
     args: &CheckArgs,
     clock: &geometry::timings::Stopwatch,
+    terrain: Option<axioval::engine::TerrainServiceHandle>,
 ) -> Runtime {
     let mut runtime = Runtime::new(registry);
+    if let Some(terrain) = terrain {
+        runtime = runtime.with_terrain(terrain);
+    }
     if let Some(policy) = args.locate.policy() {
         runtime = runtime.with_locations(policy);
     }

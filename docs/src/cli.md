@@ -64,6 +64,7 @@ axioval check --model building.ifc[:DISCIPLINE] [--model other.ifc[:DISCIPLINE] 
    | --ids rules.ids [--ids-filter selector.json]) \
   [--relations RELATION=FILE[#SHEET] ...] [--catalogue CATALOGUE[@VERSION]=FILE[#SHEET] ...] \
   [--zones zones.geojson ...] \
+  [--terrain KIND@ACCURACY=FILE[#SURFACE] ... --terrain-in model|map] \
   [--geometry [--no-exact-boundaries]] [--locate storeys|containers|geometry] \
   [--rule-status] [--timings] [--report result.json] \
   [--decisions decisions.json | --decisions-from reviewed.bcfzip] \
@@ -234,6 +235,34 @@ read from a zone cites the same digest:
 "zone_files": [
   { "file": "zones.geojson", "sha256": "4b1e…", "reference": "axioval:model",
     "zones": ["P1", "B1", "L1"] }
+### Terrain beside the model
+
+`--terrain original@0.05=dgm.xml --terrain-in map` supplies a terrain
+surface as context (see [Terrain as context](./terrain.md)): which ground it
+is, `original` or `finished`; its vertical accuracy in metres (a trailing
+`m` is allowed), the most any of its elevations may differ from the true
+ground, which LandXML does not state and the argument therefore must; and a
+LandXML file holding one TIN surface, or the one named after its last `#`
+(`dgm.xml#Existing`). Repeat it for the other ground. `--terrain-in` is
+required with it and says whether the files are in the models' own
+coordinates (`model`) or in the map each model's stated map conversion maps
+onto (`map`).
+
+Before any model is read, the check fails with status 1, writing nothing,
+when a file cannot be read, is larger than 256 MiB, states no or an unknown
+linear unit, holds no such surface or several without one being named, or
+its surface is refused (not a TIN, a face naming a point it does not state,
+no triangle with plan area), and when one ground is given twice. An
+argument without an accuracy, and `--terrain` without `--terrain-in`, are
+usage errors (status 2).
+
+The result's additive `terrain_files` records each surface supplied:
+
+```json
+"terrain_files": [
+  { "terrain": "original", "file": "dgm.xml", "surface": "Existing",
+    "sha256": "4be1…", "accuracy_metres": 0.05, "frame": "map",
+    "crs": "EPSG:25832", "points": 1250, "triangles": 2396 }
 ]
 ```
 

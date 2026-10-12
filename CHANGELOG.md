@@ -27,6 +27,24 @@ All notable changes are documented here. This project follows Semantic Versionin
   `zones-not-supplied` and `zone-not-supplied` name zones the rules read
   and no file states
   ([#327](https://github.com/axioval/engine/issues/327)).
+- **Terrain as context**: a terrain surface is read beside the model, the
+  original and the finished ground each served on its own.
+  `TerrainService` (`surfaces`, `measure_elevation`,
+  `measure_mean_elevation`, the latter refused by default) answers
+  `TerrainPointRequest`s and `TerrainOutlineRequest`s with
+  `TerrainElevation` intervals widened by the surface's stated vertical
+  accuracy, which the handle holds every answer to; a plan point outside a
+  surface is refused by name (`TerrainError::Outside`) and one it folds
+  over (`Folded`), never answered from the nearest edge. `TinTerrain`
+  serves triangulated `TerrainSurface`s, which
+  `TerrainSurface::read_landxml` reads from LandXML (one `TIN` surface,
+  `northing easting elevation` points, invisible faces left out, the stated
+  linear unit, the named coordinate system); LandXML states no accuracy,
+  so the caller must, and none is ever assumed. `Runtime::with_terrain`
+  installs a terrain in every run. `check --terrain
+  KIND@ACCURACY=FILE[#SURFACE] --terrain-in model|map` supplies one per
+  ground and records each in the result's additive `terrain_files`
+  ([#320](https://github.com/axioval/engine/issues/320)).
 
 - **Measured values**: `alignment_vertical_curvature` and
   `alignment_vertical_radius` read the gradient line's curvature in its

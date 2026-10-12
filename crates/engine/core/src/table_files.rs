@@ -507,7 +507,7 @@ fn xlsx_rows(bytes: &[u8], sheet: &str) -> Result<Grid, String> {
 }
 
 /// One XML event, by local name.
-enum Xml {
+pub(crate) enum Xml {
     Open(String, BTreeMap<String, String>),
     Close(String),
     Text(String),
@@ -516,9 +516,19 @@ enum Xml {
 /// Walks `xml`, calling `on` for each element and text; an empty element
 /// opens and closes. A document type, a processing instruction or an
 /// entity other than the predefined ones is refused.
-fn walk_xml(xml: &str, mut on: impl FnMut(Xml) -> Result<(), String>) -> Result<(), String> {
+fn walk_xml(xml: &str, on: impl FnMut(Xml) -> Result<(), String>) -> Result<(), String> {
+    walk_document(xml, "workbook", on)
+}
+
+/// [`walk_xml`] of a document of another kind, `what` naming it in every
+/// refusal (`malformed {what} XML: …`).
+pub(crate) fn walk_document(
+    xml: &str,
+    what: &str,
+    mut on: impl FnMut(Xml) -> Result<(), String>,
+) -> Result<(), String> {
     let mut reader = quick_xml::Reader::from_str(xml);
-    let malformed = |error: &dyn std::fmt::Display| format!("malformed workbook XML: {error}");
+    let malformed = |error: &dyn std::fmt::Display| format!("malformed {what} XML: {error}");
     loop {
         let event = reader.read_event().map_err(|error| malformed(&error))?;
         let (element, empty) = match event {
@@ -529,7 +539,7 @@ fn walk_xml(xml: &str, mut on: impl FnMut(Xml) -> Result<(), String>) -> Result<
                 continue;
             }
             other => {
-                if walk_other(other, &mut on)? {
+                if walk_other(other, what, &mut on)? {
                     return Ok(());
                 }
                 continue;
@@ -554,9 +564,10 @@ fn walk_xml(xml: &str, mut on: impl FnMut(Xml) -> Result<(), String>) -> Result<
 /// Passes on text and references; `true` at the end of the document.
 fn walk_other(
     event: Event<'_>,
+    what: &str,
     on: &mut impl FnMut(Xml) -> Result<(), String>,
 ) -> Result<bool, String> {
-    let malformed = |error: &dyn std::fmt::Display| format!("malformed workbook XML: {error}");
+    let malformed = |error: &dyn std::fmt::Display| format!("malformed {what} XML: {error}");
     {
         match event {
             Event::Text(text) => on(Xml::Text(
@@ -571,7 +582,7 @@ fn walk_other(
                     Ok(None) => {
                         let name = reference.xml_content(XmlVersion::Implicit1_0);
                         quick_xml::escape::resolve_predefined_entity(&name)
-                            .ok_or_else(|| format!("malformed workbook XML: entity `{name}`"))?
+                            .ok_or_else(|| format!("malformed {what} XML: entity `{name}`"))?
                             .to_owned()
                     }
                     Err(error) => return Err(malformed(&error)),
@@ -579,9 +590,9 @@ fn walk_other(
                 on(Xml::Text(resolved))?;
             }
             Event::DocType(_) | Event::PI(_) => {
-                return Err(
-                    "workbook XML declares a document type or processing instruction".into(),
-                );
+                return Err(format!(
+                    "{what} XML declares a document type or processing instruction"
+                ));
             }
             Event::Eof => return Ok(true),
             _ => {}

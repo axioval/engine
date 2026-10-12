@@ -73,6 +73,10 @@ pub struct CheckOutput {
     /// argument order, so the run can be reproduced. Absent otherwise.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub zone_files: Vec<ZoneFileRecord>,
+    /// The terrain surfaces `check --terrain` supplied as context, in
+    /// argument order, so the run can be reproduced. Absent otherwise.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub terrain_files: Vec<TerrainFileRecord>,
 }
 
 /// One file of entries supplied to a catalogue at check time.
@@ -103,6 +107,31 @@ pub struct ZoneFileRecord {
     pub reference: String,
     /// The zones it states, by id, in the file's order.
     pub zones: Vec<String>,
+}
+
+/// One terrain surface supplied as context at check time.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TerrainFileRecord {
+    /// Which ground it is: `original` or `finished`.
+    pub terrain: String,
+    /// The file's name.
+    pub file: String,
+    /// The surface's name in the file.
+    pub surface: String,
+    /// The lowercase hex SHA-256 of the file's bytes.
+    pub sha256: String,
+    /// The vertical accuracy the argument states, in metres.
+    pub accuracy_metres: f64,
+    /// The coordinates the surface is given in: `model` or `map`.
+    pub frame: String,
+    /// The map coordinate reference system the file names, for a map
+    /// surface.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crs: Option<String>,
+    /// How many points it has.
+    pub points: usize,
+    /// How many triangles with plan area it has.
+    pub triangles: usize,
 }
 
 /// One file of pairs supplied to a relation at check time.
@@ -524,6 +553,7 @@ impl CheckOutput {
             relation_files: Vec::new(),
             catalogue_files: Vec::new(),
             zone_files: Vec::new(),
+            terrain_files: Vec::new(),
         }
     }
 
@@ -567,6 +597,13 @@ impl CheckOutput {
     #[must_use]
     pub fn with_catalogue_files(mut self, files: Vec<CatalogueFileRecord>) -> Self {
         self.catalogue_files = files;
+        self
+    }
+
+    /// The same result recording the terrain surfaces supplied as context.
+    #[must_use]
+    pub fn with_terrain_files(mut self, files: Vec<TerrainFileRecord>) -> Self {
+        self.terrain_files = files;
         self
     }
 

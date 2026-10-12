@@ -117,5 +117,14 @@ CLI output and exit codes are public automation contracts. Parse packages fail c
   with no file is the integrity warning `zones-not-supplied`, a zone it
   names that no file states `zone-not-supplied` (locator
   `axioval:zone;id=<id>`); the values reading them are not evaluated.
+- `check --terrain KIND@ACCURACY=FILE[#SURFACE]` with `--terrain-in
+  model|map` (`src/terrain.rs`: `terrain_arg`, `read_terrains`) reads each
+  LandXML surface with `TerrainSurface::read_landxml` before any model is
+  read and gives the runtime one `TinTerrain` (`Runtime::with_terrain`).
+  The accuracy is required in the argument (LandXML states none) and the
+  frame by `--terrain-in`: never default either. A second file for one
+  ground, an unreadable, oversized or refused file fails with status 1 and
+  writes nothing; each file is recorded in the additive `terrain_files`
+  (`digest::TerrainFileRecord`).
 - `check --timings` prints each phase's time on stderr as it ends (`geometry/timings.rs`, `Stopwatch`; rules through `Runtime::with_rule_observer`) and never changes the result or status; `tests/check.rs` pins it. Envelope declarations (`IsExternal` of every meshed object) are read on the first envelope membership request (`LazyEnvelope`), never eagerly: a ruleset without an envelope rule resolves none (the same test).
 - `check --rule-status` records `Report::rules`; the summary lists them bounded by `--top` (rules that did not pass first) and never changes the exit status.

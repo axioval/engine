@@ -242,6 +242,72 @@ impl FacadeFaces {
     }
 }
 
+/// The volume the outward faces of a set of objects enclose, in cubic
+/// metres, with its evidence: the envelope of a building its walls, roofs,
+/// slabs, windows and doors make together.
+///
+/// A service answers only where the faces close, every edge of every face
+/// met by faces beyond it, and where every face looks outside wholly; the
+/// interval holds the rounding (and a tessellation's chord band), and the
+/// evidence is exact only where every face is of its object's exact shape.
+#[derive(Clone, Debug, PartialEq)]
+pub struct EnclosedVolume {
+    objects: Vec<ObjectId>,
+    lower: f64,
+    upper: f64,
+    evidence: Evidence,
+}
+
+impl EnclosedVolume {
+    /// The volume `objects` (sorted and deduplicated here) enclose, known
+    /// to lie in `[lower, upper]`.
+    ///
+    /// # Errors
+    ///
+    /// [`FacadeAreaError::InvalidMeasurement`] for bounds not finite,
+    /// negative or reversed, [`FacadeAreaError::InexactEvidence`] for
+    /// evidence without a locator.
+    pub fn try_new(
+        mut objects: Vec<ObjectId>,
+        lower: f64,
+        upper: f64,
+        evidence: Evidence,
+    ) -> Result<Self, FacadeAreaError> {
+        if !lower.is_finite() || !upper.is_finite() || lower < 0.0 || lower > upper {
+            return Err(FacadeAreaError::InvalidMeasurement);
+        }
+        if evidence.locator.trim().is_empty() {
+            return Err(FacadeAreaError::InexactEvidence);
+        }
+        objects.sort();
+        objects.dedup();
+        Ok(Self {
+            objects,
+            lower,
+            upper,
+            evidence,
+        })
+    }
+
+    /// The objects whose faces enclose the volume, sorted.
+    #[must_use]
+    pub fn objects(&self) -> &[ObjectId] {
+        &self.objects
+    }
+
+    /// The least and greatest volume, in cubic metres.
+    #[must_use]
+    pub fn cubic_metres(&self) -> (f64, f64) {
+        (self.lower, self.upper)
+    }
+
+    /// Reviewable provenance of the measurement.
+    #[must_use]
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+}
+
 /// Measures the outward-facing surface area of model objects.
 pub trait FacadeAreaService: Send + Sync + 'static {
     /// The area of `object`'s faces that face the outside.
@@ -272,6 +338,23 @@ pub trait FacadeAreaService: Send + Sync + 'static {
         let _ = object;
         Err(FacadeAreaError::Unavailable(
             "outward faces are not listed by this service".into(),
+        ))
+    }
+
+    /// The volume the faces of `objects` looking outside enclose together,
+    /// refused where they do not close or a face only partly looks
+    /// outside.
+    ///
+    /// The default refuses with [`FacadeAreaError::Unavailable`], so a
+    /// service that does not measure envelopes fails closed.
+    // gate: measures volume
+    fn measure_enclosed_volume(
+        &self,
+        objects: &[ObjectId],
+    ) -> Result<EnclosedVolume, FacadeAreaError> {
+        let _ = objects;
+        Err(FacadeAreaError::Unavailable(
+            "enclosed volumes are not measured by this service".into(),
         ))
     }
 }
@@ -315,6 +398,22 @@ impl FacadeAreaServiceHandle {
             return Err(FacadeAreaError::InvalidMeasurement);
         }
         Ok(faces)
+    }
+
+    /// The volume the outward faces of `objects` enclose. A volume of
+    /// other objects answers a different question and is refused.
+    pub fn measure_enclosed_volume(
+        &self,
+        objects: &[ObjectId],
+    ) -> Result<EnclosedVolume, FacadeAreaError> {
+        let volume = self.0.measure_enclosed_volume(objects)?;
+        let mut asked = objects.to_vec();
+        asked.sort();
+        asked.dedup();
+        if volume.objects() != asked {
+            return Err(FacadeAreaError::InvalidMeasurement);
+        }
+        Ok(volume)
     }
 }
 
@@ -382,6 +481,34 @@ mod tests {
         );
         assert!(FacadeFaces::try_new(id("a"), vec![leaning], exact()).is_ok());
         assert!(FacadeFaces::try_new(id("a"), vec![], exact()).is_ok());
+    }
+
+    #[test]
+    fn an_enclosed_volume_is_of_the_objects_asked_about() {
+        struct Fixed;
+        impl FacadeAreaService for Fixed {
+            fn measure_facade_area(&self, _: &ObjectId) -> Result<FacadeArea, FacadeAreaError> {
+                Err(FacadeAreaError::InvalidMeasurement)
+            }
+            fn measure_enclosed_volume(
+                &self,
+                _: &[ObjectId],
+            ) -> Result<EnclosedVolume, FacadeAreaError> {
+                EnclosedVolume::try_new(vec![id("b"), id("a")], 1.0, 1.0, exact())
+            }
+        }
+        assert!(EnclosedVolume::try_new(vec![id("a")], 2.0, 1.0, exact()).is_err());
+        assert!(EnclosedVolume::try_new(vec![id("a")], -1.0, 1.0, exact()).is_err());
+        let handle = FacadeAreaServiceHandle::new(Arc::new(Fixed));
+        assert!(
+            handle
+                .measure_enclosed_volume(&[id("a"), id("b"), id("a")])
+                .is_ok()
+        );
+        assert_eq!(
+            handle.measure_enclosed_volume(&[id("a")]),
+            Err(FacadeAreaError::InvalidMeasurement)
+        );
     }
 
     struct Other;

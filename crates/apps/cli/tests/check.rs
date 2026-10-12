@@ -20720,3 +20720,134 @@ fn a_window_facing_south_measures_its_azimuth_tilt_and_obstruction() {
     assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
     assert_eq!(objects(&result, "findings"), ["#39"], "{result:#}");
 }
+
+/// A box building 10 x 8 m in plan and 4 m high, in metres: walls #19
+/// (south, x 0..10, y 0..0.5), #29 (north, y 7.5..8), #39 (west, x 0..0.5)
+/// and #49 (east, x 9.5..10), 3 m high, between a floor slab #59
+/// (z -0.5..0) and a roof slab #69 (z 3..3.5); two 2 x 1.5 m windows #79
+/// and #99 in the south wall (x 2..4 and 6..8, z 1..2.5) and one, #119, in
+/// the east wall (y 3..5), each filling its opening; space #139 inside.
+fn box_building() -> String {
+    let wall = "IFCWALL('GID',$,$,$,$,PL,REP,$,$)";
+    let slab = "IFCSLAB('GID',$,$,$,$,PL,REP,$,$)";
+    let opening = "IFCOPENINGELEMENT('GID',$,$,$,$,PL,REP,$,.OPENING.)";
+    let window = "IFCWINDOW('GID',$,$,$,$,PL,REP,$,1.5,2.,$,$,$)";
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,#8);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCDIRECTION((0.,1.));\n\
+         #9=IFCPROJECT('0000000000000000000009',$,'P',$,$,$,$,(#5),#7);\n\
+         {}{}{}{}{}{}{}{}{}{}{}{}{}{}\
+         #150=IFCRELVOIDSELEMENT('0000000000000000000150',$,$,$,#19,#89);\n\
+         #151=IFCRELVOIDSELEMENT('0000000000000000000151',$,$,$,#19,#109);\n\
+         #152=IFCRELVOIDSELEMENT('0000000000000000000152',$,$,$,#49,#129);\n\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        placed_box(10, [5.0, 0.25, 0.0], [10.0, 0.5, 3.0], wall),
+        placed_box(20, [5.0, 7.75, 0.0], [10.0, 0.5, 3.0], wall),
+        placed_box(30, [0.25, 4.0, 0.0], [0.5, 7.0, 3.0], wall),
+        placed_box(40, [9.75, 4.0, 0.0], [0.5, 7.0, 3.0], wall),
+        placed_box(50, [5.0, 4.0, -0.5], [10.0, 8.0, 0.5], slab),
+        placed_box(60, [5.0, 4.0, 3.0], [10.0, 8.0, 0.5], slab),
+        placed_box(70, [3.0, 0.25, 1.0], [2.0, 0.5, 1.5], window),
+        placed_box(80, [3.0, 0.25, 1.0], [2.0, 1.0, 1.5], opening),
+        placed_box(90, [7.0, 0.25, 1.0], [2.0, 0.5, 1.5], window),
+        placed_box(100, [7.0, 0.25, 1.0], [2.0, 1.0, 1.5], opening),
+        placed_box(110, [9.75, 4.0, 1.0], [0.5, 2.0, 1.5], window),
+        placed_box(120, [9.75, 4.0, 1.0], [1.0, 2.0, 1.5], opening),
+        placed_box(
+            130,
+            [5.0, 4.0, 0.0],
+            [9.0, 7.0, 3.0],
+            "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,$,$)"
+        ),
+        "",
+    )
+}
+
+/// engine#333: for a box building 10 x 8 x 4 m with two windows facing
+/// south and one facing east, the envelope measures 304 m² (160 m² of
+/// slabs, 80 m² facing south and north, 64 m² facing east and west), of
+/// which the windows are 6 m² south and 3 m² east and the walls 24 m²
+/// south; its faces enclose 320 m³, an A/V of 0.95 per metre.
+#[test]
+fn a_box_building_measures_its_envelope_by_orientation_volume_and_compactness() {
+    let case = Case::new("envelope-area-volume");
+    let types = [("space", "IfcSpace")];
+    let quantity = |value: f64, unit: &str| json!({"kind": "literal", "value": {"type": "quantity", "value": value, "unit": unit}});
+    let number =
+        |value: f64| json!({"kind": "literal", "value": {"type": "number", "value": value}});
+    let between = |name: &str, low: Value, high: Value| {
+        json!({"requirement": {"type": "expression", "value": {
+                "kind": "between",
+                "operand": {"kind": "property", "propertySet": "axioval:measured",
+                            "property": name, "label": "value"},
+                "low": low, "high": high}},
+               "message": {"type": "string", "value": "measures {value}"}})
+    };
+    let model = box_building();
+    let every = "elements=IfcWall,IfcSlab,IfcWindow";
+    let area = |value: f64| (quantity(value - 1e-6, "m2"), quantity(value + 1e-6, "m2"));
+    let mut checks: Vec<(String, (Value, Value))> = vec![
+        (format!("envelope_area;{every}"), area(304.0)),
+        (format!("envelope_area;{every};toward=south"), area(40.0)),
+        (format!("envelope_area;{every};toward=east"), area(32.0)),
+        (
+            "envelope_area;elements=IfcWindow;toward=south".into(),
+            area(6.0),
+        ),
+        (
+            "envelope_area;elements=IfcWindow;toward=east".into(),
+            area(3.0),
+        ),
+        (
+            "envelope_area;elements=IfcWindow;toward=north".into(),
+            area(0.0),
+        ),
+        (
+            "envelope_area;elements=IfcWall;toward=south".into(),
+            area(24.0),
+        ),
+        (
+            format!("envelope_volume;{every}"),
+            (quantity(319.999, "m3"), quantity(320.001, "m3")),
+        ),
+        (
+            format!("compactness;{every}"),
+            (number(0.9499), number(0.9501)),
+        ),
+    ];
+    for (name, (low, high)) in checks.drain(..) {
+        let (output, result) = case.geometry_rule(
+            &model,
+            &types,
+            "axioval:capability.expression",
+            &registry_signature("axioval:capability.expression"),
+            entity("space"),
+            between(&name, low, high),
+        );
+        assert_eq!(output.status.code(), Some(0), "{name}: {}", stderr(&output));
+        assert!(finding_ids(&result).is_empty(), "{name}: {result:#}");
+    }
+    // Without the windows the walls' faces leave holes: the volume is not
+    // evaluated.
+    let (output, result) = case.geometry_rule(
+        &model,
+        &types,
+        "axioval:capability.expression",
+        &registry_signature("axioval:capability.expression"),
+        entity("space"),
+        between(
+            "envelope_volume;elements=IfcWall,IfcSlab",
+            quantity(0.0, "m3"),
+            quantity(1000.0, "m3"),
+        ),
+    );
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    assert!(result.to_string().contains("do not close"), "{result:#}");
+}

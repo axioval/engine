@@ -39,8 +39,8 @@ use axiolid_measure::WindingMesh;
 use axiolid_mesh::{TriMesh, audit_mesh};
 use axiolid_ray_mesh::intersect_triangle;
 use axioval_engine::{
-    FacadeArea, FacadeAreaError, FacadeAreaService, FacadeFace, FacadeFaceSide, FacadeFaces,
-    GeometryFidelity,
+    EnclosedVolume, FacadeArea, FacadeAreaError, FacadeAreaService, FacadeFace, FacadeFaceSide,
+    FacadeFaces, GeometryFidelity,
 };
 use axioval_ir::{Evidence, ObjectId};
 
@@ -186,6 +186,8 @@ struct Classified {
     soup: Vec<Triangle>,
     looked: Vec<(usize, usize)>,
     deviation: Option<f64>,
+    /// `1` where the triangles are wound outward, `-1` where inward.
+    orientation: f64,
 }
 
 impl AxiolidFacadeAreaService {
@@ -276,6 +278,7 @@ impl AxiolidFacadeAreaService {
             soup,
             looked,
             deviation,
+            orientation,
         })
     }
 }
@@ -286,6 +289,7 @@ impl FacadeAreaService for AxiolidFacadeAreaService {
             soup,
             looked,
             deviation,
+            ..
         } = self.classify(object, Faces::Steep)?;
         // Area certainly and possibly on the facade, the summed perimeter of
         // their triangles, and how many faces each counted.
@@ -322,6 +326,7 @@ impl FacadeAreaService for AxiolidFacadeAreaService {
             soup,
             looked,
             deviation,
+            ..
         } = self.classify(object, Faces::All)?;
         let boundary = crate::face_normals::boundary(object, &soup, deviation)
             .map_err(|error| FacadeAreaError::Unavailable(error.to_string()))?;
@@ -357,6 +362,73 @@ impl FacadeAreaService for AxiolidFacadeAreaService {
             exact: deviation.is_none(),
         };
         FacadeFaces::try_new(object.clone(), faces, evidence)
+    }
+
+    fn measure_enclosed_volume(
+        &self,
+        objects: &[ObjectId],
+    ) -> Result<EnclosedVolume, FacadeAreaError> {
+        let mut asked = objects.to_vec();
+        asked.sort();
+        asked.dedup();
+        if asked.is_empty() {
+            return Err(FacadeAreaError::Unavailable(
+                "no objects bound the envelope".into(),
+            ));
+        }
+        // Every face looking outside, wound outward, and the chord band of
+        // the tessellated ones.
+        let (mut faces, mut band, mut exact) = (Vec::new(), 0.0_f64, true);
+        for object in &asked {
+            let Classified {
+                soup,
+                looked,
+                deviation,
+                orientation,
+            } = self.classify(object, Faces::All)?;
+            for (index, outside) in looked {
+                if outside != SAMPLES {
+                    return Err(FacadeAreaError::Unavailable(format!(
+                        "a face of {object} only partly looks outside, so where the envelope \
+                         runs is undecided"
+                    )));
+                }
+                let [a, b, c] = soup[index];
+                let face = if orientation < 0.0 {
+                    [a, c, b]
+                } else {
+                    [a, b, c]
+                };
+                if let Some(deviation) = deviation {
+                    exact = false;
+                    let area = (b - a).cross(c - a).length() / 2.0;
+                    let perimeter = (b - a).length() + (c - b).length() + (a - c).length();
+                    band += area * deviation + perimeter * deviation * deviation;
+                }
+                faces.push(face.map(|point| point.to_array()));
+            }
+        }
+        let volume = enclosed(&faces).map_err(FacadeAreaError::Unavailable)?;
+        let band = band * (1.0 + 8.0 * f64::EPSILON);
+        let (lower, upper) = (
+            (volume.0 - band).next_down().max(0.0),
+            (volume.1 + band).next_up(),
+        );
+        if volume.1 <= 0.0 {
+            return Err(FacadeAreaError::Unavailable(
+                "the faces looking outside enclose no volume".into(),
+            ));
+        }
+        let evidence = Evidence {
+            source: asked[0].source.clone(),
+            locator: format!(
+                "enclosed-volume:objects={}:faces={}",
+                asked.len(),
+                faces.len()
+            ),
+            exact,
+        };
+        EnclosedVolume::try_new(asked, lower, upper, evidence)
     }
 
     fn measure_face_area(&self, object: &ObjectId) -> Result<FacadeArea, FacadeAreaError> {
@@ -544,4 +616,187 @@ fn first_met(
         }
     }
     Ok(first.map(|(_, met)| met))
+}
+
+/// At most this many face edges are matched to prove an envelope closed.
+const MAX_ENVELOPE_EDGES: usize = 30_000;
+
+/// How far apart two points of an envelope's edges may lie and still meet,
+/// in metres.
+const SEAM: f64 = 1e-9;
+
+fn minus(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
+    [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+}
+
+fn dot(a: [f64; 3], b: [f64; 3]) -> f64 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+
+fn cross(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
+}
+
+fn norm(a: [f64; 3]) -> f64 {
+    dot(a, a).sqrt()
+}
+
+/// The volume the outward-wound `faces` enclose, `[lower, upper]`, or why
+/// they enclose none.
+///
+/// The faces close where every stretch of every edge is run as often one
+/// way as the other by the faces' edges on its line (a T-junction
+/// included): their boundary is then empty, and the divergence theorem
+/// gives the volume as the sum of the signed tetrahedra over the faces.
+/// Edges meet within [`SEAM`]; the volume a gap that thin may hide, along
+/// every edge at the faces' distance, widens the interval with the
+/// arithmetic's rounding.
+pub(crate) fn enclosed(faces: &[[[f64; 3]; 3]]) -> Result<(f64, f64), String> {
+    if faces.len() * 3 > MAX_ENVELOPE_EDGES {
+        return Err(format!(
+            "the envelope has more than {MAX_ENVELOPE_EDGES} face edges to match, too many to \
+             prove it closed"
+        ));
+    }
+    if let Some([x, y, z]) = open_edge(faces) {
+        return Err(format!(
+            "the faces looking outside do not close: nothing lies beyond the edge at \
+             ({x:.3}, {y:.3}, {z:.3})"
+        ));
+    }
+    let origin = faces.first().map_or([0.0; 3], |face| face[0]);
+    let (mut volume, mut magnitude, mut reach, mut edges) = (0.0_f64, 0.0_f64, 0.0_f64, 0.0_f64);
+    for face in faces {
+        let [a, b, c] = face.map(|point| minus(point, origin));
+        let term = dot(a, cross(b, c)) / 6.0;
+        volume += term;
+        magnitude += norm(a) * norm(b) * norm(c) / 6.0;
+        reach = reach.max(norm(a)).max(norm(b)).max(norm(c));
+        edges += norm(minus(b, a)) + norm(minus(c, b)) + norm(minus(a, c));
+    }
+    // Each tetrahedron rounds within a few ulps of its corners' product,
+    // the running sum within a few per term; a seam hides at most a strip `SEAM`
+    // wide along every edge, as far out as the farthest corner.
+    let count = f64::from(u32::try_from(faces.len()).unwrap_or(u32::MAX));
+    let slack = (count + 8.0) * 4.0 * f64::EPSILON * magnitude + SEAM * edges * reach / 3.0;
+    Ok(((volume - slack).next_down(), (volume + slack).next_up()))
+}
+
+/// A point on an edge of `faces` that nothing lies beyond: run more often
+/// one way than the other along its line. `None` where the faces close.
+fn open_edge(faces: &[[[f64; 3]; 3]]) -> Option<[f64; 3]> {
+    let edges: Vec<([f64; 3], [f64; 3])> = faces
+        .iter()
+        .flat_map(|[a, b, c]| [(*a, *b), (*b, *c), (*c, *a)])
+        .filter(|(from, to)| norm(minus(*to, *from)) > SEAM)
+        .collect();
+    let mut placed = vec![false; edges.len()];
+    for first in 0..edges.len() {
+        if placed[first] {
+            continue;
+        }
+        let (start, end) = edges[first];
+        let length = norm(minus(end, start));
+        let direction = minus(end, start).map(|value| value / length);
+        let on_line = |point: [f64; 3]| norm(cross(minus(point, start), direction)) <= SEAM;
+        // The edges on this line, as stretches along it, each `1` where it
+        // runs along the line's direction and `-1` where against it.
+        let mut stretches: Vec<(f64, f64, i32)> = Vec::new();
+        for (at, (from, to)) in edges.iter().enumerate().skip(first) {
+            if placed[at] || !on_line(*from) || !on_line(*to) {
+                continue;
+            }
+            placed[at] = true;
+            let (p, q) = (
+                dot(minus(*from, start), direction),
+                dot(minus(*to, start), direction),
+            );
+            stretches.push((p.min(q), p.max(q), if q > p { 1 } else { -1 }));
+        }
+        let mut stops: Vec<f64> = stretches.iter().flat_map(|(p, q, _)| [*p, *q]).collect();
+        stops.sort_by(f64::total_cmp);
+        stops.dedup_by(|later, earlier| *later - *earlier <= SEAM);
+        for pair in stops.windows(2) {
+            let middle = f64::midpoint(pair[0], pair[1]);
+            let runs: i32 = stretches
+                .iter()
+                .filter(|(p, q, _)| *p < middle && middle < *q)
+                .map(|(_, _, way)| way)
+                .sum();
+            if runs != 0 {
+                return Some(std::array::from_fn(|axis| {
+                    start[axis] + direction[axis] * middle
+                }));
+            }
+        }
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The twelve outward triangles of the box `min` to `max`.
+    fn cube(min: [f64; 3], max: [f64; 3]) -> Vec<[[f64; 3]; 3]> {
+        let [x0, y0, z0] = min;
+        let [x1, y1, z1] = max;
+        let p = [
+            [x0, y0, z0],
+            [x1, y0, z0],
+            [x1, y1, z0],
+            [x0, y1, z0],
+            [x0, y0, z1],
+            [x1, y0, z1],
+            [x1, y1, z1],
+            [x0, y1, z1],
+        ];
+        [
+            [0, 2, 1],
+            [0, 3, 2],
+            [4, 5, 6],
+            [4, 6, 7],
+            [0, 1, 5],
+            [0, 5, 4],
+            [1, 2, 6],
+            [1, 6, 5],
+            [2, 3, 7],
+            [2, 7, 6],
+            [3, 0, 4],
+            [3, 4, 7],
+        ]
+        .iter()
+        .map(|corners: &[usize; 3]| corners.map(|corner| p[corner]))
+        .collect()
+    }
+
+    #[test]
+    fn a_closed_box_encloses_its_volume_and_an_open_one_nothing() {
+        let faces = cube([0.0, 0.0, 0.0], [10.0, 8.0, 3.6]);
+        let (lower, upper) = enclosed(&faces).unwrap();
+        assert!(
+            lower <= 288.0 && 288.0 <= upper && upper - lower < 1e-5,
+            "{lower} {upper}"
+        );
+        let open = &faces[..11];
+        assert!(enclosed(open).unwrap_err().contains("do not close"));
+    }
+
+    #[test]
+    fn faces_meeting_at_a_t_junction_still_close() {
+        // The box's top split in two along x = 4, its two halves meeting
+        // the side faces' single edges.
+        let mut faces = cube([0.0, 0.0, 0.0], [10.0, 8.0, 3.0]);
+        faces.retain(|face| !face.iter().all(|corner| (corner[2] - 3.0).abs() < 1e-12));
+        for (x0, x1) in [(0.0, 4.0), (4.0, 10.0)] {
+            faces.push([[x0, 0.0, 3.0], [x1, 0.0, 3.0], [x1, 8.0, 3.0]]);
+            faces.push([[x0, 0.0, 3.0], [x1, 8.0, 3.0], [x0, 8.0, 3.0]]);
+        }
+        let (lower, upper) = enclosed(&faces).unwrap();
+        assert!(lower <= 240.0 && 240.0 <= upper, "{lower} {upper}");
+    }
 }

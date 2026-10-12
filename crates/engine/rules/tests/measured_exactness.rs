@@ -340,6 +340,13 @@ const COVERED: &[(&str, &str, &str)] = &[
         "tests/facade_orientation.rs",
         "an_orientation_measured_on_a_tessellation_is_inexact",
     ),
+    // Envelope areas, volumes and their ratio over a tessellation are
+    // inexact.
+    (
+        "envelope_area",
+        "tests/envelope_area.rs",
+        "an_envelope_measured_on_a_tessellation_is_inexact",
+    ),
     // A port placement must be stated exactly: one cited approximate is
     // refused before it reaches a fall.
     (

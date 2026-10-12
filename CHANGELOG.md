@@ -26,6 +26,18 @@ All notable changes are documented here. This project follows Semantic Versionin
   its end the 25 mm. No host is `null`; several hosts, a body not wholly
   inside its host (never a negative cover) and a tessellated host are not
   evaluated ([#341](https://github.com/axioval/engine/issues/341)).
+- **Measured values**: `envelope_area;elements=<objects>[;toward=north|
+  east|south|west]` is the project's envelope area, the summed area of the
+  elements' faces looking outside, all of them or those looking within
+  45° of a compass direction from true north; by element kind it is, say,
+  the window area facing south. `envelope_volume` is the volume those
+  faces enclose together, by the divergence theorem, refused where they do
+  not close (every stretch of every edge must meet a face beyond it);
+  `compactness` is A/V, per metre. A box building 10 × 8 × 4 m measures
+  304 m², 320 m³ and 0.95 per metre, its two south windows 6 m².
+  `FacadeAreaService::measure_enclosed_volume` (`EnclosedVolume`) refuses
+  by default; the Axiolid adapter answers it
+  ([#333](https://github.com/axioval/engine/issues/333)).
 - **Measured values**: `azimuth` and `tilt` read which way an object
   faces: the compass direction of the outward normals of its faces
   looking outside, clockwise from true north as the source states it (or

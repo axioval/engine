@@ -968,6 +968,14 @@ carries its certified normal box and area (as the boundary pieces of
 `measure_face_pieces` bound them, widened for a tessellation) and its
 centroid, and is `Outside` where all four samples look outside, `Partly`
 where only some do. An open surface has no outside and refuses.
+`measure_enclosed_volume` gathers the faces looking outside of every object
+asked about, wound outward, and refuses where one only partly looks outside
+or the faces do not close: every edge is matched against the edges on its
+line (within 1 nm), and each stretch must be run as often one way as the
+other, which also closes T-junctions. The volume is then the sum of the
+signed tetrahedra from the first corner, widened by its rounding and by a
+1 nm strip along every edge, and for a tessellation by its chord band
+over the faces; at most 30 000 edges are matched.
 `AxiolidProximityService::measure_body_volume` answers the certified
 `enclosed_volume` of a closed two-manifold, widened by the chord band
 (`tube_volume`) for a tessellated one; an open surface refuses with

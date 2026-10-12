@@ -347,3 +347,58 @@ fn a_roof_looks_up_and_a_slab_under_a_room_does_not() {
     let roof = service.measure_facade_area(&id("roof")).unwrap();
     assert!(close(roof.lower_square_metres(), 8.4), "{roof:?}");
 }
+
+/// A box building 10 x 8 m in plan and 3.6 m high: four walls 0.3 m thick
+/// (the south and north ones running the whole length), a floor slab and a
+/// roof slab 0.3 m thick, a full-height 2 m window between the south wall's
+/// two panels and the room inside.
+fn building() -> AxiolidGeometry {
+    AxiolidGeometry::new()
+        .with_mesh(id("south"), cuboid([0.0, 0.0, 0.0], [2.0, 0.3, 3.0]))
+        .with_mesh(id("window"), cuboid([2.0, 0.0, 0.0], [4.0, 0.3, 3.0]))
+        .with_mesh(id("south-east"), cuboid([4.0, 0.0, 0.0], [10.0, 0.3, 3.0]))
+        .with_mesh(id("north"), cuboid([0.0, 7.7, 0.0], [10.0, 8.0, 3.0]))
+        .with_mesh(id("west"), cuboid([0.0, 0.3, 0.0], [0.3, 7.7, 3.0]))
+        .with_mesh(id("east"), cuboid([9.7, 0.3, 0.0], [10.0, 7.7, 3.0]))
+        .with_mesh(id("floor"), cuboid([0.0, 0.0, -0.3], [10.0, 8.0, 0.0]))
+        .with_mesh(id("roof"), cuboid([0.0, 0.0, 3.0], [10.0, 8.0, 3.3]))
+        .with_mesh(id("room"), cuboid([0.3, 0.3, 0.0], [9.7, 7.7, 3.0]))
+}
+
+#[test]
+fn the_outward_faces_of_a_building_enclose_its_gross_volume() {
+    let service = AxiolidFacadeAreaService::new(building()).with_space(id("room"));
+    let all: Vec<ObjectId> = [
+        "south",
+        "window",
+        "south-east",
+        "north",
+        "west",
+        "east",
+        "floor",
+        "roof",
+    ]
+    .map(id)
+    .to_vec();
+    let volume = service.measure_enclosed_volume(&all).unwrap();
+    let (lower, upper) = volume.cubic_metres();
+    assert!(
+        lower <= 288.0 && 288.0 <= upper && upper - lower < 1e-4,
+        "{lower} {upper}"
+    );
+    assert!(volume.evidence().exact);
+    assert_eq!(volume.objects().len(), 8);
+    // Without the roof, or the window, the faces do not close.
+    for left_out in ["roof", "window"] {
+        let some: Vec<ObjectId> = all
+            .iter()
+            .filter(|object| object.local_id != left_out)
+            .cloned()
+            .collect();
+        let why = service.measure_enclosed_volume(&some).unwrap_err();
+        assert!(
+            why.to_string().contains("do not close"),
+            "{left_out}: {why}"
+        );
+    }
+}

@@ -526,6 +526,22 @@ const NORTH_REFERENCE: MeasuredParameter = MeasuredParameter {
     ),
 };
 
+/// `elements`: the objects whose faces looking outside make the envelope.
+const ENVELOPE_ELEMENTS: MeasuredParameter = selected(
+    "elements",
+    true,
+    &en_de(
+        "The objects whose faces looking outside make the envelope: their source kinds, \
+         `,`-separated, or `@` a selector parameter of the rule.",
+        "Die Objekte, deren nach außen blickende Flächen die Hülle bilden: ihre \
+         Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel.",
+    ),
+);
+const ENVELOPE_UNDECIDED: &str =
+    "the selection leaves elements undecided that may bound the envelope";
+const ENVELOPE_OPEN: &str =
+    "the faces looking outside do not close, or a face only partly looks outside";
+
 /// Why a space-validation value of selected elements is not evaluated.
 pub(super) const SPACE_UNDECIDED: &str = "the selection leaves elements undecided";
 
@@ -3379,6 +3395,22 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         ),
     },
     MeasuredDescriptor {
+        name: "compactness",
+        parameters: &[ENVELOPE_ELEMENTS],
+        dimension: None,
+        services: &["facade-area"],
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Project,
+        not_evaluated: &[NO_GEOMETRY, ENVELOPE_UNDECIDED, ENVELOPE_OPEN],
+        label: &en_de("Compactness (A/V)", "Kompaktheit (A/V)"),
+        help: &en_de(
+            "Of the project: `envelope_area` over `envelope_volume` of the same elements, \
+             per metre (A/V).",
+            "Des Projekts: `envelope_area` durch `envelope_volume` derselben Bauteile, je \
+             Meter (A/V).",
+        ),
+    },
+    MeasuredDescriptor {
         name: "contact_area",
         parameters: &CONTACT,
         dimension: Some(QuantityDimension::Area),
@@ -4218,6 +4250,46 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         ),
     },
     MeasuredDescriptor {
+        name: "envelope_area",
+        parameters: &[
+            ENVELOPE_ELEMENTS,
+            MeasuredParameter {
+                key: "toward",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["north", "east", "south", "west"],
+                },
+                required: false,
+                default: None,
+                help: &en_de(
+                    "Only the faces looking within 45° of this compass direction (north \
+                     from 315° up to 45°, east from 45° up to 135°, and so on); a level face \
+                     looks in none. Without it, every face.",
+                    "Nur die Flächen, die höchstens 45° von dieser Himmelsrichtung abweichen \
+                     (Norden von 315° bis unter 45°, Osten von 45° bis unter 135° und so \
+                     weiter); eine waagerechte Fläche blickt in keine. Ohne Angabe jede \
+                     Fläche.",
+                ),
+            },
+            NORTH_REFERENCE,
+        ],
+        dimension: Some(QuantityDimension::Area),
+        services: FACING_SERVICES,
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Project,
+        not_evaluated: &[NO_GEOMETRY, NO_TRUE_NORTH],
+        label: &en_de("Envelope area", "Hüllfläche"),
+        help: &en_de(
+            "Of the project: the summed area of the elements' faces looking outside, of any \
+             slope, or of those looking towards one compass direction. Faces only partly \
+             looking outside, faces that may look the other way and elements the selection \
+             leaves undecided add only to the most it may be.",
+            "Des Projekts: die Summe der Flächen der Bauteile, die nach außen blicken, jeder \
+             Neigung, oder derer, die in eine Himmelsrichtung blicken. Nur teilweise nach \
+             außen blickende Flächen, Flächen, die auch anders blicken können, und \
+             Bauteile, die die Auswahl offenlässt, erhöhen nur den Höchstwert.",
+        ),
+    },
+    MeasuredDescriptor {
         name: "envelope_intrusions",
         parameters: ENVELOPE_PARAMETERS,
         dimension: None,
@@ -4261,6 +4333,25 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              model declares: the project's envelope, derived once per run.",
             "Wie viele Objekte die Ableitung auf die Gebäudehülle legt, was immer das Modell \
              angibt: die Hülle des Projekts, einmal je Lauf abgeleitet.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "envelope_volume",
+        parameters: &[ENVELOPE_ELEMENTS],
+        dimension: Some(QuantityDimension::Volume),
+        services: &["facade-area"],
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Project,
+        not_evaluated: &[NO_GEOMETRY, ENVELOPE_UNDECIDED, ENVELOPE_OPEN],
+        label: &en_de("Envelope volume", "Hüllvolumen"),
+        help: &en_de(
+            "Of the project: the volume the elements' faces looking outside enclose \
+             together, the gross volume of a building its walls, roofs, slabs, windows and \
+             doors bound; refused where those faces do not close.",
+            "Des Projekts: das Volumen, das die nach außen blickenden Flächen der Bauteile \
+             gemeinsam umschließen, das Bruttovolumen eines Gebäudes, das seine Wände, \
+             Dächer, Decken, Fenster und Türen begrenzen; verweigert, wo diese Flächen sich \
+             nicht schließen.",
         ),
     },
     MeasuredDescriptor {

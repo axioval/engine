@@ -31,7 +31,7 @@ use axioval_engine::{
     SkyObstructionRequest,
 };
 use axioval_ir::measured::{MeasuredArgument, MeasuredCall};
-use axioval_ir::{Evidence, ObjectId, QuantityDimension};
+use axioval_ir::{Evidence, ObjectId, QuantityDimension, SourceId};
 
 use crate::measured_kinds::{interval, refused, selection};
 use crate::support::Unavailable;
@@ -369,7 +369,7 @@ fn dominant(parts: &[Part]) -> Result<Vec<&Part>, Unavailable> {
     }))
 }
 
-fn facade_unavailable(error: &FacadeAreaError) -> Unavailable {
+pub(crate) fn facade_unavailable(error: &FacadeAreaError) -> Unavailable {
     let reason = match error {
         FacadeAreaError::Unavailable(_) | FacadeAreaError::UnknownObject(_) => {
             NotEvaluatedReason::BackendUnavailable
@@ -393,11 +393,12 @@ fn sight_unavailable(error: &SightError) -> Unavailable {
     (reason, error.to_string())
 }
 
-/// The north `call` measures from, with whether it is stated exactly.
-pub(crate) fn north(
+/// The north `call` measures from in `source`, with whether it is stated
+/// exactly.
+pub(crate) fn north_of(
     call: &MeasuredCall,
     context: &RuleContext<'_>,
-    object: &ObjectId,
+    source: &SourceId,
 ) -> Result<([f64; 2], bool), Unavailable> {
     if call.choice("reference") == Some("project_north") {
         return Ok(([0.0, 1.0], true));
@@ -411,7 +412,7 @@ pub(crate) fn north(
                 "coordinate-system service is not registered".to_owned(),
             )
         })?
-        .coordinate_system(&object.source)
+        .coordinate_system(source)
         .map_err(|error| (NotEvaluatedReason::BackendUnavailable, error.to_string()))?;
     let north = system.true_north().ok_or_else(|| {
         (
@@ -580,7 +581,7 @@ impl MeasuredProvider for FacingMeasures {
         };
         match call.name() {
             AZIMUTH => {
-                let (north, stated) = north(call, context, object).map_err(&refuse)?;
+                let (north, stated) = north_of(call, context, &object.source).map_err(&refuse)?;
                 let value = facing.azimuth(north).map_err(incomplete)?;
                 Ok((
                     angle(value, facing.exact && stated, AZIMUTH),

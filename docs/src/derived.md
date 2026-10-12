@@ -525,6 +525,7 @@ ignoring ASCII case):
 | `skew;path=<steps>` | how far the long axis is from square to the reached objects', an angle | `PlanSpanService::measure_rectangle`, `RelationshipSelectionService` |
 | `bearing;axis=own_x\|own_y\|long[;reference=project_north\|true_north]` | an axis's plan bearing clockwise from north, an angle | `ObjectFrameService` or `PlanSpanService`, `CoordinateSystemService` for true north |
 | `azimuth[;reference=true_north\|project_north]`, `tilt` | the compass direction the object's outward faces look, clockwise from true north (by default) or the plan's y axis, and their angle from straight up, each an angle (see [Orientation and obstruction](#orientation-and-obstruction)) | built in, over `FacadeAreaService::measure_facade_faces`, `CoordinateSystemService` for true north |
+| `envelope_area;elements=<objects>[;toward=north\|east\|south\|west][;reference=…]`, `envelope_volume;elements=<objects>`, `compactness;elements=<objects>` | of the project: the summed area of the elements' faces looking outside, or of those looking towards one compass direction; the volume they enclose together; and their ratio A/V, per metre (see [The envelope as a whole](#the-envelope-as-a-whole)) | built in, over `FacadeAreaService::measure_facade_faces` and `measure_enclosed_volume`, `CoordinateSystemService` for true north |
 | `obstruction_angle;obstacles=<objects>[;sector=<degrees>]` | how high the obstacles rise above the horizon in front of the object's outward faces, an angle | built in, over `FacadeAreaService::measure_facade_faces` and `SightService::measure_sky_obstruction` |
 | `rectangle_side;side=width\|length` | the shorter or longer side of the footprint's least-area rectangle, a length | `PlanSpanService::measure_rectangle` |
 | `obstruction_count;obstacles=<kinds>;reach=<m>;at=ends\|sides\|within[;side_zone=<m>]` | how many ends or sides of that rectangle obstacles obstruct, or how many stand within it, a plain number | built in, over `PlanSpanService`, `ProximityService`, `VerticalExtentService` |
@@ -825,6 +826,41 @@ hull over the direction's faces, rounded outward, and exact only where the
 faces are of the object's exact shape; the obstruction angle of a
 tessellation is not evaluated, since the direction it looks along is
 approximate.
+
+### The envelope as a whole
+
+Three values of the project measure the building envelope its elements
+make together, the `elements` named by kind (`IfcWall,IfcSlab,IfcWindow`)
+or `@` a selector parameter.
+
+- `envelope_area` is the summed area of the elements' faces looking
+  outside, of any slope: a wall's external side, a window's outer face, a
+  roof's top, a ground slab's underside and the slabs' edges. With
+  `toward` it is the area of the faces looking within 45° of a compass
+  direction (north from 315° up to 45°, east from 45° up to 135°, and so
+  on), clockwise from true north as the source states it (`reference`, as
+  for `azimuth`); a face tilted less than a nanoradian from level looks in
+  none, so a flat roof counts in no direction. Grouped by element kind
+  (`elements=IfcWindow;toward=south`) it is the window area facing south.
+  A face counts towards the least area only where the selection surely
+  picks its element, all of it looks outside and it surely looks that way;
+  one that may adds only to the most.
+- `envelope_volume` is the volume the elements' faces looking outside
+  enclose together (`FacadeAreaService::measure_enclosed_volume`): the sum
+  of the signed tetrahedra over the faces, by the divergence theorem, and
+  only where the faces close, every stretch of every edge met by a face
+  beyond it (T-junctions included, edges meeting within a nanometre). A
+  face only partly looking outside, an element the selection leaves
+  undecided, or an envelope with a hole (the windows left out of
+  `elements`) leaves it not evaluated.
+- `compactness` is `envelope_area` over `envelope_volume` of the same
+  elements, per metre: A/V.
+
+A box building 10 × 8 m in plan and 4 m high has an envelope of 304 m²
+(160 m² of slabs, 80 m² facing south and north, 64 m² facing east and
+west) enclosing 320 m³, an A/V of 0.95 per metre; with two 3 m² windows
+facing south and one facing east, `envelope_area;elements=IfcWindow;
+toward=south` is 6 m² and `toward=east` 3 m².
 
 ### Dimensions
 
@@ -1277,6 +1313,7 @@ sites that cite a value exact:
 | `cover` | the face distances are (a host is exact or refused; a tessellated body's are not) | the body's chord deviation |
 | `height_above_surface` | always: the proximity service refuses tessellated bodies | the clipping's rounding, sixteen ulps of the largest coordinate |
 | `fall_in_flow` | always: the object-frame service refuses inexact placements | the arithmetic's rounding, eight ulps of the quotient outward |
+| `envelope_area`, `envelope_volume`, `compactness` | every face is of its element's exact shape, wholly outside and surely in the direction asked, and the selection decides every element | the sums and the quotient rounded outward; the enclosed volume by its rounding and a nanometre's seam along every edge |
 | `azimuth`, `tilt`, `obstruction_angle` | the outward faces are of the object's exact shape (and true north is stated exactly); for the obstruction angle also every obstacle is measured exactly and none is undecided | the hull over the faces' normal boxes, rounded outward; 1e-9 rad around the elevation; undecided obstacles raise only the upper bound |
 | `stack_distance`, `stack_prevailing`, `body_extent`, `plan_area`, `triangle_count` | every extent, frame, area or count is exact (for `stack_prevailing`, the prevailing pair's) | rounding |
 | `counterpart_uncovered_share`, `counterpart_uncovered`, `counterpart_whole` | every evidence is exact and every counterpart that may cover was read | the undecided cover, as `counterpart-coverage` cites it (`Cited`) |

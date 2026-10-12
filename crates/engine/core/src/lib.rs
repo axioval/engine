@@ -1019,8 +1019,8 @@ pub use envelope_membership::{
     EnvelopeMembershipRequest, EnvelopeMembershipService, EnvelopeMembershipServiceHandle,
 };
 pub use facade_area::{
-    FacadeArea, FacadeAreaError, FacadeAreaService, FacadeAreaServiceHandle, FacadeFace,
-    FacadeFaceSide, FacadeFaces,
+    EnclosedVolume, FacadeArea, FacadeAreaError, FacadeAreaService, FacadeAreaServiceHandle,
+    FacadeFace, FacadeFaceSide, FacadeFaces,
 };
 pub use free_space::{
     AreaInterval, BoxClearance, ClearanceOutcome, ClearancePlacementEvidence, ClearanceRequest,

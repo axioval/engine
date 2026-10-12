@@ -1041,6 +1041,7 @@ mod resources;
 mod rule_outcomes;
 mod section;
 mod services;
+mod setback;
 mod side_distance;
 mod sight;
 mod sight_distance;
@@ -1231,6 +1232,9 @@ pub use services::{ServiceRegistry, ServiceRegistryError};
 pub use session::{
     EvidenceSession, EvidenceSessionError, SessionSources, SnapshotBoundService, SourceDisciplines,
     SourceSnapshot,
+};
+pub use setback::{
+    SetbackArea, SetbackDirection, SetbackOther, SetbackPolygons, SetbackRequest, SetbackStrip,
 };
 pub use side_distance::{
     RectangleSide, SideDistance, SideDistanceRequest, SideDistances, SidePresence,

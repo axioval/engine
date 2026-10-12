@@ -262,19 +262,19 @@ fn tilt(normal: &FaceNormal) -> Result<Interval, String> {
 
 /// One face looking outside, as the grouping reads it.
 #[derive(Clone, Debug)]
-struct Part {
+pub(crate) struct Part {
     normal: FaceNormal,
     /// The unit normal at the box's middle.
-    unit: [f64; 3],
+    pub(crate) unit: [f64; 3],
     /// How far the true normal may lean from `unit`, in radians.
     spread: f64,
-    area: (f64, f64),
+    pub(crate) area: (f64, f64),
     centroid: [f64; 3],
-    side: FacadeFaceSide,
+    pub(crate) side: FacadeFaceSide,
 }
 
 impl Part {
-    fn of(
+    pub(crate) fn of(
         normal: &FaceNormal,
         area: (f64, f64),
         centroid: [f64; 3],
@@ -318,7 +318,7 @@ fn between(a: [f64; 3], b: [f64; 3]) -> f64 {
 
 /// The faces of the one direction surely holding the most area, or why
 /// there is none.
-fn dominant(parts: &[Part]) -> Result<Vec<&Part>, Unavailable> {
+pub(crate) fn dominant(parts: &[Part]) -> Result<Vec<&Part>, Unavailable> {
     let undecided = |why: &str| (NotEvaluatedReason::IncompleteEvidence, why.to_owned());
     // Directions: each the faces whose normals may be parallel to its
     // first face's.

@@ -33,6 +33,7 @@ pub mod plan_area;
 pub mod plan_span;
 pub(crate) mod planar;
 pub mod proximity;
+pub(crate) mod setback;
 pub(crate) mod shell;
 mod side_distance;
 pub mod sight;

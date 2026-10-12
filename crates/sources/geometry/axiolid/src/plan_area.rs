@@ -625,4 +625,11 @@ impl PlanAreaService for AxiolidPlanAreaService {
     ) -> Result<axioval_engine::ZoneArea, PlanAreaError> {
         crate::zone_area::measure(self, request)
     }
+
+    fn measure_setback(
+        &self,
+        request: &axioval_engine::SetbackRequest,
+    ) -> Result<axioval_engine::SetbackArea, PlanAreaError> {
+        crate::setback::measure(self, request)
+    }
 }

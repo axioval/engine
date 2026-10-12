@@ -447,9 +447,10 @@ pub trait TerrainService: Send + Sync + 'static {
 }
 
 /// The grounds `plan` may measure against: the `terrain` of every
-/// `above_terrain` and `mean_terrain_height` its rules and values read, and
-/// both grounds where a rule binds it from a parameter. A host warns of a
-/// ground read but not supplied, whose values are not evaluated.
+/// `above_terrain`, `mean_terrain_height` and `setback_*` its rules and
+/// values read, and both grounds where a rule binds it from a parameter. A
+/// host warns of a ground read but not supplied, whose values are not
+/// evaluated.
 #[must_use]
 pub fn terrain_kinds_read(plan: &crate::ExecutionPlan) -> BTreeSet<TerrainKind> {
     fn walk(value: &serde_json::Value, found: &mut BTreeSet<TerrainKind>) {
@@ -457,7 +458,8 @@ pub fn terrain_kinds_read(plan: &crate::ExecutionPlan) -> BTreeSet<TerrainKind> 
             serde_json::Value::String(text) => {
                 let lowered = text.trim_start().to_ascii_lowercase();
                 if !(lowered.starts_with("above_terrain")
-                    || lowered.starts_with("mean_terrain_height"))
+                    || lowered.starts_with("mean_terrain_height")
+                    || lowered.starts_with("setback_"))
                 {
                     return;
                 }

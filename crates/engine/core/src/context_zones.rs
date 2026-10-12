@@ -620,7 +620,7 @@ pub struct ZoneReads {
 /// Whether `name` is a measured value reading a context zone.
 #[must_use]
 pub fn reads_zone(name: &str) -> bool {
-    name.starts_with("zone_")
+    name.starts_with("zone_") || name == "setback_outside_area"
 }
 
 /// The zones the strings in `value` read as measured names, the

@@ -22,6 +22,7 @@
 - [Derived properties and measured values](./derived.md)
 - [Context zones](./context-zones.md)
 - [Terrain as context](./terrain.md)
+- [Setback areas](./setbacks.md)
 - [Expressions](./expressions.md)
 - [Capability templates](./templates.md)
 - [Gated rules](./gates.md)

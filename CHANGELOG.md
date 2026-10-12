@@ -29,6 +29,30 @@ All notable changes are documented here. This project follows Semantic Versionin
   `across_face` reads an `adjacent-across` edge's face with its outward
   normal. `axioval:material` is unchanged
   ([#334](https://github.com/axioval/engine/issues/334)).
+- **Setback areas**: the measured values `setback_depth`, `setback_area`,
+  `setback_outside_area` (`zone=<id>`) and `setback_overlap_area`
+  (`others=<objects>`) of a wall, each taking
+  `terrain=original|finished;factor=<n>[;minimum=<m>][;roof=<kinds>;roof_share=<n>]`.
+  The depth is `factor` × the wall's top above the mean terrain along its
+  outline, plus `roof_share` of the rise of the `roof` objects standing
+  over it, at least `minimum`: an interval, the terrain's accuracy
+  widening it. The setback is the wall's footprint swept straight out by
+  the depth along every plan direction its steep faces look outside, less
+  the footprint; its part outside a context zone holds every boundary the
+  zone's accuracy allows, and its overlap with other walls' setbacks
+  (other buildings' included) names the walls overlapping. A wall whose
+  outward side is undecided, a tessellated wall, no terrain or an
+  unplaced zone leave the value not evaluated; an internal wall has no
+  setback, exactly. Of a building 6 m high on a terrain known to 5 cm,
+  the south wall's setback reaching 6 m crosses its parcel's edge 5 m in
+  front and is found with 10 ± 0.5 m² beyond it; a second building 8 m
+  away overlaps it by 24 ± 0.6 m², found on both walls.
+  `PlanAreaService::measure_setback` (`SetbackRequest`, `SetbackStrip`,
+  `SetbackDirection`, `SetbackOther`, `SetbackArea`) refuses by default;
+  the Axiolid adapter sweeps the plan triangles and answers with the plan
+  overlay. A check reading a setback value warns `terrain-not-supplied`
+  for a ground no `--terrain` supplies
+  ([#326](https://github.com/axioval/engine/issues/326)).
 - **Context zones**: parcels, zoning areas, building limits and building
   lines supplied beside the model (`check --zones zones.geojson`, a
   GeoJSON feature collection naming its reference system, each zone with

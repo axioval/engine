@@ -728,6 +728,22 @@ area possibly inside its intersection with the zone and the band, and the
 area outside the other way round. A tessellated footprint widens every
 bound by its band `2·P·d + π·d²`.
 
+A wall's setback (`measure_setback`) is its footprint swept along each
+outward plan direction by the depth, less the footprint: the sum of the
+footprint and the segment `[0, d·n]` distributes over a union, and a plan
+triangle swept along a segment is the convex hull of the triangle and its
+translate, so each projected triangle is swept on its own and exactly,
+handed to the overlay as fan triangles, united, and the footprint (as
+`bounded_footprint` measures it) taken away. The least setback sweeps the
+sure directions by the least depth, the most every direction by the most.
+The part outside a zone is the least setback less the zone with its band
+and the most less the zone without it (the band as above); the overlap is
+the least setback's intersection with the sure other walls' least
+setbacks, and the most's with every other wall's most. Every bound widens
+by the band `2·P·d + π·d²` along the setbacks' perimeters for the largest
+chord deviation of the walls involved, and by any slivers the footprints
+left out.
+
 An elevation cover (`measure_elevation_cover`) takes every body into the
 request's frame (`s` along the plan axis, `t` across it, `z` up) and
 projects onto `(s, z)`. A cover body counts within the subject's depth

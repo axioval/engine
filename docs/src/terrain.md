@@ -119,6 +119,10 @@ share), and every refusal to place it (no conversion, an inexact map unit,
 a world frame not stated as the identity, a scale more than 0.1 % from
 one, another named reference system) leaves the value not evaluated.
 
+The [setback values](./setbacks.md) read a wall's height above the terrain
+through `above_terrain`, so the terrain's accuracy widens their depth and
+areas too.
+
 ## Command line
 
 `axioval check --terrain KIND@ACCURACY=FILE[#SURFACE] --terrain-in model|map`

@@ -737,6 +737,17 @@ impl PlanAreaService for GroupAreas {
         self.refuse_groups(&objects)?;
         self.inner.measure_zone_area(request)
     }
+
+    fn measure_setback(
+        &self,
+        request: &crate::SetbackRequest,
+    ) -> Result<crate::SetbackArea, PlanAreaError> {
+        let objects: Vec<&ObjectId> = std::iter::once(request.strip().object())
+            .chain(request.others().iter().map(|other| other.strip().object()))
+            .collect();
+        self.refuse_groups(&objects)?;
+        self.inner.measure_setback(request)
+    }
 }
 
 /// Derives every grouping of a run, in order, over `project`.

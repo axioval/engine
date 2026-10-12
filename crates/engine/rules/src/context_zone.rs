@@ -65,7 +65,7 @@ fn zone_id(call: &MeasuredCall) -> Result<&str, Unavailable> {
 }
 
 /// The zone `call` names, placed in the model coordinates of `source`.
-fn placed(
+pub(crate) fn placed(
     context: &RuleContext<'_>,
     call: &MeasuredCall,
     source: &SourceId,
@@ -123,7 +123,7 @@ fn placed(
 }
 
 /// The zone's polygons; a line encloses no area.
-fn polygons(zone: &PlacedZone) -> Result<&[PlanPolygon], Unavailable> {
+pub(crate) fn polygons(zone: &PlacedZone) -> Result<&[PlanPolygon], Unavailable> {
     match zone.shape() {
         ZoneShape::Area(polygons) => Ok(polygons),
         ZoneShape::Line(_) => Err((
@@ -138,7 +138,7 @@ fn polygons(zone: &PlacedZone) -> Result<&[PlanPolygon], Unavailable> {
 }
 
 /// The zone's statement, as evidence beside a measurement of `source`.
-fn statement(zone: &PlacedZone, source: &SourceId) -> Evidence {
+pub(crate) fn statement(zone: &PlacedZone, source: &SourceId) -> Evidence {
     Evidence {
         source: source.clone(),
         locator: zone.locator().to_owned(),

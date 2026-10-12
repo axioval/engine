@@ -366,6 +366,13 @@ const COVERED: &[(&str, &str, &str)] = &[
         "tests/context_zones.rs",
         "a_zone_measured_on_a_tessellation_is_inexact",
     ),
+    // A setback's depth, area and parts over a terrain known only to its
+    // accuracy are inexact.
+    (
+        "setback_area",
+        "tests/setback.rs",
+        "a_setback_measured_over_an_approximate_terrain_is_inexact",
+    ),
     // A port placement must be stated exactly: one cited approximate is
     // refused before it reaches a fall.
     (

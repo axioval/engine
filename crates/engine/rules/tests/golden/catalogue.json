@@ -82972,6 +82972,622 @@
       "available": true
     },
     {
+      "name": "setback_area",
+      "parameters": [
+        {
+          "key": "terrain",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "original",
+              "finished"
+            ]
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The ground measured against: the `original` terrain before construction or the `finished` terrain after it, as supplied beside the model."
+            },
+            {
+              "language": "de",
+              "text": "Das Gelände, gegen das gemessen wird: das `original` Gelände vor dem Bau oder das `finished` Gelände danach, wie neben dem Modell geliefert."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "factor",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The setback depth per metre of the wall's height H, such as 0.4; the depth is factor × H, at least `minimum`."
+            },
+            {
+              "language": "de",
+              "text": "Die Tiefe der Abstandsfläche je Meter der Wandhöhe H, etwa 0,4; die Tiefe ist factor × H, mindestens `minimum`."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "minimum",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The least setback depth, in metres, whatever the height; none without it."
+            },
+            {
+              "language": "de",
+              "text": "Die kleinste Tiefe der Abstandsfläche in Metern, unabhängig von der Höhe; ohne sie keine."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "roof",
+          "kind": {
+            "type": "sourceKind"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The source kinds of the roofs (or gables modelled apart) that add to the wall's height, `,`-separated; subtypes match. Those of the wall's source whose footprint overlaps the wall's add `roof_share` of their rise above the wall's top. Taken only with `roof_share`."
+            },
+            {
+              "language": "de",
+              "text": "Die Quellarten der Dächer (oder getrennt modellierten Giebel), die zur Wandhöhe hinzukommen, durch `,` getrennt; Untertypen zählen mit. Die der Quelle der Wand, deren Grundfläche die der Wand überlappt, fügen `roof_share` ihrer Höhe über der Wandoberkante hinzu. Nur mit `roof_share`."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "roof_share",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The share of a roof's rise above the wall's top that counts towards H, such as 1/3 or 1. Taken only with `roof`."
+            },
+            {
+              "language": "de",
+              "text": "Der Anteil der Höhe eines Dachs über der Wandoberkante, der zu H zählt, etwa 1/3 oder 1. Nur mit `roof`."
+            }
+          ],
+          "references": "number"
+        }
+      ],
+      "dimension": "area",
+      "services": [
+        "terrain",
+        "plan-area",
+        "facade-area",
+        "vertical-extent",
+        "coordinate-system",
+        "type-hierarchy"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "no terrain of the named ground is supplied",
+        "a plan point measured, or part of the outline, lies outside the terrain surface, or the surface folds over it",
+        "the terrain is in map coordinates and the object's source states no map conversion, states its map unit inexactly, does not state its world frame as the identity, scales by more than 0.1 % or maps onto another reference system than the terrain names",
+        "the wall's top above the terrain, or a roof's top or whether it stands over the wall, cannot be read",
+        "`roof` is stated without `roof_share`, or `roof_share` without `roof`",
+        "both sides of the body look outside, so which side faces out is undecided",
+        "the body looks outside in several directions and none surely holds the most area",
+        "the wall is a tessellation, so the directions it looks out along are approximate"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Setback area"
+        },
+        {
+          "language": "de",
+          "text": "Abstandsfläche"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The area of the setback in front of an external wall: its footprint swept straight out along each plan direction its steep faces look outside, by `setback_depth`, less the footprint. Faces only partly outside add only to the most; a wall no steep face of which looks outside has none, exactly."
+        },
+        {
+          "language": "de",
+          "text": "Die Fläche der Abstandsfläche vor einer Außenwand: ihre Grundfläche, entlang jeder Grundrissrichtung, in die ihre steilen Flächen nach außen blicken, um `setback_depth` gerade hinaus geschoben, ohne die Grundfläche. Nur teilweise außen liegende Flächen erhöhen nur den Höchstwert; eine Wand, von der keine steile Fläche nach außen blickt, hat genau keine."
+        }
+      ],
+      "unit": "m2",
+      "available": true
+    },
+    {
+      "name": "setback_depth",
+      "parameters": [
+        {
+          "key": "terrain",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "original",
+              "finished"
+            ]
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The ground measured against: the `original` terrain before construction or the `finished` terrain after it, as supplied beside the model."
+            },
+            {
+              "language": "de",
+              "text": "Das Gelände, gegen das gemessen wird: das `original` Gelände vor dem Bau oder das `finished` Gelände danach, wie neben dem Modell geliefert."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "factor",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The setback depth per metre of the wall's height H, such as 0.4; the depth is factor × H, at least `minimum`."
+            },
+            {
+              "language": "de",
+              "text": "Die Tiefe der Abstandsfläche je Meter der Wandhöhe H, etwa 0,4; die Tiefe ist factor × H, mindestens `minimum`."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "minimum",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The least setback depth, in metres, whatever the height; none without it."
+            },
+            {
+              "language": "de",
+              "text": "Die kleinste Tiefe der Abstandsfläche in Metern, unabhängig von der Höhe; ohne sie keine."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "roof",
+          "kind": {
+            "type": "sourceKind"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The source kinds of the roofs (or gables modelled apart) that add to the wall's height, `,`-separated; subtypes match. Those of the wall's source whose footprint overlaps the wall's add `roof_share` of their rise above the wall's top. Taken only with `roof_share`."
+            },
+            {
+              "language": "de",
+              "text": "Die Quellarten der Dächer (oder getrennt modellierten Giebel), die zur Wandhöhe hinzukommen, durch `,` getrennt; Untertypen zählen mit. Die der Quelle der Wand, deren Grundfläche die der Wand überlappt, fügen `roof_share` ihrer Höhe über der Wandoberkante hinzu. Nur mit `roof_share`."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "roof_share",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The share of a roof's rise above the wall's top that counts towards H, such as 1/3 or 1. Taken only with `roof`."
+            },
+            {
+              "language": "de",
+              "text": "Der Anteil der Höhe eines Dachs über der Wandoberkante, der zu H zählt, etwa 1/3 oder 1. Nur mit `roof`."
+            }
+          ],
+          "references": "number"
+        }
+      ],
+      "dimension": "length",
+      "services": [
+        "terrain",
+        "plan-area",
+        "facade-area",
+        "vertical-extent",
+        "coordinate-system",
+        "type-hierarchy"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "no terrain of the named ground is supplied",
+        "a plan point measured, or part of the outline, lies outside the terrain surface, or the surface folds over it",
+        "the terrain is in map coordinates and the object's source states no map conversion, states its map unit inexactly, does not state its world frame as the identity, scales by more than 0.1 % or maps onto another reference system than the terrain names",
+        "the wall's top above the terrain, or a roof's top or whether it stands over the wall, cannot be read",
+        "`roof` is stated without `roof_share`, or `roof_share` without `roof`"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Setback depth"
+        },
+        {
+          "language": "de",
+          "text": "Tiefe der Abstandsfläche"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "How deep the setback in front of a wall reaches: `factor` × H, at least `minimum`, where H is the wall's top above the mean terrain along its outline (`above_terrain`, its accuracy included) plus `roof_share` of the rise of the `roof` objects over it above the wall's top. An interval: the terrain's accuracy widens H and so the depth."
+        },
+        {
+          "language": "de",
+          "text": "Wie tief die Abstandsfläche vor einer Wand reicht: `factor` × H, mindestens `minimum`, wobei H die Oberkante der Wand über der mittleren Geländehöhe entlang ihres Umrisses ist (`above_terrain`, samt Genauigkeit) zuzüglich `roof_share` der Höhe der Objekte aus `roof` über ihr oberhalb der Wandoberkante. Ein Intervall: die Genauigkeit des Geländes erweitert H und so die Tiefe."
+        }
+      ],
+      "unit": "m",
+      "available": true
+    },
+    {
+      "name": "setback_outside_area",
+      "parameters": [
+        {
+          "key": "terrain",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "original",
+              "finished"
+            ]
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The ground measured against: the `original` terrain before construction or the `finished` terrain after it, as supplied beside the model."
+            },
+            {
+              "language": "de",
+              "text": "Das Gelände, gegen das gemessen wird: das `original` Gelände vor dem Bau oder das `finished` Gelände danach, wie neben dem Modell geliefert."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "factor",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The setback depth per metre of the wall's height H, such as 0.4; the depth is factor × H, at least `minimum`."
+            },
+            {
+              "language": "de",
+              "text": "Die Tiefe der Abstandsfläche je Meter der Wandhöhe H, etwa 0,4; die Tiefe ist factor × H, mindestens `minimum`."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "minimum",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The least setback depth, in metres, whatever the height; none without it."
+            },
+            {
+              "language": "de",
+              "text": "Die kleinste Tiefe der Abstandsfläche in Metern, unabhängig von der Höhe; ohne sie keine."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "roof",
+          "kind": {
+            "type": "sourceKind"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The source kinds of the roofs (or gables modelled apart) that add to the wall's height, `,`-separated; subtypes match. Those of the wall's source whose footprint overlaps the wall's add `roof_share` of their rise above the wall's top. Taken only with `roof_share`."
+            },
+            {
+              "language": "de",
+              "text": "Die Quellarten der Dächer (oder getrennt modellierten Giebel), die zur Wandhöhe hinzukommen, durch `,` getrennt; Untertypen zählen mit. Die der Quelle der Wand, deren Grundfläche die der Wand überlappt, fügen `roof_share` ihrer Höhe über der Wandoberkante hinzu. Nur mit `roof_share`."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "roof_share",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The share of a roof's rise above the wall's top that counts towards H, such as 1/3 or 1. Taken only with `roof`."
+            },
+            {
+              "language": "de",
+              "text": "Der Anteil der Höhe eines Dachs über der Wandoberkante, der zu H zählt, etwa 1/3 oder 1. Nur mit `roof`."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "zone",
+          "kind": {
+            "type": "text"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The id of the context zone, among the zones supplied beside the model (`check --zones`), or `@` a text parameter of the rule naming it."
+            },
+            {
+              "language": "de",
+              "text": "Die Kennung der Kontextzone unter den neben dem Modell gelieferten Zonen (`check --zones`), oder mit `@` ein Textparameter der Regel, der sie nennt."
+            }
+          ],
+          "references": "string"
+        }
+      ],
+      "dimension": "area",
+      "services": [
+        "terrain",
+        "plan-area",
+        "facade-area",
+        "vertical-extent",
+        "coordinate-system",
+        "type-hierarchy"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "no terrain of the named ground is supplied",
+        "a plan point measured, or part of the outline, lies outside the terrain surface, or the surface folds over it",
+        "the terrain is in map coordinates and the object's source states no map conversion, states its map unit inexactly, does not state its world frame as the identity, scales by more than 0.1 % or maps onto another reference system than the terrain names",
+        "the wall's top above the terrain, or a roof's top or whether it stands over the wall, cannot be read",
+        "`roof` is stated without `roof_share`, or `roof_share` without `roof`",
+        "both sides of the body look outside, so which side faces out is undecided",
+        "the body looks outside in several directions and none surely holds the most area",
+        "the wall is a tessellation, so the directions it looks out along are approximate",
+        "no zone of that id was supplied beside the model",
+        "the zone's coordinates cannot be placed in the model's (another reference system, a map conversion not stated exactly)",
+        "the zone is a line, which encloses no area"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Setback outside a zone"
+        },
+        {
+          "language": "de",
+          "text": "Abstandsfläche außerhalb einer Zone"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The area of the wall's setback (`setback_area`) outside a context zone, such as its parcel with half the public area beside it, under every boundary the zone's stated accuracy allows: the setback lies inside where it is zero, and one straddling the boundary within the accuracy is never surely inside."
+        },
+        {
+          "language": "de",
+          "text": "Die Fläche der Abstandsfläche der Wand (`setback_area`) außerhalb einer Kontextzone, etwa ihres Flurstücks mit der Hälfte der angrenzenden öffentlichen Fläche, bei jedem Rand, den die angegebene Genauigkeit der Zone zulässt: bei null liegt sie innerhalb, und eine, die den Rand innerhalb der Genauigkeit überschreitet, liegt nie sicher innerhalb."
+        }
+      ],
+      "unit": "m2",
+      "available": true
+    },
+    {
+      "name": "setback_overlap_area",
+      "parameters": [
+        {
+          "key": "terrain",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "original",
+              "finished"
+            ]
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The ground measured against: the `original` terrain before construction or the `finished` terrain after it, as supplied beside the model."
+            },
+            {
+              "language": "de",
+              "text": "Das Gelände, gegen das gemessen wird: das `original` Gelände vor dem Bau oder das `finished` Gelände danach, wie neben dem Modell geliefert."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "factor",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The setback depth per metre of the wall's height H, such as 0.4; the depth is factor × H, at least `minimum`."
+            },
+            {
+              "language": "de",
+              "text": "Die Tiefe der Abstandsfläche je Meter der Wandhöhe H, etwa 0,4; die Tiefe ist factor × H, mindestens `minimum`."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "minimum",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The least setback depth, in metres, whatever the height; none without it."
+            },
+            {
+              "language": "de",
+              "text": "Die kleinste Tiefe der Abstandsfläche in Metern, unabhängig von der Höhe; ohne sie keine."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "roof",
+          "kind": {
+            "type": "sourceKind"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The source kinds of the roofs (or gables modelled apart) that add to the wall's height, `,`-separated; subtypes match. Those of the wall's source whose footprint overlaps the wall's add `roof_share` of their rise above the wall's top. Taken only with `roof_share`."
+            },
+            {
+              "language": "de",
+              "text": "Die Quellarten der Dächer (oder getrennt modellierten Giebel), die zur Wandhöhe hinzukommen, durch `,` getrennt; Untertypen zählen mit. Die der Quelle der Wand, deren Grundfläche die der Wand überlappt, fügen `roof_share` ihrer Höhe über der Wandoberkante hinzu. Nur mit `roof_share`."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "roof_share",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The share of a roof's rise above the wall's top that counts towards H, such as 1/3 or 1. Taken only with `roof`."
+            },
+            {
+              "language": "de",
+              "text": "Der Anteil der Höhe eines Dachs über der Wandoberkante, der zu H zählt, etwa 1/3 oder 1. Nur mit `roof`."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "others",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The walls whose setbacks, each measured with the same parameters, are compared: their source kinds, `,`-separated, or `@` a selector parameter of the rule, whose undecided walls may overlap; never the wall itself. Walls of other buildings and of other models are compared alike."
+            },
+            {
+              "language": "de",
+              "text": "Die Wände, deren Abstandsflächen, jede mit denselben Parametern gemessen, verglichen werden: ihre Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel, dessen unentschiedene Wände überlappen können; nie die Wand selbst. Wände anderer Gebäude und anderer Modelle werden ebenso verglichen."
+            }
+          ],
+          "references": "selector"
+        }
+      ],
+      "dimension": "area",
+      "services": [
+        "terrain",
+        "plan-area",
+        "facade-area",
+        "vertical-extent",
+        "coordinate-system",
+        "type-hierarchy"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "no terrain of the named ground is supplied",
+        "a plan point measured, or part of the outline, lies outside the terrain surface, or the surface folds over it",
+        "the terrain is in map coordinates and the object's source states no map conversion, states its map unit inexactly, does not state its world frame as the identity, scales by more than 0.1 % or maps onto another reference system than the terrain names",
+        "the wall's top above the terrain, or a roof's top or whether it stands over the wall, cannot be read",
+        "`roof` is stated without `roof_share`, or `roof_share` without `roof`",
+        "both sides of the body look outside, so which side faces out is undecided",
+        "the body looks outside in several directions and none surely holds the most area",
+        "the wall is a tessellation, so the directions it looks out along are approximate",
+        "a compared wall's setback cannot be measured"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Overlap of setbacks"
+        },
+        {
+          "language": "de",
+          "text": "Überdeckung von Abstandsflächen"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The area of the wall's setback (`setback_area`) that the setbacks of the `others` overlap, united: zero where none does. The finding relates the walls whose setbacks may overlap it. A compared wall no steep face of which looks outside has no setback."
+        },
+        {
+          "language": "de",
+          "text": "Die Fläche der Abstandsfläche der Wand (`setback_area`), die die vereinigten Abstandsflächen der `others` überdecken: null, wo keine es tut. Der Befund nennt die Wände, deren Abstandsflächen sie überdecken können. Eine verglichene Wand, von der keine steile Fläche nach außen blickt, hat keine Abstandsfläche."
+        }
+      ],
+      "unit": "m2",
+      "available": true
+    },
+    {
       "name": "shelf_clear_height",
       "parameters": [
         {

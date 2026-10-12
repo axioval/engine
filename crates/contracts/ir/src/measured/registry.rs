@@ -2362,6 +2362,87 @@ const TERRAIN_UNPLACED: &str = "the terrain is in map coordinates and the object
 const TERRAIN_NO_OUTLINE: &str = "the outline's objects have no footprint the service can \
      measure, or none is selected";
 
+const SETBACK_FACTOR: MeasuredParameter = MeasuredParameter {
+    key: "factor",
+    kind: MeasuredParameterKind::Number { minimum: 0.0 },
+    required: true,
+    default: None,
+    help: &en_de(
+        "The setback depth per metre of the wall's height H, such as 0.4; the depth is \
+         factor × H, at least `minimum`.",
+        "Die Tiefe der Abstandsfläche je Meter der Wandhöhe H, etwa 0,4; die Tiefe ist \
+         factor × H, mindestens `minimum`.",
+    ),
+};
+
+const SETBACK_MINIMUM: MeasuredParameter = MeasuredParameter {
+    key: "minimum",
+    kind: MeasuredParameterKind::Length { minimum: 0.0 },
+    required: false,
+    default: None,
+    help: &en_de(
+        "The least setback depth, in metres, whatever the height; none without it.",
+        "Die kleinste Tiefe der Abstandsfläche in Metern, unabhängig von der Höhe; ohne \
+         sie keine.",
+    ),
+};
+
+const SETBACK_ROOF: MeasuredParameter = MeasuredParameter {
+    key: "roof",
+    kind: MeasuredParameterKind::SourceKind,
+    required: false,
+    default: None,
+    help: &en_de(
+        "The source kinds of the roofs (or gables modelled apart) that add to the wall's \
+         height, `,`-separated; subtypes match. Those of the wall's source whose footprint \
+         overlaps the wall's add `roof_share` of their rise above the wall's top. Taken \
+         only with `roof_share`.",
+        "Die Quellarten der Dächer (oder getrennt modellierten Giebel), die zur Wandhöhe \
+         hinzukommen, durch `,` getrennt; Untertypen zählen mit. Die der Quelle der Wand, \
+         deren Grundfläche die der Wand überlappt, fügen `roof_share` ihrer Höhe über der \
+         Wandoberkante hinzu. Nur mit `roof_share`.",
+    ),
+};
+
+const SETBACK_ROOF_SHARE: MeasuredParameter = MeasuredParameter {
+    key: "roof_share",
+    kind: MeasuredParameterKind::Number { minimum: 0.0 },
+    required: false,
+    default: None,
+    help: &en_de(
+        "The share of a roof's rise above the wall's top that counts towards H, such as \
+         1/3 or 1. Taken only with `roof`.",
+        "Der Anteil der Höhe eines Dachs über der Wandoberkante, der zu H zählt, etwa 1/3 \
+         oder 1. Nur mit `roof`.",
+    ),
+};
+
+/// What every setback value takes: the ground, the depth's factor and
+/// minimum, and the roofs adding to the height.
+const SETBACK: &[MeasuredParameter] = &[
+    TERRAIN,
+    SETBACK_FACTOR,
+    SETBACK_MINIMUM,
+    SETBACK_ROOF,
+    SETBACK_ROOF_SHARE,
+];
+
+const SETBACK_SERVICES: &[&str] = &[
+    "terrain",
+    "plan-area",
+    "facade-area",
+    "vertical-extent",
+    "coordinate-system",
+    "type-hierarchy",
+];
+const SETBACK_HEIGHT_UNREAD: &str = "the wall's top above the terrain, or a roof's top or \
+     whether it stands over the wall, cannot be read";
+const SETBACK_ROOF_UNPAIRED: &str =
+    "`roof` is stated without `roof_share`, or `roof_share` without `roof`";
+const SETBACK_TESSELLATED: &str =
+    "the wall is a tessellation, so the directions it looks out along are approximate";
+const SETBACK_OTHERS_UNREAD: &str = "a compared wall's setback cannot be measured";
+
 /// The three positions along an alignment take the same parameters.
 const ALONG: &[MeasuredParameter] = &[ALIGNMENT, ALIGNMENT_PATH];
 
@@ -6688,6 +6769,162 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              hollow.",
             "Das elastische Widerstandsmoment rechteckiger und kreisförmiger Profile, voll \
              oder hohl.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "setback_area",
+        parameters: SETBACK,
+        dimension: Some(QuantityDimension::Area),
+        services: SETBACK_SERVICES,
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[
+            NO_GEOMETRY,
+            TERRAIN_UNSUPPLIED,
+            TERRAIN_OUTSIDE,
+            TERRAIN_UNPLACED,
+            SETBACK_HEIGHT_UNREAD,
+            SETBACK_ROOF_UNPAIRED,
+            OUTWARD_SIDE_UNDECIDED,
+            SEVERAL_DIRECTIONS,
+            SETBACK_TESSELLATED,
+        ],
+        label: &en_de("Setback area", "Abstandsfläche"),
+        help: &en_de(
+            "The area of the setback in front of an external wall: its footprint swept \
+             straight out along each plan direction its steep faces look outside, by \
+             `setback_depth`, less the footprint. Faces only partly outside add only to the \
+             most; a wall no steep face of which looks outside has none, exactly.",
+            "Die Fläche der Abstandsfläche vor einer Außenwand: ihre Grundfläche, entlang \
+             jeder Grundrissrichtung, in die ihre steilen Flächen nach außen blicken, um \
+             `setback_depth` gerade hinaus geschoben, ohne die Grundfläche. Nur teilweise \
+             außen liegende Flächen erhöhen nur den Höchstwert; eine Wand, von der keine \
+             steile Fläche nach außen blickt, hat genau keine.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "setback_depth",
+        parameters: SETBACK,
+        dimension: Some(QuantityDimension::Length),
+        services: SETBACK_SERVICES,
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[
+            TERRAIN_UNSUPPLIED,
+            TERRAIN_OUTSIDE,
+            TERRAIN_UNPLACED,
+            SETBACK_HEIGHT_UNREAD,
+            SETBACK_ROOF_UNPAIRED,
+        ],
+        label: &en_de("Setback depth", "Tiefe der Abstandsfläche"),
+        help: &en_de(
+            "How deep the setback in front of a wall reaches: `factor` × H, at least \
+             `minimum`, where H is the wall's top above the mean terrain along its outline \
+             (`above_terrain`, its accuracy included) plus `roof_share` of the rise of the \
+             `roof` objects over it above the wall's top. An interval: the terrain's \
+             accuracy widens H and so the depth.",
+            "Wie tief die Abstandsfläche vor einer Wand reicht: `factor` × H, mindestens \
+             `minimum`, wobei H die Oberkante der Wand über der mittleren Geländehöhe \
+             entlang ihres Umrisses ist (`above_terrain`, samt Genauigkeit) zuzüglich \
+             `roof_share` der Höhe der Objekte aus `roof` über ihr oberhalb der \
+             Wandoberkante. Ein Intervall: die Genauigkeit des Geländes erweitert H und so \
+             die Tiefe.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "setback_outside_area",
+        parameters: &[
+            TERRAIN,
+            SETBACK_FACTOR,
+            SETBACK_MINIMUM,
+            SETBACK_ROOF,
+            SETBACK_ROOF_SHARE,
+            ZONE,
+        ],
+        dimension: Some(QuantityDimension::Area),
+        services: SETBACK_SERVICES,
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[
+            NO_GEOMETRY,
+            TERRAIN_UNSUPPLIED,
+            TERRAIN_OUTSIDE,
+            TERRAIN_UNPLACED,
+            SETBACK_HEIGHT_UNREAD,
+            SETBACK_ROOF_UNPAIRED,
+            OUTWARD_SIDE_UNDECIDED,
+            SEVERAL_DIRECTIONS,
+            SETBACK_TESSELLATED,
+            ZONE_UNSUPPLIED,
+            ZONE_UNPLACED,
+            ZONE_LINE,
+        ],
+        label: &en_de(
+            "Setback outside a zone",
+            "Abstandsfläche außerhalb einer Zone",
+        ),
+        help: &en_de(
+            "The area of the wall's setback (`setback_area`) outside a context zone, such as \
+             its parcel with half the public area beside it, under every boundary the zone's \
+             stated accuracy allows: the setback lies inside where it is zero, and one \
+             straddling the boundary within the accuracy is never surely inside.",
+            "Die Fläche der Abstandsfläche der Wand (`setback_area`) außerhalb einer \
+             Kontextzone, etwa ihres Flurstücks mit der Hälfte der angrenzenden öffentlichen \
+             Fläche, bei jedem Rand, den die angegebene Genauigkeit der Zone zulässt: bei \
+             null liegt sie innerhalb, und eine, die den Rand innerhalb der Genauigkeit \
+             überschreitet, liegt nie sicher innerhalb.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "setback_overlap_area",
+        parameters: &[
+            TERRAIN,
+            SETBACK_FACTOR,
+            SETBACK_MINIMUM,
+            SETBACK_ROOF,
+            SETBACK_ROOF_SHARE,
+            selected(
+                "others",
+                true,
+                &en_de(
+                    "The walls whose setbacks, each measured with the same parameters, are \
+                     compared: their source kinds, `,`-separated, or `@` a selector parameter \
+                     of the rule, whose undecided walls may overlap; never the wall itself. \
+                     Walls of other buildings and of other models are compared alike.",
+                    "Die Wände, deren Abstandsflächen, jede mit denselben Parametern \
+                     gemessen, verglichen werden: ihre Quellarten, durch `,` getrennt, oder \
+                     mit `@` ein Selektorparameter der Regel, dessen unentschiedene Wände \
+                     überlappen können; nie die Wand selbst. Wände anderer Gebäude und \
+                     anderer Modelle werden ebenso verglichen.",
+                ),
+            ),
+        ],
+        dimension: Some(QuantityDimension::Area),
+        services: SETBACK_SERVICES,
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[
+            NO_GEOMETRY,
+            TERRAIN_UNSUPPLIED,
+            TERRAIN_OUTSIDE,
+            TERRAIN_UNPLACED,
+            SETBACK_HEIGHT_UNREAD,
+            SETBACK_ROOF_UNPAIRED,
+            OUTWARD_SIDE_UNDECIDED,
+            SEVERAL_DIRECTIONS,
+            SETBACK_TESSELLATED,
+            SETBACK_OTHERS_UNREAD,
+        ],
+        label: &en_de("Overlap of setbacks", "Überdeckung von Abstandsflächen"),
+        help: &en_de(
+            "The area of the wall's setback (`setback_area`) that the setbacks of the `others` \
+             overlap, united: zero where none does. The finding relates the walls whose \
+             setbacks may overlap it. A compared wall no steep face of which looks outside \
+             has no setback.",
+            "Die Fläche der Abstandsfläche der Wand (`setback_area`), die die vereinigten \
+             Abstandsflächen der `others` überdecken: null, wo keine es tut. Der Befund nennt \
+             die Wände, deren Abstandsflächen sie überdecken können. Eine verglichene Wand, \
+             von der keine steile Fläche nach außen blickt, hat keine Abstandsfläche.",
         ),
     },
     MeasuredDescriptor {

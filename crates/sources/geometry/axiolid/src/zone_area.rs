@@ -36,7 +36,7 @@ use crate::planar::{
 const MINIMUM_BAND: f64 = 1e-6;
 
 /// A stated polygon as the overlay takes it.
-fn overlay_polygon(polygon: &PlanPolygon) -> Polygon {
+pub(crate) fn overlay_polygon(polygon: &PlanPolygon) -> Polygon {
     let ring = |points: &[[f64; 2]]| Ring {
         points: points.iter().map(|[x, y]| Point2::new(*x, *y)).collect(),
     };
@@ -48,7 +48,7 @@ fn overlay_polygon(polygon: &PlanPolygon) -> Polygon {
 
 /// Every point within `radius` of the zone's boundary, as fan triangles
 /// of each boundary segment's hull grown by a circumscribed 16-gon.
-fn boundary_band(zone: &[PlanPolygon], radius: f64) -> Vec<Polygon> {
+pub(crate) fn boundary_band(zone: &[PlanPolygon], radius: f64) -> Vec<Polygon> {
     let offsets = Disc::Circumscribed.vertices(radius.max(MINIMUM_BAND));
     let mut band = Vec::new();
     for ring in zone.iter().flat_map(PlanPolygon::rings) {
@@ -83,7 +83,7 @@ fn boundary_band(zone: &[PlanPolygon], radius: f64) -> Vec<Polygon> {
 
 /// The overlay of two polygon sets, each filled as its non-zero union;
 /// an empty operand is the empty set.
-fn combine(
+pub(crate) fn combine(
     first: Vec<Polygon>,
     second: Vec<Polygon>,
     operation: OverlayOperation,
@@ -108,7 +108,7 @@ fn combine(
     .map_err(|error| PlanAreaError::Unavailable(overlay_refusal(&error).to_owned()))
 }
 
-fn area(polygons: &[Polygon]) -> f64 {
+pub(crate) fn area(polygons: &[Polygon]) -> f64 {
     polygons.iter().map(polygon_area).sum()
 }
 

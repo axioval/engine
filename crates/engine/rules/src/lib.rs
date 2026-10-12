@@ -92,6 +92,7 @@ mod roof_distance;
 mod roof_features;
 mod same_container;
 mod selection;
+mod setback;
 mod shelf_capacity;
 mod slab_contact;
 mod slab_stack;
@@ -385,6 +386,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(facade_orientation::FacingMeasures))
         .and_then(|registry| registry.register_measured(envelope_area::EnvelopeAreaMeasures))
         .and_then(|registry| registry.register_measured(context_zone::ZoneMeasures))
+        .and_then(|registry| registry.register_measured(setback::SetbackMeasures))
         .and_then(|registry| registry.register_measured(body_extent::ExtentMeasures))
         .and_then(|registry| registry.register_measured(plan_area::AreaMeasures))
         .and_then(|registry| registry.register_measured(area_ratio::RatioMeasures))

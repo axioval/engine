@@ -31,6 +31,7 @@ use axioval_ir::{Evidence, ObjectId};
 use thiserror::Error;
 
 use crate::coverage::{CoverageEvidence, CoverageRequest, check_answer};
+use crate::setback::{SetbackArea, SetbackRequest};
 use crate::zone_area::{ZoneArea, ZoneAreaRequest};
 
 /// Failure to measure a plan area.
@@ -613,6 +614,21 @@ pub trait PlanAreaService: Send + Sync + 'static {
             request.objects().len()
         )))
     }
+
+    /// The setback of the request's wall (its footprint swept along its
+    /// outward directions by the depth, less the footprint), its area,
+    /// and as asked the part outside the zone and the part the other
+    /// walls' setbacks overlap.
+    ///
+    /// A service that does not measure setbacks refuses; it never answers
+    /// with no setback or with the footprint.
+    // gate: measures area
+    fn measure_setback(&self, request: &SetbackRequest) -> Result<SetbackArea, PlanAreaError> {
+        Err(PlanAreaError::Unavailable(format!(
+            "this plan-area service does not measure setbacks ({})",
+            request.strip().object()
+        )))
+    }
 }
 
 /// Registry handle for a [`PlanAreaService`].
@@ -767,6 +783,18 @@ impl PlanAreaServiceHandle {
     pub fn measure_zone_area(&self, request: &ZoneAreaRequest) -> Result<ZoneArea, PlanAreaError> {
         let answer = self.0.measure_zone_area(request)?;
         if answer.objects() != request.objects() {
+            return Err(PlanAreaError::InvalidMeasurement);
+        }
+        Ok(answer)
+    }
+
+    /// The setback of the request's wall.
+    ///
+    /// An answer about another wall, without a part asked for, with a
+    /// part not asked for, or naming a wall not compared, is refused.
+    pub fn measure_setback(&self, request: &SetbackRequest) -> Result<SetbackArea, PlanAreaError> {
+        let answer = self.0.measure_setback(request)?;
+        if !crate::setback::answers(request, &answer) {
             return Err(PlanAreaError::InvalidMeasurement);
         }
         Ok(answer)

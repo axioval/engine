@@ -63,6 +63,7 @@ axioval check --model building.ifc[:DISCIPLINE] [--model other.ifc[:DISCIPLINE] 
   (--definitions definitions.json --ruleset ruleset.json [--ruleset other.json ...] \
    | --ids rules.ids [--ids-filter selector.json]) \
   [--relations RELATION=FILE[#SHEET] ...] [--catalogue CATALOGUE[@VERSION]=FILE[#SHEET] ...] \
+  [--zones zones.geojson ...] \
   [--geometry [--no-exact-boundaries]] [--locate storeys|containers|geometry] \
   [--rule-status] [--timings] [--report result.json] \
   [--decisions decisions.json | --decisions-from reviewed.bcfzip] \
@@ -204,6 +205,35 @@ Every value read cites the catalogue, the version and the entry (see
 "catalogue_files": [
   { "catalogue": "materials", "version": "2026-1", "file": "materials.csv",
     "sha256": "4be1…", "entries": 3 }
+### Context zones supplied beside the model
+
+Parcels, zoning areas, building limits and building lines are not part of
+a model. `--zones zones.geojson` supplies them for this check as
+[context zones](./context-zones.md): a GeoJSON feature collection naming
+its reference system in `crs` (`axioval:model` for the model's own plan
+coordinates, or a map system such as `EPSG:25832` that the model's map
+conversion names), each feature a zone with an `id`, a `kind`, an
+`accuracy` in metres and a polygon, multipolygon or line string. Repeat it
+for several files; a zone id may be stated once only.
+
+Before any model is read, the check fails with status 1, writing nothing,
+when a file cannot be read, is larger than 64 MB, names no reference
+system, states a zone without an id, kind, accuracy or readable geometry,
+or states an id an earlier file states. A rule reading context zones when
+no file was given leaves every value reading them not evaluated, and
+`integrity` lists the warning `zones-not-supplied`; a zone the rules name
+(in a measured value or the rule's text parameter it binds) that no file
+states is the warning `zone-not-supplied`, located at
+`axioval:zone;id=<id>`.
+
+The result's additive `zone_files` records each file supplied, its
+reference system and its zones, so the run can be reproduced; every value
+read from a zone cites the same digest:
+
+```json
+"zone_files": [
+  { "file": "zones.geojson", "sha256": "4b1e…", "reference": "axioval:model",
+    "zones": ["P1", "B1", "L1"] }
 ]
 ```
 
@@ -369,6 +399,9 @@ following them are not evaluated, and the exit status follows from them.
 As `catalogue-not-supplied` warnings it lists every
 [catalogue](./expressions.md#catalogues) given no `--catalogue` file; the
 objects whose expressions read it are not evaluated.
+It lists as `zones-not-supplied` a ruleset reading context zones given no
+`--zones` file, and as `zone-not-supplied` every zone it names that no
+file states (see [Context zones](#context-zones-supplied-beside-the-model)).
 With `--geometry` it lists, as `shape.no-representation` warnings, every
 physical product with no shape representation and no parts, and as
 `shape.self-intersecting-face` warnings every product unmeasured for a face

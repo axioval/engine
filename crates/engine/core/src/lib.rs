@@ -188,6 +188,10 @@ pub enum EngineError {
     /// rows its declaration refuses.
     #[error("catalogue `{catalogue}`: {detail}")]
     InvalidCatalogue { catalogue: String, detail: String },
+    /// The host supplied context zones whose id another supplied file
+    /// already states.
+    #[error("context zones `{origin}`: {detail}")]
+    InvalidContextZones { origin: String, detail: String },
 }
 
 pub use schema::ColumnKind;
@@ -837,6 +841,8 @@ pub struct ExecutionPlan {
     /// The catalogues the rulesets declare, with the entries the host
     /// supplied for them.
     catalogues: Catalogues,
+    /// The context zones the host supplied beside the model.
+    zones: SuppliedZones,
     /// The values the ruleset derives, by name.
     values: Arc<BTreeMap<String, schema::Expression>>,
     /// The types the ruleset declares for its expressions' reads.
@@ -948,6 +954,43 @@ impl ExecutionPlan {
     pub fn is_auxiliary(&self, rule: &RuleId) -> bool {
         self.auxiliary.contains(rule)
     }
+    /// Supplies the zones of one file for this run (#327). Zones are
+    /// context beside the model, never part of a rule package: every
+    /// measured value naming a zone no file supplies is not evaluated.
+    ///
+    /// # Errors
+    ///
+    /// [`EngineError::InvalidContextZones`] when a zone's id is already
+    /// supplied by an earlier file.
+    pub fn supply_context_zones(&mut self, zones: ContextZones) -> Result<(), EngineError> {
+        let origin = zones.origin().to_owned();
+        self.zones
+            .supply(zones)
+            .map_err(|detail| EngineError::InvalidContextZones { origin, detail })
+    }
+    /// The context zones supplied for this run.
+    pub fn context_zones(&self) -> &SuppliedZones {
+        &self.zones
+    }
+    /// The context zones the plan's rules and values read through
+    /// measured names: each `zone` stated or bound from a rule's text
+    /// parameter, and whether any measured value reads a zone at all.
+    pub fn context_zone_reads(&self) -> ZoneReads {
+        let mut reads = ZoneReads::default();
+        for rule in &self.rules {
+            let parameters = |name: &str| match rule.parameters.get(name) {
+                Some(schema::ParameterValue::String { value }) => Some(value.clone()),
+                _ => None,
+            };
+            if let Ok(value) = serde_json::to_value((&rule.parameters, &rule.selector)) {
+                context_zones::zone_reads(&value, &parameters, &mut reads);
+            }
+        }
+        if let Ok(value) = serde_json::to_value(self.values.as_ref()) {
+            context_zones::zone_reads(&value, &|_| None, &mut reads);
+        }
+        reads
+    }
 }
 
 mod alignment;
@@ -961,6 +1004,7 @@ mod compartments;
 mod compiler;
 mod concepts;
 mod contact;
+mod context_zones;
 mod coordinate_system;
 mod corridor_end;
 mod coverage;
@@ -1010,6 +1054,7 @@ mod values;
 mod vertical_extent;
 mod walkability;
 mod walking_surface;
+mod zone_area;
 pub use alignment::{
     AlignmentError, AlignmentInterval, AlignmentParameter, AlignmentParameterRequest,
     AlignmentParameterValue, AlignmentPosition, AlignmentRequest, AlignmentService,
@@ -1040,6 +1085,10 @@ pub use concepts::{
 pub use contact::{
     ContactError, ContactEvidence, ContactRequest, ContactService, ContactServiceHandle,
     ContactSide, ContactTolerance,
+};
+pub use context_zones::{
+    ContextZone, ContextZones, MODEL_REFERENCE, PlacedZone, SuppliedZones, ZONE_LOCATOR_PREFIX,
+    ZoneReads, ZoneReference, ZoneShape, reads_zone,
 };
 pub use coordinate_system::{
     CoordinateFrame, CoordinateSystemError, CoordinateSystemService, CoordinateSystemServiceHandle,
@@ -1222,6 +1271,7 @@ pub use walking_surface::{
     WalkingLine, WalkingLinePlacement, WalkingStretch, WalkingSurfaceError, WalkingSurfaceService,
     WalkingSurfaceServiceHandle, across,
 };
+pub use zone_area::{PlanPolygon, ZoneArea, ZoneAreaRequest};
 
 /// Binds a rule's outcomes to it, reporting each source-wide cause once.
 ///
@@ -1643,6 +1693,9 @@ impl Runtime {
         // The catalogues are the plan's: a host copy could state entries it
         // never supplied through the plan.
         services.replace(Arc::new(plan.catalogues.clone()));
+        // The context zones are the plan's: a host copy could state zones
+        // it never supplied through the plan.
+        services.replace(plan.zones.clone());
         self.registry.install_measured(&mut services, project);
         // Measured values are answered through the host's resolver in
         // every run; classifications are derived first when the plan has

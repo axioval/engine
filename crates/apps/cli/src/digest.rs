@@ -69,6 +69,10 @@ pub struct CheckOutput {
     /// argument order, so the run can be reproduced. Absent otherwise.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub catalogue_files: Vec<CatalogueFileRecord>,
+    /// The context zones `check --zones` supplied beside the model, in
+    /// argument order, so the run can be reproduced. Absent otherwise.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub zone_files: Vec<ZoneFileRecord>,
 }
 
 /// One file of entries supplied to a catalogue at check time.
@@ -85,6 +89,20 @@ pub struct CatalogueFileRecord {
     pub sha256: String,
     /// How many entries it lists.
     pub entries: usize,
+}
+
+/// One file of context zones supplied at check time.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ZoneFileRecord {
+    /// The file's name.
+    pub file: String,
+    /// The lowercase hex SHA-256 of the file's bytes.
+    pub sha256: String,
+    /// The reference system its coordinates are stated in:
+    /// `axioval:model` or a map system's name.
+    pub reference: String,
+    /// The zones it states, by id, in the file's order.
+    pub zones: Vec<String>,
 }
 
 /// One file of pairs supplied to a relation at check time.
@@ -505,7 +523,15 @@ impl CheckOutput {
             unmatched_topics: Vec::new(),
             relation_files: Vec::new(),
             catalogue_files: Vec::new(),
+            zone_files: Vec::new(),
         }
+    }
+
+    /// The same result recording the files of context zones supplied.
+    #[must_use]
+    pub fn with_zone_files(mut self, files: Vec<ZoneFileRecord>) -> Self {
+        self.zone_files = files;
+        self
     }
 
     /// The same result listing the BCF topics that decided no finding.

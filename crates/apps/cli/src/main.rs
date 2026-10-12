@@ -29,6 +29,7 @@ mod export;
 mod geometry;
 mod ids;
 mod server;
+mod zones;
 
 use axioval::{
     bcf, bcf_snapshot,
@@ -204,6 +205,18 @@ struct CheckArgs {
         value_parser = catalogue_arg
     )]
     catalogues: Vec<CatalogueArg>,
+    /// Supply context zones beside the model (parcels, zoning areas,
+    /// building limits and lines): a `GeoJSON` feature collection naming its
+    /// reference system in `crs` (`axioval:model` for the model's own plan
+    /// coordinates, or a map system the model's map conversion names), each
+    /// feature a zone with an `id`, a `kind`, an `accuracy` in metres and a
+    /// polygon, multipolygon or line string. Repeat for several files. A file
+    /// that cannot be read, or a zone id two files state, stops the check
+    /// before anything runs; a zone the rules read and no file states leaves
+    /// every value reading it not evaluated. The result records each file's
+    /// SHA-256.
+    #[arg(long = "zones", value_name = "FILE")]
+    zones: Vec<PathBuf>,
     /// Mesh the model's bodies so geometric rules can run. Off by default:
     /// meshing costs time and purely semantic rulesets do not need it.
     #[arg(long)]
@@ -972,8 +985,7 @@ fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     };
     let registry = axioval::default_registry()?;
     let mut plan = compile_rulesets(&registry, &definitions, &rulesets)?;
-    let relation_files = supply_relations(&mut plan, &args.relations)?;
-    let catalogue_files = supply_catalogues(&mut plan, &args.catalogues)?;
+    let mut supplied = supply_inputs(&mut plan, &args)?;
     if args.locate == Locate::Geometry && !args.geometry {
         return Err("`--locate geometry` needs `--geometry` to derive spaces from bodies".into());
     }
@@ -1008,8 +1020,6 @@ fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     };
     let runtime = check_runtime(registry, &args, &clock);
     let unknown_pairs = axioval::engine::unknown_relation_objects(&plan, session.project());
-    let mut unsupplied = unsupplied_relations(&plan);
-    unsupplied.extend(unsupplied_catalogues(&plan));
     let mut result = runtime.run_session(&session, plan)?;
     clock.lap("run (all rules)");
     // Keyed as the BCF sink keys its topics, so a decision recorded against
@@ -1027,7 +1037,7 @@ fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     }
     let mut integrity = integrity(&session)?;
     integrity.extend(relation_records(unknown_pairs));
-    integrity.extend(unsupplied);
+    integrity.append(&mut supplied.unsupplied);
     // Model data the bridge found (no shape at all, a face whose boundary
     // crosses itself), once per object.
     if let Some(report) = meshed.as_mut() {
@@ -1038,11 +1048,10 @@ fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
         .as_mut()
         .map(|report| std::mem::take(&mut report.meshes));
     let geometry = meshed.map(geometry_record);
-    let mut output = CheckOutput::new(result, integrity, geometry, session.project())
+    let output = CheckOutput::new(result, integrity, geometry, session.project())
         .with_sources(source_infos(&session))
-        .with_relation_files(relation_files)
-        .with_catalogue_files(catalogue_files)
         .with_unmatched_topics(unmatched);
+    let mut output = supplied.recorded(output);
     let complete = translated.as_ref().is_none_or(ids::Translated::is_complete);
     if let Some(translated) = translated {
         output = output.with_ids(translated.record);
@@ -1062,6 +1071,48 @@ fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
         // A specification that did not run was not checked: never a pass.
         Outcome::Passed if !complete => Outcome::Incomplete,
         outcome => outcome,
+    })
+}
+
+/// What `check` supplied beside the model before anything ran: the files
+/// of relation pairs, catalogue entries and context zones, and a warning
+/// for each input the plan reads that no file supplied.
+struct Supplied {
+    relation_files: Vec<digest::RelationFileRecord>,
+    catalogue_files: Vec<digest::CatalogueFileRecord>,
+    zone_files: Vec<digest::ZoneFileRecord>,
+    unsupplied: Vec<IntegrityRecord>,
+}
+
+impl Supplied {
+    /// `output` recording every file supplied.
+    fn recorded(self, output: CheckOutput) -> CheckOutput {
+        output
+            .with_relation_files(self.relation_files)
+            .with_catalogue_files(self.catalogue_files)
+            .with_zone_files(self.zone_files)
+    }
+}
+
+/// Supplies `plan` with the relation pairs, catalogue entries and context
+/// zones `args` name, before any model is read.
+///
+/// # Errors
+///
+/// Any file refused (see [`supply_relations`], [`supply_catalogues`] and
+/// [`zones::supply`]).
+fn supply_inputs(plan: &mut ExecutionPlan, args: &CheckArgs) -> Result<Supplied, Box<dyn Error>> {
+    let relation_files = supply_relations(plan, &args.relations)?;
+    let catalogue_files = supply_catalogues(plan, &args.catalogues)?;
+    let (zone_files, unsupplied_zones) = zones::supply(plan, &args.zones)?;
+    let mut unsupplied = unsupplied_relations(plan);
+    unsupplied.extend(unsupplied_catalogues(plan));
+    unsupplied.extend(unsupplied_zones);
+    Ok(Supplied {
+        relation_files,
+        catalogue_files,
+        zone_files,
+        unsupplied,
     })
 }
 

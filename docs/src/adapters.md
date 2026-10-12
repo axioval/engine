@@ -693,6 +693,19 @@ unmeasured, undescribed or a group that cannot give a footprint refuses the
 measurement, never zero. The 0.3.0 overlay's region dilation is not used: it
 does not state on which side of the true offset its polygon lies.
 
+The footprint of objects in a stated zone (`measure_zone_area`) unites the
+objects' footprints as a footprint is united (slivers the overlay refuses
+left out, their area bounding what they could add) and measures the part
+inside the zone as the overlay's intersection with it and the part outside
+as the overlay's difference, each directly, so a footprint wholly inside
+has exactly no area outside. A zone stated within an accuracy `a` has a
+band around its boundary: each boundary segment's hull grown by a 16-gon
+around a disc of radius `a`, handed over as fan triangles. The area surely
+inside is the footprint's intersection with the zone less the band, the
+area possibly inside its intersection with the zone and the band, and the
+area outside the other way round. A tessellated footprint widens every
+bound by its band `2·P·d + π·d²`.
+
 An elevation cover (`measure_elevation_cover`) takes every body into the
 request's frame (`s` along the plan axis, `t` across it, `z` up) and
 projects onto `(s, z)`. A cover body counts within the subject's depth

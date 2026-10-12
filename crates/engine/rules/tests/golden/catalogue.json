@@ -86102,6 +86102,385 @@
       ],
       "unit": "m",
       "available": true
+    },
+    {
+      "name": "zone_area",
+      "parameters": [
+        {
+          "key": "zone",
+          "kind": {
+            "type": "text"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The id of the context zone, among the zones supplied beside the model (`check --zones`), or `@` a text parameter of the rule naming it."
+            },
+            {
+              "language": "de",
+              "text": "Die Kennung der Kontextzone unter den neben dem Modell gelieferten Zonen (`check --zones`), oder mit `@` ein Textparameter der Regel, der sie nennt."
+            }
+          ],
+          "references": "string"
+        }
+      ],
+      "dimension": "area",
+      "services": [
+        "coordinate-system"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "no zone of that id was supplied beside the model",
+        "the zone's coordinates cannot be placed in the model's (another reference system, a map conversion not stated exactly)",
+        "the zone is a line, which encloses no area"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Zone area"
+        },
+        {
+          "language": "de",
+          "text": "Zonenfläche"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The area of a context zone supplied beside the model (a parcel, a zoning area), placed in the object's model coordinates: an interval holding every boundary its stated accuracy allows. The plot ratio GRZ is `zone_footprint_area` over it."
+        },
+        {
+          "language": "de",
+          "text": "Die Fläche einer neben dem Modell gelieferten Kontextzone (ein Flurstück, eine Baugebietsfläche), in die Modellkoordinaten des Objekts gelegt: ein Intervall, das jeden Rand hält, den ihre angegebene Genauigkeit zulässt. Die GRZ ist `zone_footprint_area` durch sie."
+        }
+      ],
+      "unit": "m2",
+      "available": true
+    },
+    {
+      "name": "zone_distance",
+      "parameters": [
+        {
+          "key": "zone",
+          "kind": {
+            "type": "text"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The id of the context zone, among the zones supplied beside the model (`check --zones`), or `@` a text parameter of the rule naming it."
+            },
+            {
+              "language": "de",
+              "text": "Die Kennung der Kontextzone unter den neben dem Modell gelieferten Zonen (`check --zones`), oder mit `@` ein Textparameter der Regel, der sie nennt."
+            }
+          ],
+          "references": "string"
+        }
+      ],
+      "dimension": "length",
+      "services": [
+        "proximity",
+        "coordinate-system"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "no zone of that id was supplied beside the model",
+        "the zone's coordinates cannot be placed in the model's (another reference system, a map conversion not stated exactly)"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Distance to a zone's line"
+        },
+        {
+          "language": "de",
+          "text": "Abstand zur Linie einer Zone"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The least plan distance from the object's footprint to a context zone's line (a building line) or to its boundary (a parcel's, a building limit's), zero where they meet, widened by the zone's stated accuracy."
+        },
+        {
+          "language": "de",
+          "text": "Der kleinste Abstand im Grundriss von der Grundfläche des Objekts zur Linie einer Kontextzone (einer Baulinie) oder zu ihrem Rand (dem eines Flurstücks, einer Baugrenze), null, wo sie sich berühren, erweitert um die angegebene Genauigkeit der Zone."
+        }
+      ],
+      "unit": "m",
+      "available": true
+    },
+    {
+      "name": "zone_floor_area",
+      "parameters": [
+        {
+          "key": "zone",
+          "kind": {
+            "type": "text"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The id of the context zone, among the zones supplied beside the model (`check --zones`), or `@` a text parameter of the rule naming it."
+            },
+            {
+              "language": "de",
+              "text": "Die Kennung der Kontextzone unter den neben dem Modell gelieferten Zonen (`check --zones`), oder mit `@` ein Textparameter der Regel, der sie nennt."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "elements",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects whose footprints are taken: their source kinds, `,`-separated, or `@` a selector parameter of the rule. They must lie in one source."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, deren Grundflächen genommen werden: ihre Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel. Sie müssen in einer Quelle liegen."
+            }
+          ],
+          "references": "selector"
+        }
+      ],
+      "dimension": "area",
+      "services": [
+        "plan-area",
+        "coordinate-system"
+      ],
+      "exactness": "measured",
+      "subject": "project",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "no zone of that id was supplied beside the model",
+        "the zone's coordinates cannot be placed in the model's (another reference system, a map conversion not stated exactly)",
+        "the zone is a line, which encloses no area",
+        "the elements lie in several sources"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Floor area in a zone"
+        },
+        {
+          "language": "de",
+          "text": "Geschossfläche in einer Zone"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "Of the project: the sum of each selected element's footprint inside a context zone, such as every storey's floor slab, so floors stacked above one another each count. The plot ratio GFZ is it over `zone_area`. Elements the selection leaves undecided add only to the most it may be."
+        },
+        {
+          "language": "de",
+          "text": "Des Projekts: die Summe der Grundfläche jedes gewählten Bauteils innerhalb einer Kontextzone, etwa der Bodenplatte jedes Geschosses, sodass übereinanderliegende Geschosse jedes zählen. Die GFZ ist sie durch `zone_area`. Bauteile, die die Auswahl offenlässt, erhöhen nur den Höchstwert."
+        }
+      ],
+      "unit": "m2",
+      "available": true
+    },
+    {
+      "name": "zone_footprint_area",
+      "parameters": [
+        {
+          "key": "zone",
+          "kind": {
+            "type": "text"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The id of the context zone, among the zones supplied beside the model (`check --zones`), or `@` a text parameter of the rule naming it."
+            },
+            {
+              "language": "de",
+              "text": "Die Kennung der Kontextzone unter den neben dem Modell gelieferten Zonen (`check --zones`), oder mit `@` ein Textparameter der Regel, der sie nennt."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "elements",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects whose footprints are taken: their source kinds, `,`-separated, or `@` a selector parameter of the rule. They must lie in one source."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, deren Grundflächen genommen werden: ihre Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel. Sie müssen in einer Quelle liegen."
+            }
+          ],
+          "references": "selector"
+        }
+      ],
+      "dimension": "area",
+      "services": [
+        "plan-area",
+        "coordinate-system"
+      ],
+      "exactness": "measured",
+      "subject": "project",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "no zone of that id was supplied beside the model",
+        "the zone's coordinates cannot be placed in the model's (another reference system, a map conversion not stated exactly)",
+        "the zone is a line, which encloses no area",
+        "the elements lie in several sources"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Footprint in a zone"
+        },
+        {
+          "language": "de",
+          "text": "Grundfläche in einer Zone"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "Of the project: the area of the union of the selected elements' footprints inside a context zone, overlaps counted once: the area a parcel's buildings cover. The plot ratio GRZ is it over `zone_area`. Elements the selection leaves undecided add only to the most it may be."
+        },
+        {
+          "language": "de",
+          "text": "Des Projekts: die Fläche der Vereinigung der Grundflächen der gewählten Bauteile innerhalb einer Kontextzone, Überlappungen einmal gezählt: die Fläche, die die Gebäude eines Flurstücks überdecken. Die GRZ ist sie durch `zone_area`. Bauteile, die die Auswahl offenlässt, erhöhen nur den Höchstwert."
+        }
+      ],
+      "unit": "m2",
+      "available": true
+    },
+    {
+      "name": "zone_inside_area",
+      "parameters": [
+        {
+          "key": "zone",
+          "kind": {
+            "type": "text"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The id of the context zone, among the zones supplied beside the model (`check --zones`), or `@` a text parameter of the rule naming it."
+            },
+            {
+              "language": "de",
+              "text": "Die Kennung der Kontextzone unter den neben dem Modell gelieferten Zonen (`check --zones`), oder mit `@` ein Textparameter der Regel, der sie nennt."
+            }
+          ],
+          "references": "string"
+        }
+      ],
+      "dimension": "area",
+      "services": [
+        "plan-area",
+        "coordinate-system"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "no zone of that id was supplied beside the model",
+        "the zone's coordinates cannot be placed in the model's (another reference system, a map conversion not stated exactly)",
+        "the zone is a line, which encloses no area"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Footprint inside a zone"
+        },
+        {
+          "language": "de",
+          "text": "Grundfläche innerhalb einer Zone"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The area of the object's footprint inside a context zone, under every boundary the zone's stated accuracy allows. None of it is inside where it is zero."
+        },
+        {
+          "language": "de",
+          "text": "Die Fläche der Grundfläche des Objekts innerhalb einer Kontextzone, bei jedem Rand, den die angegebene Genauigkeit der Zone zulässt. Bei null liegt nichts davon innerhalb."
+        }
+      ],
+      "unit": "m2",
+      "available": true
+    },
+    {
+      "name": "zone_outside_area",
+      "parameters": [
+        {
+          "key": "zone",
+          "kind": {
+            "type": "text"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The id of the context zone, among the zones supplied beside the model (`check --zones`), or `@` a text parameter of the rule naming it."
+            },
+            {
+              "language": "de",
+              "text": "Die Kennung der Kontextzone unter den neben dem Modell gelieferten Zonen (`check --zones`), oder mit `@` ein Textparameter der Regel, der sie nennt."
+            }
+          ],
+          "references": "string"
+        }
+      ],
+      "dimension": "area",
+      "services": [
+        "plan-area",
+        "coordinate-system"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "no zone of that id was supplied beside the model",
+        "the zone's coordinates cannot be placed in the model's (another reference system, a map conversion not stated exactly)",
+        "the zone is a line, which encloses no area"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Footprint outside a zone"
+        },
+        {
+          "language": "de",
+          "text": "Grundfläche außerhalb einer Zone"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The area of the object's footprint outside a context zone (beyond a building limit, off its parcel), under every boundary the zone's stated accuracy allows: the footprint lies inside where it is zero, and one straddling the boundary within that accuracy is never surely inside."
+        },
+        {
+          "language": "de",
+          "text": "Die Fläche der Grundfläche des Objekts außerhalb einer Kontextzone (jenseits einer Baugrenze, außerhalb ihres Flurstücks), bei jedem Rand, den die angegebene Genauigkeit der Zone zulässt: bei null liegt die Grundfläche innerhalb, und eine, die den Rand innerhalb dieser Genauigkeit überspannt, liegt nie sicher innerhalb."
+        }
+      ],
+      "unit": "m2",
+      "available": true
     }
   ],
   "measuredMembers": [

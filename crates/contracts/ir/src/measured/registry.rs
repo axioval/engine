@@ -7632,4 +7632,171 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
             "Die z-Koordinate des Platzierungsursprungs des Objekts."
         )
     ),
+    MeasuredDescriptor {
+        name: "zone_area",
+        parameters: &[ZONE],
+        dimension: Some(QuantityDimension::Area),
+        services: COORDINATES,
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[ZONE_UNSUPPLIED, ZONE_UNPLACED, ZONE_LINE],
+        label: &en_de("Zone area", "Zonenfläche"),
+        help: &en_de(
+            "The area of a context zone supplied beside the model (a parcel, a zoning area), \
+             placed in the object's model coordinates: an interval holding every boundary its \
+             stated accuracy allows. The plot ratio GRZ is `zone_footprint_area` over it.",
+            "Die Fläche einer neben dem Modell gelieferten Kontextzone (ein Flurstück, eine \
+             Baugebietsfläche), in die Modellkoordinaten des Objekts gelegt: ein Intervall, \
+             das jeden Rand hält, den ihre angegebene Genauigkeit zulässt. Die GRZ ist \
+             `zone_footprint_area` durch sie.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "zone_distance",
+        parameters: &[ZONE],
+        dimension: Some(QuantityDimension::Length),
+        services: &["proximity", "coordinate-system"],
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[NO_GEOMETRY, ZONE_UNSUPPLIED, ZONE_UNPLACED],
+        label: &en_de("Distance to a zone's line", "Abstand zur Linie einer Zone"),
+        help: &en_de(
+            "The least plan distance from the object's footprint to a context zone's line (a \
+             building line) or to its boundary (a parcel's, a building limit's), zero where \
+             they meet, widened by the zone's stated accuracy.",
+            "Der kleinste Abstand im Grundriss von der Grundfläche des Objekts zur Linie einer \
+             Kontextzone (einer Baulinie) oder zu ihrem Rand (dem eines Flurstücks, einer \
+             Baugrenze), null, wo sie sich berühren, erweitert um die angegebene Genauigkeit \
+             der Zone.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "zone_floor_area",
+        parameters: &[ZONE, ZONE_ELEMENTS],
+        dimension: Some(QuantityDimension::Area),
+        services: ZONE_SERVICES,
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Project,
+        not_evaluated: &[
+            NO_GEOMETRY,
+            ZONE_UNSUPPLIED,
+            ZONE_UNPLACED,
+            ZONE_LINE,
+            ZONE_SOURCES,
+        ],
+        label: &en_de("Floor area in a zone", "Geschossfläche in einer Zone"),
+        help: &en_de(
+            "Of the project: the sum of each selected element's footprint inside a context \
+             zone, such as every storey's floor slab, so floors stacked above one another each \
+             count. The plot ratio GFZ is it over `zone_area`. Elements the selection leaves \
+             undecided add only to the most it may be.",
+            "Des Projekts: die Summe der Grundfläche jedes gewählten Bauteils innerhalb einer \
+             Kontextzone, etwa der Bodenplatte jedes Geschosses, sodass übereinanderliegende \
+             Geschosse jedes zählen. Die GFZ ist sie durch `zone_area`. Bauteile, die die \
+             Auswahl offenlässt, erhöhen nur den Höchstwert.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "zone_footprint_area",
+        parameters: &[ZONE, ZONE_ELEMENTS],
+        dimension: Some(QuantityDimension::Area),
+        services: ZONE_SERVICES,
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Project,
+        not_evaluated: &[
+            NO_GEOMETRY,
+            ZONE_UNSUPPLIED,
+            ZONE_UNPLACED,
+            ZONE_LINE,
+            ZONE_SOURCES,
+        ],
+        label: &en_de("Footprint in a zone", "Grundfläche in einer Zone"),
+        help: &en_de(
+            "Of the project: the area of the union of the selected elements' footprints inside \
+             a context zone, overlaps counted once: the area a parcel's buildings cover. The \
+             plot ratio GRZ is it over `zone_area`. Elements the selection leaves undecided \
+             add only to the most it may be.",
+            "Des Projekts: die Fläche der Vereinigung der Grundflächen der gewählten Bauteile \
+             innerhalb einer Kontextzone, Überlappungen einmal gezählt: die Fläche, die die \
+             Gebäude eines Flurstücks überdecken. Die GRZ ist sie durch `zone_area`. Bauteile, \
+             die die Auswahl offenlässt, erhöhen nur den Höchstwert.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "zone_inside_area",
+        parameters: &[ZONE],
+        dimension: Some(QuantityDimension::Area),
+        services: ZONE_SERVICES,
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[NO_GEOMETRY, ZONE_UNSUPPLIED, ZONE_UNPLACED, ZONE_LINE],
+        label: &en_de(
+            "Footprint inside a zone",
+            "Grundfläche innerhalb einer Zone",
+        ),
+        help: &en_de(
+            "The area of the object's footprint inside a context zone, under every boundary \
+             the zone's stated accuracy allows. None of it is inside where it is zero.",
+            "Die Fläche der Grundfläche des Objekts innerhalb einer Kontextzone, bei jedem \
+             Rand, den die angegebene Genauigkeit der Zone zulässt. Bei null liegt nichts \
+             davon innerhalb.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "zone_outside_area",
+        parameters: &[ZONE],
+        dimension: Some(QuantityDimension::Area),
+        services: ZONE_SERVICES,
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[NO_GEOMETRY, ZONE_UNSUPPLIED, ZONE_UNPLACED, ZONE_LINE],
+        label: &en_de(
+            "Footprint outside a zone",
+            "Grundfläche außerhalb einer Zone",
+        ),
+        help: &en_de(
+            "The area of the object's footprint outside a context zone (beyond a building \
+             limit, off its parcel), under every boundary the zone's stated accuracy allows: \
+             the footprint lies inside where it is zero, and one straddling the boundary \
+             within that accuracy is never surely inside.",
+            "Die Fläche der Grundfläche des Objekts außerhalb einer Kontextzone (jenseits einer \
+             Baugrenze, außerhalb ihres Flurstücks), bei jedem Rand, den die angegebene \
+             Genauigkeit der Zone zulässt: bei null liegt die Grundfläche innerhalb, und eine, \
+             die den Rand innerhalb dieser Genauigkeit überspannt, liegt nie sicher innerhalb.",
+        ),
+    },
 ];
+
+/// `zone`: the context zone a value reads.
+const ZONE: MeasuredParameter = MeasuredParameter {
+    key: "zone",
+    kind: MeasuredParameterKind::Text,
+    required: true,
+    default: None,
+    help: &en_de(
+        "The id of the context zone, among the zones supplied beside the model (`check \
+         --zones`), or `@` a text parameter of the rule naming it.",
+        "Die Kennung der Kontextzone unter den neben dem Modell gelieferten Zonen (`check \
+         --zones`), oder mit `@` ein Textparameter der Regel, der sie nennt.",
+    ),
+};
+
+/// `elements`: the objects whose footprints a zone's aggregate takes.
+const ZONE_ELEMENTS: MeasuredParameter = selected(
+    "elements",
+    true,
+    &en_de(
+        "The objects whose footprints are taken: their source kinds, `,`-separated, or `@` a \
+         selector parameter of the rule. They must lie in one source.",
+        "Die Objekte, deren Grundflächen genommen werden: ihre Quellarten, durch `,` \
+         getrennt, oder mit `@` ein Selektorparameter der Regel. Sie müssen in einer Quelle \
+         liegen.",
+    ),
+);
+
+const ZONE_SERVICES: &[&str] = &["plan-area", "coordinate-system"];
+const ZONE_UNSUPPLIED: &str = "no zone of that id was supplied beside the model";
+const ZONE_UNPLACED: &str = "the zone's coordinates cannot be placed in the model's (another \
+     reference system, a map conversion not stated exactly)";
+const ZONE_LINE: &str = "the zone is a line, which encloses no area";
+const ZONE_SOURCES: &str = "the elements lie in several sources";

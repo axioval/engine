@@ -24,6 +24,7 @@ mod component_visibility;
 mod conformance;
 mod consistent_value;
 mod containment;
+mod context_zone;
 mod coordinate_consistency;
 mod corridor_end_openings;
 mod counterpart_coverage;
@@ -382,6 +383,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(height_above::HeightMeasures))
         .and_then(|registry| registry.register_measured(facade_orientation::FacingMeasures))
         .and_then(|registry| registry.register_measured(envelope_area::EnvelopeAreaMeasures))
+        .and_then(|registry| registry.register_measured(context_zone::ZoneMeasures))
         .and_then(|registry| registry.register_measured(body_extent::ExtentMeasures))
         .and_then(|registry| registry.register_measured(plan_area::AreaMeasures))
         .and_then(|registry| registry.register_measured(area_ratio::RatioMeasures))

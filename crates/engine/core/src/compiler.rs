@@ -134,6 +134,7 @@ pub fn compile(
         relations,
         supplied: BTreeMap::new(),
         catalogues: crate::Catalogues::declared(&catalogues),
+        zones: crate::SuppliedZones::default(),
         values: Arc::new(values),
     })
 }
@@ -948,6 +949,7 @@ pub fn compile_rulesets(
         relations,
         supplied: BTreeMap::new(),
         catalogues: crate::Catalogues::declared(&catalogues),
+        zones: crate::SuppliedZones::default(),
         values: Arc::new(values),
         types: Arc::new(types),
     })

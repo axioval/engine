@@ -571,4 +571,11 @@ impl PlanAreaService for AxiolidPlanAreaService {
     ) -> Result<ElevationCover, PlanAreaError> {
         crate::elevation::measure(self, request)
     }
+
+    fn measure_zone_area(
+        &self,
+        request: &axioval_engine::ZoneAreaRequest,
+    ) -> Result<axioval_engine::ZoneArea, PlanAreaError> {
+        crate::zone_area::measure(self, request)
+    }
 }

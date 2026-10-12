@@ -569,7 +569,7 @@ pub(crate) enum Disc {
 }
 
 impl Disc {
-    fn vertices(self, radius: f64) -> Vec<(f64, f64)> {
+    pub(crate) fn vertices(self, radius: f64) -> Vec<(f64, f64)> {
         let step = std::f64::consts::PI / f64::from(GROWTH_SIDES / 2);
         let (offset, reach) = match self {
             Self::Inscribed => (0.0, radius),

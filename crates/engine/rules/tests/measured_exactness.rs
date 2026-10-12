@@ -352,6 +352,13 @@ const COVERED: &[(&str, &str, &str)] = &[
         "tests/envelope_area.rs",
         "an_envelope_measured_on_a_tessellation_is_inexact",
     ),
+    // Footprints inside and outside a context zone, and their sums over a
+    // parcel, over a tessellation are inexact.
+    (
+        "zone_area",
+        "tests/context_zones.rs",
+        "a_zone_measured_on_a_tessellation_is_inexact",
+    ),
     // A port placement must be stated exactly: one cited approximate is
     // refused before it reaches a fall.
     (

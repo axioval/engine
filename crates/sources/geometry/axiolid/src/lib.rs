@@ -45,6 +45,7 @@ pub(crate) mod vertical_surface;
 pub mod walkability;
 pub(crate) mod walkable;
 pub mod walking_surface;
+pub(crate) mod zone_area;
 
 pub use boundary_coverage::AxiolidBoundaryCoverageService;
 pub use contact::AxiolidContactService;

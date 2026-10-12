@@ -21260,3 +21260,196 @@ fn a_box_building_measures_its_envelope_by_orientation_volume_and_compactness() 
     assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
     assert!(result.to_string().contains("do not close"), "{result:#}");
 }
+
+/// Parcel `P1` (x 0..30, y 0..20) holding buildings #19 (x 2..12, y 2..10)
+/// and #29 (x 15..21, y 2..7); building #39 (x 30.3..40.3, y 2..10) beside
+/// it crosses the building limit `B1` (x 0..40, y 0..15) by 0.3 m; the
+/// building line `L1` runs along y = 15 from x 0 to 30. Each a proxy 3 m
+/// high, in metres.
+fn parcel_buildings() -> String {
+    let proxy = "IFCBUILDINGELEMENTPROXY('GID',$,$,$,$,PL,REP,$,$)";
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,#8);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCDIRECTION((0.,1.));\n\
+         #9=IFCPROJECT('0000000000000000000009',$,'P',$,$,$,$,(#5),#7);\n\
+         {}{}{}\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        placed_box(10, [7.0, 6.0, 0.0], [10.0, 8.0, 3.0], proxy),
+        placed_box(20, [18.0, 4.5, 0.0], [6.0, 5.0, 3.0], proxy),
+        placed_box(30, [35.3, 6.0, 0.0], [10.0, 8.0, 3.0], proxy),
+    )
+}
+
+/// The zones of [`parcel_buildings`], in the model's coordinates, stated
+/// exactly.
+const PARCEL_ZONES: &str = r#"{"type": "FeatureCollection",
+  "crs": {"type": "name", "properties": {"name": "axioval:model"}},
+  "accuracy": 0,
+  "features": [
+    {"type": "Feature", "id": "P1", "properties": {"kind": "parcel"},
+     "geometry": {"type": "Polygon", "coordinates": [[[0, 0], [30, 0], [30, 20], [0, 20], [0, 0]]]}},
+    {"type": "Feature", "id": "B1", "properties": {"kind": "building-limit"},
+     "geometry": {"type": "Polygon", "coordinates": [[[0, 0], [40, 0], [40, 15], [0, 15], [0, 0]]]}},
+    {"type": "Feature", "id": "L1", "properties": {"kind": "building-line"},
+     "geometry": {"type": "LineString", "coordinates": [[0, 15], [30, 15]]}}
+  ]}"#;
+
+impl Case {
+    /// One expression rule over every building of [`parcel_buildings`],
+    /// with the zones supplied unless `zones` is false.
+    fn zone_rule(&self, requirement: &Value, zones: bool) -> (Output, Value) {
+        self.write("model.ifc", &parcel_buildings());
+        let path = self.write("zones.geojson", PARCEL_ZONES);
+        let path = path.to_str().unwrap().to_owned();
+        let args: Vec<&str> = if zones {
+            vec!["--zones", &path]
+        } else {
+            Vec::new()
+        };
+        self.geometry_rule_with(
+            &["model.ifc"],
+            &[("building", "IfcBuildingElementProxy")],
+            (
+                "axioval:capability.expression",
+                &registry_signature("axioval:capability.expression"),
+            ),
+            entity("building"),
+            json!({"requirement": {"type": "expression", "value": requirement}}),
+            &json!({}),
+            &args,
+        )
+    }
+}
+
+fn measured_against(name: &str, operator: &str, right: &Value) -> Value {
+    json!({"kind": "compare", "operator": operator, "label": "value",
+           "left": {"kind": "property", "propertySet": "axioval:measured", "property": name},
+           "right": {"kind": "literal", "value": right}})
+}
+
+/// engine#327: a building crossing its building limit by 0.3 m along 8 m
+/// yields a finding naming the 2.4 m² outside; the two keeping to it pass.
+/// Without the zones every building is not evaluated and the check warns.
+#[test]
+fn a_building_crossing_its_limit_is_found_with_the_area_outside() {
+    let case = Case::new("zone-building-limit");
+    let rule = measured_against(
+        "zone_outside_area;zone=B1",
+        "lessThanOrEquals",
+        &json!({"type": "quantity", "value": 0.0, "unit": "m2"}),
+    );
+    let (output, result) = case.zone_rule(&rule, true);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(finding_ids(&result), ["#39"], "{result:#}");
+    // 0.3 m by 8 m, as the overlay rounds it.
+    let message = result["report"]["findings"][0]["message"].to_string();
+    assert!(
+        message.contains("zone_outside_area;zone=B1 = 2.39999999"),
+        "{message}"
+    );
+    let files = &result["zone_files"];
+    assert_eq!(files[0]["file"], "zones.geojson", "{result:#}");
+    assert_eq!(files[0]["reference"], "axioval:model");
+    assert_eq!(files[0]["zones"], json!(["P1", "B1", "L1"]));
+    assert_eq!(files[0]["sha256"].as_str().map(str::len), Some(64));
+
+    let (output, result) = case.zone_rule(&rule, false);
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    assert!(finding_ids(&result).is_empty(), "{result:#}");
+    let integrity = result["integrity"].to_string();
+    assert!(integrity.contains("zones-not-supplied"), "{integrity}");
+    assert!(
+        result["report"]["not_evaluated"]
+            .to_string()
+            .contains("no context zones were supplied"),
+        "{result:#}"
+    );
+
+    // A zone no file states is not evaluated, and the check warns.
+    let (output, result) = case.zone_rule(
+        &measured_against(
+            "zone_outside_area;zone=B9",
+            "lessThanOrEquals",
+            &json!({"type": "quantity", "value": 0.0, "unit": "m2"}),
+        ),
+        true,
+    );
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    let integrity = result["integrity"].to_string();
+    assert!(
+        integrity.contains("zone-not-supplied") && integrity.contains("axioval:zone;id=B9"),
+        "{integrity}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .to_string()
+            .contains("no supplied context zone is `B9`"),
+        "{result:#}"
+    );
+}
+
+/// engine#327: the plot ratio GRZ of parcel P1 is the 110 m² its two
+/// buildings cover over its 600 m², 0.183: within 0.4, beyond 0.15. The
+/// building beside the parcel adds nothing.
+#[test]
+fn the_plot_ratio_of_a_parcel_with_two_buildings_is_judged() {
+    let case = Case::new("zone-plot-ratio");
+    let ratio = |operator: &str, limit: f64| {
+        json!({"kind": "compare", "operator": operator, "label": "value",
+               "left": {"kind": "divide",
+                        "left": {"kind": "property", "propertySet": "axioval:measured",
+                                 "property": "zone_footprint_area;zone=P1;elements=IfcBuildingElementProxy"},
+                        "right": {"kind": "property", "propertySet": "axioval:measured",
+                                  "property": "zone_area;zone=P1"}},
+               "right": {"kind": "literal", "value": {"type": "number", "value": limit}}})
+    };
+    let (output, result) = case.zone_rule(&ratio("lessThanOrEquals", 0.4), true);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}: {result:#}",
+        stderr(&output)
+    );
+    let (output, result) = case.zone_rule(&ratio("lessThanOrEquals", 0.15), true);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(finding_ids(&result), ["#19", "#29", "#39"], "{result:#}");
+    let finding = result["report"]["findings"][0].to_string();
+    assert!(finding.contains("0.183"), "{finding}");
+}
+
+/// engine#327: each building's distance from the building line along
+/// y = 15: 5 m for #19, 8 m for #29, and just over 5 m for #39 past the
+/// line's end.
+#[test]
+fn the_distance_of_buildings_from_a_building_line_is_measured() {
+    let case = Case::new("zone-building-line");
+    let metres = |value: f64| json!({"type": "quantity", "value": value, "unit": "m"});
+    let (output, result) = case.zone_rule(
+        &measured_against(
+            "zone_distance;zone=L1",
+            "greaterThanOrEquals",
+            &metres(4.99),
+        ),
+        true,
+    );
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}: {result:#}",
+        stderr(&output)
+    );
+    let (output, result) = case.zone_rule(
+        &measured_against("zone_distance;zone=L1", "lessThanOrEquals", &metres(6.0)),
+        true,
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(finding_ids(&result), ["#29"], "{result:#}");
+    assert!(result["report"]["findings"][0].to_string().contains('8'));
+}

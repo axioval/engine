@@ -31,6 +31,7 @@ use axioval_ir::{Evidence, ObjectId};
 use thiserror::Error;
 
 use crate::coverage::{CoverageEvidence, CoverageRequest, check_answer};
+use crate::zone_area::{ZoneArea, ZoneAreaRequest};
 
 /// Failure to measure a plan area.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
@@ -504,6 +505,20 @@ pub trait PlanAreaService: Send + Sync + 'static {
             request.object()
         )))
     }
+
+    /// The footprint of the request's objects, united, and how much of it
+    /// lies inside and outside the request's zone, under every boundary
+    /// the zone's accuracy allows.
+    ///
+    /// A service that does not measure zones refuses; it never answers
+    /// with the whole footprint inside or outside.
+    // gate: measures area
+    fn measure_zone_area(&self, request: &ZoneAreaRequest) -> Result<ZoneArea, PlanAreaError> {
+        Err(PlanAreaError::Unavailable(format!(
+            "this plan-area service does not measure footprints in a zone ({} objects)",
+            request.objects().len()
+        )))
+    }
 }
 
 /// Registry handle for a [`PlanAreaService`].
@@ -625,6 +640,17 @@ impl PlanAreaServiceHandle {
     ) -> Result<ElevationCover, PlanAreaError> {
         let answer = self.0.measure_elevation_cover(request)?;
         if answer.object() != request.object() {
+            return Err(PlanAreaError::InvalidMeasurement);
+        }
+        Ok(answer)
+    }
+
+    /// The footprint of the request's objects inside and outside its zone.
+    ///
+    /// An answer about other objects is refused.
+    pub fn measure_zone_area(&self, request: &ZoneAreaRequest) -> Result<ZoneArea, PlanAreaError> {
+        let answer = self.0.measure_zone_area(request)?;
+        if answer.objects() != request.objects() {
             return Err(PlanAreaError::InvalidMeasurement);
         }
         Ok(answer)

@@ -712,6 +712,15 @@ impl PlanAreaService for GroupAreas {
         self.refuse_groups(&[request.object()])?;
         self.inner.measure_elevation_cover(request)
     }
+
+    fn measure_zone_area(
+        &self,
+        request: &crate::ZoneAreaRequest,
+    ) -> Result<crate::ZoneArea, PlanAreaError> {
+        let objects: Vec<&ObjectId> = request.objects().iter().collect();
+        self.refuse_groups(&objects)?;
+        self.inner.measure_zone_area(request)
+    }
 }
 
 /// Derives every grouping of a run, in order, over `project`.

@@ -6,6 +6,28 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Context zones**: parcels, zoning areas, building limits and building
+  lines supplied beside the model (`check --zones zones.geojson`, a
+  GeoJSON feature collection naming its reference system, each zone with
+  an id, a kind, a stated accuracy and a polygon or line; recorded in the
+  result's `zone_files`). A zone stated in a map system is placed through
+  the model's map conversion only where the transform is established, else
+  not evaluated. The measured values `zone_inside_area` and
+  `zone_outside_area` measure an object's footprint inside and outside a
+  zone, `zone_distance` its least plan distance to a zone's line or
+  boundary, `zone_area` the zone's area, and the project values
+  `zone_footprint_area` and `zone_floor_area` the union and the sum of
+  selected elements' footprints in it, for GRZ and GFZ. Areas hold every
+  boundary the zone's accuracy allows, so a footprint straddling it is
+  never surely inside. A building crossing its building limit by 0.3 m
+  along 8 m measures 2.4 m² outside; two buildings of 80 and 30 m² on a
+  600 m² parcel give a GRZ of 0.18. `PlanAreaService::measure_zone_area`
+  (`ZoneAreaRequest`, `ZoneArea`, `PlanPolygon`) refuses by default; the
+  Axiolid adapter answers it with the plan overlay. The integrity warnings
+  `zones-not-supplied` and `zone-not-supplied` name zones the rules read
+  and no file states
+  ([#327](https://github.com/axioval/engine/issues/327)).
+
 - **Measured values**: `alignment_vertical_curvature` and
   `alignment_vertical_radius` read the gradient line's curvature in its
   vertical plane (`z'' / (1 + z'^2)^(3/2)`, positive in a sag) and its

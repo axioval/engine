@@ -62,6 +62,17 @@ pub(crate) fn key_cells<'a>(
     properties: &KeyProperties<'_>,
     case_sensitive: bool,
 ) -> Result<KeyCells<'a>, Unavailable> {
+    key_cells_by(row, number, properties, (case_sensitive, TextPattern::new))
+}
+
+/// The key cells of row `number` as [`key_cells`] reads them, each pattern
+/// compiled by `compile`.
+pub(crate) fn key_cells_by<'a>(
+    row: table::Row<'a>,
+    number: usize,
+    properties: &KeyProperties<'_>,
+    (case_sensitive, compile): (bool, table::Compile),
+) -> Result<KeyCells<'a>, Unavailable> {
     let mut keys = [None, None, None, None];
     for (slot, (column, property)) in keys.iter_mut().zip(KEYS.iter().zip(properties)) {
         let Some(text) = row.text(column)? else {
@@ -73,7 +84,7 @@ pub(crate) fn key_cells<'a>(
             )));
         }
         let pattern = row
-            .pattern(column, case_sensitive)?
+            .pattern_by(column, case_sensitive, compile)?
             .expect("a filled cell compiles");
         *slot = Some((pattern, text));
     }
@@ -661,7 +672,14 @@ impl<'a> Declaration<'a> {
             .enumerate()
         {
             let number = index + 1;
-            let keys = key_cells(row, number, &properties, case_sensitive)?;
+            // The rule's patterns are the same every run: compiled once
+            // and kept.
+            let keys = key_cells_by(
+                row,
+                number,
+                &properties,
+                (case_sensitive, TextPattern::kept),
+            )?;
             let count = row.integer("count")?;
             if count.is_some_and(|count| count < 0) {
                 return Err(invalid(format!("row {number} has a negative count")));
@@ -675,7 +693,7 @@ impl<'a> Declaration<'a> {
                     )));
                 }
                 Some(text) => Some((
-                    row.pattern("anchor", case_sensitive)?
+                    row.pattern_by("anchor", case_sensitive, TextPattern::kept)?
                         .expect("a filled cell compiles"),
                     text,
                 )),

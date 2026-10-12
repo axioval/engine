@@ -631,8 +631,26 @@ every outcome placed on an object copied its id twice, once into a scope
 only to be thrown away: on the fixture, where every wall of `door-swing`'s
 rules is left open for want of a hinged leaf, 3% of the run time. What is
 left of the gap is wording and judging items through the template's
-messages; on the small models most of either side's time is compiling the
-rows' wildcard patterns, which both do once per rule and run.
+messages; on the small models most of either side's time was compiling the
+rows' wildcard patterns, which both did once per rule and run (see
+[Patterns compiled once](#patterns-compiled-once)).
+
+### Patterns compiled once
+
+`table-allocation` on the tessellated column (three objects, no space)
+stayed at the line after #296: 1.25× (99% interval 1.24 to 1.26), passing
+or failing by chance
+([#355](https://github.com/axioval/engine/issues/355)). A profile of the
+pair put about 70% of both sides' time in compiling the rows' wildcard
+patterns into regular expressions, done again in every run although a
+rule's patterns never change. The allocation now compiles each pattern once
+per process and keeps it (`TextPattern::kept`, at most 256 per case, all
+dropped when one more would not fit; a pattern that does not compile is
+refused afresh every time and never kept), as a template keeps its bound
+plans. The reference still compiles them every run. Outcomes, messages and
+the descriptors are unchanged. Three exclusive gates gave the pair
+0.35× (0.31 to 0.40), 0.35× (0.16 to 0.75) and 0.36× (0.16 to 0.82), and
+every other `table-allocation` input 0.41 to 0.72×.
 
 ### Judged with a stated confidence
 

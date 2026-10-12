@@ -958,8 +958,19 @@ pub(crate) mod table {
             column: &str,
             case_sensitive: bool,
         ) -> Result<Option<TextPattern>, Unavailable> {
+            self.pattern_by(column, case_sensitive, TextPattern::new)
+        }
+
+        /// A `textPattern` cell compiled for matching by `compile`
+        /// ([`TextPattern::new`] or [`TextPattern::kept`]).
+        pub(crate) fn pattern_by(
+            self,
+            column: &str,
+            case_sensitive: bool,
+            compile: Compile,
+        ) -> Result<Option<TextPattern>, Unavailable> {
             self.text(column)?
-                .map(|pattern| TextPattern::new(pattern, case_sensitive).map_err(invalid))
+                .map(|pattern| compile(pattern, case_sensitive).map_err(invalid))
                 .transpose()
         }
 
@@ -1028,6 +1039,20 @@ pub(crate) mod table {
     ///
     /// Its specificity is the number of literal characters: `Office` is more
     /// specific than `Off*`, which is more specific than `*`.
+    /// The patterns [`TextPattern::kept`] compiled, by their text: the
+    /// case-insensitive ones first, then the case-sensitive ones.
+    type Kept = [std::collections::HashMap<Box<str>, TextPattern>; 2];
+
+    static KEPT: std::sync::LazyLock<std::sync::Mutex<Kept>> =
+        std::sync::LazyLock::new(std::sync::Mutex::default);
+
+    /// How a cell's wildcard pattern is compiled: afresh
+    /// ([`TextPattern::new`]) or once ([`TextPattern::kept`]).
+    pub(crate) type Compile = fn(&str, bool) -> Result<TextPattern, String>;
+
+    /// How many compiled patterns [`TextPattern::kept`] keeps per case.
+    const PATTERNS_KEPT: usize = 256;
+
     #[derive(Clone, Debug)]
     pub(crate) struct TextPattern {
         regex: Regex,
@@ -1053,6 +1078,28 @@ pub(crate) mod table {
                 }
             }
             Ok(Self { regex, literals })
+        }
+
+        /// `pattern` compiled as [`TextPattern::new`] compiles it, kept
+        /// once compiled: a rule's patterns are the same every run, so a
+        /// host checking model after model compiles them once. A pattern
+        /// that does not compile is refused the same way every time, and
+        /// is not kept. At most [`PATTERNS_KEPT`] per case, all dropped
+        /// when one more would not fit.
+        pub(crate) fn kept(pattern: &str, case_sensitive: bool) -> Result<Self, String> {
+            let lookup = |kept: &Kept| kept[usize::from(case_sensitive)].get(pattern).cloned();
+            if let Some(found) = KEPT.lock().ok().and_then(|kept| lookup(&kept)) {
+                return Ok(found);
+            }
+            let compiled = Self::new(pattern, case_sensitive)?;
+            if let Ok(mut kept) = KEPT.lock() {
+                let patterns = &mut kept[usize::from(case_sensitive)];
+                if patterns.len() >= PATTERNS_KEPT {
+                    patterns.clear();
+                }
+                patterns.insert(pattern.into(), compiled.clone());
+            }
+            Ok(compiled)
         }
 
         /// How many literal characters the pattern holds: none for a bare
@@ -1291,6 +1338,21 @@ pub(crate) mod table {
             let folded = TextPattern::new("office", false).unwrap();
             assert_eq!(folded.test("OFFICE"), Match(6));
             assert!(TextPattern::new("a\\", true).is_err());
+        }
+
+        #[test]
+        fn kept_patterns_match_as_compiled_ones_and_keep_their_case() {
+            for _ in 0..2 {
+                let sensitive = TextPattern::kept("Office*", true).unwrap();
+                let folded = TextPattern::kept("Office*", false).unwrap();
+                assert_eq!(sensitive.test("Office 2"), Match(6));
+                assert_eq!(sensitive.test("OFFICE 2"), NoMatch);
+                assert_eq!(folded.test("OFFICE 2"), Match(6));
+                assert_eq!(
+                    TextPattern::kept("a\\", true).unwrap_err(),
+                    TextPattern::new("a\\", true).unwrap_err()
+                );
+            }
         }
 
         #[test]

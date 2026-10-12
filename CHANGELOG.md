@@ -205,6 +205,10 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **Geometry**: moved to `axiolid-overlay` 0.3.13 (exact edge contact),
+  `axiolid-mesh-compile` 0.3.21 (a stretched instance's deviation within
+  budget) and through it `axiolid-triangulate` 0.3.3, which triangulates in
+  near-linear time with identical output.
 - **IFC**: moved to `openbim-ifc` 0.28, `ifc-geometry` 0.22, `axiolid-evaluate`
   0.3.11 and `axiolid-mesh-compile` 0.3.20. A single station on an offset of
   a gradient, spiral, B-spline or ellipse basis lowers, snapped onto the

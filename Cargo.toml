@@ -92,8 +92,9 @@ axiolid-measure = "0.3.10"
 # both; 0.3.11 decides ring orientation and `ZeroArea` exactly relative to
 # a vertex, so small rings far from the origin keep their winding (#274);
 # 0.3.12 keeps Minkowski sum and erosion memory linear in the subdivision's
-# pieces, with bit-identical results (#292).
-axiolid-overlay = "0.3.12"
+# pieces, with bit-identical results (#292); 0.3.13 decides exact edge
+# contact and accepts its own settled output fed back (#272).
+axiolid-overlay = "0.3.13"
 axiolid-ray-mesh = "0.4.0"
 axiolid-route = "0.3.7"
 axiolid-spatial = "0.3.0"
@@ -139,8 +140,10 @@ axiolid-evaluate = "0.3.11"
 # 0.3.19 cuts tilted elliptical-cylinder walls exactly (#287, through
 # axiolid-brep-boolean 0.1.9), so a slab less an oblique round opening is
 # exact and its mesh certified; 0.3.20 snaps oriented stations onto a seam
-# within their window (#294).
-axiolid-mesh-compile = "0.3.20"
+# within their window (#294); 0.3.21 keeps a stretched instance's deviation
+# bound within the requested budget (#258). Its axiolid-triangulate 0.3.3
+# updates adjacency locally per flip (#268), with identical output.
+axiolid-mesh-compile = "0.3.21"
 axiolid-exact-compile-contract = "0.3.1"
 # 0.3.3 adds `MeshClosure::OpenSolid` (#265).
 axiolid-mesh-compile-contract = "0.3.3"

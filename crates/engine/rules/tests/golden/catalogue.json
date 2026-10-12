@@ -75725,6 +75725,86 @@
       "available": true
     },
     {
+      "name": "height_above_surface",
+      "parameters": [
+        {
+          "key": "surface",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects whose faces looking up are the surfaces: their source kinds, `,`-separated, or `@` a selector parameter of the rule, whose undecided objects beneath leave the height undecided."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, deren nach oben weisende Seiten die Oberflächen sind: ihre Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel, dessen unentschiedene Objekte darunter die Höhe offen lassen."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "edge",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "top",
+              "bottom"
+            ]
+          },
+          "required": false,
+          "default": "top",
+          "help": [
+            {
+              "language": "en",
+              "text": "The object's edge measured from: its faces looking up (`top`, an upstand's crest) or down (`bottom`, a sill's underside)."
+            },
+            {
+              "language": "de",
+              "text": "Die Kante des Objekts, von der gemessen wird: seine nach oben weisenden Seiten (`top`, die Krone einer Aufkantung) oder nach unten weisenden (`bottom`, die Unterseite einer Brüstung)."
+            }
+          ],
+          "references": "string"
+        }
+      ],
+      "dimension": "length",
+      "services": [
+        "proximity",
+        "type-hierarchy"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "no selected surface lies beneath part of the edge",
+        "a body is tessellated or no closed solid",
+        "an object the selection cannot decide may lie beneath"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Height above surface"
+        },
+        {
+          "language": "de",
+          "text": "Höhe über Oberfläche"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The least vertical distance from the object's top or bottom faces down to the nearest selected surface beneath them, over the whole edge: an upstand's height above a sloped roof."
+        },
+        {
+          "language": "de",
+          "text": "Der kleinste lotrechte Abstand von den oberen oder unteren Seiten des Objekts zur nächsten gewählten Oberfläche darunter, über die ganze Kante: die Höhe einer Aufkantung über einem geneigten Dach."
+        }
+      ],
+      "unit": "m",
+      "available": true
+    },
+    {
       "name": "hinged_leaves",
       "parameters": [],
       "services": [

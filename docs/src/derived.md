@@ -529,6 +529,7 @@ ignoring ASCII case):
 | `plan_area[;measure=footprint\|facade]` | the object's own area as `plan-area` measures it, an empty footprint refused | built in, over `PlanAreaService` or `FacadeAreaService` |
 | `contact_gap[;with=<objects>][;side=…;gap=…;intersection=…;polygon=…]` | the distance to the nearest object named the contact service reports, none where it reports none; refused while the selection leaves an object undecided | built in, over `ContactService` |
 | `cover;host_path=<steps>[;faces=top,side,bottom]` | the least distance from an embedded object, over its whole body, to the chosen faces of the one host the path reaches; none where it reaches none | built in, over `ProximityService::measure_face_distance` and `RelationshipSelectionService` |
+| `height_above_surface;surface=<objects>[;edge=top\|bottom]` | the least vertical distance from the object's top (or bottom) faces down to the nearest selected surface beneath them, over the whole edge | built in, over `ProximityService::measure_height_above` |
 | `level_rise;levels=<kinds>;order=<set/name>[;anchor=<steps>][;path=<steps>][;lowest=…][;highest=…][;contents=<steps>;content_kinds=<kinds>]`, `prevailing_rise;…[;tolerance=<m>]` | a level's rise to the next one up, and the prevailing rise among its anchor's levels, as `level-spacing` measures them | built in, over the order property and `VerticalExtentService` |
 | `prevailing_elevation;side=bottom\|top;spaces=<steps>[;kinds=<kinds>][;tolerance=<m>]` | the prevailing bottom or top elevation among the spaces of the space's level | built in, over `VerticalExtentService` |
 | `levels_above`, `levels_below` `;levels=<kinds>;path=<steps>` | how many storeys of the source lie above or below the object's one storey by their `Elevation` attribute | built in, over the property and relationship services |
@@ -845,6 +846,35 @@ far end measures the 25 mm.
 - The host must be an exact closed solid: a tessellated host's faces are
   not its true faces, and the service refuses it. A tessellated embedded
   body is measured, widened by its chord deviation and cited inexact.
+
+### Heights above surfaces
+
+`height_above_surface;surface=<objects>[;edge=top|bottom]` is how high an
+object's edge stands above the surface beneath it: an upstand's crest
+above a roof or terrace, a threshold above a balcony, a sill's underside
+above a floor. The edge is the object's faces looking up (`top`, the
+default: within 45° of up) or down (`bottom`); the surfaces are the faces
+looking up of the objects `surface` names (kinds or `@` a selector). Over
+every point of the edge the surface beneath is the nearest such face at
+or below it, and the value is the least vertical distance between them
+over the whole edge, so a sloping surface is measured where it runs
+highest under the edge: a level upstand 0.15 m above a roof at one end
+and 0.12 m at the other measures 0.12 m.
+
+- The surfaces asked about are the selected objects whose extent overlaps
+  the object's in plan and reaches no higher than its top. None, or a part
+  of the edge with positive plan area over no selected surface (past the
+  roof's edge, over an opening), leaves the value not evaluated, naming
+  that area; it is never measured to the surfaces beside it. Selecting the
+  next surface down too (a floor below) measures to it where nothing
+  nearer lies beneath.
+- An object the selection cannot decide that may lie beneath, or whose
+  extent cannot be read, leaves the value open, since it may be the
+  nearest surface.
+- Every body must be an exact closed solid: the service refuses a
+  tessellation, whose chords do not state its true faces, and a face
+  within rounding of 45°. The value is exact, widened only by the
+  clipping's rounding.
 
 ### Doors and windows
 
@@ -1197,6 +1227,7 @@ sites that cite a value exact:
 | `contact_area`, `contact_gap`, `contact_share` | always: the contact service refuses inexact evidence | the share's division, rounded outward; the contact undecided candidates may add |
 | `undecided_count` | always: counted over the selection | nothing |
 | `cover` | the face distances are (a host is exact or refused; a tessellated body's are not) | the body's chord deviation |
+| `height_above_surface` | always: the proximity service refuses tessellated bodies | the clipping's rounding, sixteen ulps of the largest coordinate |
 | `fall_in_flow` | always: the object-frame service refuses inexact placements | the arithmetic's rounding, eight ulps of the quotient outward |
 | `stack_distance`, `stack_prevailing`, `body_extent`, `plan_area`, `triangle_count` | every extent, frame, area or count is exact (for `stack_prevailing`, the prevailing pair's) | rounding |
 | `counterpart_uncovered_share`, `counterpart_uncovered`, `counterpart_whole` | every evidence is exact and every counterpart that may cover was read | the undecided cover, as `counterpart-coverage` cites it (`Cited`) |

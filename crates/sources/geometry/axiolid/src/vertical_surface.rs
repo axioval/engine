@@ -118,7 +118,7 @@ pub(crate) fn interval(
 }
 
 /// The part of a convex polygon where `side` is not negative.
-fn clip(polygon: &[Point3], side: impl Fn(&Point3) -> f64) -> Vec<Point3> {
+pub(crate) fn clip(polygon: &[Point3], side: impl Fn(&Point3) -> f64) -> Vec<Point3> {
     let mut kept = Vec::with_capacity(polygon.len() + 1);
     for (index, a) in polygon.iter().enumerate() {
         let b = &polygon[(index + 1) % polygon.len()];
@@ -135,10 +135,10 @@ fn clip(polygon: &[Point3], side: impl Fn(&Point3) -> f64) -> Vec<Point3> {
 }
 
 /// A convex plan polygon, counter-clockwise, as `(x, y)` points.
-type Plan = Vec<(f64, f64)>;
+pub(crate) type Plan = Vec<(f64, f64)>;
 
 /// The part of a triangle over a convex counter-clockwise plan polygon.
-fn over(triangle: &Triangle, region: &Plan) -> Vec<Point3> {
+pub(crate) fn over(triangle: &Triangle, region: &Plan) -> Vec<Point3> {
     let mut piece = triangle.to_vec();
     for index in 0..region.len() {
         if piece.is_empty() {
@@ -153,7 +153,7 @@ fn over(triangle: &Triangle, region: &Plan) -> Vec<Point3> {
     piece
 }
 
-fn plan_area(piece: &[Point3]) -> f64 {
+pub(crate) fn plan_area(piece: &[Point3]) -> f64 {
     let mut sum = 0.0;
     for (index, a) in piece.iter().enumerate() {
         let b = piece[(index + 1) % piece.len()];
@@ -174,11 +174,11 @@ fn box_of(points: &[(f64, f64)]) -> [f64; 4] {
     )
 }
 
-fn triangle_box(triangle: &Triangle) -> [f64; 4] {
+pub(crate) fn triangle_box(triangle: &Triangle) -> [f64; 4] {
     box_of(&triangle.map(|point| (point.x, point.y)))
 }
 
-fn apart(a: [f64; 4], b: [f64; 4]) -> bool {
+pub(crate) fn apart(a: [f64; 4], b: [f64; 4]) -> bool {
     a[2] < b[0] || b[2] < a[0] || a[3] < b[1] || b[3] < a[1]
 }
 

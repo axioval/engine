@@ -1733,6 +1733,138 @@ impl FaceDistanceEvidence {
     }
 }
 
+/// A request for how high one object's top or bottom faces stand above the
+/// surfaces of other objects beneath them.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct HeightAboveRequest {
+    subject: ObjectId,
+    surfaces: Vec<ObjectId>,
+    edge: SubjectSurface,
+}
+
+impl HeightAboveRequest {
+    /// The height of `subject`'s `edge` faces above the upward faces of
+    /// `surfaces`, which are sorted and deduplicated. None may be the
+    /// subject, and there must be one.
+    pub fn try_new(
+        subject: ObjectId,
+        mut surfaces: Vec<ObjectId>,
+        edge: SubjectSurface,
+    ) -> Result<Self, ProximityError> {
+        surfaces.sort();
+        surfaces.dedup();
+        if surfaces.contains(&subject) {
+            return Err(ProximityError::SameObject);
+        }
+        if surfaces.is_empty() {
+            return Err(ProximityError::InvalidMeasurement);
+        }
+        Ok(Self {
+            subject,
+            surfaces,
+            edge,
+        })
+    }
+    /// The object whose edge is measured.
+    pub fn subject(&self) -> &ObjectId {
+        &self.subject
+    }
+    /// The objects whose upward faces are the surfaces beneath, sorted.
+    pub fn surfaces(&self) -> &[ObjectId] {
+        &self.surfaces
+    }
+    /// Which of the subject's faces is its edge: those looking up (`Top`)
+    /// or down (`Bottom`).
+    pub fn edge(&self) -> SubjectSurface {
+        self.edge
+    }
+}
+
+/// How high an edge stands above the surfaces beneath it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum HeightAbove {
+    /// A surface lies beneath every part of the edge: bounds on the least
+    /// vertical distance from the edge down to the nearest surface beneath
+    /// it, over the whole edge.
+    Beneath {
+        lower_metres: f64,
+        upper_metres: f64,
+    },
+    /// Part of the edge's plan has no surface beneath it: that part's area
+    /// and the whole edge's, in square metres.
+    Uncovered {
+        uncovered_square_metres: f64,
+        edge_square_metres: f64,
+    },
+}
+
+/// The height of a subject's edge above the surfaces beneath it.
+///
+/// The edge is the subject's faces looking up (within 45° of up) for
+/// [`SubjectSurface::Top`], or down for [`SubjectSurface::Bottom`]; the
+/// surfaces are the requested objects' faces looking up. Over each point of
+/// the edge, the surface beneath is the nearest such face at or below it;
+/// the height is the least vertical distance from the edge to it over the
+/// whole edge. A part of the edge with no surface beneath it leaves the
+/// height undefined there ([`HeightAbove::Uncovered`]), never measured to
+/// the surfaces beside it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct HeightAboveEvidence {
+    request: HeightAboveRequest,
+    height: HeightAbove,
+    evidence: Evidence,
+}
+
+impl HeightAboveEvidence {
+    /// Rejects incoherent heights and evidence without a locator.
+    pub fn try_new(
+        request: HeightAboveRequest,
+        height: HeightAbove,
+        evidence: Evidence,
+    ) -> Result<Self, ProximityError> {
+        let coherent = match height {
+            HeightAbove::Beneath {
+                lower_metres,
+                upper_metres,
+            } => {
+                lower_metres.is_finite()
+                    && upper_metres.is_finite()
+                    && 0.0 <= lower_metres
+                    && lower_metres <= upper_metres
+            }
+            HeightAbove::Uncovered {
+                uncovered_square_metres,
+                edge_square_metres,
+            } => {
+                uncovered_square_metres.is_finite()
+                    && edge_square_metres.is_finite()
+                    && 0.0 < uncovered_square_metres
+                    && uncovered_square_metres <= edge_square_metres
+            }
+        };
+        if !coherent {
+            return Err(ProximityError::InvalidMeasurement);
+        }
+        if evidence.locator.trim().is_empty() {
+            return Err(ProximityError::EvidenceFidelityMismatch);
+        }
+        Ok(Self {
+            request,
+            height,
+            evidence,
+        })
+    }
+    pub fn request(&self) -> &HeightAboveRequest {
+        &self.request
+    }
+    pub fn height(&self) -> HeightAbove {
+        self.height
+    }
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+}
+
 /// Measures extents and pairwise proximity of model objects.
 ///
 /// ADR 0004: every method returns a measurement. None decides a clash.
@@ -1801,6 +1933,20 @@ pub trait ProximityService: Send + Sync + 'static {
     ) -> Result<OverlapAlongEvidence, ProximityError> {
         let _ = request;
         Err(ProximityError::UnsupportedProjection)
+    }
+
+    /// How high the subject's top or bottom faces stand above the upward
+    /// faces of other objects beneath them ([`HeightAboveEvidence`]).
+    ///
+    /// The default refuses with [`ProximityError::Unavailable`], so a
+    /// service that does not measure heights above surfaces fails closed.
+    // gate: measures length, area
+    fn measure_height_above(
+        &self,
+        request: &HeightAboveRequest,
+    ) -> Result<HeightAboveEvidence, ProximityError> {
+        let _ = request;
+        Err(ProximityError::Unavailable)
     }
 
     /// The volume one closed body encloses.
@@ -1918,6 +2064,18 @@ impl ProximityServiceHandle {
         }
         Ok(measured)
     }
+    /// The height of an edge above the surfaces beneath it. Evidence
+    /// answering another request is refused.
+    pub fn measure_height_above(
+        &self,
+        request: &HeightAboveRequest,
+    ) -> Result<HeightAboveEvidence, ProximityError> {
+        let measured = self.0.measure_height_above(request)?;
+        if measured.request() != request {
+            return Err(ProximityError::InvalidMeasurement);
+        }
+        Ok(measured)
+    }
     /// The volume `object` encloses. A volume naming another object answers
     /// a different question and is refused.
     pub fn measure_body_volume(&self, object: &ObjectId) -> Result<BodyVolume, ProximityError> {
@@ -1975,6 +2133,79 @@ mod tests {
 
     /// A service answering one volume whatever it is asked.
     struct OneVolume(BodyVolume);
+
+    /// A service answering one height whatever it is asked.
+    struct OneHeight(HeightAboveEvidence);
+
+    impl ProximityService for OneHeight {
+        fn bounds(&self, _: &ObjectId) -> Result<ObjectBounds, ProximityError> {
+            Err(ProximityError::Unavailable)
+        }
+        fn measure_proximity(
+            &self,
+            _: &ProximityRequest,
+        ) -> Result<ProximityEvidence, ProximityError> {
+            Err(ProximityError::Unavailable)
+        }
+        fn measure_height_above(
+            &self,
+            _: &HeightAboveRequest,
+        ) -> Result<HeightAboveEvidence, ProximityError> {
+            Ok(self.0.clone())
+        }
+    }
+
+    #[test]
+    fn a_height_above_names_its_request_and_stays_coherent() {
+        let request = HeightAboveRequest::try_new(
+            id("upstand"),
+            vec![id("roof"), id("floor"), id("roof")],
+            SubjectSurface::Top,
+        )
+        .unwrap();
+        assert_eq!(request.surfaces(), &[id("floor"), id("roof")]);
+        assert_eq!(
+            HeightAboveRequest::try_new(id("roof"), vec![id("roof")], SubjectSurface::Top),
+            Err(ProximityError::SameObject)
+        );
+        assert_eq!(
+            HeightAboveRequest::try_new(id("roof"), Vec::new(), SubjectSurface::Top),
+            Err(ProximityError::InvalidMeasurement)
+        );
+        let beneath = |lower_metres, upper_metres| HeightAbove::Beneath {
+            lower_metres,
+            upper_metres,
+        };
+        for incoherent in [
+            beneath(-0.1, 0.1),
+            beneath(0.2, 0.1),
+            beneath(0.1, f64::INFINITY),
+            HeightAbove::Uncovered {
+                uncovered_square_metres: 0.0,
+                edge_square_metres: 1.0,
+            },
+            HeightAbove::Uncovered {
+                uncovered_square_metres: 2.0,
+                edge_square_metres: 1.0,
+            },
+        ] {
+            assert_eq!(
+                HeightAboveEvidence::try_new(request.clone(), incoherent, exact()),
+                Err(ProximityError::InvalidMeasurement)
+            );
+        }
+        let measured =
+            HeightAboveEvidence::try_new(request.clone(), beneath(0.12, 0.12), exact()).unwrap();
+        let handle = ProximityServiceHandle::new(Arc::new(OneHeight(measured.clone())));
+        assert_eq!(handle.measure_height_above(&request), Ok(measured));
+        let other =
+            HeightAboveRequest::try_new(id("upstand"), vec![id("roof")], SubjectSurface::Top)
+                .unwrap();
+        assert_eq!(
+            handle.measure_height_above(&other),
+            Err(ProximityError::InvalidMeasurement)
+        );
+    }
 
     #[test]
     fn a_body_volume_keeps_its_exactness_honest_and_names_its_object() {

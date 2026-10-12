@@ -25,6 +25,7 @@ pub(crate) mod flight;
 pub mod free_space;
 pub mod geometry;
 pub mod guard;
+mod height_above;
 pub mod linear_quantity;
 pub mod metric_routing;
 mod placement;

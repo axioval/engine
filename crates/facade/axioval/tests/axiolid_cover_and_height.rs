@@ -224,3 +224,71 @@ fn a_cover_measured_on_a_tessellation_is_inexact() {
     let why = slab().tessellated("s").measure("b", COVER).unwrap_err();
     assert!(why.contains("tessellated"), "{why}");
 }
+
+/// A 4 m x 2 m roof rising 1 % along x, its top 0.2 m up at x 0, with a
+/// level upstand `u` across x 0.5..3.5 whose crest stands 0.15 m above the
+/// roof at one end and 0.12 m at the other; `p` reaching past the roof's
+/// edge; `w` over no roof, above a floor slab `f` 3 m down; and a sill `s`
+/// whose underside is 1 m up.
+fn roof() -> Scene {
+    Scene::default()
+        .body(
+            "r",
+            "roof",
+            prism(&rect(0.0, 0.0, 4.0, 2.0), 0.0, |x, _| 0.2 + 0.01 * x),
+        )
+        .body("f", "slab", cuboid([-1.0, -1.0, -3.0], [10.0, 3.0, -2.8]))
+        .body("u", "upstand", cuboid([0.5, 0.9, 0.2], [3.5, 1.1, 0.355]))
+        .body("p", "upstand", cuboid([3.5, 0.2, 0.2], [4.5, 0.4, 0.4]))
+        .body("w", "upstand", cuboid([6.0, 0.9, -2.8], [7.0, 1.1, -2.6]))
+        .body("s", "sill", cuboid([1.0, 1.5, 1.0], [2.0, 1.6, 1.5]))
+}
+
+#[test]
+fn an_upstand_on_a_sloped_roof_measures_its_least_height() {
+    let height = roof()
+        .measure("u", "height_above_surface;surface=roof")
+        .unwrap();
+    assert!(near(height, 0.12, 1e-12), "{height:?}");
+    assert!(height.unwrap().2, "{height:?}");
+    // The sill's underside stands 1 m up, above the roof's 0.22 m at x 2.
+    let sill = roof()
+        .measure("s", "height_above_surface;surface=roof;edge=bottom")
+        .unwrap();
+    assert!(near(sill, 0.78, 1e-12), "{sill:?}");
+    // With the floor slab selected too, the roof is still the nearest
+    // surface beneath the upstand.
+    let both = roof()
+        .measure("u", "height_above_surface;surface=roof,slab")
+        .unwrap();
+    assert!(near(both, 0.12, 1e-12), "{both:?}");
+}
+
+#[test]
+fn an_edge_with_no_surface_beneath_is_not_measured() {
+    // Over no roof at all, and partly past the roof's edge.
+    let why = roof()
+        .measure("w", "height_above_surface;surface=roof")
+        .unwrap_err();
+    assert!(why.contains("no selected surface lies beneath it"), "{why}");
+    let why = roof()
+        .measure("p", "height_above_surface;surface=roof")
+        .unwrap_err();
+    assert!(why.contains("has no selected surface beneath it"), "{why}");
+    // Past the roof, the next surface beneath is the floor slab.
+    let next = roof()
+        .measure("w", "height_above_surface;surface=roof,slab")
+        .unwrap();
+    assert!(near(next, 0.2, 1e-12), "{next:?}");
+}
+
+#[test]
+fn a_height_measured_on_a_tessellation_is_refused() {
+    for tessellated in ["r", "u"] {
+        let why = roof()
+            .tessellated(tessellated)
+            .measure("u", "height_above_surface;surface=roof")
+            .unwrap_err();
+        assert!(why.contains("tessellated"), "{why}");
+    }
+}

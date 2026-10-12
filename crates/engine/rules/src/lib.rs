@@ -45,6 +45,7 @@ mod free_floor_circle;
 mod free_floor_rectangle;
 mod group_composition;
 mod guard_diagnosis;
+mod height_above;
 mod horizontal_guard;
 mod keyed_limit;
 mod level_spacing;
@@ -373,6 +374,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(triangle_count::TriangleMeasures))
         .and_then(|registry| registry.register_measured(fall_in_flow::FallMeasures))
         .and_then(|registry| registry.register_measured(cover::CoverMeasures))
+        .and_then(|registry| registry.register_measured(height_above::HeightMeasures))
         .and_then(|registry| registry.register_measured(body_extent::ExtentMeasures))
         .and_then(|registry| registry.register_measured(plan_area::AreaMeasures))
         .and_then(|registry| registry.register_measured(area_ratio::RatioMeasures))

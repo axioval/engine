@@ -316,6 +316,13 @@ const COVERED: &[(&str, &str, &str)] = &[
         "../../facade/axioval/tests/axiolid_cover_and_height.rs",
         "a_cover_measured_on_a_tessellation_is_inexact",
     ),
+    // The faces of a tessellated edge or surface are not its true faces,
+    // so the service refuses it.
+    (
+        "height_above_surface",
+        "../../facade/axioval/tests/axiolid_cover_and_height.rs",
+        "a_height_measured_on_a_tessellation_is_refused",
+    ),
     // A port placement must be stated exactly: one cited approximate is
     // refused before it reaches a fall.
     (

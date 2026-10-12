@@ -4500,6 +4500,57 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         ),
     },
     MeasuredDescriptor {
+        name: "height_above_surface",
+        parameters: &[
+            selected(
+                "surface",
+                true,
+                &en_de(
+                    "The objects whose faces looking up are the surfaces: their source kinds, \
+                     `,`-separated, or `@` a selector parameter of the rule, whose undecided \
+                     objects beneath leave the height undecided.",
+                    "Die Objekte, deren nach oben weisende Seiten die Oberflächen sind: ihre \
+                     Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der \
+                     Regel, dessen unentschiedene Objekte darunter die Höhe offen lassen.",
+                ),
+            ),
+            MeasuredParameter {
+                key: "edge",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["top", "bottom"],
+                },
+                required: false,
+                default: Some("top"),
+                help: &en_de(
+                    "The object's edge measured from: its faces looking up (`top`, an \
+                     upstand's crest) or down (`bottom`, a sill's underside).",
+                    "Die Kante des Objekts, von der gemessen wird: seine nach oben weisenden \
+                     Seiten (`top`, die Krone einer Aufkantung) oder nach unten weisenden \
+                     (`bottom`, die Unterseite einer Brüstung).",
+                ),
+            },
+        ],
+        dimension: Some(QuantityDimension::Length),
+        services: &["proximity", "type-hierarchy"],
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[
+            NO_GEOMETRY,
+            "no selected surface lies beneath part of the edge",
+            "a body is tessellated or no closed solid",
+            "an object the selection cannot decide may lie beneath",
+        ],
+        label: &en_de("Height above surface", "Höhe über Oberfläche"),
+        help: &en_de(
+            "The least vertical distance from the object's top or bottom faces down to the \
+             nearest selected surface beneath them, over the whole edge: an upstand's height \
+             above a sloped roof.",
+            "Der kleinste lotrechte Abstand von den oberen oder unteren Seiten des Objekts \
+             zur nächsten gewählten Oberfläche darunter, über die ganze Kante: die Höhe einer \
+             Aufkantung über einem geneigten Dach.",
+        ),
+    },
+    MeasuredDescriptor {
         name: "hinged_leaves",
         parameters: &[],
         dimension: None,

@@ -6,6 +6,17 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Measured values**: `height_above_surface;surface=<objects>[;edge=top|bottom]`
+  is the least vertical distance from an object's faces looking up (or
+  down) to the nearest selected surface beneath them, over the whole
+  edge: a level upstand 0.15 m above a sloped roof at one end and 0.12 m
+  at the other measures 0.12 m. No surface beneath, or part of the edge
+  over none, an undecided object that may lie beneath and a tessellated
+  body are not evaluated. `ProximityService::measure_height_above`
+  (`HeightAboveRequest`, `HeightAboveEvidence`, `HeightAbove`) measures
+  it; Axiolid clips the surfaces' faces to the edge's in plan and checks
+  their plan cover with the overlay
+  ([#331](https://github.com/axioval/engine/issues/331)).
 - **Measured values**: `cover;host_path=<steps>[;faces=top,side,bottom]`
   is the least distance from an embedded object, over its whole body, to
   the chosen faces of the one host the path reaches (a bar's concrete

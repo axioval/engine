@@ -19916,3 +19916,108 @@ fn the_cover_of_bars_is_their_least_distance_to_the_slab_faces() {
         assert_eq!(found[1].0, "#60", "{result:#}");
     }
 }
+
+/// A roof slab #100, 4 m along x and 2 m across, its top rising 1 % from
+/// 0.2 m at x 0 to 0.24 m at x 4, and walls 0.2 m thick as upstands: #20
+/// across x 0.5..3.5 with a level crest at 0.355 m, 0.15 m above the roof
+/// at its low end and 0.12 m at its high end, and #40 at x 6..8 over no
+/// roof.
+fn upstands_on_a_sloped_roof() -> String {
+    let wall = "IFCWALL('GID',$,$,$,$,#3,REP,$,.PARAPET.)";
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         #9=IFCDIRECTION((0.,-1.,0.));\n\
+         #10=IFCDIRECTION((1.,0.,0.));\n\
+         {}{}{}\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        swept(
+            100,
+            [0.0, 2.0, 0.0],
+            &[[0.0, 0.0], [4.0, 0.0], [4.0, 0.24], [0.0, 0.2]],
+            2.0,
+            "IFCSLAB('GID',$,$,$,$,PL,REP,$,.ROOF.)",
+        ),
+        extruded(
+            20,
+            wall,
+            "IFCRECTANGLEPROFILEDEF(.AREA.,$,$,3.,0.2)",
+            [2.0, 1.0, 0.2],
+            "$,$",
+            0.155,
+        ),
+        extruded(
+            40,
+            wall,
+            "IFCRECTANGLEPROFILEDEF(.AREA.,$,$,2.,0.2)",
+            [7.0, 1.0, 0.2],
+            "$,$",
+            0.155,
+        ),
+    )
+}
+
+/// engine#331: an upstand on a sloped roof, 0.15 m high at one end and
+/// 0.12 m at the other, measures 0.12 m, and fails a 0.15 m minimum by it;
+/// one over no roof is not evaluated.
+#[test]
+fn the_height_of_an_upstand_is_its_least_height_above_the_roof() {
+    let case = Case::new("height-above-surface");
+    let height = json!({"kind": "property", "propertySet": "axioval:measured",
+                        "property": "height_above_surface;surface=IfcSlab",
+                        "label": "height"});
+    let at_least = |minimum: f64| {
+        json!({"requirement": {"type": "expression", "value": {
+                "kind": "compare", "operator": "greaterThanOrEquals", "left": height.clone(),
+                "right": {"kind": "literal",
+                          "value": {"type": "quantity", "value": minimum, "unit": "m"}}}},
+               "message": {"type": "string", "value": "height {height}"}})
+    };
+    let rule = |minimum: f64| {
+        case.geometry_rule(
+            &upstands_on_a_sloped_roof(),
+            &[("wall", "IfcWall")],
+            "axioval:capability.expression",
+            &registry_signature("axioval:capability.expression"),
+            entity("wall"),
+            at_least(minimum),
+        )
+    };
+
+    let (output, result) = rule(0.15);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let found = finding_messages(&result);
+    assert_eq!(found.len(), 1, "{result:#}");
+    assert_eq!(found[0].0, "#20", "{result:#}");
+    let text = found[0]
+        .1
+        .trim_start_matches("height ")
+        .trim_end_matches(" m");
+    let bounds: Vec<f64> = text
+        .split("..")
+        .map(|bound| bound.trim().parse::<f64>().unwrap())
+        .collect();
+    assert!(
+        bounds.iter().all(|bound| (bound - 0.12).abs() < 1e-9),
+        "{found:?}"
+    );
+    let open = result["report"]["not_evaluated"].as_array().unwrap();
+    assert_eq!(open.len(), 1, "{result:#}");
+    assert_eq!(open[0]["object_id"]["local_id"], "#40", "{result:#}");
+    let why = open[0]["message"].as_str().unwrap();
+    assert!(why.contains("no selected surface lies beneath it"), "{why}");
+
+    // At 0.11 m the upstand passes.
+    let (_, result) = rule(0.11);
+    assert!(finding_messages(&result).is_empty(), "{result:#}");
+    let open = result["report"]["not_evaluated"].as_array().unwrap();
+    assert_eq!(open.len(), 1, "{result:#}");
+    assert_eq!(open[0]["object_id"]["local_id"], "#40", "{result:#}");
+}

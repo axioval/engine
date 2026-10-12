@@ -613,6 +613,17 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   proven inside, surface crossings, nearby host vertices) face by face. The
   host must be an exact closed solid; a tessellated body widens both bounds
   and decides a vertex's side only beyond its deviation.
+- `src/height_above.rs` answers `measure_height_above`: the edge's faces
+  (looking up or down, read as face classes are, outward by the signed
+  volume, refusing a face within `CLASS_TOLERANCE` of 45°) against the
+  surfaces' faces looking up. Each surface triangle is clipped in plan to
+  each edge triangle (`vertical_surface::over`), then to where it lies at
+  or below the edge (`clip`, within `LINEAR_TOLERANCE`); the least gap is
+  at a vertex of a kept piece. The kept pieces' plan union must cover the
+  edge's plan (overlay, a rounding sliver allowed), else `Uncovered` with
+  the area: never measure a part with no surface beneath to its
+  neighbours. Every body must be exact and closed (refused otherwise);
+  the value is widened by sixteen ulps of the largest coordinate.
 - **Every service honours fidelity.** Proximity reports approximate evidence.
   The services whose contracts only accept exact evidence -- contact,
   envelope, clearance and free area, guard -- refuse with their inexact-evidence

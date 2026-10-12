@@ -309,6 +309,13 @@ const COVERED: &[(&str, &str, &str)] = &[
         "tests/external_wall_validation.rs",
         "an_envelope_cited_approximate_is_refused",
     ),
+    // A port placement must be stated exactly: one cited approximate is
+    // refused before it reaches a fall.
+    (
+        "fall_in_flow",
+        "tests/fall_in_flow.rs",
+        "a_placement_cited_approximate_is_refused",
+    ),
     // Counted over a selection, which nothing measures.
     (
         "undecided_count",

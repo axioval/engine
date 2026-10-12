@@ -33,6 +33,17 @@ All notable changes are documented here. This project follows Semantic Versionin
   distance at an object's station; `AlignmentParameter` gains
   `CantRatio`
   ([#339](https://github.com/axioval/engine/issues/339)).
+- **Networks**: the measured value `fall_in_flow` is how far a run falls
+  in flow direction per metre of plan length, a ratio, from the placement
+  of its inlet (`sink`) port to its outlet (`source`) port as the
+  distribution network states them: positive where it falls, negative
+  where it is laid against the flow. An element without one inlet and one
+  outlet, with a connection of undecided direction or on a cycle of flow,
+  and a plumb run are not evaluated with the reason. The least fall along
+  a path is an aggregate's `min` over `axioval:derived.flow:forward+`: of
+  three pipes falling 2 %, rising 1 % and falling 1 %, the one against
+  the flow measures -1 % and is the least fall downstream of the basin
+  ([#345](https://github.com/axioval/engine/issues/345)).
 - **Networks**: the derived relationship `axioval:derived.flow` walks the
   connected building services network a source states through its ports:
   `forward` downstream, `backward` upstream, `either` every connected

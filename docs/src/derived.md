@@ -426,6 +426,40 @@ naming an absent port, a direction outside the four) is refused as a whole.
 The flow takes no parameters; `axioval:derived.flow;…` is an invalid
 request. Its edges are not listed, as for every derived relationship.
 
+### Fall in flow direction
+
+`fall_in_flow` is how far a run falls in flow direction per metre of plan
+length, a plain ratio (`0.01` is 1 %): the elevation of the placement of
+the port flow enters it by (its one `sink` port) above that of the port
+flow leaves it by (its one `source` port), divided by the plan distance
+between them. It is positive where the run falls in flow direction and
+negative where it is laid against the flow, so a minimum fall is
+`fall_in_flow ≥ 0.005` and a counter-fall fails it. The placements are the
+ports' own (`ObjectFrameService`), stated exactly or refused, and the value
+is exact, widened only by the arithmetic's rounding.
+
+The direction is the network's, never a guess: an element that states
+other than one inlet and one outlet (a port passing flow either way or
+stating none, a junction of several inlets), that holds a connection of
+undecided direction or lies on a cycle of flow is not evaluated, naming
+the ports; so is a run whose inlet lies plumb above or below its outlet,
+which has no fall, and every element when no network service is
+registered. The least fall along a path is an aggregate's `min` over the
+path:
+
+```json
+{"kind": "aggregate", "function": "min", "label": "least fall",
+ "over": {"kind": "path", "path": ["axioval:derived.flow:forward+"]},
+ "where": {"kind": "entityType", "objectType": "ex:pipe-segment",
+           "includeSubtypes": true},
+ "value": {"kind": "property", "propertySet": "axioval:measured",
+           "property": "fall_in_flow"}}
+```
+
+read on a fixture, the least fall of every pipe downstream of it. A pipe
+whose fall is not evaluated leaves the least fall not evaluated with its
+reason.
+
 ## Measured values
 
 The set `axioval:measured` (`axioval_ir::MEASURED_SET`) holds values the
@@ -505,6 +539,7 @@ ignoring ASCII case):
 | `body_extent;axis=right\|forward\|up` | the body's depth along one of its own placement axes, as `body-extent` measures it | built in, over `ObjectFrameService`, `VerticalExtentService` |
 | `body_position;axis=right\|forward\|up;end=low\|high` | where the body begins or ends along one of its own placement axes, from the origin of the coordinates along it | built in, over `ObjectFrameService`, `VerticalExtentService` |
 | `triangle_count` | how many triangles the host's mesh of the body holds | built in, over `TriangleCountService` |
+| `fall_in_flow` | how far a run falls in flow direction per metre of plan length, from its inlet port to its outlet port (see [Distribution networks](#distribution-networks)) | built in, over `FlowGraphs` and `ObjectFrameService` |
 | `coordinate_shift;of=world\|site\|map`, `coordinate_turn;of=world\|site\|north\|map`, `map_scale_change`, `map_target_change`, `map_conversion[;of=own\|reference]` `[;reference=<discipline>]` | of a source: how its coordinate system departs from the reference source's | built in, over `CoordinateSystemService` |
 | `coordinate_reference[;reference=<discipline>]` | of the project: how many sources are compared with the reference source, which it cites | built in, over `SourceDisciplines` |
 | `envelope_size;derivation=all-spaces\|gross-area-groups[;bounding=<objects>][;groups=<objects>;group_path=<steps>]` | of the project: how many objects the derivation places on the building envelope | built in, over `EnvelopeMembershipService` |
@@ -1133,6 +1168,7 @@ sites that cite a value exact:
 | `levels_above`, `levels_below`, `storey_end` | always: counted over stated elevations, which the property service answers exactly | nothing |
 | `contact_area`, `contact_gap`, `contact_share` | always: the contact service refuses inexact evidence | the share's division, rounded outward; the contact undecided candidates may add |
 | `undecided_count` | always: counted over the selection | nothing |
+| `fall_in_flow` | always: the object-frame service refuses inexact placements | the arithmetic's rounding, eight ulps of the quotient outward |
 | `stack_distance`, `stack_prevailing`, `body_extent`, `plan_area`, `triangle_count` | every extent, frame, area or count is exact (for `stack_prevailing`, the prevailing pair's) | rounding |
 | `counterpart_uncovered_share`, `counterpart_uncovered`, `counterpart_whole` | every evidence is exact and every counterpart that may cover was read | the undecided cover, as `counterpart-coverage` cites it (`Cited`) |
 | `counterpart_covering`, `counterpart_infill` | always: counted over what was read | the undecided cover, or whether the infill applies |

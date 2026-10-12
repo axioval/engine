@@ -147,6 +147,8 @@ pub struct FlowGraph {
     cyclic: BTreeMap<ObjectId, String>,
     /// Ports of each element connected to nothing, with their evidence.
     open: BTreeMap<ObjectId, Vec<(ObjectId, Vec<Evidence>)>>,
+    /// Every port of each element, with the flow direction it states.
+    ports: BTreeMap<ObjectId, Vec<(ObjectId, Option<FlowDirection>)>>,
     evidence: Vec<Evidence>,
 }
 
@@ -237,6 +239,13 @@ impl FlowGraph {
             }
         }
         for port in network.ports() {
+            if let [element] = port.elements.as_slice() {
+                graph
+                    .ports
+                    .entry(element.clone())
+                    .or_default()
+                    .push((port.port.clone(), port.flow));
+            }
             if connected.contains(&port.port) {
                 continue;
             }
@@ -329,6 +338,31 @@ impl FlowGraph {
                 self.cyclic.insert(member, why.clone());
             }
         }
+    }
+
+    /// Every port of `element` that belongs to it alone, sorted, with the
+    /// flow direction it states.
+    #[must_use]
+    pub fn ports(&self, element: &ObjectId) -> &[(ObjectId, Option<FlowDirection>)] {
+        self.ports.get(element).map_or(&[], Vec::as_slice)
+    }
+
+    /// Whether the direction of flow at `element` is decided: none of its
+    /// connections is undecided or leads to an unknown end, and it lies on
+    /// no cycle of flow.
+    ///
+    /// # Errors
+    ///
+    /// Why it is undecided, as a directed read from it is.
+    pub fn settled(&self, element: &ObjectId) -> Result<(), String> {
+        self.reach(element, TraversalDirection::Forward, false)
+            .map(|_| ())
+    }
+
+    /// The network's completeness proof.
+    #[must_use]
+    pub fn evidence(&self) -> &[Evidence] {
+        &self.evidence
     }
 
     /// The elements `anchor` reaches in `direction` (with `chain`, one or
@@ -438,34 +472,47 @@ pub(crate) fn install(services: &mut ServiceRegistry) {
     let inner = services
         .get::<RelationshipSelectionServiceHandle>()
         .cloned();
-    let network = services.get::<DistributionNetworkServiceHandle>().cloned();
-    if inner.is_none() && network.is_none() {
+    let graphs = services
+        .get::<DistributionNetworkServiceHandle>()
+        .cloned()
+        .map(|network| Arc::new(FlowGraphs::new(network)));
+    if let Some(graphs) = &graphs {
+        services.replace(graphs.clone());
+    }
+    if inner.is_none() && graphs.is_none() {
         return;
     }
     services.replace(RelationshipSelectionServiceHandle::new(Arc::new(
-        FlowRelationships {
-            inner,
-            network,
-            graphs: Mutex::default(),
-        },
+        FlowRelationships { inner, graphs },
     )));
 }
 
 type Graphs = BTreeMap<SourceId, Result<Arc<FlowGraph>, String>>;
 
-/// Answers [`FLOW_RELATIONSHIP`] from the network service, every other
-/// identity from the host's relationship service.
-struct FlowRelationships {
-    inner: Option<RelationshipSelectionServiceHandle>,
-    network: Option<DistributionNetworkServiceHandle>,
+/// The flow graph of each source, built from the network service once per
+/// run on first use; the runtime installs it as `Arc<FlowGraphs>` beside
+/// the host's services whenever a network service is registered.
+pub struct FlowGraphs {
+    network: DistributionNetworkServiceHandle,
     graphs: Mutex<Graphs>,
 }
 
-impl FlowRelationships {
-    fn graph(&self, source: &SourceId) -> Result<Arc<FlowGraph>, String> {
-        let network = self.network.as_ref().ok_or_else(|| {
-            "no distribution network service is registered, so no flow can be traversed".to_owned()
-        })?;
+impl FlowGraphs {
+    /// The graphs of `network`'s sources, none built yet.
+    #[must_use]
+    pub fn new(network: DistributionNetworkServiceHandle) -> Self {
+        Self {
+            network,
+            graphs: Mutex::default(),
+        }
+    }
+
+    /// The flow graph of `source`.
+    ///
+    /// # Errors
+    ///
+    /// Why the source's network cannot be read.
+    pub fn graph(&self, source: &SourceId) -> Result<Arc<FlowGraph>, String> {
         let mut graphs = self
             .graphs
             .lock()
@@ -473,12 +520,31 @@ impl FlowRelationships {
         graphs
             .entry(source.clone())
             .or_insert_with(|| {
-                network
+                self.network
                     .network(source)
                     .map(|network| Arc::new(FlowGraph::build(&network)))
                     .map_err(|error| error.to_string())
             })
             .clone()
+    }
+}
+
+/// Answers [`FLOW_RELATIONSHIP`] from the network service, every other
+/// identity from the host's relationship service.
+struct FlowRelationships {
+    inner: Option<RelationshipSelectionServiceHandle>,
+    graphs: Option<Arc<FlowGraphs>>,
+}
+
+impl FlowRelationships {
+    fn graph(&self, source: &SourceId) -> Result<Arc<FlowGraph>, String> {
+        self.graphs
+            .as_ref()
+            .ok_or_else(|| {
+                "no distribution network service is registered, so no flow can be traversed"
+                    .to_owned()
+            })?
+            .graph(source)
     }
 
     fn answer(

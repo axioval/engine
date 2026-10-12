@@ -4232,6 +4232,31 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         ),
     },
     MeasuredDescriptor {
+        name: "fall_in_flow",
+        parameters: &[],
+        dimension: None,
+        services: &["distribution-network", "object-frame"],
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[
+            "the element states no single inlet and outlet port",
+            "the flow direction at the element is undecided",
+            "a port's placement is not stated exactly",
+            "the inlet lies plumb above or below the outlet",
+        ],
+        label: &en_de("Fall in flow direction", "Gefälle in Fließrichtung"),
+        help: &en_de(
+            "How far a run falls in flow direction per unit of plan length, a ratio: from \
+             the placement of the port flow enters by (its sink) to the one it leaves by \
+             (its source), positive where it falls, negative where it is laid against the \
+             flow.",
+            "Wie weit ein Strang in Fließrichtung je Grundrisslänge fällt, als Verhältnis: \
+             von der Lage des Anschlusses, durch den der Durchfluss eintritt (Senke), zu \
+             dem, durch den er austritt (Quelle), positiv bei Gefälle, negativ, wo er gegen \
+             die Fließrichtung verlegt ist.",
+        ),
+    },
+    MeasuredDescriptor {
         name: "flight_rise",
         parameters: &[super::members::WALKING_LINE_OFFSET],
         dimension: Some(QuantityDimension::Length),

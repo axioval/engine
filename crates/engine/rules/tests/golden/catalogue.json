@@ -74699,6 +74699,43 @@
       "available": true
     },
     {
+      "name": "fall_in_flow",
+      "parameters": [],
+      "services": [
+        "distribution-network",
+        "object-frame"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the element states no single inlet and outlet port",
+        "the flow direction at the element is undecided",
+        "a port's placement is not stated exactly",
+        "the inlet lies plumb above or below the outlet"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Fall in flow direction"
+        },
+        {
+          "language": "de",
+          "text": "Gefälle in Fließrichtung"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "How far a run falls in flow direction per unit of plan length, a ratio: from the placement of the port flow enters by (its sink) to the one it leaves by (its source), positive where it falls, negative where it is laid against the flow."
+        },
+        {
+          "language": "de",
+          "text": "Wie weit ein Strang in Fließrichtung je Grundrisslänge fällt, als Verhältnis: von der Lage des Anschlusses, durch den der Durchfluss eintritt (Senke), zu dem, durch den er austritt (Quelle), positiv bei Gefälle, negativ, wo er gegen die Fließrichtung verlegt ist."
+        }
+      ],
+      "unit": "1",
+      "available": true
+    },
+    {
       "name": "flight_rise",
       "parameters": [
         {

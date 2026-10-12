@@ -19661,3 +19661,139 @@ fn a_disconnected_fixture_is_reported_as_reaching_no_collector() {
         "{result:#}"
     );
 }
+
+/// A basin #10 draining through three pipes in a row, #20, #21 and #22,
+/// each from its inlet to its outlet port placed in metres: #20 from
+/// (0, 0, 1) to (1, 0, 0.98), falling 2 %; #21 from (1, 0, 0.98) to
+/// (2, 0, 0.99), laid against the flow and rising 1 %; #22 from
+/// (2, 0, 0.99) to (4, 0, 0.97), falling 1 %. `last_outlet` is the flow
+/// direction #22's outlet states.
+fn pipe_run(last_outlet: &str) -> String {
+    let mut data = String::from(
+        "#1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         #10=IFCSANITARYTERMINAL('0000000000000000000010',$,'Basin',$,$,#3,$,$,.WASHHANDBASIN.);\n\
+         #20=IFCPIPESEGMENT('0000000000000000000020',$,'P1',$,$,#3,$,$,.RIGIDSEGMENT.);\n\
+         #21=IFCPIPESEGMENT('0000000000000000000021',$,'P2',$,$,#3,$,$,.RIGIDSEGMENT.);\n\
+         #22=IFCPIPESEGMENT('0000000000000000000022',$,'P3',$,$,#3,$,$,.RIGIDSEGMENT.);\n",
+    );
+    let ports: [(u32, u32, &str, [f64; 3]); 7] = [
+        (100, 10, "SOURCE", [0.0, 0.0, 1.0]),
+        (200, 20, "SINK", [0.0, 0.0, 1.0]),
+        (201, 20, "SOURCE", [1.0, 0.0, 0.98]),
+        (210, 21, "SINK", [1.0, 0.0, 0.98]),
+        (211, 21, "SOURCE", [2.0, 0.0, 0.99]),
+        (220, 22, "SINK", [2.0, 0.0, 0.99]),
+        (221, 22, last_outlet, [4.0, 0.0, 0.97]),
+    ];
+    for (port, element, flow, [x, y, z]) in ports {
+        let _ = writeln!(
+            data,
+            "#{point}=IFCCARTESIANPOINT(({x:?},{y:?},{z:?}));\n\
+             #{axes}=IFCAXIS2PLACEMENT3D(#{point},$,$);\n\
+             #{placement}=IFCLOCALPLACEMENT(#3,#{axes});\n\
+             #{port}=IFCDISTRIBUTIONPORT('0000000000000000000{port}',$,$,$,$,#{placement},$,.{flow}.,.PIPE.,.DRAINAGE.);\n\
+             #{nest}=IFCRELNESTS('000000000000000000{nest}',$,$,$,#{element},(#{port}));",
+            point = port + 1000,
+            axes = port + 2000,
+            placement = port + 3000,
+            nest = port + 4000,
+        );
+    }
+    for (index, (relating, related)) in [(100, 200), (201, 210), (211, 220)].into_iter().enumerate()
+    {
+        let _ = writeln!(
+            data,
+            "#{id}=IFCRELCONNECTSPORTS('000000000000000000{id}',$,$,$,#{relating},#{related},$);",
+            id = 5000 + index,
+        );
+    }
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n{data}ENDSEC;\nEND-ISO-10303-21;\n"
+    )
+}
+
+/// engine#345: the pipe laid against the flow falls by a negative 1 %, the
+/// others fall 2 % and 1 %, and the least fall downstream of the basin is
+/// that of the pipe against the flow. With the last pipe's outlet passing
+/// flow either way, its fall is not evaluated, and so is the least fall
+/// along the run from the basin.
+#[test]
+fn the_fall_of_pipes_is_measured_in_flow_direction() {
+    let case = Case::new("network-fall-in-flow");
+    let types = [
+        ("terminal", "IfcSanitaryTerminal"),
+        ("pipe", "IfcPipeSegment"),
+    ];
+    let fall = json!({"kind": "property", "propertySet": "axioval:measured",
+                      "property": "fall_in_flow", "label": "fall"});
+    let at_least = |left: Value| {
+        json!({"requirement": {"type": "expression", "value": {
+                "kind": "compare", "operator": "greaterThanOrEquals", "left": left,
+                "right": {"kind": "literal", "value": {"type": "number", "value": 0.005}}}},
+               "message": {"type": "string", "value": "falls {fall}"}})
+    };
+    let least = json!({"kind": "aggregate", "function": "min", "label": "fall",
+        "over": {"kind": "path", "path": ["axioval:derived.flow:forward+"]},
+        "where": entity("pipe"), "value": fall});
+    let rule = |model: &str, applies_to: &str, parameters: Value| {
+        case.geometry_rule(
+            model,
+            &types,
+            "axioval:capability.expression",
+            &registry_signature("axioval:capability.expression"),
+            entity(applies_to),
+            parameters,
+        )
+    };
+
+    let (output, result) = rule(&pipe_run("SOURCE"), "pipe", at_least(fall.clone()));
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let found = finding_messages(&result);
+    assert_eq!(found.len(), 1, "{result:#}");
+    assert_eq!(found[0].0, "#21", "{result:#}");
+    // A fall of -1 %, within the rounding of the subtraction.
+    assert!(
+        found[0].1.starts_with("falls -0.01000000000000")
+            && found[0].1.ends_with("..-0.00999999999999999"),
+        "{result:#}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+
+    let (output, result) = rule(&pipe_run("SOURCE"), "terminal", at_least(least.clone()));
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let found = finding_messages(&result);
+    assert_eq!(found.len(), 1, "{result:#}");
+    assert_eq!(found[0].0, "#10", "{result:#}");
+    // The least fall along the run is that of the pipe against the flow.
+    let pipe = rule(&pipe_run("SOURCE"), "pipe", at_least(fall.clone())).1;
+    assert_eq!(found[0].1, finding_messages(&pipe)[0].1, "{result:#}");
+
+    // The last outlet passing flow either way leaves the last pipe's fall
+    // undecided; the pipe against the flow is found as before.
+    let (_, result) = rule(&pipe_run("SOURCEANDSINK"), "pipe", at_least(fall.clone()));
+    let found = finding_messages(&result);
+    assert_eq!(found.len(), 1, "{result:#}");
+    assert_eq!(found[0].0, "#21", "{result:#}");
+    let open = result["report"]["not_evaluated"].as_array().unwrap();
+    assert_eq!(open.len(), 1, "{result:#}");
+    assert_eq!(open[0]["object_id"]["local_id"], "#22", "{result:#}");
+    let why = open[0]["message"].as_str().unwrap();
+    assert!(why.contains("source-and-sink"), "{why}");
+    let (_, result) = rule(&pipe_run("SOURCEANDSINK"), "terminal", at_least(least));
+    let open = result["report"]["not_evaluated"].as_array().unwrap();
+    assert_eq!(open.len(), 1, "{result:#}");
+    assert_eq!(open[0]["object_id"]["local_id"], "#10", "{result:#}");
+    let why = open[0]["message"].as_str().unwrap();
+    assert!(why.contains("#221 is source-and-sink"), "{why}");
+}

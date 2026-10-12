@@ -1061,7 +1061,7 @@ pub use metric_routing::{
 };
 pub use network::{
     DistributionNetworkService, DistributionNetworkServiceHandle, FLOW_RELATIONSHIP, FlowGraph,
-    NetworkServiceError,
+    FlowGraphs, NetworkServiceError,
 };
 pub use object_frame::{
     ObjectFrame, ObjectFrameError, ObjectFrameService, ObjectFrameServiceHandle, ObjectFront,

@@ -347,3 +347,125 @@ fn a_tessellated_roof_widens_its_lines_and_is_never_exact() {
         assert!(edge.sides().iter().all(|side| !side.normal().is_exact()));
     }
 }
+
+/// A closed box from `min` to `max`, wound outward.
+fn cuboid(min: P, max: P) -> TriMesh {
+    let corner = |i: usize| -> P {
+        [0, 1, 2].map(|axis| {
+            if i >> axis & 1 == 0 {
+                min[axis]
+            } else {
+                max[axis]
+            }
+        })
+    };
+    let quad = |outward: P, [a, b, c, d]: [usize; 4]| {
+        (
+            outward,
+            vec![
+                [corner(a), corner(b), corner(c)],
+                [corner(a), corner(c), corner(d)],
+            ],
+        )
+    };
+    let faces = [
+        quad([0.0, 0.0, -1.0], [0, 2, 3, 1]),
+        quad([0.0, 0.0, 1.0], [4, 5, 7, 6]),
+        quad([0.0, -1.0, 0.0], [0, 1, 5, 4]),
+        quad([0.0, 1.0, 0.0], [2, 6, 7, 3]),
+        quad([-1.0, 0.0, 0.0], [0, 4, 6, 2]),
+        quad([1.0, 0.0, 0.0], [1, 3, 7, 5]),
+    ];
+    let borrowed: Vec<(P, &[[P; 3]])> = faces
+        .iter()
+        .map(|(outward, triangles)| (*outward, triangles.as_slice()))
+        .collect();
+    mesh(&borrowed, false)
+}
+
+fn line_request(
+    start: P,
+    end: P,
+    slack: f64,
+    projection: axioval_engine::LineProjection,
+) -> axioval_engine::LineDistanceRequest {
+    let corner = |at: P| {
+        axioval_engine::PointBox::try_new(at.map(|c| c - slack), at.map(|c| c + slack)).unwrap()
+    };
+    axioval_engine::LineDistanceRequest::new(id("box"), corner(start), corner(end), projection)
+}
+
+/// engine#330: a box 0.4 m in plan from a level line and 0.5 m below it
+/// measures 0.4 m in plan and √0.41 m in space; a line through the box
+/// or inside it is at zero; a line known within boxes, or a tessellated
+/// body, widens the distance and is never exact.
+#[test]
+fn a_body_measures_its_distance_to_a_line_in_space_and_in_plan() {
+    use axioval_axiolid::AxiolidProximityService;
+    use axioval_engine::{LineProjection, ProximityService};
+    let service = AxiolidProximityService::new(
+        AxiolidGeometry::new().with_mesh(id("box"), cuboid([4.0, 6.6, 3.0], [6.0, 7.6, 3.5])),
+    );
+    let measure = |request| service.measure_line_distance(&request).unwrap();
+    let plan = measure(line_request(
+        [0.0, 8.0, 4.0],
+        [10.0, 8.0, 4.0],
+        0.0,
+        LineProjection::Plan,
+    ));
+    assert!(plan.evidence().exact);
+    assert!((plan.lower_metres() - 0.4).abs() < 1e-12, "{plan:?}");
+    assert_eq!(plan.lower_metres(), plan.upper_metres());
+    let space = measure(line_request(
+        [0.0, 8.0, 4.0],
+        [10.0, 8.0, 4.0],
+        0.0,
+        LineProjection::Space,
+    ));
+    assert!(
+        (space.lower_metres() - 0.41_f64.sqrt()).abs() < 1e-12,
+        "{space:?}"
+    );
+    // Through the box, and wholly inside it.
+    let through = measure(line_request(
+        [5.0, 0.0, 3.2],
+        [5.0, 10.0, 3.2],
+        0.0,
+        LineProjection::Space,
+    ));
+    assert_eq!(through.upper_metres(), 0.0);
+    let inside = measure(line_request(
+        [4.5, 7.0, 3.2],
+        [5.5, 7.0, 3.2],
+        0.0,
+        LineProjection::Space,
+    ));
+    assert_eq!(inside.upper_metres(), 0.0);
+    // Ends known within a centimetre.
+    let loose = measure(line_request(
+        [0.0, 8.0, 4.0],
+        [10.0, 8.0, 4.0],
+        0.01,
+        LineProjection::Plan,
+    ));
+    assert!(!loose.evidence().exact);
+    assert!(
+        loose.lower_metres() <= 0.39 + 1e-9 && loose.upper_metres() >= 0.41 - 1e-9,
+        "{loose:?}"
+    );
+    let tessellated = AxiolidProximityService::new(AxiolidGeometry::new().with_tessellated_mesh(
+        id("box"),
+        cuboid([4.0, 6.6, 3.0], [6.0, 7.6, 3.5]),
+        0.002,
+    ));
+    let widened = tessellated
+        .measure_line_distance(&line_request(
+            [0.0, 8.0, 4.0],
+            [10.0, 8.0, 4.0],
+            0.0,
+            LineProjection::Plan,
+        ))
+        .unwrap();
+    assert!(!widened.evidence().exact);
+    assert!(widened.lower_metres() <= 0.398 + 1e-9 && widened.upper_metres() >= 0.402 - 1e-9);
+}

@@ -43,7 +43,7 @@ use std::sync::Arc;
 
 use axioval_ir::{Evidence, ObjectId};
 
-use crate::{ConvexPlanRegion, LengthInterval, MetricDirection, SignedDistanceInterval};
+use crate::{ConvexPlanRegion, LengthInterval, MetricDirection, PointBox, SignedDistanceInterval};
 
 /// Why a proximity measurement could not be produced.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
@@ -1865,6 +1865,148 @@ impl HeightAboveEvidence {
     }
 }
 
+/// How a distance to a line is measured: in space, or between the plan
+/// projections of the body and the line.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum LineProjection {
+    /// The least distance in space.
+    Space,
+    /// The least distance between the footprint and the line's projection
+    /// onto the horizontal plane.
+    Plan,
+}
+
+impl LineProjection {
+    /// The projection's name, as a locator writes it.
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Space => "space",
+            Self::Plan => "plan",
+        }
+    }
+}
+
+/// The distance from an object's body to a stated straight line, such as a
+/// roof's ridge, whose ends are known within boxes.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LineDistanceRequest {
+    object: ObjectId,
+    start: PointBox,
+    end: PointBox,
+    projection: LineProjection,
+}
+
+impl LineDistanceRequest {
+    /// The distance from `object` to the line from `start` to `end`, in
+    /// `projection`.
+    #[must_use]
+    pub fn new(
+        object: ObjectId,
+        start: PointBox,
+        end: PointBox,
+        projection: LineProjection,
+    ) -> Self {
+        Self {
+            object,
+            start,
+            end,
+            projection,
+        }
+    }
+
+    /// The object measured from.
+    #[must_use]
+    pub fn object(&self) -> &ObjectId {
+        &self.object
+    }
+
+    /// Where the line starts.
+    #[must_use]
+    pub fn start(&self) -> PointBox {
+        self.start
+    }
+
+    /// Where the line ends.
+    #[must_use]
+    pub fn end(&self) -> PointBox {
+        self.end
+    }
+
+    /// How the distance is measured.
+    #[must_use]
+    pub fn projection(&self) -> LineProjection {
+        self.projection
+    }
+}
+
+/// The least distance from an object's body to a line, as an interval sure
+/// to hold it: zero where they meet (or the line runs inside a closed
+/// body), widened by the line's end boxes and the body's chord deviation.
+/// The evidence is exact only where the body and both ends are.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LineDistanceEvidence {
+    request: LineDistanceRequest,
+    lower_metres: f64,
+    upper_metres: f64,
+    evidence: Evidence,
+}
+
+impl LineDistanceEvidence {
+    /// Rejects incoherent intervals, and evidence without a locator or from
+    /// another source than the object's.
+    ///
+    /// # Errors
+    ///
+    /// [`ProximityError::InvalidMeasurement`] for bounds not finite,
+    /// negative or reversed, [`ProximityError::EvidenceFidelityMismatch`]
+    /// for evidence that cannot be reviewed.
+    pub fn try_new(
+        request: LineDistanceRequest,
+        lower_metres: f64,
+        upper_metres: f64,
+        evidence: Evidence,
+    ) -> Result<Self, ProximityError> {
+        let bound_ok = |value: f64| value.is_finite() && value >= 0.0;
+        if !bound_ok(lower_metres) || !bound_ok(upper_metres) || lower_metres > upper_metres {
+            return Err(ProximityError::InvalidMeasurement);
+        }
+        if evidence.locator.trim().is_empty() || evidence.source != request.object().source {
+            return Err(ProximityError::EvidenceFidelityMismatch);
+        }
+        Ok(Self {
+            request,
+            lower_metres,
+            upper_metres,
+            evidence,
+        })
+    }
+
+    /// The request answered.
+    #[must_use]
+    pub fn request(&self) -> &LineDistanceRequest {
+        &self.request
+    }
+
+    /// The least distance it may be, in metres.
+    #[must_use]
+    pub fn lower_metres(&self) -> f64 {
+        self.lower_metres
+    }
+
+    /// The greatest distance it may be, in metres.
+    #[must_use]
+    pub fn upper_metres(&self) -> f64 {
+        self.upper_metres
+    }
+
+    /// The source and exactness of the measurement.
+    #[must_use]
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+}
+
 /// Measures extents and pairwise proximity of model objects.
 ///
 /// ADR 0004: every method returns a measurement. None decides a clash.
@@ -1919,6 +2061,18 @@ pub trait ProximityService: Send + Sync + 'static {
         &self,
         request: &RegionDistanceRequest,
     ) -> Result<RegionDistanceEvidence, ProximityError> {
+        let _ = request;
+        Err(ProximityError::UnsupportedProjection)
+    }
+    /// The least distance from an object's body to a stated line.
+    ///
+    /// The default refuses with [`ProximityError::UnsupportedProjection`],
+    /// so a service that does not measure lines fails closed.
+    // gate: measures length
+    fn measure_line_distance(
+        &self,
+        request: &LineDistanceRequest,
+    ) -> Result<LineDistanceEvidence, ProximityError> {
         let _ = request;
         Err(ProximityError::UnsupportedProjection)
     }
@@ -2112,6 +2266,18 @@ impl ProximityServiceHandle {
         request: &RegionDistanceRequest,
     ) -> Result<RegionDistanceEvidence, ProximityError> {
         let measured = self.0.measure_region_distance(request)?;
+        if measured.request() != request {
+            return Err(ProximityError::InvalidMeasurement);
+        }
+        Ok(measured)
+    }
+    /// The distance from a body to a line. Evidence answering another
+    /// request is refused.
+    pub fn measure_line_distance(
+        &self,
+        request: &LineDistanceRequest,
+    ) -> Result<LineDistanceEvidence, ProximityError> {
+        let measured = self.0.measure_line_distance(request)?;
         if measured.request() != request {
             return Err(ProximityError::InvalidMeasurement);
         }

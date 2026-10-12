@@ -886,7 +886,13 @@ mesh turned to look up, and an open mesh with a vertical triangle is
 refused) and the side of the line its face lies on, read from the
 triangle's winding, never from a rounded sign; an edge of a closed mesh not
 shared by exactly two triangles refuses. A tessellation widens the line's
-ends by its chord deviation. Thicknesses
+ends by its chord deviation. The proximity service measures a body's
+distance to such a line (`measure_line_distance`) between the line's end
+boxes' middles and the body's triangles, the line taken as a zero-area
+triangle (its segment), or in plan between the footprint and the line's
+plan; a closed body holding a line that crosses none of its faces is at
+zero, and the distance widens by how far the ends may lie from their
+middles and by the chord deviation. Thicknesses
 (`measure_thickness`) are measured on a closed mesh between the triangles
 looking along the direction within 60° and those looking back, at every
 projected corner and every crossing of their projected edges, where the

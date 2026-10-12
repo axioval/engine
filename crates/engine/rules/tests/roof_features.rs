@@ -505,3 +505,178 @@ fn a_ridge_height_limit_is_judged_and_never_passed_on_an_undecided_line() {
         NotEvaluatedReason::IncompleteEvidence
     );
 }
+
+/// Objects as points, each known within a slack (zero: exactly), measured
+/// to a line between its ends' middles.
+#[derive(Default)]
+struct Points(BTreeMap<ObjectId, (P, f64)>);
+
+impl axioval_engine::ProximityService for Points {
+    fn bounds(
+        &self,
+        _: &ObjectId,
+    ) -> Result<axioval_engine::ObjectBounds, axioval_engine::ProximityError> {
+        Err(axioval_engine::ProximityError::Unavailable)
+    }
+
+    fn measure_proximity(
+        &self,
+        _: &axioval_engine::ProximityRequest,
+    ) -> Result<axioval_engine::ProximityEvidence, axioval_engine::ProximityError> {
+        Err(axioval_engine::ProximityError::Unavailable)
+    }
+
+    fn measure_line_distance(
+        &self,
+        request: &axioval_engine::LineDistanceRequest,
+    ) -> Result<axioval_engine::LineDistanceEvidence, axioval_engine::ProximityError> {
+        let (point, slack) = *self
+            .0
+            .get(request.object())
+            .ok_or(axioval_engine::ProximityError::Unavailable)?;
+        let middle =
+            |at: PointBox| [0, 1, 2].map(|axis| f64::midpoint(at.lower()[axis], at.upper()[axis]));
+        let (a, b) = (middle(request.start()), middle(request.end()));
+        let along = sub(b, a);
+        let t = (dot(sub(point, a), along) / dot(along, along)).clamp(0.0, 1.0);
+        let foot = [0, 1, 2].map(|axis| a[axis] + t * along[axis]);
+        let gap = sub(point, foot);
+        let distance = dot(gap, gap).sqrt();
+        let mut evidence = Evidence::exact(source(), format!("line:{}", request.object().local_id));
+        evidence.exact = slack == 0.0 && request.start().is_exact();
+        axioval_engine::LineDistanceEvidence::try_new(
+            request.clone(),
+            (distance - slack).max(0.0),
+            distance + slack,
+            evidence,
+        )
+    }
+}
+
+fn distance_services(
+    roofs: Roofs,
+    points: Points,
+) -> (axioval_ir::Project, axioval_engine::ServiceRegistry) {
+    let model = Model::default()
+        .object("roof", "roof")
+        .object("skylight", "window")
+        .object("chimney", "window");
+    let (project, mut services) = model.services();
+    services
+        .register(VerticalExtentServiceHandle::new(Arc::new(roofs)))
+        .unwrap();
+    services
+        .register(axioval_engine::ProximityServiceHandle::new(Arc::new(
+            points,
+        )))
+        .unwrap();
+    register_builtins(CapabilityRegistry::new())
+        .unwrap()
+        .install_measured(&mut services, &project);
+    (project, services)
+}
+
+/// #330: a skylight 0.4 m from the valley measures 0.4 m, exactly, and
+/// relates the roof; the nearest of two ridges is taken; a roof without a
+/// hip has no distance to one.
+#[test]
+fn a_skylight_measures_its_distance_to_the_nearest_line_of_a_class() {
+    // 0.4 m off the valley's middle (4.5, 2.5, 5.5), square to it and to
+    // the main roof's normal.
+    let off = 0.4 / 6.0_f64.sqrt();
+    let skylight = [4.5 - 2.0 * off, 2.5 + off, 5.5 + off];
+    let points = Points(BTreeMap::from([
+        (id("skylight"), (skylight, 0.0)),
+        (id("chimney"), ([5.0, 4.0, 9.0], 0.0)),
+    ]));
+    let (project, services) = distance_services(roof(gable(0.0), true), points);
+    let measured =
+        |object: &str, name: &str| common::measured_cited(&services, &project, &id(object), name);
+    let ((lower, upper), exact) =
+        measured("skylight", "distance_to_feature;feature=valley;roofs=roof")
+            .unwrap()
+            .unwrap();
+    assert!(lower <= 0.4 + 1e-12 && upper >= 0.4 - 1e-12 && upper - lower < 1e-9);
+    assert!(exact);
+    // The chimney 2 m above the ridge at (5, 4, 7).
+    let ((lower, upper), _) = measured("chimney", "distance_to_feature;feature=ridge;roofs=roof")
+        .unwrap()
+        .unwrap();
+    assert!(
+        lower <= 2.0 + 1e-12 && upper >= 2.0 - 1e-12,
+        "{lower} {upper}"
+    );
+    // Without a line of the class: none.
+    let (project, services) = distance_services(
+        roof(gable(0.0)[..5].to_vec(), true),
+        Points(BTreeMap::from([(id("skylight"), (skylight, 0.0))])),
+    );
+    assert_eq!(
+        common::measured_cited(
+            &services,
+            &project,
+            &id("skylight"),
+            "distance_to_feature;feature=hip;roofs=roof"
+        )
+        .unwrap(),
+        None
+    );
+}
+
+/// A line that may be of the class and lies nearer than the nearest that
+/// surely is leaves the distance not evaluated; one farther away does not
+/// matter.
+#[test]
+fn a_possible_line_nearer_than_the_nearest_sure_one_leaves_the_distance_open() {
+    let kink = line(
+        [0.0, 2.0, 5.0],
+        [10.0, 2.0, 5.0],
+        &[
+            (SOUTH, [5.0, 1.0, 4.0]),
+            ([0.0, -1.025, 1.0], [5.0, 3.0, 6.025]),
+        ],
+        0.0,
+    );
+    let mut edges = gable(0.0);
+    edges.push(kink);
+    let points = Points(BTreeMap::from([
+        (id("skylight"), ([5.0, 2.0, 6.0], 0.0)),
+        (id("chimney"), ([5.0, 4.0, 9.0], 0.0)),
+    ]));
+    let (project, services) = distance_services(roof(edges, true), points);
+    let why = common::measured_cited(
+        &services,
+        &project,
+        &id("skylight"),
+        "distance_to_feature;feature=ridge;roofs=roof",
+    )
+    .unwrap_err();
+    assert!(why.contains("may be a ridge nearer"), "{why}");
+    // The chimney is nearer the ridge than the kink.
+    let ((lower, _), _) = common::measured_cited(
+        &services,
+        &project,
+        &id("chimney"),
+        "distance_to_feature;feature=ridge;roofs=roof",
+    )
+    .unwrap()
+    .unwrap();
+    assert!(lower <= 2.0 + 1e-12);
+}
+
+/// #330 on a tessellation: the distance is measured, never exact.
+#[test]
+fn a_distance_to_a_feature_on_a_tessellation_is_inexact() {
+    let points = Points(BTreeMap::from([(id("skylight"), ([5.0, 4.0, 9.0], 0.01))]));
+    let (project, services) = distance_services(roof(gable(0.001), false), points);
+    let ((lower, upper), exact) = common::measured_cited(
+        &services,
+        &project,
+        &id("skylight"),
+        "distance_to_feature;feature=ridge;roofs=roof",
+    )
+    .unwrap()
+    .unwrap();
+    assert!(!exact);
+    assert!(lower <= 1.99 && upper >= 2.01, "{lower} {upper}");
+}

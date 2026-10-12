@@ -164,7 +164,7 @@ fn rise(a: &Vector) -> Option<Interval> {
 }
 
 /// The tolerance's sine and cosine.
-struct Tolerance {
+pub(crate) struct Tolerance {
     sine: Interval,
     cosine: Interval,
 }
@@ -454,45 +454,87 @@ fn datum(
     Ok((height, evidence))
 }
 
-/// Whether a line of `outcomes` (surely of the class `decided`, if any)
-/// is a member of the list of `chosen` (every class without one): surely
-/// (`Some(true)`), possibly (`Some(false)`), or not at all (`None`).
-fn membership(
-    outcomes: &BTreeSet<Outcome>,
-    decided: Option<Feature>,
-    chosen: Option<Feature>,
-) -> Option<bool> {
-    let unclassifiable = outcomes
-        .iter()
-        .any(|outcome| matches!(outcome, Outcome::Unclassifiable(_)));
-    let included = match chosen {
-        Some(feature) => outcomes.contains(&Outcome::Feature(feature)) || unclassifiable,
-        None => !outcomes.iter().all(|outcome| *outcome == Outcome::None),
-    };
-    included.then_some(match (chosen, decided) {
-        (Some(feature), Some(found)) => feature == found,
-        (None, Some(_)) => true,
-        _ => false,
-    })
-}
-
-/// The items of one roof: its feature lines in the service's order.
-fn items(
-    call: &MeasuredCall,
-    object: &ObjectId,
-    context: &RuleContext<'_>,
-) -> Result<Vec<MeasuredMember>, Unavailable> {
-    let chosen = match call.choice("feature") {
-        Some(name) => Some(
-            Feature::named(name).ok_or_else(|| invalid(format!("`feature` {name} is unknown")))?,
-        ),
-        None => None,
-    };
+/// The tolerance `call` states, in degrees, as its sine and cosine.
+pub(crate) fn tolerance(call: &MeasuredCall) -> Result<Tolerance, Unavailable> {
     let degrees = match call.argument("tolerance") {
         Some(MeasuredArgument::Number(degrees)) => *degrees,
         _ => return Err(invalid("`tolerance` is required")),
     };
-    let tolerance = Tolerance::of(degrees).ok_or_else(|| invalid("`tolerance` is no angle"))?;
+    Tolerance::of(degrees).ok_or_else(|| invalid("`tolerance` is no angle"))
+}
+
+/// One line of a roof's body and the classes it may have.
+pub(crate) struct Line {
+    pub(crate) edge: FaceEdge,
+    outcomes: BTreeSet<Outcome>,
+}
+
+impl Line {
+    /// The one class the line surely has, if any.
+    pub(crate) fn decided(&self) -> Option<Feature> {
+        match self.outcomes.iter().collect::<Vec<_>>().as_slice() {
+            [Outcome::Feature(feature)] => Some(*feature),
+            _ => None,
+        }
+    }
+
+    /// Whether the line may be of the class `feature`: it may have it, or
+    /// it has a class nobody can tell.
+    pub(crate) fn may_be(&self, feature: Feature) -> bool {
+        self.outcomes.contains(&Outcome::Feature(feature)) || self.unclassifiable()
+    }
+
+    fn unclassifiable(&self) -> bool {
+        self.outcomes
+            .iter()
+            .any(|outcome| matches!(outcome, Outcome::Unclassifiable(_)))
+    }
+
+    /// Whether the line may be a roof feature line at all.
+    fn may_be_any(&self) -> bool {
+        !self
+            .outcomes
+            .iter()
+            .all(|outcome| *outcome == Outcome::None)
+    }
+
+    /// The line's ends, as words name it.
+    pub(crate) fn place(&self) -> String {
+        format!("{} - {}", words(self.edge.start()), words(self.edge.end()))
+    }
+
+    /// Why the line of `roof` cannot be classified.
+    pub(crate) fn why(&self, roof: &ObjectId) -> String {
+        format!(
+            "the line {} of {roof} cannot be classified: {}",
+            self.place(),
+            alternatives(&self.outcomes)
+        )
+    }
+
+    /// Whether the line is a member of the list of `chosen` (every class
+    /// without one): surely (`Some(true)`), possibly (`Some(false)`), or
+    /// not at all (`None`).
+    fn membership(&self, chosen: Option<Feature>) -> Option<bool> {
+        let included = match chosen {
+            Some(feature) => self.may_be(feature),
+            None => self.may_be_any(),
+        };
+        included.then_some(match (chosen, self.decided()) {
+            (Some(feature), Some(found)) => feature == found,
+            (None, Some(_)) => true,
+            _ => false,
+        })
+    }
+}
+
+/// The lines of `roof`'s body, each with the classes it may have under
+/// `tolerance`, in the service's order, and the evidence they come from.
+pub(crate) fn lines(
+    context: &RuleContext<'_>,
+    roof: &ObjectId,
+    tolerance: &Tolerance,
+) -> Result<(Vec<Line>, Evidence), Unavailable> {
     let service = context
         .services
         .get::<VerticalExtentServiceHandle>()
@@ -502,41 +544,62 @@ fn items(
                 "the vertical-extent service is not registered".to_owned(),
             )
         })?;
-    let (datum, datum_evidence) = datum(call, object, context)?;
-    let edges = service.measure_face_edges(object).map_err(|error| {
+    let edges = service.measure_face_edges(roof).map_err(|error| {
         let (reason, why) = extent_error(&error);
-        (reason, format!("{object}: {why}"))
+        (reason, format!("{roof}: {why}"))
     })?;
-    let exact = edges.evidence().exact;
+    let lines = edges
+        .edges()
+        .iter()
+        .map(|edge| Line {
+            edge: edge.clone(),
+            outcomes: outcomes(&predicates(edge, tolerance)),
+        })
+        .collect();
+    Ok((lines, edges.evidence().clone()))
+}
+
+/// The class `call` chooses, if any.
+pub(crate) fn chosen(call: &MeasuredCall) -> Result<Option<Feature>, Unavailable> {
+    call.choice("feature")
+        .map(|name| {
+            Feature::named(name).ok_or_else(|| invalid(format!("`feature` {name} is unknown")))
+        })
+        .transpose()
+}
+
+/// The items of one roof: its feature lines in the service's order.
+fn items(
+    call: &MeasuredCall,
+    object: &ObjectId,
+    context: &RuleContext<'_>,
+) -> Result<Vec<MeasuredMember>, Unavailable> {
+    let chosen = chosen(call)?;
+    let tolerance = tolerance(call)?;
+    let (datum, datum_evidence) = datum(call, object, context)?;
+    let (lines, evidence) = lines(context, object, &tolerance)?;
+    let exact = evidence.exact;
     let length = Some(QuantityDimension::Length);
     let mut items = Vec::new();
-    for (index, edge) in edges.edges().iter().enumerate() {
-        let outcomes = outcomes(&predicates(edge, &tolerance));
-        let decided = match outcomes.iter().collect::<Vec<_>>().as_slice() {
-            [Outcome::Feature(feature)] => Some(*feature),
-            _ => None,
-        };
-        let Some(certain) = membership(&outcomes, decided, chosen) else {
+    for (index, line) in lines.iter().enumerate() {
+        let Some(certain) = line.membership(chosen) else {
             continue;
         };
-        let (start, end) = (edge.start(), edge.end());
-        let line = format!("{} - {}", words(start), words(end));
+        let (start, end) = (line.edge.start(), line.edge.end());
+        let place = line.place();
         let locator = |field: &str| format!("{LIST}:{object}:{index}:{field}");
-        let (feature, what) = match decided {
+        let (feature, what) = match line.decided() {
             Some(feature) => (
                 MemberValue::Text {
                     text: feature.name().to_owned(),
                 },
-                format!("the {} {line}", feature.name()),
+                format!("the {} {place}", feature.name()),
             ),
             None => (
                 MemberValue::Undecided {
-                    why: format!(
-                        "the line {line} of {object} cannot be classified: {}",
-                        alternatives(&outcomes)
-                    ),
+                    why: line.why(object),
                 },
-                format!("the line {line}"),
+                format!("the line {place}"),
             ),
         };
         let (from, to) = (
@@ -559,18 +622,18 @@ fn items(
                 locator(field),
             )),
             None => MemberValue::Undecided {
-                why: format!("the {field} of the line {line} of {object} cannot be bounded"),
+                why: format!("the {field} of the line {place} of {object} cannot be bounded"),
             },
         };
         let above = |value: Interval| value.minus(Interval::point(datum)).ok();
         let low = above(from[2].min(to[2]));
         let high = above(from[2].max(to[2]));
-        let mut evidence = vec![edges.evidence().clone()];
-        evidence.extend(datum_evidence.iter().cloned());
+        let mut cited = vec![evidence.clone()];
+        cited.extend(datum_evidence.iter().cloned());
         items.push(MeasuredMember {
             certain,
             exact,
-            evidence,
+            evidence: cited,
             fields: BTreeMap::from([
                 ("feature", feature),
                 ("what", MemberValue::Text { text: what }),

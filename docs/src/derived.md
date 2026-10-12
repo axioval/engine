@@ -491,6 +491,7 @@ ignoring ASCII case):
 | `clear_width;obstacles=<kinds>;band_to=<m>[;band_from=<m>][;along=flight\|runs]` | the narrowest clear width along a flight or a ramp's runs | `WalkingSurfaceService::measure_clear_width` |
 | `clear_height` | a space's clear height | `SpaceService::measure_clear_height` |
 | `distance;to=<kinds>[;mode=nearest\|farthest][;projection=…][;direction=…][;subject_surface=…;counterpart_surface=…][;within=<m>]` | the nearest or farthest counterpart's distance, as `distance` measures it | built in, over `ProximityService` |
+| `distance_to_feature;feature=<class>;roofs=<kinds>\|@<selector>[;projection=space\|plan][;tolerance=<degrees>]` | the least distance to the nearest roof feature line of the class on the roofs ([Roof feature lines](#roof-feature-lines)) | built in, over `ProximityService::measure_line_distance` and `VerticalExtentService::measure_face_edges` |
 | `count_within;to=<kinds>;radius=<m>[;from=<m>][;projection=…][;direction=…]` | how many counterparts lie within a radius, a plain number | built in, over `ProximityService` |
 | `sum_within`, `min_within`, `max_within`, `mean_within` `;to=<kinds>;value=<property>;radius=<m>[;from=<m>][;projection=…][;direction=…]` | the sum, least, greatest or mean of a plain number the counterparts within a radius state | built in, over `ProximityService` and the counterparts' properties |
 | the same `;to=<kinds>;value=<property>;radius=<m>[;from=<m>];measure=walking;walking_radius=<m>;walking_height=<m>;walking_step=<m>[;walking_slope=…]` | the same over the counterparts within a walk of `radius` | built in, over `ProximityService` (plan), `PlanSpanService`, `VerticalExtentService` and `MetricRoutingService::route` |
@@ -1196,6 +1197,7 @@ sites that cite a value exact:
 | Provider | Exact when | The interval holds |
 | --- | --- | --- |
 | `distance`, `count_within` | every counterpart that may be the nearest (farthest) or may count was measured exactly | the undecided counterparts, as `distance` cites them (`Cited`) |
+| `distance_to_feature` | the body, the nearest lines' ends and the roofs' edges are exact | rounding; a line that may be of the class and may lie nearer leaves it not evaluated |
 | `sum_within`, `min_within`, `max_within`, `mean_within` | every counterpart that may count was measured (walking: walked, and both ends placed; by group: its membership cited) exactly and states its value exactly | the undecided counterparts' values or nothing, summed and divided outward |
 | `door_clear_width`, `door_clear_height`, `sill_height`, `threshold_step` | every extent, leaf and stated value read is exact | rounding of the differences, widened outward |
 | `leaf_count`, `leaf_width`, `swings_into`, `hinged_leaves` | the leaves (stated, exact by contract) and every probe are exact | a total width summed outward |
@@ -1664,6 +1666,29 @@ dormer's ridge, eaves, verges, two valleys and the two abutments of its
 cheeks, each at its height. A body whose edges cannot be read (an edge of
 a closed body not shared by two faces, an open surface standing vertical)
 refuses the list.
+
+`distance_to_feature;feature=<class>;roofs=<kinds>|@<selector>[;projection=space|plan]`
+is the least distance from an object (a skylight, a chimney, a dormer) to
+the nearest line of the class on the roofs `roofs` names, classified as
+`roof_features` classifies it under the same `tolerance`: in space
+(`space`, the default; for an object lying in the roof plane, the distance
+along it) or between the object's footprint and the line's plan (`plan`).
+The proximity service measures the body to each line
+(`measure_line_distance`), widened by the line's end boxes and the body's
+chord deviation. The nearest is taken over the lines surely of the class,
+from the least lower bound to the least upper bound; a line that may be of
+the class but is not surely one (or a line of a roof that may be
+selected) and may lie nearer leaves the distance not evaluated, and so
+does one where no line surely is. Roofs without a line of the class have
+no distance (`null`). A skylight lying 0.4 m up the slope from a valley
+measures 0.4 m, and a 0.5 m minimum from the valley is a finding:
+
+```json
+{"kind": "compare", "operator": "greaterThanOrEquals",
+ "left": {"kind": "property", "propertySet": "axioval:measured",
+          "property": "distance_to_feature;feature=valley;roofs=IfcRoof"},
+ "right": {"kind": "literal", "value": {"type": "quantity", "value": 0.5, "unit": "m"}}}
+```
 
 ### Levels
 

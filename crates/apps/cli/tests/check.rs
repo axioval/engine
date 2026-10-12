@@ -3498,43 +3498,65 @@ fn with_geometry_an_earthworks_fill_is_judged_piece_by_piece() {
 /// body, and its triangles.
 type RoofFace = ([f64; 3], &'static [[[f64; 3]; 3]]);
 
-/// An `IfcRoof` #30 whose `Body` is one closed `IfcTriangulatedFaceSet`
-/// of `faces`, each triangle wound to look out along its face's direction.
+/// Instances `#first` to `#first + 3`: one closed `IfcTriangulatedFaceSet`
+/// of `triangles`, each wound to look out along its direction, as the
+/// `Body` of the product shape `#{first + 3}`.
 #[allow(clippy::float_cmp)] // Corners are shared where exactly equal.
-fn face_set_roof(faces: &[RoofFace]) -> String {
+fn face_set_body(first: u32, triangles: &[([f64; 3], [[f64; 3]; 3])]) -> String {
     let mut points: Vec<[f64; 3]> = Vec::new();
-    let mut triangles = Vec::new();
-    for (outward, face) in faces {
-        for [a, b, c] in face.iter().copied() {
-            let (ab, ac) = (
-                [b[0] - a[0], b[1] - a[1], b[2] - a[2]],
-                [c[0] - a[0], c[1] - a[1], c[2] - a[2]],
-            );
-            let normal = [
-                ab[1] * ac[2] - ab[2] * ac[1],
-                ab[2] * ac[0] - ab[0] * ac[2],
-                ab[0] * ac[1] - ab[1] * ac[0],
-            ];
-            let looks: f64 = (0..3).map(|axis| normal[axis] * outward[axis]).sum();
-            let corners = if looks > 0.0 { [a, b, c] } else { [a, c, b] };
-            let indices = corners.map(|corner| {
-                points
-                    .iter()
-                    .position(|point| *point == corner)
-                    .unwrap_or_else(|| {
-                        points.push(corner);
-                        points.len() - 1
-                    })
-                    + 1
-            });
-            triangles.push(format!("({},{},{})", indices[0], indices[1], indices[2]));
-        }
+    let mut wound = Vec::new();
+    for (outward, [a, b, c]) in triangles.iter().copied() {
+        let (ab, ac) = (
+            [b[0] - a[0], b[1] - a[1], b[2] - a[2]],
+            [c[0] - a[0], c[1] - a[1], c[2] - a[2]],
+        );
+        let normal = [
+            ab[1] * ac[2] - ab[2] * ac[1],
+            ab[2] * ac[0] - ab[0] * ac[2],
+            ab[0] * ac[1] - ab[1] * ac[0],
+        ];
+        let looks: f64 = (0..3).map(|axis| normal[axis] * outward[axis]).sum();
+        let corners = if looks > 0.0 { [a, b, c] } else { [a, c, b] };
+        let indices = corners.map(|corner| {
+            points
+                .iter()
+                .position(|point| *point == corner)
+                .unwrap_or_else(|| {
+                    points.push(corner);
+                    points.len() - 1
+                })
+                + 1
+        });
+        wound.push(format!("({},{},{})", indices[0], indices[1], indices[2]));
     }
     let coordinates = points
         .iter()
         .map(|[x, y, z]| format!("({x:?},{y:?},{z:?})"))
         .collect::<Vec<_>>()
         .join(",");
+    let [list, set, shape, definition] = [0, 1, 2, 3].map(|offset| first + offset);
+    format!(
+        "#{list}=IFCCARTESIANPOINTLIST3D(({coordinates}),$);\n\
+         #{set}=IFCTRIANGULATEDFACESET(#{list},$,.T.,({}),$);\n\
+         #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','Tessellation',(#{set}));\n\
+         #{definition}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n",
+        wound.join(","),
+    )
+}
+
+/// The triangles of `faces`, each with its face's outward direction.
+fn roof_triangles(faces: &[RoofFace]) -> Vec<([f64; 3], [[f64; 3]; 3])> {
+    faces
+        .iter()
+        .flat_map(|(outward, triangles)| {
+            triangles.iter().map(move |triangle| (*outward, *triangle))
+        })
+        .collect()
+}
+
+/// A model holding an `IfcRoof` #30 whose `Body` is one closed face set of
+/// `triangles`, and the instances `more`.
+fn face_set_roof_with(triangles: &[([f64; 3], [[f64; 3]; 3])], more: &str) -> String {
     format!(
         "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
          #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
@@ -3542,14 +3564,18 @@ fn face_set_roof(faces: &[RoofFace]) -> String {
          #3=IFCLOCALPLACEMENT($,#2);\n\
          #4=IFCDIRECTION((0.,0.,1.));\n\
          #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
-         #10=IFCCARTESIANPOINTLIST3D(({coordinates}),$);\n\
-         #11=IFCTRIANGULATEDFACESET(#10,$,.T.,({}),$);\n\
-         #12=IFCSHAPEREPRESENTATION(#5,'Body','Tessellation',(#11));\n\
-         #13=IFCPRODUCTDEFINITIONSHAPE($,$,(#12));\n\
+         {}\
          #30=IFCROOF('0000000000000000000030',$,$,$,$,#3,#13,$,.GABLE_ROOF.);\n\
+         {more}\
          ENDSEC;\nEND-ISO-10303-21;\n",
-        triangles.join(","),
+        face_set_body(10, triangles),
     )
+}
+
+/// An `IfcRoof` #30 whose `Body` is one closed `IfcTriangulatedFaceSet`
+/// of `faces`, each triangle wound to look out along its face's direction.
+fn face_set_roof(faces: &[RoofFace]) -> String {
+    face_set_roof_with(&roof_triangles(faces), "")
 }
 
 /// engine#329: a closed gable roof 10 m along x over y in `[0, 8]`, eaves
@@ -3824,6 +3850,195 @@ fn with_geometry_a_roof_kinking_within_the_tolerance_is_undecided() {
     );
     assert_eq!(judged, (0, 0), "{result:#}");
     assert_eq!(output.status.code(), Some(0), "{result:#}");
+}
+
+/// engine#330: two gable roofs side by side as one closed body, 10 m along
+/// x over y in `[0, 16]` on a 1 m fascia from 2 m, eaves at 3 m, ridges at
+/// 7 m along y = 4 and y = 12 and a level valley at 3 m along y = 8; and a
+/// skylight #50, a slab 0.1 m thick lying in the north slope of the first
+/// (z = 11 - y), 2 m wide and 0.8 m up the slope, its lower edge 0.4 m up
+/// the slope from the valley.
+#[allow(clippy::too_many_lines, clippy::many_single_char_names)] // One face after another.
+fn twin_gable_roof_with_a_skylight() -> String {
+    let gable = |x: f64, outward: f64| {
+        let at = |y: f64, z: f64| [x, y, z];
+        let [g, a, b, c, d, e, f] = [
+            at(0.0, 2.0),
+            at(0.0, 3.0),
+            at(4.0, 7.0),
+            at(8.0, 3.0),
+            at(12.0, 7.0),
+            at(16.0, 3.0),
+            at(16.0, 2.0),
+        ];
+        [[g, a, b], [g, b, c], [g, c, f], [c, e, f], [c, d, e]].map(|t| ([outward, 0.0, 0.0], t))
+    };
+    let quad = |outward: [f64; 3], [a, b, c, d]: [[f64; 3]; 4]| {
+        [(outward, [a, b, c]), (outward, [a, c, d])]
+    };
+    let slope = |y0: f64, z0: f64, y1: f64, z1: f64| {
+        let outward = if z1 > z0 {
+            [0.0, -1.0, 1.0]
+        } else {
+            [0.0, 1.0, 1.0]
+        };
+        quad(
+            outward,
+            [[0.0, y0, z0], [10.0, y0, z0], [10.0, y1, z1], [0.0, y1, z1]],
+        )
+    };
+    let mut roof = Vec::new();
+    roof.extend(quad(
+        [0.0, 0.0, -1.0],
+        [
+            [0.0, 0.0, 2.0],
+            [10.0, 0.0, 2.0],
+            [10.0, 16.0, 2.0],
+            [0.0, 16.0, 2.0],
+        ],
+    ));
+    roof.extend(quad(
+        [0.0, -1.0, 0.0],
+        [
+            [0.0, 0.0, 2.0],
+            [10.0, 0.0, 2.0],
+            [10.0, 0.0, 3.0],
+            [0.0, 0.0, 3.0],
+        ],
+    ));
+    roof.extend(quad(
+        [0.0, 1.0, 0.0],
+        [
+            [0.0, 16.0, 2.0],
+            [10.0, 16.0, 2.0],
+            [10.0, 16.0, 3.0],
+            [0.0, 16.0, 3.0],
+        ],
+    ));
+    roof.extend(slope(0.0, 3.0, 4.0, 7.0));
+    roof.extend(slope(4.0, 7.0, 8.0, 3.0));
+    roof.extend(slope(8.0, 3.0, 12.0, 7.0));
+    roof.extend(slope(12.0, 7.0, 16.0, 3.0));
+    roof.extend(gable(0.0, -1.0));
+    roof.extend(gable(10.0, 1.0));
+    // The skylight: its lower edge 0.4 m up the slope from the valley.
+    let step = 0.4 / 2.0_f64.sqrt();
+    let (y1, y0) = (8.0 - step, 8.0 - step - 0.8);
+    let lift = 0.1 / 2.0_f64.sqrt();
+    let corner = |x: f64, y: f64, top: bool| {
+        let rise = if top { lift } else { 0.0 };
+        [x, y + rise, 11.0 - y + rise]
+    };
+    let mut skylight = Vec::new();
+    for (outward, [a, b, c, d]) in [
+        (
+            [0.0, -1.0, -1.0],
+            [
+                corner(4.0, y0, false),
+                corner(6.0, y0, false),
+                corner(6.0, y1, false),
+                corner(4.0, y1, false),
+            ],
+        ),
+        (
+            [0.0, 1.0, 1.0],
+            [
+                corner(4.0, y0, true),
+                corner(6.0, y0, true),
+                corner(6.0, y1, true),
+                corner(4.0, y1, true),
+            ],
+        ),
+        (
+            [0.0, -1.0, 1.0],
+            [
+                corner(4.0, y0, false),
+                corner(6.0, y0, false),
+                corner(6.0, y0, true),
+                corner(4.0, y0, true),
+            ],
+        ),
+        (
+            [0.0, 1.0, -1.0],
+            [
+                corner(4.0, y1, false),
+                corner(6.0, y1, false),
+                corner(6.0, y1, true),
+                corner(4.0, y1, true),
+            ],
+        ),
+        (
+            [-1.0, 0.0, 0.0],
+            [
+                corner(4.0, y0, false),
+                corner(4.0, y1, false),
+                corner(4.0, y1, true),
+                corner(4.0, y0, true),
+            ],
+        ),
+        (
+            [1.0, 0.0, 0.0],
+            [
+                corner(6.0, y0, false),
+                corner(6.0, y1, false),
+                corner(6.0, y1, true),
+                corner(6.0, y0, true),
+            ],
+        ),
+    ] {
+        skylight.extend(quad(outward, [a, b, c, d]));
+    }
+    let model = format!(
+        "{}#50=IFCWINDOW('0000000000000000000050',$,$,$,$,#3,#43,$,$,$,$,$,$);\n",
+        face_set_body(40, &skylight)
+    );
+    face_set_roof_with(&roof, &model)
+}
+
+/// engine#330: the skylight lies 0.4 m up the slope from the valley: its
+/// distance to the valley in space measures 0.4 m within the mesh bound,
+/// and a 0.5 m minimum yields a finding; in plan it is 0.3 m / √2 from the
+/// valley's plan.
+#[test]
+fn with_geometry_a_skylight_measures_its_distance_to_the_valley() {
+    let case = Case::new("geometry-roof-distance");
+    let model = twin_gable_roof_with_a_skylight();
+    let distance = |projection: &str| {
+        json!({"kind": "property", "propertySet": "axioval:measured",
+            "property": format!(
+                "distance_to_feature;feature=valley;roofs=IfcRoof;projection={projection}")})
+    };
+    let rule = |requirement: Value| {
+        let (output, result) = case.geometry_rule(
+            &model,
+            &[("window", "IfcWindow"), ("roof", "IfcRoof")],
+            "axioval:capability.expression",
+            &registry_signature("axioval:capability.expression"),
+            entity("window"),
+            json!({"requirement": {"type": "expression", "value": requirement}}),
+        );
+        let count = |key: &str| result["report"][key].as_array().map_or(0, Vec::len);
+        (output, (count("findings"), count("not_evaluated")), result)
+    };
+    let (output, judged, result) = rule(json!({"kind": "and", "operands": [
+        about(distance("space"), 0.4),
+        about(distance("plan"), 0.3 / 2.0_f64.sqrt()),
+    ]}));
+    assert_eq!(judged, (0, 0), "{result:#}");
+    assert_eq!(output.status.code(), Some(0), "{result:#}");
+    let (output, judged, result) = rule(json!({"kind": "compare",
+        "operator": "greaterThanOrEquals", "left": distance("space"), "right": metres(0.5)}));
+    assert_eq!(output.status.code(), Some(3), "{result:#}");
+    assert_eq!(judged, (1, 0), "{result:#}");
+    let finding = &result["report"]["findings"][0];
+    assert_eq!(finding["object_id"]["local_id"], "#50", "{finding:#}");
+    assert!(
+        finding["message"]
+            .as_str()
+            .unwrap()
+            .contains("feature=valley"),
+        "{finding:#}"
+    );
 }
 
 /// The crossing walls with an `IfcOpeningElement` (#208) voiding the first

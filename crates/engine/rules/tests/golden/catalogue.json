@@ -71912,6 +71912,132 @@
       "available": true
     },
     {
+      "name": "distance_to_feature",
+      "parameters": [
+        {
+          "key": "feature",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "ridge",
+              "hip",
+              "valley",
+              "eaves",
+              "verge",
+              "abutment"
+            ]
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The class of roof feature line measured to, as `roof_features` classifies it."
+            },
+            {
+              "language": "de",
+              "text": "Die Art der Dachlinie, zu der gemessen wird, wie `roof_features` sie einordnet."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "roofs",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The roofs whose lines are measured to: source kinds, `,`-separated, or a selector parameter of the rule (`@name`)."
+            },
+            {
+              "language": "de",
+              "text": "Die Dächer, zu deren Linien gemessen wird: Quellarten, durch `,` getrennt, oder ein Auswahlparameter der Regel (`@name`)."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "projection",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "space",
+              "plan"
+            ]
+          },
+          "required": false,
+          "default": "space",
+          "help": [
+            {
+              "language": "en",
+              "text": "`space` measures the least distance in space, which for an object in the roof plane is the distance along it; `plan` between the object's footprint and the line's plan."
+            },
+            {
+              "language": "de",
+              "text": "`space` misst den kleinsten Abstand im Raum, für ein Objekt in der Dachfläche den Abstand entlang ihr; `plan` zwischen dem Grundriss des Objekts und dem der Linie."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "tolerance",
+          "kind": {
+            "type": "angle",
+            "below": 45.0
+          },
+          "required": false,
+          "default": "2",
+          "help": [
+            {
+              "language": "en",
+              "text": "The tolerance `roof_features` classifies the lines with, in degrees."
+            },
+            {
+              "language": "de",
+              "text": "Die Toleranz, mit der `roof_features` die Linien einordnet, in Grad."
+            }
+          ],
+          "references": "angle"
+        }
+      ],
+      "dimension": "length",
+      "services": [
+        "vertical-extent",
+        "proximity",
+        "type-hierarchy"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "a roof's edges cannot be read",
+        "a line that may be of the class, but is not surely, may lie nearer than the nearest that surely is"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Distance to a roof line"
+        },
+        {
+          "language": "de",
+          "text": "Abstand zu einer Dachlinie"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The least distance from the object to the nearest roof feature line of the class on the roofs, such as a skylight's to a valley or a chimney's to the ridge; none when the roofs have no such line."
+        },
+        {
+          "language": "de",
+          "text": "Der kleinste Abstand vom Objekt zur nächsten Dachlinie der Art auf den Dächern, etwa eines Dachfensters zur Kehle oder eines Schornsteins zum First; keiner, wenn die Dächer keine solche Linie haben."
+        }
+      ],
+      "unit": "m",
+      "available": true
+    },
+    {
       "name": "door_clear_height",
       "parameters": [
         {

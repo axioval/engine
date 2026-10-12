@@ -3831,6 +3831,82 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         ),
     },
     MeasuredDescriptor {
+        name: "distance_to_feature",
+        parameters: &[
+            MeasuredParameter {
+                key: "feature",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["ridge", "hip", "valley", "eaves", "verge", "abutment"],
+                },
+                required: true,
+                default: None,
+                help: &en_de(
+                    "The class of roof feature line measured to, as `roof_features` \
+                     classifies it.",
+                    "Die Art der Dachlinie, zu der gemessen wird, wie `roof_features` sie \
+                     einordnet.",
+                ),
+            },
+            MeasuredParameter {
+                key: "roofs",
+                kind: MeasuredParameterKind::Objects,
+                required: true,
+                default: None,
+                help: &en_de(
+                    "The roofs whose lines are measured to: source kinds, `,`-separated, \
+                     or a selector parameter of the rule (`@name`).",
+                    "Die Dächer, zu deren Linien gemessen wird: Quellarten, durch `,` \
+                     getrennt, oder ein Auswahlparameter der Regel (`@name`).",
+                ),
+            },
+            MeasuredParameter {
+                key: "projection",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["space", "plan"],
+                },
+                required: false,
+                default: Some("space"),
+                help: &en_de(
+                    "`space` measures the least distance in space, which for an object in \
+                     the roof plane is the distance along it; `plan` between the object's \
+                     footprint and the line's plan.",
+                    "`space` misst den kleinsten Abstand im Raum, für ein Objekt in der \
+                     Dachfläche den Abstand entlang ihr; `plan` zwischen dem Grundriss des \
+                     Objekts und dem der Linie.",
+                ),
+            },
+            MeasuredParameter {
+                key: "tolerance",
+                kind: MeasuredParameterKind::Angle { below: 45.0 },
+                required: false,
+                default: Some("2"),
+                help: &en_de(
+                    "The tolerance `roof_features` classifies the lines with, in degrees.",
+                    "Die Toleranz, mit der `roof_features` die Linien einordnet, in Grad.",
+                ),
+            },
+        ],
+        dimension: Some(QuantityDimension::Length),
+        services: &["vertical-extent", "proximity", "type-hierarchy"],
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[
+            NO_GEOMETRY,
+            "a roof's edges cannot be read",
+            "a line that may be of the class, but is not surely, may lie nearer than the \
+             nearest that surely is",
+        ],
+        label: &en_de("Distance to a roof line", "Abstand zu einer Dachlinie"),
+        help: &en_de(
+            "The least distance from the object to the nearest roof feature line of the \
+             class on the roofs, such as a skylight's to a valley or a chimney's to the \
+             ridge; none when the roofs have no such line.",
+            "Der kleinste Abstand vom Objekt zur nächsten Dachlinie der Art auf den \
+             Dächern, etwa eines Dachfensters zur Kehle oder eines Schornsteins zum First; \
+             keiner, wenn die Dächer keine solche Linie haben.",
+        ),
+    },
+    MeasuredDescriptor {
         name: "door_clear_height",
         parameters: &[
             stated(

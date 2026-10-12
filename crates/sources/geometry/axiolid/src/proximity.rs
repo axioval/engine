@@ -129,10 +129,11 @@ use axiolid_spatial::{Bvh, SpatialItem};
 use axioval_engine::{
     BodyContainment, BodyVolume, Bounds3, ConvexPlanRegion, FaceDistanceError,
     FaceDistanceEvidence, FaceDistanceRequest, GeometryFidelity, IntersectionVolume,
-    LengthInterval, MetricDirection, ObjectBounds, OverlapAlongEvidence, OverlapAlongRequest,
-    OverlapExtents, ProjectedDistanceEvidence, ProximityError, ProximityEvidence,
-    ProximityProjection, ProximityRequest, ProximityService, RegionDistanceEvidence,
-    RegionDistanceRequest, VerticalDirection, VerticalSurfaces, VolumeInterval,
+    LengthInterval, LineDistanceEvidence, LineDistanceRequest, LineProjection, MetricDirection,
+    ObjectBounds, OverlapAlongEvidence, OverlapAlongRequest, OverlapExtents, PointBox,
+    ProjectedDistanceEvidence, ProximityError, ProximityEvidence, ProximityProjection,
+    ProximityRequest, ProximityService, RegionDistanceEvidence, RegionDistanceRequest,
+    VerticalDirection, VerticalSurfaces, VolumeInterval,
 };
 use axioval_engine::{
     BodySurface, ExactBoundaryHandle, HeightAboveEvidence, HeightAboveRequest,
@@ -2421,6 +2422,87 @@ impl ProximityService for AxiolidProximityService {
                     request.region().ring().len()
                 ),
                 exact: fidelity.is_exact(),
+            },
+        )
+    }
+
+    /// The least distance from the body to the line between its ends'
+    /// middles, in space (a closed body holding the line is at zero) or
+    /// between the footprint and the line's plan; widened by how far the
+    /// ends may lie from their middles and by the chord deviation.
+    fn measure_line_distance(
+        &self,
+        request: &LineDistanceRequest,
+    ) -> Result<LineDistanceEvidence, ProximityError> {
+        let object = request.object();
+        let body = self.body(object)?;
+        let fidelity = self.geometry.fidelity(object)?;
+        let plan = request.projection() == LineProjection::Plan;
+        let axes = if plan { 2 } else { 3 };
+        let (start, end) = (request.start(), request.end());
+        let middle = |point: PointBox| {
+            let [x, y, z] =
+                [0, 1, 2].map(|axis| f64::midpoint(point.lower()[axis], point.upper()[axis]));
+            Point3::new(x, y, if plan { 0.0 } else { z })
+        };
+        // How far a point of the box may lie from its middle, rounded up.
+        let reach = |point: PointBox| {
+            let squared: f64 = (0..axes)
+                .map(|axis| {
+                    let half = (point.upper()[axis] - point.lower()[axis]) / 2.0;
+                    half * half
+                })
+                .sum();
+            if squared == 0.0 {
+                0.0
+            } else {
+                (squared.sqrt() * (1.0 + 4.0 * f64::EPSILON)).next_up()
+            }
+        };
+        let (from, to) = (middle(start), middle(end));
+        let distance = if plan {
+            let line = Flat::Segment([from, to]);
+            let boxes = vec![flat_box(&line)];
+            nearest(
+                &Indexed::build(vec![line], boxes)?,
+                &footprint(&body)?,
+                flat_distance,
+            )?
+        } else {
+            let line = [from, to, to];
+            let boxes = vec![triangle_box(&line)];
+            let measured = nearest(&Indexed::build(vec![line], boxes)?, &body.soup, |a, b| {
+                triangle_pair_distance(*a, *b)
+            })?;
+            // A line crossing no face lies wholly inside or outside.
+            if measured > 0.0 && body.solid && body.winding()?.decide(from, || Ok(measured))? {
+                0.0
+            } else {
+                measured
+            }
+        };
+        let exact = fidelity.is_exact() && start.is_exact() && end.is_exact();
+        let widening = reach(start).max(reach(end)) + fidelity.deviation_metres();
+        let (lower, upper) = if widening > 0.0 {
+            (
+                (distance - widening).next_down().max(0.0),
+                (distance + widening).next_up(),
+            )
+        } else {
+            (distance, distance)
+        };
+        LineDistanceEvidence::try_new(
+            request.clone(),
+            lower,
+            upper,
+            Evidence {
+                source: object.source.clone(),
+                locator: format!(
+                    "axiolid:distance:line-{}:{object}{}",
+                    request.projection().name(),
+                    self.geometry.body_note(&[object])
+                ),
+                exact,
             },
         )
     }

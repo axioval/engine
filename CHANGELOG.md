@@ -190,6 +190,18 @@ All notable changes are documented here. This project follows Semantic Versionin
   `PointBox`), defaulted to refusing, which the Axiolid adapter answers
   from the pieces it tells apart, merging collinear segments
   ([#329](https://github.com/axioval/engine/issues/329)).
+- **Roofs**: the measured value `distance_to_feature` is the least
+  distance from an object (a skylight, a chimney, a dormer) to the nearest
+  roof feature line of a `feature` class on the `roofs`, in space (along
+  the roof plane for an object lying in it) or with `projection=plan` in
+  plan, over the lines surely of the class; one that may be of the class
+  and may lie nearer leaves it not evaluated, and roofs without such a line
+  have none. A skylight 0.4 m up the slope from a valley measures 0.4 m and
+  misses a 0.5 m minimum. The proximity service gains
+  `measure_line_distance` (`LineDistanceRequest`, `LineDistanceEvidence`,
+  `LineProjection`), defaulted to refusing, which the Axiolid adapter
+  answers from the body's triangles or footprint
+  ([#330](https://github.com/axioval/engine/issues/330)).
 
 ### Changed
 

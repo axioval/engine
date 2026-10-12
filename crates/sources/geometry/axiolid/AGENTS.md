@@ -559,6 +559,12 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   distance. Never report a certified interval alone, never certify an
   exact pair (its evidence is a point), and never use the distance in space
   for a plan projection or the plan distance for one in space.
+  `measure_line_distance` measures a body to a stated line between its
+  end boxes' middles: in space the line as a zero-area triangle through
+  `triangle_pair_distance` (a closed body holding a line that crosses no
+  face is at zero, by its winding number), in plan between the footprint
+  and the line's plan through `flat_distance`; it widens by the end boxes'
+  reach and the chord deviation, never less (`tests/face_edges.rs`).
   `measure_region_distance` folds the same 2D closest points between a
   stated region's fan triangles and the counterpart's footprint, widened by
   the counterpart's chord deviation.

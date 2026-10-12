@@ -55,6 +55,11 @@ const COVERED: &[(&str, &str, &str)] = &[
         "a_spacing_measured_on_a_tessellation_is_inexact",
     ),
     (
+        "distance_to_feature",
+        "tests/roof_features.rs",
+        "a_distance_to_a_feature_on_a_tessellation_is_inexact",
+    ),
+    (
         "roof_features",
         "tests/roof_features.rs",
         "a_feature_measured_on_a_tessellation_is_inexact",

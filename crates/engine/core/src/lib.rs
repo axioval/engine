@@ -1088,11 +1088,12 @@ pub use proximity::{
     BodyContainment, BodySurface, BodyVolume, Bounds3, CounterpartSurface, DirectedDistance,
     ExactBoundaryHandle, FaceClass, FaceDistanceError, FaceDistanceEvidence, FaceDistanceRequest,
     GeometryFidelity, HeightAbove, HeightAboveEvidence, HeightAboveRequest, IntersectionVolume,
-    ObjectBounds, OverlapAlongEvidence, OverlapAlongRequest, OverlapExtents,
-    ProjectedDistanceEvidence, ProximityError, ProximityEvidence, ProximityProjection,
-    ProximityRequest, ProximityService, ProximityServiceHandle, RegionDistanceEvidence,
-    RegionDistanceRequest, SubjectSurface, SurfaceBasis, SurfaceDirection, SurfaceDistanceEvidence,
-    SurfaceDistanceRequest, VerticalDirection, VerticalSurfaces, VolumeInterval,
+    LineDistanceEvidence, LineDistanceRequest, LineProjection, ObjectBounds, OverlapAlongEvidence,
+    OverlapAlongRequest, OverlapExtents, ProjectedDistanceEvidence, ProximityError,
+    ProximityEvidence, ProximityProjection, ProximityRequest, ProximityService,
+    ProximityServiceHandle, RegionDistanceEvidence, RegionDistanceRequest, SubjectSurface,
+    SurfaceBasis, SurfaceDirection, SurfaceDistanceEvidence, SurfaceDistanceRequest,
+    VerticalDirection, VerticalSurfaces, VolumeInterval,
 };
 pub use refinement::{
     Deviation, LocationMethod, LocationPolicy, OutcomeRefiner, Refining, RuleRefinement,

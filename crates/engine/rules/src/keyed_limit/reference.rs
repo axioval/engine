@@ -9,8 +9,8 @@ use axioval_ir::{Evidence, Finding, Object, ObjectId};
 
 use super::threshold::{self, Floor, Threshold, sides};
 use super::{
-    Declared, Keys, Limit, Measured, Measuring, Quantity, Sills, judge_as_displayed, parse, select,
-    sills,
+    Declared, GlazingRatio, Keys, Limit, Measured, Measuring, PerLeaf, Quantity, Sills,
+    judge_as_displayed, parse, select, sills, snapped,
 };
 use crate::counts::Population;
 use crate::level_spacing::{extent, extents};
@@ -122,6 +122,12 @@ fn check(
     if let Quantity::SillHeight(floor) = quantity {
         let described = format!("limit row {index}: {}", keys.describe(declared));
         return sill_height(context, rule, floor, subject, limit, &described, keys);
+    }
+    if let Quantity::GlazingRatio(glazing) = quantity
+        && glazing.per_leaf
+    {
+        let described = format!("limit row {index}: {}", keys.describe(declared));
+        return per_leaf(context, rule, glazing, subject, limit, &described, keys);
     }
     if let Quantity::ThresholdStep(step) = quantity {
         let described = format!("limit row {index}: {}", keys.describe(declared));
@@ -248,6 +254,101 @@ fn sill_height(
     }
     evidence.push(window);
     evidence.extend(cited);
+    related.sort();
+    related.dedup();
+    Ok(Some((
+        finding(
+            rule,
+            &subject.id,
+            format!("{} ({described})", failed.join("; ")),
+            evidence,
+            related,
+        ),
+        worst,
+    )))
+}
+
+/// Each value judged per leaf: what it is, and its bounds or why it is
+/// undecided.
+type Ratios = Vec<(String, Result<(f64, f64), String>)>;
+
+/// Judges the glazing ratio of each leaf of `subject` (or the door's one
+/// value, stated or its type's default) against `limit`. One failing leaf
+/// is a finding naming it; otherwise a leaf whose glazing is undecided, or
+/// whose ratio straddles a bound, leaves the door not evaluated.
+fn per_leaf(
+    context: &RuleContext<'_>,
+    rule: &CompiledRule,
+    glazing: &GlazingRatio<'_>,
+    subject: &Object,
+    limit: &Limit,
+    described: &str,
+    keys: Keys,
+) -> Result<Option<Graded>, Unavailable> {
+    let (values, cited): (Ratios, Vec<Evidence>) = match glazing.per_leaf(context, subject)? {
+        PerLeaf::Door(measured) => (
+            vec![(measured.what, Ok((measured.lower, measured.upper)))],
+            measured.evidence,
+        ),
+        PerLeaf::Leaves(leaves, mut stated) => {
+            stated.extend(leaves.evidence.iter().cloned());
+            (
+                leaves
+                    .each
+                    .iter()
+                    .map(|leaf| {
+                        (
+                            format!("glazing ratio of {} (measured)", leaf.name),
+                            leaf.ratio(),
+                        )
+                    })
+                    .collect(),
+                stated,
+            )
+        }
+    };
+    let mut failed = Vec::new();
+    let mut worst: Option<Deviation> = None;
+    let mut undecided = Vec::new();
+    for (what, value) in values {
+        let (lower, upper) = match value {
+            Ok((lower, upper)) => snapped(lower, upper, limit.minimum, limit.maximum),
+            Err(why) => {
+                undecided.push(why);
+                continue;
+            }
+        };
+        let ratio = shown(lower, upper);
+        match judge(lower, upper, limit.minimum, limit.maximum) {
+            Verdict::Pass => {}
+            Verdict::Fail(bound) => {
+                failed.push(format!("{what} is {ratio}; required {bound}"));
+                let missed = deviation(lower, upper, limit.minimum, limit.maximum);
+                worst = match (worst, missed) {
+                    (Some(worst), Some(missed)) => Some(worst.worst(missed)),
+                    (worst, missed) => worst.or(missed),
+                };
+            }
+            Verdict::Undecided(bound) => {
+                undecided.push(format!(
+                    "{what} is {ratio}, which straddles the bound {bound}"
+                ));
+            }
+        }
+    }
+    if failed.is_empty() {
+        return if undecided.is_empty() {
+            Ok(None)
+        } else {
+            Err((
+                NotEvaluatedReason::IncompleteEvidence,
+                format!("{} ({described})", undecided.join("; ")),
+            ))
+        };
+    }
+    let mut evidence = keys.evidence;
+    evidence.extend(cited);
+    let mut related = keys.sources;
     related.sort();
     related.dedup();
     Ok(Some((

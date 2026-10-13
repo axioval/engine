@@ -1820,7 +1820,8 @@ check per form of `quantity`:
 
 | Check | When `quantity` is | Items | Judgement |
 | --- | --- | --- | --- |
-| value | `plan-area`, `member-plan-area`, `property`, `measured`, `clear-width`, `clear-height`, `glazing-ratio` | one value of the object (`what`, `unit`) | a range against the row's bounds, graded: `{what} is {value:area}{unit}; required {bound:plain}{unit} (limit row {row:fixed0}: {keys})`, straddling it open |
+| value | `plan-area`, `member-plan-area`, `property`, `measured`, `clear-width`, `clear-height`, `glazing-ratio` (not per leaf) | one value of the object (`what`, `unit`) | a range against the row's bounds, graded: `{what} is {value:area}{unit}; required {bound:plain}{unit} (limit row {row:fixed0}: {keys})`, straddling it open |
+| leaf | `glazing-ratio` with `glazing_ratio_per` `leaf` | each leaf's glazing ratio measured from the door's body (undecided for a leaf the body cannot decide), or one item for a fraction the door states or its type's default | `combined`: every failing leaf in one finding, `(limit row …)` appended; an undecided leaf open unless another fails |
 | sill | `sill-height` | the sill height above each floor beside a window, each citing that floor's extent | `combined`: every failing floor in one finding, `(limit row …)` appended; any failing floor a finding beside an unknown one (D15) |
 | step | `threshold-step` | the step onto each floor a side of a door may step onto (`side`, `sure`) | `combined` with `alternatives` per side: a side fails where a floor it surely steps onto fails, or every floor it may |
 

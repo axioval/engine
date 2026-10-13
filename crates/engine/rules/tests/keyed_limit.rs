@@ -8,11 +8,12 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use axioval_engine::{
-    CapabilityEvaluation, ElevationInterval, GeometryFidelity, ObjectBounds, PlanArea,
+    CapabilityEvaluation, DoorGlazing, ElevationInterval, GeometryFidelity, LeafGlazing,
+    LeafGlazingError, LeafGlazingService, LeafGlazingServiceHandle, ObjectBounds, PlanArea,
     PlanAreaError, PlanAreaService, PlanAreaServiceHandle, ProjectedDistanceEvidence,
     ProximityError, ProximityEvidence, ProximityProjection, ProximityRequest, ProximityService,
-    ProximityServiceHandle, VerticalExtent, VerticalExtentError, VerticalExtentService,
-    VerticalExtentServiceHandle,
+    ProximityServiceHandle, SourceSnapshot, VerticalExtent, VerticalExtentError,
+    VerticalExtentService, VerticalExtentServiceHandle,
 };
 use axioval_ir::contract::{ParameterValue, TableRow};
 use axioval_ir::{Evidence, NotEvaluatedReason, ObjectId, PropertyValue, QuantityDimension};
@@ -552,6 +553,7 @@ fn a_package_binds_the_limit_table() {
         column("glazing_ratio", "number"),
     ]);
     parameters.insert("door_type_defaults".into(), defaults);
+    parameters.insert("glazing_ratio_per".into(), parameter("string", false));
     for (name, kind) in [
         ("relationship", "string"),
         ("direction", "string"),
@@ -2984,4 +2986,407 @@ mod generated {
             sill(rooms(&listed), bottoms, sill_keys(sill_limits()));
         }
     }
+}
+
+/// Leaf glazing a test states door by door, as a leaf-glazing service
+/// measures it.
+#[derive(Default)]
+struct Glazing {
+    doors: BTreeMap<ObjectId, Result<Vec<LeafGlazing>, LeafGlazingError>>,
+    /// Whether the bodies are tessellated, so no measurement is exact.
+    tessellated: bool,
+}
+
+impl Glazing {
+    fn door(mut self, local: &str, leaves: Vec<LeafGlazing>) -> Self {
+        self.doors.insert(id(local), Ok(leaves));
+        self
+    }
+
+    fn failing(mut self, local: &str, error: LeafGlazingError) -> Self {
+        self.doors.insert(id(local), Err(error));
+        self
+    }
+
+    fn tessellated(mut self) -> Self {
+        self.tessellated = true;
+        self
+    }
+}
+
+static SNAPSHOTS: std::sync::LazyLock<Vec<SourceSnapshot>> =
+    std::sync::LazyLock::new(|| vec![SourceSnapshot::try_new(source(), "r1", "sha256:1").unwrap()]);
+
+impl LeafGlazingService for Glazing {
+    fn source_snapshots(&self) -> &[SourceSnapshot] {
+        &SNAPSHOTS
+    }
+
+    fn measure_leaf_glazing(
+        &self,
+        leaves: &axioval_engine::DoorLeaves,
+    ) -> Result<DoorGlazing, LeafGlazingError> {
+        let door = leaves.door();
+        let measured = self
+            .doors
+            .get(door)
+            .cloned()
+            .unwrap_or_else(|| Err(LeafGlazingError::UnknownObject(door.clone())))?;
+        let mut evidence = Evidence::exact(source(), format!("leaf-glazing:{}", door.local_id));
+        evidence.exact = !self.tessellated;
+        DoorGlazing::try_new(door.clone(), measured, evidence)
+    }
+}
+
+/// A leaf `glazed` square metres glazed of 1.89 (0.9 m by 2.1 m).
+fn glazed(glazed: f64) -> LeafGlazing {
+    LeafGlazing::Measured {
+        glazed: (glazed, glazed),
+        leaf: (1.89, 1.89),
+        items: usize::from(glazed > 0.0),
+    }
+}
+
+/// Double doors: two 0.9 m leaves meeting at 0.9 m.
+fn double_leaves(frames: common::doors::Doors, local: &str) -> common::doors::Doors {
+    use common::doors::hinged;
+    frames.door(
+        local,
+        vec![
+            hinged([0.0; 3], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], 0.9, false),
+            hinged(
+                [1.8, 0.0, 0.0],
+                [-1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                0.9,
+                false,
+            ),
+        ],
+        1.8,
+        None,
+    )
+}
+
+/// A glazing ratio of at least `minimum`, judged per leaf.
+fn per_leaf(minimum: f64) -> Vec<(&'static str, ParameterValue)> {
+    vec![
+        (
+            "limits",
+            table(vec![row([Some("*"), None, None], Some(minimum), None)]),
+        ),
+        ("quantity", string("glazing-ratio")),
+        (
+            "quantity_property",
+            property(Some("Pset"), "GlazingAreaFraction"),
+        ),
+        ("glazing_ratio_per", string("leaf")),
+        ("key_1", property(Some("Attributes"), "OperationType")),
+    ]
+}
+
+fn glazing_model(locals: &[&str]) -> Model {
+    let mut model = Model::default();
+    for local in locals {
+        model = model.object(local, "door").text(
+            local,
+            "Attributes",
+            "OperationType",
+            "DOUBLE_DOOR_SINGLE_SWING",
+        );
+    }
+    model
+}
+
+fn by_leaf(
+    model: Model,
+    frames: common::doors::Doors,
+    glazing: Glazing,
+    parameters: Vec<(&'static str, ParameterValue)>,
+) -> CapabilityEvaluation {
+    model.evaluate_with(&HELD, &rule(ID, kind("door"), parameters), |services| {
+        services.register(frames.handle()).unwrap();
+        services
+            .register(LeafGlazingServiceHandle::new(Arc::new(glazing)))
+            .unwrap();
+    })
+}
+
+/// A double door with one glazed and one solid leaf gives two ratios
+/// from geometry alone: the glazed leaf's share passes, the solid leaf's
+/// zero is a finding naming it.
+#[test]
+fn a_glazing_ratio_is_judged_per_leaf_from_geometry() {
+    let frames = double_leaves(common::doors::Doors::default(), "d1");
+    let glazing = Glazing::default().door("d1", vec![glazed(0.4), glazed(0.0)]);
+    let evaluation = by_leaf(glazing_model(&["d1"]), frames, glazing, per_leaf(0.2));
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "d1".into(),
+            "glazing ratio of leaf 2 of 2 (measured) is 0; required at least 0.2 (limit row 0: \
+             Attributes.OperationType `DOUBLE_DOOR_SINGLE_SWING`)"
+                .into()
+        )]
+    );
+    let finding = &evaluation.findings()[0];
+    for cited in ["leaves:d1", "leaf-glazing:d1"] {
+        assert!(
+            finding
+                .evidence
+                .iter()
+                .any(|evidence| evidence.locator == cited),
+            "{cited} is cited"
+        );
+    }
+    // Both leaves pass a lower bound: 0.4 / 1.89 is about 0.21.
+    let frames = double_leaves(common::doors::Doors::default(), "d1");
+    let glazing = Glazing::default().door("d1", vec![glazed(0.4), glazed(0.4)]);
+    let evaluation = by_leaf(glazing_model(&["d1"]), frames, glazing, per_leaf(0.2));
+    assert!(findings(&evaluation).is_empty());
+    assert!(unevaluated(&evaluation).is_empty());
+}
+
+/// A leaf whose glazing items cannot be told apart from the frame is not
+/// evaluated, never read as unglazed; another leaf failing still finds.
+#[test]
+fn a_leaf_whose_glazing_is_undecided_is_not_evaluated() {
+    let undecided = || {
+        LeafGlazing::Undecided(
+            "item #42 reaches into leaf 1 but cannot be told apart from the frame: it has no \
+             surface style"
+                .into(),
+        )
+    };
+    let frames = double_leaves(double_leaves(common::doors::Doors::default(), "d1"), "d2");
+    let glazing = Glazing::default()
+        .door("d1", vec![undecided(), glazed(0.4)])
+        .door("d2", vec![undecided(), glazed(0.0)]);
+    let evaluation = by_leaf(glazing_model(&["d1", "d2"]), frames, glazing, per_leaf(0.2));
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("d1".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+    assert_eq!(
+        evaluation.not_evaluated_outcomes()[0].message(),
+        "the glazing of leaf 1 of 2 is undecided: item #42 reaches into leaf 1 but cannot be \
+         told apart from the frame: it has no surface style (limit row 0: \
+         Attributes.OperationType `DOUBLE_DOOR_SINGLE_SWING`)"
+    );
+    assert_eq!(flagged(&evaluation), ["d2"]);
+}
+
+/// A door stating its glazing fraction is judged by it: the stated value
+/// wins over the geometry, as it wins over its type's default.
+#[test]
+fn a_stated_glazing_fraction_wins_over_the_leaves() {
+    let frames = double_leaves(common::doors::Doors::default(), "d1");
+    let glazing = Glazing::default().door("d1", vec![glazed(0.0), glazed(0.0)]);
+    let model = glazing_model(&["d1"]).value(
+        "d1",
+        "Pset",
+        "GlazingAreaFraction",
+        PropertyValue::Decimal(0.25),
+    );
+    let evaluation = by_leaf(model, frames, glazing, per_leaf(0.3));
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "d1".into(),
+            "glazing ratio (Pset.GlazingAreaFraction) is 0.25; required at least 0.3 (limit row \
+             0: Attributes.OperationType `DOUBLE_DOOR_SINGLE_SWING`)"
+                .into()
+        )]
+    );
+    assert!(
+        !evaluation.findings()[0]
+            .evidence
+            .iter()
+            .any(|evidence| evidence.locator == "leaf-glazing:d1"),
+        "the geometry is not read"
+    );
+}
+
+/// A door stating nothing to measure (no leaves, no body) takes its
+/// type's default; without one, and wherever the measurement fails, it
+/// is not evaluated, never defaulted.
+#[test]
+fn a_door_without_leaves_or_body_takes_its_types_default() {
+    let frames = double_leaves(common::doors::Doors::default(), "d2").unknown(
+        "d1",
+        axioval_engine::DoorLeavesError::NotStated("no panels".into()),
+    );
+    let frames = double_leaves(frames, "d3");
+    let glazing = Glazing::default()
+        .failing("d2", LeafGlazingError::NoBody(id("d2")))
+        .failing("d3", LeafGlazingError::Unavailable("not meshed".into()));
+    let mut parameters = per_leaf(0.3);
+    parameters.push((
+        "door_type_defaults",
+        table(vec![defaults_row(&[("glazing_ratio", number(0.25))])]),
+    ));
+    let evaluation = by_leaf(
+        glazing_model(&["d1", "d2", "d3"]),
+        frames,
+        glazing,
+        parameters,
+    );
+    assert_eq!(flagged(&evaluation), ["d1", "d2"]);
+    assert!(
+        findings(&evaluation)[0]
+            .1
+            .contains("door type's default glazing ratio 0.25"),
+        "{:?}",
+        findings(&evaluation)
+    );
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("d3".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+    // Without a default the door states nothing to judge.
+    let frames = common::doors::Doors::default().unknown(
+        "d1",
+        axioval_engine::DoorLeavesError::NotStated("no panels".into()),
+    );
+    let evaluation = by_leaf(
+        glazing_model(&["d1"]),
+        frames,
+        Glazing::default(),
+        per_leaf(0.3),
+    );
+    let message = evaluation.not_evaluated_outcomes()[0].message();
+    assert!(
+        message.ends_with(
+            "Pset.GlazingAreaFraction is absent, the door states no leaves (no panels) and the \
+             door's type gives no default glazing ratio"
+        ),
+        "{message}"
+    );
+}
+
+#[test]
+fn a_glazing_ratio_per_leaf_needs_its_services_and_a_valid_mode() {
+    let model = || glazing_model(&["d1"]);
+    let evaluation = model().evaluate(&HELD, &rule(ID, kind("door"), per_leaf(0.2)));
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("d1".to_owned(), NotEvaluatedReason::MissingService)]
+    );
+    let invalid = |parameters: Vec<(&'static str, ParameterValue)>| {
+        let evaluation = model().evaluate(&HELD, &rule(ID, kind("door"), parameters));
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
+        );
+    };
+    let mut unknown = per_leaf(0.2);
+    unknown.retain(|(name, _)| *name != "glazing_ratio_per");
+    unknown.push(("glazing_ratio_per", string("panel")));
+    invalid(unknown);
+    let mut plan = fire_keys(fire_limits());
+    plan.push(("glazing_ratio_per", string("leaf")));
+    invalid(plan);
+}
+
+/// The leaves' glazing is a measured member list an expression reads: a
+/// leaf undecided leaves the door open, a solid leaf fails it.
+#[test]
+fn leaf_glazing_is_a_measured_list() {
+    use axioval_rules::ExpressionRequirement;
+    use serde_json::json;
+    let requirement = json!({"kind": "aggregate", "function": "all",
+        "over": {"kind": "measured", "name": "leaf_glazing"},
+        "value": {"kind": "compare", "operator": "greaterThanOrEquals",
+            "left": {"kind": "property", "propertySet": "axioval:member", "property": "ratio"},
+            "right": {"kind": "literal", "value": {"type": "number", "value": 0.15}}}});
+    let evaluation = glazing_model(&["d1", "d2", "d3"]).evaluate_measured(
+        &ExpressionRequirement,
+        &rule(
+            "axioval:capability.expression",
+            kind("door"),
+            vec![("requirement", common::expression(requirement))],
+        ),
+        |services| {
+            let frames = double_leaves(
+                double_leaves(double_leaves(common::doors::Doors::default(), "d1"), "d2"),
+                "d3",
+            );
+            services.register(frames.handle()).unwrap();
+            let glazing = Glazing::default()
+                .door(
+                    "d1",
+                    vec![
+                        glazed(0.378),
+                        LeafGlazing::Undecided("a pane straddles the edge".into()),
+                    ],
+                )
+                .door("d2", vec![glazed(0.378), glazed(0.0)])
+                .door("d3", vec![glazed(0.378), glazed(0.378)]);
+            services
+                .register(LeafGlazingServiceHandle::new(Arc::new(glazing)))
+                .unwrap();
+        },
+    );
+    assert_eq!(flagged(&evaluation), ["d2"]);
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("d1".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+}
+
+/// Leaf glazing measured from a tessellated body is never exact: the
+/// members of `leaf_glazing`, and a leaf failing `keyed-limit`, cite it
+/// inexact.
+#[test]
+fn leaf_glazing_measured_on_a_tessellation_is_inexact() {
+    use axioval_rules::ExpressionRequirement;
+    use serde_json::json;
+    let glazing = || {
+        Glazing::default()
+            .door("d1", vec![glazed(0.378), glazed(0.0)])
+            .tessellated()
+    };
+    let register = |services: &mut axioval_engine::ServiceRegistry| {
+        services
+            .register(double_leaves(common::doors::Doors::default(), "d1").handle())
+            .unwrap();
+        services
+            .register(LeafGlazingServiceHandle::new(Arc::new(glazing())))
+            .unwrap();
+    };
+    let requirement = json!({"kind": "aggregate", "function": "all",
+        "over": {"kind": "measured", "name": "leaf_glazing"},
+        "value": {"kind": "compare", "operator": "greaterThanOrEquals",
+            "left": {"kind": "property", "propertySet": "axioval:member", "property": "ratio"},
+            "right": {"kind": "literal", "value": {"type": "number", "value": 0.15}}}});
+    let evaluation = glazing_model(&["d1"]).evaluate_measured(
+        &ExpressionRequirement,
+        &rule(
+            "axioval:capability.expression",
+            kind("door"),
+            vec![("requirement", common::expression(requirement))],
+        ),
+        register,
+    );
+    assert_eq!(flagged(&evaluation), ["d1"]);
+    assert!(
+        evaluation.findings()[0]
+            .evidence
+            .iter()
+            .any(|evidence| !evidence.exact),
+        "{:?}",
+        evaluation.findings()[0].evidence
+    );
+    let evaluation = by_leaf(
+        glazing_model(&["d1"]),
+        double_leaves(common::doors::Doors::default(), "d1"),
+        glazing(),
+        per_leaf(0.15),
+    );
+    assert_eq!(flagged(&evaluation), ["d1"]);
+    assert!(
+        evaluation.findings()[0]
+            .evidence
+            .iter()
+            .any(|evidence| evidence.locator == "leaf-glazing:d1" && !evidence.exact)
+    );
 }

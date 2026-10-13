@@ -431,6 +431,8 @@ Refused rather than guessed:
 
 An object whose styled glazing sits in an unstyled frame and has no styled material lists only the glazing: an unstyled item states nothing, and is not assumed opaque.
 
+`GlazingReader` answers the same question item by item for a geometry host measuring the glazing of a door's leaves (`ItemGlazing`, #205): the outermost `IfcMappedItem` above the item with a surface style of its own, else the item's own style, decides it (a transparency above 0 is glazing, 0 is not, styles stating both decide nothing); an item with no style takes its product's material styles only where every material is styled and they agree. A frame and a glass constituent that disagree, an unstyled material or none leave the item undecided: IFC does not say which material an item is made of, and its shape is never read as its material.
+
 ### Materials
 
 `axioval:material` is read from `IfcRelAssociatesMaterial` through
@@ -965,6 +967,21 @@ A tread's or run's sides are reported only when its faces fill a rectangle along
 Handrails are measured in the frame of the flight or run: the pitch line is the polyline through the treads' nosings (and the upper floor's edge where the flight ends in a riser) or the line of a run's surface. A requested rail counts when its box, grown by its chord deviation, reaches the plan strip over the pitch line within the reach across, lies no higher than the reach above the pitch line and not wholly below it; a bodiless rail is skipped and an unmeasured one refuses. Its upward-facing faces must fill one rectangle along the walking direction, as for a tread's width, or the request refuses: the rail bends, stands at an angle or carries parts outside its line. Between the positions of its corners and the pitch line's knots, the top of its body is the upper envelope of the lines its edges trace, so its least height above the pitch line lies at an end of such a piece or where two lines cross, and its greatest at an end. Heights carry a numerical margin scaled by the coordinates and the steepest line; a tessellated rail is accepted and widened by its chord deviation in every position and height. The rise over an extension is the spread of the top beyond an end over the requested length, evaluated without rounding where every line is level, so a level extension of an exact rail rises by exactly zero.
 
 A turning flight's handrails are measured in its straight parts, its runs of consecutive treads sharing one frame; it must start and end on such treads. A rail whose box comes within the reach of a part's sides and the flight's extent along it must fill a rectangle along exactly one such part's direction, longer along it than across, on one side of its middle; otherwise the request refuses. A rail near no part but within the reach of the flight's plan box refuses too, since it might be a piece beside a winder zone; only one farther away is skipped. Its pitch line is the polyline through the ends, on its side, of the nosings lying on the part's side line (within the nosing's uncertainty and 10⁻⁹ of the coordinates), from the part's treads outwards as far as they go; ends at one position merge into one point spanning their elevations, and ends running back refuse. Before and after those points, where the side turns away, the pitch line's height lies between the last point's elevation and the next tread's, so the rail's heights there are bounds over both, measured no farther than the flight reaches. Rises are measured only beyond the flight's own ends. A tessellated flight's parts climb along directions its chords turn, so a rail straight along the true side fills no rectangle along them and is refused.
+
+`AxiolidLeafGlazingService` measures the glazing of each leaf of a door from
+the items of its body the host supplies (`GlazingItems`: each item's world
+mesh, chord deviation and whether its source states it glazed, opaque or
+undecided). Per leaf, each item is taken into the leaf's frame (`s` along it
+from its origin, `z` up) and belongs to the leaf whose `0 ≤ s ≤ width` holds
+its extent, widened by its deviation and the rounding of the projection. The
+glazed area is the union of the leaf's glazed items projected onto that plane,
+widened by the band `2·P·e + π·e²` of its outline; the leaf's area is its
+stated width times the body's height. A glazed item reaching past the leaf's
+edge, or an undecided one reaching into it, leaves the leaf undecided; opaque
+items only give the height. Only a body that is exact and placed on the
+coordinate axes measures exactly. The CLI supplies the items from
+`ifc-geometry`'s body description, each compiled alone, with the IFC
+adapter's `GlazingReader`.
 
 `AxiolidTriangleCountService` counts the triangles of the registered mesh,
 which is the host's tessellation: exact evidence for a planar mesh,

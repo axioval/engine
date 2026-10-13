@@ -1061,6 +1061,7 @@ mod free_space;
 mod groupings;
 mod guard;
 mod integrity;
+mod leaf_glazing;
 mod linear_quantity;
 mod material_layers;
 mod measured;
@@ -1184,6 +1185,9 @@ pub use guard::{
 pub use integrity::{
     IntegrityError, IntegrityIssue, IntegritySeverity, SourceIntegrityService,
     SourceIntegrityServiceHandle,
+};
+pub use leaf_glazing::{
+    DoorGlazing, LeafGlazing, LeafGlazingError, LeafGlazingService, LeafGlazingServiceHandle,
 };
 pub use linear_quantity::{
     LinearInterval, LinearQuantityError, LinearQuantityEvidence, LinearQuantityKind,

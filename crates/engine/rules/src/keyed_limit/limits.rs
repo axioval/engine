@@ -12,7 +12,10 @@
 //!   item for a quantity of the object (`value`, `what`, `unit`), one per
 //!   floor for a sill height (`what`), one per floor a side of a door may
 //!   step onto for a threshold step (`named`, grouped by `side`, `sure`
-//!   where the side surely steps onto it). A clear width, clear height,
+//!   where the side surely steps onto it), one per leaf for a glazing
+//!   ratio per leaf measured from the door's body (`what`, undecided for a
+//!   leaf the body cannot decide; one item for a fraction the door states
+//!   or its type's default). A clear width, clear height,
 //!   glazing ratio or measured value, and a step, are read as the decimals
 //!   they display: an end within a few units in the last place of a bound
 //!   is the bound. A member area some reached objects may add to is known
@@ -36,7 +39,8 @@ use axioval_ir::{Evidence, ObjectId};
 
 use super::defaults::DoorDefaults;
 use super::{
-    Limit, Measuring, Quantity, Selected, declared, limits, quantity, selected, sills, snapped,
+    Limit, Measuring, PerLeaf, Quantity, Selected, declared, limits, quantity, selected, sills,
+    snapped,
 };
 use crate::measured_kinds::{interval, resolution_error};
 use crate::support::{Parameters, Unavailable, invalid};
@@ -330,6 +334,67 @@ impl LimitMeasures {
                         }
                     })
                     .collect()
+            }
+            Quantity::GlazingRatio(glazing) if glazing.per_leaf => {
+                let unit = || text(String::new());
+                match glazing.per_leaf(context, subject)? {
+                    PerLeaf::Door(measured) => {
+                        let exact = measured.evidence.iter().all(|evidence| evidence.exact);
+                        evidence.extend(measured.evidence);
+                        let value = snapped(measured.lower, measured.upper, minimum, maximum);
+                        vec![item(
+                            vec![
+                                ("value", span(value, exact)),
+                                ("what", text(measured.what)),
+                                ("unit", unit()),
+                            ],
+                            Vec::new(),
+                            exact,
+                            Vec::new(),
+                        )]
+                    }
+                    PerLeaf::Leaves(leaves, stated) => {
+                        let exact = leaves.exact && stated.iter().all(|evidence| evidence.exact);
+                        evidence.extend(stated);
+                        evidence.extend(leaves.evidence.iter().cloned());
+                        leaves
+                            .each
+                            .iter()
+                            .map(|leaf| {
+                                let what =
+                                    text(format!("glazing ratio of {} (measured)", leaf.name));
+                                match leaf.ratio() {
+                                    Ok((lower, upper)) => item(
+                                        vec![
+                                            (
+                                                "value",
+                                                span(
+                                                    snapped(lower, upper, minimum, maximum),
+                                                    exact,
+                                                ),
+                                            ),
+                                            ("what", what),
+                                            ("unit", unit()),
+                                        ],
+                                        Vec::new(),
+                                        exact,
+                                        Vec::new(),
+                                    ),
+                                    Err(why) => item(
+                                        vec![
+                                            ("value", MemberValue::Undecided { why }),
+                                            ("what", what),
+                                            ("unit", unit()),
+                                        ],
+                                        Vec::new(),
+                                        true,
+                                        Vec::new(),
+                                    ),
+                                }
+                            })
+                            .collect()
+                    }
+                }
             }
             quantity => {
                 let quantity = &quantity;

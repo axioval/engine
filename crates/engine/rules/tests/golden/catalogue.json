@@ -23126,6 +23126,23 @@
           ]
         },
         {
+          "name": "glazing_ratio_per",
+          "kind": "string",
+          "required": false,
+          "perObject": false,
+          "expressionText": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `glazing-ratio`: `door` (by default) for the door's one ratio, or `leaf` for each leaf's, measured from the door's body where the door states none."
+            },
+            {
+              "language": "de",
+              "text": "Bei `glazing-ratio`: `door` (standardmäßig) für den einen Anteil der Tür, oder `leaf` für den jedes Flügels, aus dem Körper der Tür gemessen, wo die Tür keinen angibt."
+            }
+          ]
+        },
+        {
           "name": "relationship",
           "kind": "string",
           "required": false,
@@ -23354,7 +23371,7 @@
           {
             "kind": "arguments",
             "when": [],
-            "value": "limited_values;limits=@limits;key_1=@key_1;key_1_path=@key_1_path;key_2=@key_2;key_2_path=@key_2_path;key_3=@key_3;key_3_path=@key_3_path;key_4=@key_4;key_4_path=@key_4_path;pair_key=@pair_key;case_sensitive=@case_sensitive;quantity=@quantity;quantity_property=@quantity_property;measured_value=@measured_value;floor_path=@floor_path;overall_width=@overall_width;width_deduction=@width_deduction;clear_width_from_leaves=@clear_width_from_leaves;overall_height=@overall_height;lining_thickness=@lining_thickness;threshold_thickness=@threshold_thickness;ramp_selector=@ramp_selector;ramp_reach=@ramp_reach;member_selector=@member_selector;relationship=@relationship;direction=@direction;follow_chain=@follow_chain;path=@path;skip_absent_relationship_ends=@skip_absent_relationship_ends;door_type_defaults=@door_type_defaults"
+            "value": "limited_values;limits=@limits;key_1=@key_1;key_1_path=@key_1_path;key_2=@key_2;key_2_path=@key_2_path;key_3=@key_3;key_3_path=@key_3_path;key_4=@key_4;key_4_path=@key_4_path;pair_key=@pair_key;case_sensitive=@case_sensitive;quantity=@quantity;quantity_property=@quantity_property;measured_value=@measured_value;floor_path=@floor_path;overall_width=@overall_width;width_deduction=@width_deduction;clear_width_from_leaves=@clear_width_from_leaves;overall_height=@overall_height;lining_thickness=@lining_thickness;threshold_thickness=@threshold_thickness;ramp_selector=@ramp_selector;ramp_reach=@ramp_reach;member_selector=@member_selector;relationship=@relationship;direction=@direction;follow_chain=@follow_chain;path=@path;skip_absent_relationship_ends=@skip_absent_relationship_ends;door_type_defaults=@door_type_defaults;glazing_ratio_per=@glazing_ratio_per"
           }
         ],
         "forms": [
@@ -23409,20 +23426,43 @@
                   "kind": "items",
                   "applies": {
                     "condition": {
-                      "kind": "oneOf",
-                      "parameter": "quantity",
-                      "values": [
-                        "plan-area",
-                        "member-plan-area",
-                        "property",
-                        "measured",
-                        "clear-width",
-                        "clear-height",
-                        "glazing-ratio"
+                      "kind": "all",
+                      "conditions": [
+                        {
+                          "kind": "oneOf",
+                          "parameter": "quantity",
+                          "values": [
+                            "plan-area",
+                            "member-plan-area",
+                            "property",
+                            "measured",
+                            "clear-width",
+                            "clear-height",
+                            "glazing-ratio"
+                          ]
+                        },
+                        {
+                          "kind": "not",
+                          "condition": {
+                            "kind": "all",
+                            "conditions": [
+                              {
+                                "kind": "equals",
+                                "parameter": "quantity",
+                                "value": "glazing-ratio"
+                              },
+                              {
+                                "kind": "equals",
+                                "parameter": "glazing_ratio_per",
+                                "value": "leaf"
+                              }
+                            ]
+                          }
+                        }
                       ]
                     }
                   },
-                  "list": "limited_values;limits=@limits;key_1=@key_1;key_1_path=@key_1_path;key_2=@key_2;key_2_path=@key_2_path;key_3=@key_3;key_3_path=@key_3_path;key_4=@key_4;key_4_path=@key_4_path;pair_key=@pair_key;case_sensitive=@case_sensitive;quantity=@quantity;quantity_property=@quantity_property;measured_value=@measured_value;floor_path=@floor_path;overall_width=@overall_width;width_deduction=@width_deduction;clear_width_from_leaves=@clear_width_from_leaves;overall_height=@overall_height;lining_thickness=@lining_thickness;threshold_thickness=@threshold_thickness;ramp_selector=@ramp_selector;ramp_reach=@ramp_reach;member_selector=@member_selector;relationship=@relationship;direction=@direction;follow_chain=@follow_chain;path=@path;skip_absent_relationship_ends=@skip_absent_relationship_ends;door_type_defaults=@door_type_defaults",
+                  "list": "limited_values;limits=@limits;key_1=@key_1;key_1_path=@key_1_path;key_2=@key_2;key_2_path=@key_2_path;key_3=@key_3;key_3_path=@key_3_path;key_4=@key_4;key_4_path=@key_4_path;pair_key=@pair_key;case_sensitive=@case_sensitive;quantity=@quantity;quantity_property=@quantity_property;measured_value=@measured_value;floor_path=@floor_path;overall_width=@overall_width;width_deduction=@width_deduction;clear_width_from_leaves=@clear_width_from_leaves;overall_height=@overall_height;lining_thickness=@lining_thickness;threshold_thickness=@threshold_thickness;ramp_selector=@ramp_selector;ramp_reach=@ramp_reach;member_selector=@member_selector;relationship=@relationship;direction=@direction;follow_chain=@follow_chain;path=@path;skip_absent_relationship_ends=@skip_absent_relationship_ends;door_type_defaults=@door_type_defaults;glazing_ratio_per=@glazing_ratio_per",
                   "refused": "{why}",
                   "checks": [
                     {
@@ -23489,12 +23529,99 @@
                   "kind": "items",
                   "applies": {
                     "condition": {
+                      "kind": "all",
+                      "conditions": [
+                        {
+                          "kind": "equals",
+                          "parameter": "quantity",
+                          "value": "glazing-ratio"
+                        },
+                        {
+                          "kind": "equals",
+                          "parameter": "glazing_ratio_per",
+                          "value": "leaf"
+                        }
+                      ]
+                    }
+                  },
+                  "list": "limited_values;limits=@limits;key_1=@key_1;key_1_path=@key_1_path;key_2=@key_2;key_2_path=@key_2_path;key_3=@key_3;key_3_path=@key_3_path;key_4=@key_4;key_4_path=@key_4_path;pair_key=@pair_key;case_sensitive=@case_sensitive;quantity=@quantity;quantity_property=@quantity_property;measured_value=@measured_value;floor_path=@floor_path;overall_width=@overall_width;width_deduction=@width_deduction;clear_width_from_leaves=@clear_width_from_leaves;overall_height=@overall_height;lining_thickness=@lining_thickness;threshold_thickness=@threshold_thickness;ramp_selector=@ramp_selector;ramp_reach=@ramp_reach;member_selector=@member_selector;relationship=@relationship;direction=@direction;follow_chain=@follow_chain;path=@path;skip_absent_relationship_ends=@skip_absent_relationship_ends;door_type_defaults=@door_type_defaults;glazing_ratio_per=@glazing_ratio_per",
+                  "refused": "{why}",
+                  "checks": [
+                    {
+                      "kind": "test",
+                      "judge": {
+                        "kind": "range",
+                        "value": "value",
+                        "unit": "area",
+                        "atLeast": [
+                          {
+                            "name": "minimum",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "value",
+                                    "name": "minimum"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "atMost": [
+                          {
+                            "name": "maximum",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "value",
+                                    "name": "maximum"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "allowance": {
+                          "kind": "none"
+                        },
+                        "grade": true,
+                        "null": {
+                          "kind": "judge"
+                        },
+                        "unmeasured": "{why}"
+                      },
+                      "fail": "{what} is {value:area}{unit}; required {bound:plain}{unit}",
+                      "undecided": "{what} is {value:area}{unit}, which straddles the bound {bound:plain}{unit}",
+                      "related": "related"
+                    }
+                  ],
+                  "combined": {
+                    "separator": "; ",
+                    "fail": "{findings} (limit row {row:fixed0}: {keys})",
+                    "open": "{opens} (limit row {row:fixed0}: {keys})"
+                  }
+                },
+                "fail": "",
+                "undecided": ""
+              },
+              {
+                "values": [],
+                "decision": {
+                  "kind": "items",
+                  "applies": {
+                    "condition": {
                       "kind": "equals",
                       "parameter": "quantity",
                       "value": "sill-height"
                     }
                   },
-                  "list": "limited_values;limits=@limits;key_1=@key_1;key_1_path=@key_1_path;key_2=@key_2;key_2_path=@key_2_path;key_3=@key_3;key_3_path=@key_3_path;key_4=@key_4;key_4_path=@key_4_path;pair_key=@pair_key;case_sensitive=@case_sensitive;quantity=@quantity;quantity_property=@quantity_property;measured_value=@measured_value;floor_path=@floor_path;overall_width=@overall_width;width_deduction=@width_deduction;clear_width_from_leaves=@clear_width_from_leaves;overall_height=@overall_height;lining_thickness=@lining_thickness;threshold_thickness=@threshold_thickness;ramp_selector=@ramp_selector;ramp_reach=@ramp_reach;member_selector=@member_selector;relationship=@relationship;direction=@direction;follow_chain=@follow_chain;path=@path;skip_absent_relationship_ends=@skip_absent_relationship_ends;door_type_defaults=@door_type_defaults",
+                  "list": "limited_values;limits=@limits;key_1=@key_1;key_1_path=@key_1_path;key_2=@key_2;key_2_path=@key_2_path;key_3=@key_3;key_3_path=@key_3_path;key_4=@key_4;key_4_path=@key_4_path;pair_key=@pair_key;case_sensitive=@case_sensitive;quantity=@quantity;quantity_property=@quantity_property;measured_value=@measured_value;floor_path=@floor_path;overall_width=@overall_width;width_deduction=@width_deduction;clear_width_from_leaves=@clear_width_from_leaves;overall_height=@overall_height;lining_thickness=@lining_thickness;threshold_thickness=@threshold_thickness;ramp_selector=@ramp_selector;ramp_reach=@ramp_reach;member_selector=@member_selector;relationship=@relationship;direction=@direction;follow_chain=@follow_chain;path=@path;skip_absent_relationship_ends=@skip_absent_relationship_ends;door_type_defaults=@door_type_defaults;glazing_ratio_per=@glazing_ratio_per",
                   "refused": "{why}",
                   "checks": [
                     {
@@ -23571,7 +23698,7 @@
                       "value": "threshold-step"
                     }
                   },
-                  "list": "limited_values;limits=@limits;key_1=@key_1;key_1_path=@key_1_path;key_2=@key_2;key_2_path=@key_2_path;key_3=@key_3;key_3_path=@key_3_path;key_4=@key_4;key_4_path=@key_4_path;pair_key=@pair_key;case_sensitive=@case_sensitive;quantity=@quantity;quantity_property=@quantity_property;measured_value=@measured_value;floor_path=@floor_path;overall_width=@overall_width;width_deduction=@width_deduction;clear_width_from_leaves=@clear_width_from_leaves;overall_height=@overall_height;lining_thickness=@lining_thickness;threshold_thickness=@threshold_thickness;ramp_selector=@ramp_selector;ramp_reach=@ramp_reach;member_selector=@member_selector;relationship=@relationship;direction=@direction;follow_chain=@follow_chain;path=@path;skip_absent_relationship_ends=@skip_absent_relationship_ends;door_type_defaults=@door_type_defaults",
+                  "list": "limited_values;limits=@limits;key_1=@key_1;key_1_path=@key_1_path;key_2=@key_2;key_2_path=@key_2_path;key_3=@key_3;key_3_path=@key_3_path;key_4=@key_4;key_4_path=@key_4_path;pair_key=@pair_key;case_sensitive=@case_sensitive;quantity=@quantity;quantity_property=@quantity_property;measured_value=@measured_value;floor_path=@floor_path;overall_width=@overall_width;width_deduction=@width_deduction;clear_width_from_leaves=@clear_width_from_leaves;overall_height=@overall_height;lining_thickness=@lining_thickness;threshold_thickness=@threshold_thickness;ramp_selector=@ramp_selector;ramp_reach=@ramp_reach;member_selector=@member_selector;relationship=@relationship;direction=@direction;follow_chain=@follow_chain;path=@path;skip_absent_relationship_ends=@skip_absent_relationship_ends;door_type_defaults=@door_type_defaults;glazing_ratio_per=@glazing_ratio_per",
                   "refused": "{why}",
                   "checks": [
                     {
@@ -23678,7 +23805,7 @@
                   "function": "none",
                   "over": {
                     "kind": "measured",
-                    "name": "limited_values;limits=@limits;key_1=@key_1;key_1_path=@key_1_path;key_2=@key_2;key_2_path=@key_2_path;key_3=@key_3;key_3_path=@key_3_path;key_4=@key_4;key_4_path=@key_4_path;pair_key=@pair_key;case_sensitive=@case_sensitive;quantity=@quantity;quantity_property=@quantity_property;measured_value=@measured_value;floor_path=@floor_path;overall_width=@overall_width;width_deduction=@width_deduction;clear_width_from_leaves=@clear_width_from_leaves;overall_height=@overall_height;lining_thickness=@lining_thickness;threshold_thickness=@threshold_thickness;ramp_selector=@ramp_selector;ramp_reach=@ramp_reach;member_selector=@member_selector;relationship=@relationship;direction=@direction;follow_chain=@follow_chain;path=@path;skip_absent_relationship_ends=@skip_absent_relationship_ends;door_type_defaults=@door_type_defaults"
+                    "name": "limited_values;limits=@limits;key_1=@key_1;key_1_path=@key_1_path;key_2=@key_2;key_2_path=@key_2_path;key_3=@key_3;key_3_path=@key_3_path;key_4=@key_4;key_4_path=@key_4_path;pair_key=@pair_key;case_sensitive=@case_sensitive;quantity=@quantity;quantity_property=@quantity_property;measured_value=@measured_value;floor_path=@floor_path;overall_width=@overall_width;width_deduction=@width_deduction;clear_width_from_leaves=@clear_width_from_leaves;overall_height=@overall_height;lining_thickness=@lining_thickness;threshold_thickness=@threshold_thickness;ramp_selector=@ramp_selector;ramp_reach=@ramp_reach;member_selector=@member_selector;relationship=@relationship;direction=@direction;follow_chain=@follow_chain;path=@path;skip_absent_relationship_ends=@skip_absent_relationship_ends;door_type_defaults=@door_type_defaults;glazing_ratio_per=@glazing_ratio_per"
                   },
                   "value": {
                     "kind": "not",
@@ -23723,7 +23850,7 @@
                   "function": "none",
                   "over": {
                     "kind": "measured",
-                    "name": "limited_values;limits=@limits;key_1=@key_1;key_1_path=@key_1_path;key_2=@key_2;key_2_path=@key_2_path;key_3=@key_3;key_3_path=@key_3_path;key_4=@key_4;key_4_path=@key_4_path;pair_key=@pair_key;case_sensitive=@case_sensitive;quantity=@quantity;quantity_property=@quantity_property;measured_value=@measured_value;floor_path=@floor_path;overall_width=@overall_width;width_deduction=@width_deduction;clear_width_from_leaves=@clear_width_from_leaves;overall_height=@overall_height;lining_thickness=@lining_thickness;threshold_thickness=@threshold_thickness;ramp_selector=@ramp_selector;ramp_reach=@ramp_reach;member_selector=@member_selector;relationship=@relationship;direction=@direction;follow_chain=@follow_chain;path=@path;skip_absent_relationship_ends=@skip_absent_relationship_ends;door_type_defaults=@door_type_defaults"
+                    "name": "limited_values;limits=@limits;key_1=@key_1;key_1_path=@key_1_path;key_2=@key_2;key_2_path=@key_2_path;key_3=@key_3;key_3_path=@key_3_path;key_4=@key_4;key_4_path=@key_4_path;pair_key=@pair_key;case_sensitive=@case_sensitive;quantity=@quantity;quantity_property=@quantity_property;measured_value=@measured_value;floor_path=@floor_path;overall_width=@overall_width;width_deduction=@width_deduction;clear_width_from_leaves=@clear_width_from_leaves;overall_height=@overall_height;lining_thickness=@lining_thickness;threshold_thickness=@threshold_thickness;ramp_selector=@ramp_selector;ramp_reach=@ramp_reach;member_selector=@member_selector;relationship=@relationship;direction=@direction;follow_chain=@follow_chain;path=@path;skip_absent_relationship_ends=@skip_absent_relationship_ends;door_type_defaults=@door_type_defaults;glazing_ratio_per=@glazing_ratio_per"
                   },
                   "value": {
                     "kind": "not",
@@ -23768,7 +23895,52 @@
                   "function": "none",
                   "over": {
                     "kind": "measured",
-                    "name": "limited_values;limits=@limits;key_1=@key_1;key_1_path=@key_1_path;key_2=@key_2;key_2_path=@key_2_path;key_3=@key_3;key_3_path=@key_3_path;key_4=@key_4;key_4_path=@key_4_path;pair_key=@pair_key;case_sensitive=@case_sensitive;quantity=@quantity;quantity_property=@quantity_property;measured_value=@measured_value;floor_path=@floor_path;overall_width=@overall_width;width_deduction=@width_deduction;clear_width_from_leaves=@clear_width_from_leaves;overall_height=@overall_height;lining_thickness=@lining_thickness;threshold_thickness=@threshold_thickness;ramp_selector=@ramp_selector;ramp_reach=@ramp_reach;member_selector=@member_selector;relationship=@relationship;direction=@direction;follow_chain=@follow_chain;path=@path;skip_absent_relationship_ends=@skip_absent_relationship_ends;door_type_defaults=@door_type_defaults"
+                    "name": "limited_values;limits=@limits;key_1=@key_1;key_1_path=@key_1_path;key_2=@key_2;key_2_path=@key_2_path;key_3=@key_3;key_3_path=@key_3_path;key_4=@key_4;key_4_path=@key_4_path;pair_key=@pair_key;case_sensitive=@case_sensitive;quantity=@quantity;quantity_property=@quantity_property;measured_value=@measured_value;floor_path=@floor_path;overall_width=@overall_width;width_deduction=@width_deduction;clear_width_from_leaves=@clear_width_from_leaves;overall_height=@overall_height;lining_thickness=@lining_thickness;threshold_thickness=@threshold_thickness;ramp_selector=@ramp_selector;ramp_reach=@ramp_reach;member_selector=@member_selector;relationship=@relationship;direction=@direction;follow_chain=@follow_chain;path=@path;skip_absent_relationship_ends=@skip_absent_relationship_ends;door_type_defaults=@door_type_defaults;glazing_ratio_per=@glazing_ratio_per"
+                  },
+                  "value": {
+                    "kind": "not",
+                    "operand": {
+                      "kind": "and",
+                      "operands": [
+                        {
+                          "kind": "compare",
+                          "operator": "greaterThanOrEquals",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "value"
+                          },
+                          "right": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "minimum"
+                          }
+                        },
+                        {
+                          "kind": "compare",
+                          "operator": "lessThanOrEquals",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "value"
+                          },
+                          "right": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "maximum"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "label": "no item fails"
+                },
+                {
+                  "kind": "aggregate",
+                  "function": "none",
+                  "over": {
+                    "kind": "measured",
+                    "name": "limited_values;limits=@limits;key_1=@key_1;key_1_path=@key_1_path;key_2=@key_2;key_2_path=@key_2_path;key_3=@key_3;key_3_path=@key_3_path;key_4=@key_4;key_4_path=@key_4_path;pair_key=@pair_key;case_sensitive=@case_sensitive;quantity=@quantity;quantity_property=@quantity_property;measured_value=@measured_value;floor_path=@floor_path;overall_width=@overall_width;width_deduction=@width_deduction;clear_width_from_leaves=@clear_width_from_leaves;overall_height=@overall_height;lining_thickness=@lining_thickness;threshold_thickness=@threshold_thickness;ramp_selector=@ramp_selector;ramp_reach=@ramp_reach;member_selector=@member_selector;relationship=@relationship;direction=@direction;follow_chain=@follow_chain;path=@path;skip_absent_relationship_ends=@skip_absent_relationship_ends;door_type_defaults=@door_type_defaults;glazing_ratio_per=@glazing_ratio_per"
                   },
                   "value": {
                     "kind": "not",
@@ -23891,6 +24063,7 @@
                               "door_type_defaults": "@door_type_defaults",
                               "floor_path": "@floor_path",
                               "follow_chain": "@follow_chain",
+                              "glazing_ratio_per": "@glazing_ratio_per",
                               "key_1": "@key_1",
                               "key_1_path": "@key_1_path",
                               "key_2": "@key_2",
@@ -24007,6 +24180,7 @@
                               "door_type_defaults": "@door_type_defaults",
                               "floor_path": "@floor_path",
                               "follow_chain": "@follow_chain",
+                              "glazing_ratio_per": "@glazing_ratio_per",
                               "key_1": "@key_1",
                               "key_1_path": "@key_1_path",
                               "key_2": "@key_2",
@@ -24123,6 +24297,124 @@
                               "door_type_defaults": "@door_type_defaults",
                               "floor_path": "@floor_path",
                               "follow_chain": "@follow_chain",
+                              "glazing_ratio_per": "@glazing_ratio_per",
+                              "key_1": "@key_1",
+                              "key_1_path": "@key_1_path",
+                              "key_2": "@key_2",
+                              "key_2_path": "@key_2_path",
+                              "key_3": "@key_3",
+                              "key_3_path": "@key_3_path",
+                              "key_4": "@key_4",
+                              "key_4_path": "@key_4_path",
+                              "limits": "@limits",
+                              "lining_thickness": "@lining_thickness",
+                              "measured_value": "@measured_value",
+                              "member_selector": "@member_selector",
+                              "overall_height": "@overall_height",
+                              "overall_width": "@overall_width",
+                              "pair_key": "@pair_key",
+                              "path": "@path",
+                              "quantity": "@quantity",
+                              "quantity_property": "@quantity_property",
+                              "ramp_reach": "@ramp_reach",
+                              "ramp_selector": "@ramp_selector",
+                              "relationship": "@relationship",
+                              "skip_absent_relationship_ends": "@skip_absent_relationship_ends",
+                              "threshold_thickness": "@threshold_thickness",
+                              "width_deduction": "@width_deduction"
+                            }
+                          }
+                        },
+                        "value": {
+                          "block": {
+                            "type": "expression.not",
+                            "inputs": {
+                              "operand": {
+                                "block": {
+                                  "type": "expression.and",
+                                  "inputs": {
+                                    "operands": {
+                                      "blocks": [
+                                        {
+                                          "type": "expression.compare",
+                                          "fields": {
+                                            "operator": "greaterThanOrEquals"
+                                          },
+                                          "inputs": {
+                                            "left": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "value",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "minimum",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "type": "expression.compare",
+                                          "fields": {
+                                            "operator": "lessThanOrEquals"
+                                          },
+                                          "inputs": {
+                                            "left": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "value",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "maximum",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.aggregate",
+                      "label": "no item fails",
+                      "fields": {
+                        "function": "none"
+                      },
+                      "inputs": {
+                        "over": {
+                          "block": {
+                            "type": "members.limited_values",
+                            "fields": {
+                              "case_sensitive": "@case_sensitive",
+                              "clear_width_from_leaves": "@clear_width_from_leaves",
+                              "direction": "@direction",
+                              "door_type_defaults": "@door_type_defaults",
+                              "floor_path": "@floor_path",
+                              "follow_chain": "@follow_chain",
+                              "glazing_ratio_per": "@glazing_ratio_per",
                               "key_1": "@key_1",
                               "key_1_path": "@key_1_path",
                               "key_2": "@key_2",
@@ -105658,6 +105950,148 @@
       "available": true
     },
     {
+      "name": "leaf_glazing",
+      "parameters": [],
+      "services": [
+        "object-frame",
+        "leaf-glazing"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the door states no leaves",
+        "the door's body cannot be measured"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Leaf glazing"
+        },
+        {
+          "language": "de",
+          "text": "Flügelverglasung"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "One item per leaf of a door or window, in the order its source states them: the glazed area of the leaf, measured from the body's items styled as or associated with a transparent or glass material, each assigned to the leaf whose extent along the door's width holds it, and the leaf's area, its width times the body's height. Undecided where an item that could be glazing reaches into the leaf but cannot be told apart from the frame or assigned to one leaf."
+        },
+        {
+          "language": "de",
+          "text": "Ein Element je Flügel einer Tür oder eines Fensters, in der Reihenfolge der Quelle: die verglaste Fläche des Flügels, gemessen an den Teilen des Körpers, die als transparentes Material oder Glas dargestellt oder ihm zugeordnet sind, jedes dem Flügel zugewiesen, dessen Ausdehnung entlang der Türbreite es enthält, und die Fläche des Flügels, seine Breite mal die Höhe des Körpers. Unentschieden, wo ein Teil, das Verglasung sein kann, in den Flügel reicht, aber nicht vom Rahmen unterschieden oder einem Flügel zugewiesen werden kann."
+        }
+      ],
+      "fields": [
+        {
+          "name": "leaf",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Leaf"
+            },
+            {
+              "language": "de",
+              "text": "Flügel"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The leaf as a message names it: `leaf 1 of 2`."
+            },
+            {
+              "language": "de",
+              "text": "Der Flügel, wie eine Meldung ihn nennt: `leaf 1 of 2`."
+            }
+          ]
+        },
+        {
+          "name": "glazed_area",
+          "kind": {
+            "type": "number",
+            "dimension": "area"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Glazed area"
+            },
+            {
+              "language": "de",
+              "text": "Verglaste Fläche"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The glazed items' area projected onto the leaf's plane, overlaps counted once; zero for a leaf without glazing; undecided for an undecided leaf."
+            },
+            {
+              "language": "de",
+              "text": "Die Fläche der verglasten Teile, auf die Ebene des Flügels projiziert, Überlappungen einmal gezählt; null für einen Flügel ohne Verglasung; unentschieden für einen unentschiedenen Flügel."
+            }
+          ]
+        },
+        {
+          "name": "leaf_area",
+          "kind": {
+            "type": "number",
+            "dimension": "area"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Leaf area"
+            },
+            {
+              "language": "de",
+              "text": "Flügelfläche"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The leaf's stated width times the body's height; undecided for an undecided leaf."
+            },
+            {
+              "language": "de",
+              "text": "Die angegebene Breite des Flügels mal die Höhe des Körpers; unentschieden für einen unentschiedenen Flügel."
+            }
+          ]
+        },
+        {
+          "name": "ratio",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Glazing ratio"
+            },
+            {
+              "language": "de",
+              "text": "Verglasungsanteil"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The glazed area over the leaf's area, between 0 and 1; undecided for an undecided leaf."
+            },
+            {
+              "language": "de",
+              "text": "Die verglaste Fläche geteilt durch die Fläche des Flügels, zwischen 0 und 1; unentschieden für einen unentschiedenen Flügel."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
       "name": "limit_row",
       "parameters": [
         {
@@ -106555,12 +106989,36 @@
             }
           ],
           "references": "table"
+        },
+        {
+          "key": "glazing_ratio_per",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "door",
+              "leaf"
+            ]
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether a glazing ratio is the door's (`door`, without it) or each leaf's (`leaf`), measured from geometry where the door states none."
+            },
+            {
+              "language": "de",
+              "text": "Ob ein Verglasungsanteil der der Tür ist (`door`, ohne Angabe) oder der jedes Flügels (`leaf`), aus der Geometrie gemessen, wo die Tür keinen angibt."
+            }
+          ],
+          "references": "string"
         }
       ],
       "services": [
         "property-resolution",
         "relationship-selection",
-        "vertical-extent"
+        "vertical-extent",
+        "object-frame",
+        "leaf-glazing"
       ],
       "exactness": "measured",
       "notEvaluated": [
@@ -106580,11 +107038,11 @@
       "help": [
         {
           "language": "en",
-          "text": "What the row the object's keys select bounds, with its bounds, as `keyed-limit` measures it: one item for a quantity of the object, one per floor for a sill height, one per floor a side of a door may step onto for a threshold step; none where no row with a bound applies."
+          "text": "What the row the object's keys select bounds, with its bounds, as `keyed-limit` measures it: one item for a quantity of the object, one per floor for a sill height, one per floor a side of a door may step onto for a threshold step, one per leaf for a glazing ratio measured per leaf; none where no row with a bound applies."
         },
         {
           "language": "de",
-          "text": "Was die Zeile, die die Schlüssel des Objekts wählen, begrenzt, mit ihren Grenzen, wie `keyed-limit` es misst: ein Element für eine Größe des Objekts, eines je Boden für eine Brüstungshöhe, eines je Boden, auf den eine Türseite treten kann, für eine Schwellenstufe; keines, wo keine Zeile mit Grenze gilt."
+          "text": "Was die Zeile, die die Schlüssel des Objekts wählen, begrenzt, mit ihren Grenzen, wie `keyed-limit` es misst: ein Element für eine Größe des Objekts, eines je Boden für eine Brüstungshöhe, eines je Boden, auf den eine Türseite treten kann, für eine Schwellenstufe, eines je Flügel für einen je Flügel gemessenen Verglasungsanteil; keines, wo keine Zeile mit Grenze gilt."
         }
       ],
       "fields": [

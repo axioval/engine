@@ -3457,6 +3457,13 @@
       {
         "expressionText": false,
         "kind": "string",
+        "name": "glazing_ratio_per",
+        "perObject": false,
+        "required": false
+      },
+      {
+        "expressionText": false,
+        "kind": "string",
         "name": "relationship",
         "perObject": false,
         "required": false

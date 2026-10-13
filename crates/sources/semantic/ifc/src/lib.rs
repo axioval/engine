@@ -14,6 +14,7 @@ mod classifications;
 mod coordinates;
 mod doors;
 mod frames;
+mod glazing;
 mod identity;
 mod ifc;
 mod integrity;
@@ -35,6 +36,7 @@ mod xml;
 pub use archive::{
     IFC_ZIP_EXTENSION, IfcZipError, IfcZipMember, import_ifc_zip_session, is_ifc_zip, read_ifc_zip,
 };
+pub use glazing::{GlazingReader, ItemGlazing};
 pub use identity::IFC_GLOBAL_ID;
 pub use ifc::{IfcSessionError, import_ifc_session};
 pub use integrity::{

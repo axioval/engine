@@ -3416,6 +3416,81 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
     materials::LAYERS,
     MemberDescriptor {
         list: MeasuredDescriptor {
+            name: "leaf_glazing",
+            parameters: &[],
+            dimension: None,
+            services: &["object-frame", "leaf-glazing"],
+            exactness: MeasuredExactness::Measured,
+            subject: MeasuredSubject::Object,
+            not_evaluated: &[
+                "the door states no leaves",
+                "the door's body cannot be measured",
+            ],
+            label: &en_de("Leaf glazing", "Flügelverglasung"),
+            help: &en_de(
+                "One item per leaf of a door or window, in the order its source states them: \
+                 the glazed area of the leaf, measured from the body's items styled as or \
+                 associated with a transparent or glass material, each assigned to the leaf \
+                 whose extent along the door's width holds it, and the leaf's area, its width \
+                 times the body's height. Undecided where an item that could be glazing reaches \
+                 into the leaf but cannot be told apart from the frame or assigned to one leaf.",
+                "Ein Element je Flügel einer Tür oder eines Fensters, in der Reihenfolge der \
+                 Quelle: die verglaste Fläche des Flügels, gemessen an den Teilen des Körpers, \
+                 die als transparentes Material oder Glas dargestellt oder ihm zugeordnet sind, \
+                 jedes dem Flügel zugewiesen, dessen Ausdehnung entlang der Türbreite es \
+                 enthält, und die Fläche des Flügels, seine Breite mal die Höhe des Körpers. \
+                 Unentschieden, wo ein Teil, das Verglasung sein kann, in den Flügel reicht, \
+                 aber nicht vom Rahmen unterschieden oder einem Flügel zugewiesen werden kann.",
+            ),
+        },
+        fields: &[
+            field(
+                "leaf",
+                MemberFieldKind::Text,
+                &en_de("Leaf", "Flügel"),
+                &en_de(
+                    "The leaf as a message names it: `leaf 1 of 2`.",
+                    "Der Flügel, wie eine Meldung ihn nennt: `leaf 1 of 2`.",
+                ),
+            ),
+            field(
+                "glazed_area",
+                AREA,
+                &en_de("Glazed area", "Verglaste Fläche"),
+                &en_de(
+                    "The glazed items' area projected onto the leaf's plane, overlaps counted \
+                     once; zero for a leaf without glazing; undecided for an undecided leaf.",
+                    "Die Fläche der verglasten Teile, auf die Ebene des Flügels projiziert, \
+                     Überlappungen einmal gezählt; null für einen Flügel ohne Verglasung; \
+                     unentschieden für einen unentschiedenen Flügel.",
+                ),
+            ),
+            field(
+                "leaf_area",
+                AREA,
+                &en_de("Leaf area", "Flügelfläche"),
+                &en_de(
+                    "The leaf's stated width times the body's height; undecided for an \
+                     undecided leaf.",
+                    "Die angegebene Breite des Flügels mal die Höhe des Körpers; unentschieden \
+                     für einen unentschiedenen Flügel.",
+                ),
+            ),
+            field(
+                "ratio",
+                RATIO,
+                &en_de("Glazing ratio", "Verglasungsanteil"),
+                &en_de(
+                    "The glazed area over the leaf's area, between 0 and 1; undecided for an \
+                     undecided leaf.",
+                    "Die verglaste Fläche geteilt durch die Fläche des Flügels, zwischen 0 und \
+                     1; unentschieden für einen unentschiedenen Flügel.",
+                ),
+            ),
+        ],
+    },
+    MemberDescriptor {
+        list: MeasuredDescriptor {
             name: "limit_row",
             parameters: &super::registry::LIMIT_ROWS,
             dimension: None,
@@ -3485,6 +3560,8 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
                 "property-resolution",
                 "relationship-selection",
                 "vertical-extent",
+                "object-frame",
+                "leaf-glazing",
             ],
             exactness: MeasuredExactness::Measured,
             subject: MeasuredSubject::Object,
@@ -3497,11 +3574,13 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
                 "What the row the object's keys select bounds, with its bounds, as \
                  `keyed-limit` measures it: one item for a quantity of the object, one per \
                  floor for a sill height, one per floor a side of a door may step onto for a \
-                 threshold step; none where no row with a bound applies.",
+                 threshold step, one per leaf for a glazing ratio measured per leaf; none where \
+                 no row with a bound applies.",
                 "Was die Zeile, die die Schlüssel des Objekts wählen, begrenzt, mit ihren \
                  Grenzen, wie `keyed-limit` es misst: ein Element für eine Größe des Objekts, \
                  eines je Boden für eine Brüstungshöhe, eines je Boden, auf den eine Türseite \
-                 treten kann, für eine Schwellenstufe; keines, wo keine Zeile mit Grenze gilt.",
+                 treten kann, für eine Schwellenstufe, eines je Flügel für einen je Flügel \
+                 gemessenen Verglasungsanteil; keines, wo keine Zeile mit Grenze gilt.",
             ),
         },
         fields: &[

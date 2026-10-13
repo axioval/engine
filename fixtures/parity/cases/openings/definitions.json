@@ -1008,6 +1008,15 @@
             }
           ]
         },
+        "glazing_ratio_per": {
+          "id": "glazing_ratio_per",
+          "name": {
+            "default": "glazing_ratio_per",
+            "translations": {}
+          },
+          "kind": "string",
+          "required": false
+        },
         "relationship": {
           "id": "relationship",
           "name": {

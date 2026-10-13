@@ -116,7 +116,7 @@ use axiolid_surface::Surface;
 use axioval::axiolid::{
     AxiolidBoundaryCoverageService, AxiolidContactService, AxiolidDerivedRelationshipService,
     AxiolidEnvelopeMembershipService, AxiolidFacadeAreaService, AxiolidFreeSpaceService,
-    AxiolidGeometry, AxiolidGuardService, AxiolidLinearQuantityService,
+    AxiolidGeometry, AxiolidGuardService, AxiolidLeafGlazingService, AxiolidLinearQuantityService,
     AxiolidMetricRoutingService, AxiolidPlanAreaService, AxiolidPlanSpanService,
     AxiolidProximityService, AxiolidSightService, AxiolidSpaceService, AxiolidTriangleCountService,
     AxiolidVerticalExtentService, AxiolidWalkabilityService, AxiolidWalkingSurfaceService,
@@ -127,14 +127,14 @@ use axioval::engine::{
     CoordinateSystemServiceHandle, DerivedRelationshipServiceHandle, EnvelopeMembershipError,
     EnvelopeMembershipEvidence, EnvelopeMembershipRequest, EnvelopeMembershipService,
     EnvelopeMembershipServiceHandle, EvidenceSession, FacadeAreaServiceHandle,
-    FreeSpaceServiceHandle, GuardServiceHandle, LinearQuantityServiceHandle,
-    MetricRoutingServiceHandle, PlanAreaServiceHandle, PlanSpanServiceHandle, PropertyRequest,
-    PropertyResolution, PropertyResolutionServiceHandle, ProximityRequest, ProximityService,
-    ProximityServiceHandle, RelationshipEdgesRequest, RelationshipQuery,
-    RelationshipSelectionRequest, RelationshipSelectionServiceHandle, SemanticRelationship,
-    SightServiceHandle, SourceSnapshot, SpaceServiceHandle, TraversalDirection,
-    TriangleCountServiceHandle, TypeHierarchyServiceHandle, VerticalExtentServiceHandle,
-    WalkabilityServiceHandle, WalkingSurfaceServiceHandle,
+    FreeSpaceServiceHandle, GuardServiceHandle, LeafGlazingServiceHandle,
+    LinearQuantityServiceHandle, MetricRoutingServiceHandle, PlanAreaServiceHandle,
+    PlanSpanServiceHandle, PropertyRequest, PropertyResolution, PropertyResolutionServiceHandle,
+    ProximityRequest, ProximityService, ProximityServiceHandle, RelationshipEdgesRequest,
+    RelationshipQuery, RelationshipSelectionRequest, RelationshipSelectionServiceHandle,
+    SemanticRelationship, SightServiceHandle, SourceSnapshot, SpaceServiceHandle,
+    TraversalDirection, TriangleCountServiceHandle, TypeHierarchyServiceHandle,
+    VerticalExtentServiceHandle, WalkabilityServiceHandle, WalkingSurfaceServiceHandle,
 };
 use axioval::ir::{ObjectId, PropertyValue, Report, SourceId};
 use axioval::rules::{CoordinateTolerance, compare_coordinate_systems};
@@ -152,6 +152,7 @@ use std::sync::{Arc, OnceLock};
 
 mod alignment;
 mod authored_faces;
+mod glazing;
 mod outer_bound;
 pub mod timings;
 
@@ -1137,9 +1138,15 @@ pub fn attach(
         geometry.clone(),
     );
     let facade = facade_service(&geometry, &kinds, &is_a);
+    // Door bodies item by item, read on a door's first leaf-glazing request.
+    let glazing = AxiolidLeafGlazingService::new(
+        snapshots.clone(),
+        Arc::new(glazing::BodyItems::new(Arc::new(parsed))),
+    );
     clock.lap("geometry: alignments and facades");
     let session = register(session, &snapshots, geometry, space, envelope, routes)?
         .with_host_service(FacadeAreaServiceHandle::new(Arc::new(facade)), &snapshots)?
+        .with_host_service(LeafGlazingServiceHandle::new(Arc::new(glazing)), &snapshots)?
         .with_derived_relationships(
             DerivedRelationshipServiceHandle::new(Arc::new(derived)),
             &snapshots,

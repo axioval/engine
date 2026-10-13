@@ -2,6 +2,7 @@
 //! values read from the object or from objects related to it.
 
 mod defaults;
+mod glazing;
 mod limits;
 mod measured;
 #[cfg(feature = "parity-reference")]
@@ -9,6 +10,7 @@ pub(crate) mod reference;
 mod template;
 mod threshold;
 
+pub(crate) use glazing::GlazingMeasures;
 pub(crate) use limits::LimitMeasures;
 pub(crate) use measured::DoorMeasures;
 
@@ -687,54 +689,117 @@ impl ClearHeight<'_> {
 /// A door's glazed share of its leaf: the fraction `quantity_property`
 /// states, else its type's `glazing_ratio` default. Only an exact absence
 /// (absent or null) takes the default.
+///
+/// Per leaf (`glazing_ratio_per` `leaf`), a fraction the door states is
+/// still its one value; where it states none, each leaf's share is
+/// measured from the door's body. Only a door stating nothing to measure
+/// (no leaves, no body) takes its type's default; a leaf whose glazing is
+/// undecided is not evaluated, never defaulted.
 struct GlazingRatio<'a> {
     stated: Option<PropertyRef<'a>>,
     defaults: Option<Arc<DoorDefaults>>,
+    per_leaf: bool,
+}
+
+/// A glazing ratio per leaf: the door's one value (stated or its type's
+/// default), or each leaf's measured share with the evidence of what the
+/// door states.
+enum PerLeaf {
+    Door(Measured),
+    Leaves(glazing::Leaves, Vec<Evidence>),
 }
 
 impl GlazingRatio<'_> {
     fn measure(&self, context: &RuleContext<'_>, object: &Object) -> Result<Measured, Unavailable> {
         let mut evidence = Vec::new();
-        if let Some(stated) = self.stated {
-            let resolved = resolve(context, object, stated)?;
-            evidence.extend(resolved.evidence());
-            let ratio = match resolved.value() {
-                None | Some(PropertyValue::Null) => None,
-                Some(PropertyValue::Decimal(value)) if (0.0..=1.0).contains(value) => Some(*value),
-                Some(PropertyValue::Integer(value @ (0 | 1))) => exact_f64(*value),
-                other => {
-                    return Err((
-                        NotEvaluatedReason::IncompleteEvidence,
-                        format!(
-                            "{} {stated} is {}, not a ratio between 0 and 1",
-                            object.id,
-                            display(other)
-                        ),
-                    ));
-                }
-            };
-            if let Some(ratio) = ratio {
-                return Ok(Measured {
-                    lower: ratio,
-                    upper: ratio,
-                    unit: String::new(),
-                    what: format!("glazing ratio ({stated})"),
-                    evidence,
-                });
-            }
+        if let Some(stated) = self.stated(context, object, &mut evidence)? {
+            return Ok(stated);
         }
+        self.defaulted(context, object, evidence, None)
+    }
+
+    /// The ratio of each leaf, or the door's one value where it states one
+    /// or states nothing to measure.
+    fn per_leaf(&self, context: &RuleContext<'_>, object: &Object) -> Result<PerLeaf, Unavailable> {
+        let mut evidence = Vec::new();
+        if let Some(stated) = self.stated(context, object, &mut evidence)? {
+            return Ok(PerLeaf::Door(stated));
+        }
+        match glazing::measured(context, &object.id)? {
+            Ok(leaves) => Ok(PerLeaf::Leaves(leaves, evidence)),
+            Err(why) => Ok(PerLeaf::Door(self.defaulted(
+                context,
+                object,
+                evidence,
+                Some(why),
+            )?)),
+        }
+    }
+
+    /// The fraction the door states; `None` for an exact absence.
+    fn stated(
+        &self,
+        context: &RuleContext<'_>,
+        object: &Object,
+        evidence: &mut Vec<Evidence>,
+    ) -> Result<Option<Measured>, Unavailable> {
+        let Some(stated) = self.stated else {
+            return Ok(None);
+        };
+        let resolved = resolve(context, object, stated)?;
+        evidence.extend(resolved.evidence());
+        let ratio = match resolved.value() {
+            None | Some(PropertyValue::Null) => None,
+            Some(PropertyValue::Decimal(value)) if (0.0..=1.0).contains(value) => Some(*value),
+            Some(PropertyValue::Integer(value @ (0 | 1))) => exact_f64(*value),
+            other => {
+                return Err((
+                    NotEvaluatedReason::IncompleteEvidence,
+                    format!(
+                        "{} {stated} is {}, not a ratio between 0 and 1",
+                        object.id,
+                        display(other)
+                    ),
+                ));
+            }
+        };
+        Ok(ratio.map(|ratio| Measured {
+            lower: ratio,
+            upper: ratio,
+            unit: String::new(),
+            what: format!("glazing ratio ({stated})"),
+            evidence: std::mem::take(evidence),
+        }))
+    }
+
+    /// The door type's default, after the door stated none (and, per leaf,
+    /// stated nothing to measure, `unmeasured` saying why).
+    fn defaulted(
+        &self,
+        context: &RuleContext<'_>,
+        object: &Object,
+        mut evidence: Vec<Evidence>,
+        unmeasured: Option<String>,
+    ) -> Result<Measured, Unavailable> {
         let typed = match &self.defaults {
             Some(defaults) => defaults.lookup(context, object, Item::GlazingRatio)?,
             None => None,
         };
         let Some(used) = typed else {
+            let mut absent = Vec::new();
+            if let Some(stated) = self.stated {
+                absent.push(format!("{stated} is absent"));
+            }
+            absent.extend(unmeasured);
             return Err((
                 NotEvaluatedReason::IncompleteEvidence,
-                match self.stated {
-                    Some(stated) => format!(
-                        "{stated} is absent and the door's type gives no default glazing ratio"
-                    ),
-                    None => "the door's type gives no default glazing ratio".into(),
+                if absent.is_empty() {
+                    "the door's type gives no default glazing ratio".into()
+                } else {
+                    format!(
+                        "{} and the door's type gives no default glazing ratio",
+                        absent.join(", ")
+                    )
                 },
             ));
         };
@@ -871,7 +936,10 @@ impl Key {
 /// door's bottom and stated threshold, measured from geometry; with
 /// `ramp_selector` a ramp within `ramp_reach` over a space is that side's
 /// floor, at its top. `glazing-ratio` is the fraction `quantity_property`
-/// states, between 0 and 1.
+/// states, between 0 and 1; with `glazing_ratio_per` `leaf` a door stating
+/// none is judged leaf by leaf, each leaf's glazed share measured from the
+/// door's body (every failing leaf one finding, an undecided leaf not
+/// evaluated).
 ///
 /// `door_type_defaults` gives defaults per door type, used only where the
 /// door states no value: a row applies by the operation type the door's
@@ -959,6 +1027,7 @@ pub(crate) fn parameters() -> Vec<ParameterDescriptor> {
             "door_type_defaults",
             ParameterType::Table(defaults::COLUMNS),
         ),
+        ParameterDescriptor::optional("glazing_ratio_per", ParameterType::String),
     ];
     parameters.extend(traversal_parameters());
     for (index, (key, path)) in KEY_COLUMNS.iter().zip(KEY_PATHS).enumerate() {
@@ -1123,6 +1192,7 @@ const APPLIES: &[(&str, &[&str])] = &[
     ("threshold_thickness", &["clear-height", "threshold-step"]),
     ("ramp_selector", &["threshold-step"]),
     ("ramp_reach", &["threshold-step"]),
+    ("glazing_ratio_per", &["glazing-ratio"]),
     ("measured_value", &["measured"]),
     ("member_selector", &["member-plan-area"]),
     ("relationship", &["member-plan-area"]),
@@ -1247,7 +1317,16 @@ fn quantity<'a>(
             })
         }
         "glazing-ratio" => {
-            if property.is_none() && defaults.is_none() {
+            let per_leaf = match parameters.string("glazing_ratio_per")? {
+                None | Some("door") => false,
+                Some("leaf") => true,
+                Some(other) => {
+                    return Err(invalid(format!(
+                        "`glazing_ratio_per` `{other}` is unsupported; use `door` or `leaf`"
+                    )));
+                }
+            };
+            if property.is_none() && defaults.is_none() && !per_leaf {
                 return Err(invalid(
                     "`quantity` `glazing-ratio` needs `quantity_property`, `door_type_defaults` \
                      or both",
@@ -1256,6 +1335,7 @@ fn quantity<'a>(
             Quantity::GlazingRatio(GlazingRatio {
                 stated: property,
                 defaults,
+                per_leaf,
             })
         }
         _ => Quantity::ThresholdStep(threshold::ThresholdStep::parse(

@@ -3,9 +3,10 @@
 //! as the measured list `limited_values` reads it with the row's bounds for
 //! the declared `quantity`: one value of
 //! the object, the sill height above each floor beside a window (every
-//! failing floor one finding), or the step onto each floor a side of a door
-//! may step onto (a side failing where a floor it surely steps onto fails,
-//! or every floor it may).
+//! failing floor one finding), the glazing ratio of each leaf of a door
+//! (every failing leaf one finding), or the step onto each floor a side of
+//! a door may step onto (a side failing where a floor it surely steps onto
+//! fails, or every floor it may).
 
 use axioval_engine::template::{
     Allowance, Alternatives, Applies, Bound, Check, Choice, Combined, Condition, Decision, Form,
@@ -40,7 +41,7 @@ const LIMITED: &str = concat!(
      ramp_reach=@ramp_reach;member_selector=@member_selector;relationship=@relationship;\
      direction=@direction;follow_chain=@follow_chain;path=@path;\
      skip_absent_relationship_ends=@skip_absent_relationship_ends;\
-     door_type_defaults=@door_type_defaults"
+     door_type_defaults=@door_type_defaults;glazing_ratio_per=@glazing_ratio_per"
 );
 
 /// The row's bounds on the item's value, each where the row states it.
@@ -119,16 +120,37 @@ fn limited(
     }
 }
 
-const VALUE: Condition = Condition::OneOf {
-    parameter: "quantity",
-    values: &[
-        "plan-area",
-        "member-plan-area",
-        "property",
-        "measured",
-        "clear-width",
-        "clear-height",
-        "glazing-ratio",
+/// A glazing ratio judged leaf by leaf.
+const PER_LEAF: Condition = Condition::All {
+    conditions: &[
+        Condition::Equals {
+            parameter: "quantity",
+            value: "glazing-ratio",
+        },
+        Condition::Equals {
+            parameter: "glazing_ratio_per",
+            value: "leaf",
+        },
+    ],
+};
+
+const VALUE: Condition = Condition::All {
+    conditions: &[
+        Condition::OneOf {
+            parameter: "quantity",
+            values: &[
+                "plan-area",
+                "member-plan-area",
+                "property",
+                "measured",
+                "clear-width",
+                "clear-height",
+                "glazing-ratio",
+            ],
+        },
+        Condition::Not {
+            condition: &PER_LEAF,
+        },
     ],
 };
 
@@ -258,6 +280,15 @@ pub(crate) fn template() -> axioval_engine::template::Template {
                          {bound:plain}{unit} (limit row {row:fixed0})",
                     ),
                     None,
+                ),
+                limited(
+                    &PER_LEAF,
+                    bounded(
+                        "{what} is {value:area}{unit}; required {bound:plain}{unit}",
+                        "{what} is {value:area}{unit}, which straddles the bound \
+                         {bound:plain}{unit}",
+                    ),
+                    Some(floors(None)),
                 ),
                 limited(
                     &SILL,

@@ -22724,3 +22724,208 @@ fn a_rule_compares_a_measured_grz_with_the_one_the_zoning_plan_states() {
         stderr(&output)
     );
 }
+
+/// A double door 1.8 m wide and 2.1 m high at `x`, operated
+/// `DOUBLE_DOOR_SINGLE_SWING` with two half panels, door #`first + 20`.
+/// Its body is a slab over the whole door styled opaque (#504) and, per
+/// `(centre, style)` of `panes`, a pane 0.4 m wide and 0.8 m high, 1 m up,
+/// centred `centre` from the door's edge and styled `style` (none:
+/// unstyled). `fraction` is the `Pset_DoorCommon.GlazingAreaFraction` it
+/// states.
+fn glazed_double_door(
+    first: u32,
+    x: f64,
+    panes: &[(f64, Option<u32>)],
+    fraction: Option<f64>,
+) -> String {
+    let at = |offset: u32| first + offset;
+    let door = at(20);
+    let mut items = vec![format!("#{}", at(6))];
+    let mut glass = String::new();
+    for (index, (centre, style)) in (0_u32..).zip(panes) {
+        let [point, position, profile, base, frame, solid, styled] =
+            [0, 1, 2, 3, 4, 5, 6].map(|offset| at(40 + 10 * index + offset));
+        let _ = write!(
+            glass,
+            "#{point}=IFCCARTESIANPOINT(({centre:?},0.05));\n\
+             #{position}=IFCAXIS2PLACEMENT2D(#{point},$);\n\
+             #{profile}=IFCRECTANGLEPROFILEDEF(.AREA.,$,#{position},0.4,0.02);\n\
+             #{base}=IFCCARTESIANPOINT((0.,0.,1.));\n\
+             #{frame}=IFCAXIS2PLACEMENT3D(#{base},$,$);\n\
+             #{solid}=IFCEXTRUDEDAREASOLID(#{profile},#{frame},#4,0.8);\n"
+        );
+        if let Some(style) = style {
+            let _ = writeln!(glass, "#{styled}=IFCSTYLEDITEM(#{solid},(#{style}),$);");
+        }
+        items.push(format!("#{solid}"));
+    }
+    let mut records = format!(
+        "#{p}=IFCCARTESIANPOINT(({x:?},0.,0.));\n\
+         #{a}=IFCAXIS2PLACEMENT3D(#{p},$,$);\n\
+         #{l}=IFCLOCALPLACEMENT($,#{a});\n\
+         #{sc}=IFCCARTESIANPOINT((0.9,0.05));\n\
+         #{sp}=IFCAXIS2PLACEMENT2D(#{sc},$);\n\
+         #{sr}=IFCRECTANGLEPROFILEDEF(.AREA.,$,#{sp},1.8,0.1);\n\
+         #{slab}=IFCEXTRUDEDAREASOLID(#{sr},#2,#4,2.1);\n\
+         {glass}\
+         #{sh}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',({items}));\n\
+         #{pd}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{sh}));\n\
+         #{door}=IFCDOOR('{door:022}',$,$,$,$,#{l},#{pd},$,2.1,1.8,.DOOR.,.DOUBLE_DOOR_SINGLE_SWING.,$);\n\
+         #{ss}=IFCSTYLEDITEM(#{slab},(#504),$);\n\
+         #{lining}=IFCDOORLININGPROPERTIES('{lining:022}',$,$,$,0.1,0.05,$,0.02,$,$,$,$,$,$,$,$,$);\n\
+         #{lr}=IFCRELDEFINESBYPROPERTIES('{lr:022}',$,$,$,(#{door}),#{lining});\n\
+         #{p1}=IFCDOORPANELPROPERTIES('{p1:022}',$,$,$,0.04,.SWINGING.,0.5,.LEFT.,$);\n\
+         #{r1}=IFCRELDEFINESBYPROPERTIES('{r1:022}',$,$,$,(#{door}),#{p1});\n\
+         #{p2}=IFCDOORPANELPROPERTIES('{p2:022}',$,$,$,0.04,.SWINGING.,0.5,.RIGHT.,$);\n\
+         #{r2}=IFCRELDEFINESBYPROPERTIES('{r2:022}',$,$,$,(#{door}),#{p2});\n",
+        p = at(0),
+        a = at(1),
+        l = at(2),
+        sc = at(3),
+        sp = at(4),
+        sr = at(5),
+        slab = at(6),
+        sh = at(13),
+        pd = at(14),
+        ss = at(15),
+        items = items.join(","),
+        lining = at(21),
+        lr = at(22),
+        p1 = at(23),
+        r1 = at(24),
+        p2 = at(25),
+        r2 = at(26),
+    );
+    if let Some(fraction) = fraction {
+        let (value, set, rel) = (at(27), at(28), at(29));
+        let _ = write!(
+            records,
+            "#{value}=IFCPROPERTYSINGLEVALUE('GlazingAreaFraction',$,IFCNORMALISEDRATIOMEASURE({fraction:?}),$);\n\
+             #{set}=IFCPROPERTYSET('{set:022}',$,'Pset_DoorCommon',$,(#{value}));\n\
+             #{rel}=IFCRELDEFINESBYPROPERTIES('{rel:022}',$,$,$,(#{door}),#{set});\n"
+        );
+    }
+    records
+}
+
+/// Door #120 has a glazed first leaf (#503, 0.7 transparent) and a solid
+/// second leaf; door #220 a glazed second leaf and an unstyled pane in its
+/// first, which cannot be told apart from the frame; door #320 is like
+/// #120 but states its glazing fraction 0.05.
+fn glazed_double_doors() -> String {
+    model_with(&format!(
+        "#500=IFCCOLOURRGB($,0.5,0.5,0.5);\n\
+         #501=IFCSURFACESTYLESHADING(#500,0.7);\n\
+         #502=IFCSURFACESTYLESHADING(#500,0.);\n\
+         #503=IFCSURFACESTYLE('Glass',.BOTH.,(#501));\n\
+         #504=IFCSURFACESTYLE('Frame',.BOTH.,(#502));\n\
+         {}{}{}",
+        glazed_double_door(100, 0.0, &[(0.4, Some(503))], None),
+        glazed_double_door(200, 5.0, &[(0.4, None), (1.4, Some(503))], None),
+        glazed_double_door(300, 10.0, &[(0.4, Some(503))], Some(0.05)),
+    ))
+}
+
+/// A glazing ratio judged per leaf, measured from the door's styled body
+/// items: the solid leaf of #120 fails, the unstyled pane of #220 leaves
+/// it not evaluated, and #320's stated fraction is used.
+#[test]
+fn with_geometry_a_glazing_ratio_is_judged_per_leaf() {
+    let case = Case::new("geometry-leaf-glazing");
+    let concept = |id: &str, name: &str| {
+        json!({"id": id, "name": {"default": name, "translations": {}},
+               "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": name}],
+               "citations": []})
+    };
+    let mut fraction = concept(
+        "axioval:example.ifc.glazing-fraction",
+        "GlazingAreaFraction",
+    );
+    fraction["valueKind"] = json!("number");
+    let mut operation = concept("axioval:example.ifc.operation-type", "OperationType");
+    operation["valueKind"] = json!("enum");
+    case.write("model.ifc", &glazed_double_doors());
+    let run = |minimum: f64| {
+        case.geometry_rule_with(
+            &["model.ifc"],
+            &[("door", "IfcDoor")],
+            (
+                "axioval:capability.keyed-limit",
+                &registry_signature("axioval:capability.keyed-limit"),
+            ),
+            entity("door"),
+            json!({
+                "limits": {"type": "table", "value": [
+                    {"key_1": {"type": "string", "value": "DOUBLE_DOOR_*"},
+                     "minimum": {"type": "number", "value": minimum}},
+                ]},
+                "quantity": {"type": "string", "value": "glazing-ratio"},
+                "glazing_ratio_per": {"type": "string", "value": "leaf"},
+                "quantity_property": {"type": "propertyReference",
+                    "propertySet": "axioval:example.ifc.pset-door-common",
+                    "property": "axioval:example.ifc.glazing-fraction"},
+                "key_1": {"type": "propertyReference", "propertySet": "axioval:attributes",
+                    "property": "axioval:example.ifc.operation-type"},
+            }),
+            &json!({
+                "definitions:propertySets": {"axioval:example.ifc.pset-door-common":
+                    concept("axioval:example.ifc.pset-door-common", "Pset_DoorCommon")},
+                "definitions:properties": {
+                    "axioval:example.ifc.glazing-fraction": fraction,
+                    "axioval:example.ifc.operation-type": operation,
+                },
+            }),
+            &[],
+        )
+    };
+    let (output, result) = run(0.1);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let keys = "(limit row 0: axioval:attributes.axioval:example.ifc.operation-type \
+                `DOUBLE_DOOR_SINGLE_SWING`)";
+    assert_eq!(
+        finding_messages(&result),
+        [
+            (
+                "#120".to_owned(),
+                format!(
+                    "glazing ratio of leaf 2 of 2 (measured) is 0; required at least 0.1 {keys}"
+                )
+            ),
+            (
+                "#320".to_owned(),
+                format!(
+                    "glazing ratio (axioval:example.ifc.pset-door-common.\
+                     axioval:example.ifc.glazing-fraction) is 0.05; required at least 0.1 {keys}"
+                )
+            ),
+        ],
+        "{result:#}"
+    );
+    let open = result["report"]["not_evaluated"].as_array().unwrap();
+    let [outcome] = &open[..] else {
+        panic!("one not evaluated: {result:#}")
+    };
+    assert_eq!(outcome["object_id"]["local_id"], "#220");
+    let message = outcome["message"].as_str().unwrap();
+    assert!(
+        message.contains("the glazing of leaf 1 of 2 is undecided: item #")
+            && message.contains("cannot be told apart from the frame"),
+        "{message}"
+    );
+    // The glazed leaf's share, from geometry alone: its 0.32 m² pane of
+    // its 0.9 m width (half the door, as its panels state) times the
+    // body's 2.1 m height, 0.1693.
+    let (_, result) = run(0.2);
+    let findings = finding_messages(&result);
+    assert_eq!(
+        findings[0],
+        (
+            "#120".to_owned(),
+            format!(
+                "glazing ratio of leaf 1 of 2 (measured) is 0.1693; required at least 0.2; \
+                 glazing ratio of leaf 2 of 2 (measured) is 0; required at least 0.2 {keys}"
+            )
+        ),
+        "{result:#}"
+    );
+}

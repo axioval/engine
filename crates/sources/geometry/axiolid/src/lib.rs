@@ -27,6 +27,7 @@ pub mod free_space;
 pub mod geometry;
 pub mod guard;
 mod height_above;
+pub mod leaf_glazing;
 pub mod linear_quantity;
 pub mod metric_routing;
 mod placement;
@@ -58,6 +59,9 @@ pub use facade_area::AxiolidFacadeAreaService;
 pub use free_space::AxiolidFreeSpaceService;
 pub use geometry::{AxiolidGeometry, ComposedBody};
 pub use guard::AxiolidGuardService;
+pub use leaf_glazing::{
+    AxiolidLeafGlazingService, GlazingItem, GlazingItems, ItemMaterial, RegisteredGlazingItems,
+};
 pub use linear_quantity::AxiolidLinearQuantityService;
 pub use metric_routing::AxiolidMetricRoutingService;
 pub use plan_area::AxiolidPlanAreaService;

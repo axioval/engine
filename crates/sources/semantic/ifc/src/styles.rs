@@ -197,6 +197,18 @@ impl StyleIndex {
         Ok(styles)
     }
 
+    /// The surfaces `item`'s own styles state (its unique direct
+    /// `IfcStyledItem`'s, else its styled layers'); empty for an item with
+    /// no surface style of its own.
+    pub(crate) fn item_surfaces(
+        &self,
+        schema: &Schema,
+        model: &Model,
+        item: EntityId,
+    ) -> Result<Vec<Surface>, PropertyResolutionError> {
+        surfaces(schema, model, &self.effective(item)?)
+    }
+
     /// The surfaces the styles of `materials` state, in material order.
     pub(crate) fn material_surfaces(
         &self,

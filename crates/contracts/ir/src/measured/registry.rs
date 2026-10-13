@@ -1890,7 +1890,7 @@ pub(super) const LIMIT_ROWS: [MeasuredParameter; 11] = [
 ];
 
 /// [`LIMIT_ROWS`] and what the rows bound, as `keyed-limit` reads it.
-pub(super) const LIMITED: [MeasuredParameter; 30] = [
+pub(super) const LIMITED: [MeasuredParameter; 31] = [
     MeasuredParameter {
         key: "limits",
         kind: MeasuredParameterKind::Table,
@@ -2203,6 +2203,20 @@ pub(super) const LIMITED: [MeasuredParameter; 30] = [
         help: &en_de(
             "The rule's defaults per door type, used where the door states no value.",
             "Die Vorgaben der Regel je Türtyp, verwendet, wo die Tür keinen Wert angibt.",
+        ),
+    },
+    MeasuredParameter {
+        key: "glazing_ratio_per",
+        kind: MeasuredParameterKind::Choice {
+            options: &["door", "leaf"],
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "Whether a glazing ratio is the door's (`door`, without it) or each leaf's \
+             (`leaf`), measured from geometry where the door states none.",
+            "Ob ein Verglasungsanteil der der Tür ist (`door`, ohne Angabe) oder der jedes \
+             Flügels (`leaf`), aus der Geometrie gemessen, wo die Tür keinen angibt.",
         ),
     },
 ];

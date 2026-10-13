@@ -6,6 +6,25 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Glazing ratio per door leaf, from geometry**: `keyed-limit`'s
+  `glazing-ratio` takes `glazing_ratio_per` (`door`, the default, or
+  `leaf`). Per leaf, a fraction the door states is still its one value;
+  otherwise each leaf's share is measured from the door's body, the items
+  styled as or associated with a transparent or glass material assigned
+  to the leaf whose extent along the door's width holds them, over the
+  leaf's width times the body's height, and every failing leaf is named in
+  one finding (`glazing ratio of leaf 2 of 2 (measured) is 0; required at
+  least 0.2 …`). Only a door stating nothing to measure (no leaves, no
+  body) takes its type's default. A leaf whose glazing cannot be told
+  apart from the frame, or a pane straddling its edge, is not evaluated,
+  never read as unglazed. New: the engine's `LeafGlazingService`
+  (`DoorGlazing`, `LeafGlazing`), `AxiolidLeafGlazingService` over
+  host-supplied `GlazingItems`, the IFC adapter's `GlazingReader`
+  (`ItemGlazing`) and the measured member list `leaf_glazing`; with
+  `--geometry` the CLI reads a door's body items on its first request. The
+  capability's outside contract gains the optional parameter, and
+  `limited_values` lists the `object-frame` and `leaf-glazing` services
+  ([#205](https://github.com/axioval/engine/issues/205)).
 - **Walks up to an object**: `MetricRouteRequest::approaching` asks for a
   walk up to the destination's object rather than onto its point, which
   may lie inside the object's own body (a wall-hung extinguisher): the

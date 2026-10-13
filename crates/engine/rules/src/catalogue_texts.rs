@@ -2350,6 +2350,11 @@ pub(crate) const CAPABILITY_TEXTS: &[CapabilityText] = &[
                 "Rows of defaults per door type, used only where the door states no value.",
                 "Zeilen mit Vorgabewerten je Türtyp, nur verwendet, wo die Tür keinen Wert angibt.",
             ),
+            param!(
+                "glazing_ratio_per",
+                "With `glazing-ratio`: `door` (by default) for the door's one ratio, or `leaf` for each leaf's, measured from the door's body where the door states none.",
+                "Bei `glazing-ratio`: `door` (standardmäßig) für den einen Anteil der Tür, oder `leaf` für den jedes Flügels, aus dem Körper der Tür gemessen, wo die Tür keinen angibt.",
+            ),
             RELATIONSHIP,
             DIRECTION,
             FOLLOW_CHAIN,

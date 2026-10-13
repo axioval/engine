@@ -695,6 +695,16 @@ All notable changes are documented here. This project follows Semantic Versionin
   bounded by its parts. Anything that cannot be bounded soundly stays
   unbounded and refuses every search it could reach
   ([#358](https://github.com/axioval/engine/issues/358)).
+- **Geometry**: an unmeasured whole is bounded by the union of its parts'
+  bounds, and an unmeasured body by the union of its items' bounds, each
+  box kept apart, rather than by the one box around them. A space or
+  free-floor search between two parts of a long railing, or two items of
+  one body, is no longer refused by the box spanning both; it is refused
+  only where one of the boxes reaches. `AxiolidGeometry` gains
+  `with_unmeasured_bounds` (several boxes; one invalid box, or none,
+  declares no bound, and more than 256 are joined into one) and
+  `parts_bounds`; `with_unmeasured_bound` and `parts_bound` keep their
+  meaning ([#358](https://github.com/axioval/engine/issues/358)).
 - **Containment**: a body of several closed shells that overlap or touch,
   which the volume kernel refuses as one self-intersecting mesh, is
   measured shell by shell against a closed body: its volume between its

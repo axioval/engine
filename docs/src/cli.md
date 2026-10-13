@@ -1357,10 +1357,13 @@ opening either.
 
 **Bounds of unmeasured products.** The space service is told where an
 unmeasured product's body can be, so that it refuses only the space
-measurements the body could reach. A whole whose parts could not be
-composed is bounded by its parts: the boxes of the measured ones and the
-bounds of the unmeasured ones, enclosed; one part with no bound leaves
-the whole without one. Otherwise a product that states a `Box`
+measurements the body could reach. A bound may be several boxes: the
+body lies within their union, and a measurement is refused only where
+one of them reaches. A whole whose parts could not be composed is
+bounded by its parts: the boxes of the measured ones and the boxes of the
+unmeasured ones, each kept apart (#358), so a space between two parts of
+a long railing is not refused by the box spanning both; one part with no
+bound leaves the whole without one. Otherwise a product that states a `Box`
 representation (`IfcBoundingBox` items) is bounded by that box: its eight
 corners are placed as the product's representations are (the context's
 world coordinate system above the placement chain) and enclosed. A
@@ -1369,7 +1372,7 @@ gross body, before the openings are subtracted, when that is measured:
 the net body is the gross body less its openings, so it lies inside the
 gross mesh's extent grown by the deviation certified for it (#301). Any
 other product left unmeasured by its own meshing is bounded by its `Body`
-items, each read on its own and the boxes enclosed (#358): an item that
+items, each read on its own and its box kept apart (#358): an item that
 compiles by its mesh grown by its certified deviation; a boolean difference
 or intersection, and a clip by a half-space, by its first operand, since
 it only removes material from it (a union by both operands); a polygon
@@ -1377,8 +1380,9 @@ mesh, a triangle mesh or a B-rep with planar faces and straight edges by
 the box of its authored vertices, whatever face of it is refused; a linear
 extrusion the kernel refuses (one along its profile's plane) by its
 profile's box (the kernel's flattened outer ring grown by the deviation it
-certifies) swept along the extrusion; every
-placement (instances, mapped items) applied to the box's corners. An item
+certifies) swept along the extrusion, one box from end to end; every
+placement (instances, mapped items) applied to each box's corners. More
+than 256 boxes are joined into the one box around them. An item
 whose lowering is refused (a clip whose half-space boundary is invalid)
 is read through its IFC boolean or mapped item the same way. Any item
 that cannot be bounded so leaves the product without a bound. A whole

@@ -648,17 +648,20 @@ impl AxiolidFreeSpaceService {
             }
             // An obstacle without geometry could stand anywhere, so neither a
             // witness nor a proof of absence would be complete, unless the
-            // host bounds it (`with_unmeasured_bound`) apart from the scope,
-            // or below or above the band (which is open at both ends, as for
-            // an exact body touching its limits).
+            // host bounds it (`with_unmeasured_bounds`) apart from the scope:
+            // every box it lies within the union of is apart in plan, or
+            // below or above the band (which is open at both ends, as for an
+            // exact body touching its limits).
             if self.geometry.mesh(obstacle).is_none()
                 && self
                     .geometry
                     .unmeasured_bound(obstacle)
                     .is_some_and(|bound| {
-                        extent_gap(bound, &room_box, true) > 0.0
-                            || bound.1[2] <= low - u
-                            || bound.0[2] >= high + u
+                        bound.iter().all(|piece| {
+                            extent_gap(piece, &room_box, true) > 0.0
+                                || piece.1[2] <= low - u
+                                || piece.0[2] >= high + u
+                        })
                     })
             {
                 continue;

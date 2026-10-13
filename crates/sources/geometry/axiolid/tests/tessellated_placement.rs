@@ -480,3 +480,49 @@ fn an_unmeasured_obstacle_bounded_elsewhere_is_left_out() {
         Err(FreeSpaceError::MissingGeometry(_))
     ));
 }
+
+/// An unmeasured obstacle bounded by several boxes (a whole by its parts,
+/// #358) lies within their union, not the box around them: it is left out
+/// of a room between its boxes, and refuses once any one of them reaches
+/// into the room. One invalid box, or none, leaves it unbounded.
+#[test]
+fn an_unmeasured_obstacle_bounded_by_boxes_either_side_is_left_out() {
+    let room = || {
+        AxiolidGeometry::new()
+            .with_mesh(id("room"), prisms(&[rect(0.0, 4.0, 0.0, 1.2)], 0.0, 3.0))
+            .with_unmeasured(id("lost"), "not meshed")
+    };
+    let shape = || rectangle(1.0, 1.0, Some((1.0, 0.0)));
+    let refused = |geometry: AxiolidGeometry| {
+        assert!(matches!(
+            place(geometry, "room", shape(), &["lost"]),
+            Err(FreeSpaceError::MissingGeometry(_))
+        ));
+    };
+    let (west, east) = (
+        ([-3.0, 0.0, 0.0], [-1.0, 1.2, 3.0]),
+        ([5.0, 0.0, 0.0], [7.0, 1.2, 3.0]),
+    );
+    found(place(
+        room().with_unmeasured_bounds(id("lost"), vec![west, east]),
+        "room",
+        shape(),
+        &["lost"],
+    ));
+    // The box around both covers the room.
+    refused(room().with_unmeasured_bound(id("lost"), west.0, east.1));
+    let reaching = ([3.0, 0.0, 0.0], [7.0, 1.2, 3.0]);
+    refused(room().with_unmeasured_bounds(id("lost"), vec![west, reaching]));
+    // One box under the floor and one apart in plan: neither stands in
+    // the band over the room.
+    let below = ([-1.0, -1.0, -0.3], [5.0, 2.2, 0.0]);
+    found(place(
+        room().with_unmeasured_bounds(id("lost"), vec![below, east]),
+        "room",
+        shape(),
+        &["lost"],
+    ));
+    let invalid = ([f64::NAN, 0.0, 0.0], [12.0, 1.2, 3.0]);
+    refused(room().with_unmeasured_bounds(id("lost"), vec![east, invalid]));
+    refused(room().with_unmeasured_bounds(id("lost"), Vec::new()));
+}

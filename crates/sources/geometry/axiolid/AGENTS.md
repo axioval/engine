@@ -193,8 +193,8 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   or overlap request naming its elements replaces the declared default,
   and an unmeasured requested element refuses. Unmeasured objects refuse a
   space's measurement only where they could change it (`complete_near`:
-  the aspect's candidates whose host-declared bound,
-  `with_unmeasured_bound`, meets the space's extent, its plan extent for
+  the aspect's candidates one of whose host-declared boxes,
+  `with_unmeasured_bounds`, meets the space's extent, its plan extent for
   boundary gaps, its cap plane for caps), and the refusal names them
   (`SpaceError::Unmeasured`). One without a bound may be anywhere and
   refuses every space; never place it by its storey, which bounds nothing.
@@ -684,10 +684,16 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   at or above its top (the band is open at both ends; pinned by
   `tests/tessellated_placement.rs`
   `an_unmeasured_obstacle_bounded_elsewhere_is_left_out`). A host-declared
-  bound (`with_unmeasured_bound`) only says where the body cannot be; an
-  invalid one is no bound. `parts_bound` encloses the parts of a whole that could
-  not be composed (mesh boxes grown by deviation, declared bounds), and is
-  `None` when any part is unbounded: never skip an unbounded part.
+  bound (`with_unmeasured_bound`, or several boxes the body lies within
+  the union of, `with_unmeasured_bounds`, #358) only says where the body
+  cannot be; an invalid box, or none, is no bound, and more than
+  `MAX_BOUND_BOXES` are joined into one. A service skips such an object
+  only where every box is apart (free space) and refuses where any one
+  reaches (space); never read the boxes as one hull where they are apart.
+  `parts_bounds` lists the boxes of a whole's parts that could not be
+  composed (mesh boxes grown by deviation, declared boxes), `parts_bound`
+  the hull around them; both are `None` when any part is unbounded:
+  never skip an unbounded part.
 - A geometry set may hold several sources. Evidence about one object (contact,
   proximity, facade area, vertical and directional extent, triangle count, shelf
   length, clear height, derived relationships, a walkability passage, a

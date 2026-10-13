@@ -630,9 +630,12 @@ subtracted in the adapter: the IFC host decides which parts an opening
 cuts and meshes them cut (see [the CLI](./cli.md)).
 
 A host may also state a box an unmeasured body lies within
-(`with_unmeasured_bound`, in world metres), such as `parts_bound` of a whole
-whose parts could not be composed. The body stays unmeasured; the
-box only says where it cannot be. `AxiolidSpaceService` refuses a space's
+(`with_unmeasured_bound`, in world metres), or several boxes it lies within
+the union of (`with_unmeasured_bounds`), such as `parts_bounds` of a whole
+whose parts could not be composed (`parts_bound` is the one box around
+them). The body stays unmeasured; the boxes only say where it cannot be,
+and a measurement is refused only where one of them reaches. One invalid
+box, or none, is no bound; more than 256 are joined into one. `AxiolidSpaceService` refuses a space's
 measurement only for the unmeasured objects that could change it, each
 refusal (`SpaceError::Unmeasured`) naming the aspect and those objects:
 
@@ -645,7 +648,8 @@ refusal (`SpaceError::Unmeasured`) naming the aspect and those objects:
 | boundary gaps | the bounding elements whose box meets the space's plan extent (coverage is judged in plan) |
 | unallocated regions | any declared space, slab, roof or storey member |
 
-Boxes are judged with a 1 µm margin for the rounding of placing them. An
+Boxes are judged with a 1 µm margin for the rounding of placing them; an
+object bounded by several boxes counts where any one of them does. An
 unmeasured object without a box, or with one that is not finite or is
 inverted, may be anywhere and refuses every space as before. The support
 counts read no body, so they count an unmeasured slab and never refuse.

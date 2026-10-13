@@ -992,11 +992,12 @@ pub fn attach(
             Err(error) => {
                 report.unmeasured.push((id.clone(), error.clone()));
                 geometry = geometry.with_unmeasured(id.clone(), error);
-                if let Some((min, max)) = stated_box(model, units, linear, entity)
+                if let Some(boxes) = stated_box(model, units, linear, entity)
                     .or_else(|| gross_bound(&backend, model, units, linear, entity, *net))
+                    .map(|bound| vec![bound])
                     .or_else(|| outer_bound::outer_bound(&backend, model, units, linear, entity))
                 {
-                    geometry = geometry.with_unmeasured_bound(id, min, max);
+                    geometry = geometry.with_unmeasured_bounds(id, boxes);
                 }
             }
         }
@@ -1283,9 +1284,9 @@ impl Composer<'_> {
             }
         }
         if let Some(reason) = self.openings.refused.get(whole).cloned() {
-            // Cutting only takes material away, so its parts' box still
-            // bounds it.
-            let bound = self.geometry.parts_bound(&parts);
+            // Cutting only takes material away, so its parts' boxes still
+            // bound it.
+            let bound = self.geometry.parts_bounds(&parts);
             self.unmeasured(
                 whole,
                 format!("no body representation of its own, and {reason}"),
@@ -1331,9 +1332,9 @@ impl Composer<'_> {
                 if let Some(part) = self.model_data_part(&parts) {
                     self.model_data.insert(whole.clone(), part);
                 }
-                // Its body is the union of its parts', so the box around
-                // their bodies and declared boxes bounds it.
-                let bound = self.geometry.parts_bound(&parts);
+                // Its body is the union of its parts', so it lies within
+                // the union of their bodies' boxes and declared boxes.
+                let bound = self.geometry.parts_bounds(&parts);
                 self.unmeasured(
                     whole,
                     format!("no body representation of its own, and {error}"),
@@ -1343,18 +1344,13 @@ impl Composer<'_> {
         }
     }
 
-    /// Leaves `whole` unmeasured, bounded by its parts' box when they give
-    /// one, else by the box its file states, else nowhere.
-    fn unmeasured(
-        &mut self,
-        whole: &ObjectId,
-        reason: String,
-        parts: Option<([f64; 3], [f64; 3])>,
-    ) {
+    /// Leaves `whole` unmeasured, bounded by its parts' boxes when they
+    /// give some, else by the box its file states, else nowhere.
+    fn unmeasured(&mut self, whole: &ObjectId, reason: String, parts: Option<Vec<Extent>>) {
         let mut geometry = std::mem::take(&mut self.geometry);
         geometry = geometry.with_unmeasured(whole.clone(), reason.clone());
-        if let Some((min, max)) = parts.or_else(|| self.stated.get(whole).copied()) {
-            geometry = geometry.with_unmeasured_bound(whole.clone(), min, max);
+        if let Some(boxes) = parts.or_else(|| self.stated.get(whole).map(|bound| vec![*bound])) {
+            geometry = geometry.with_unmeasured_bounds(whole.clone(), boxes);
         }
         self.geometry = geometry;
         self.report.unmeasured.push((whole.clone(), reason));

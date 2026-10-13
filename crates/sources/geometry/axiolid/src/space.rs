@@ -157,8 +157,10 @@ impl AxiolidSpaceService {
     /// plan when `plan` is set; only of its plane `at` a cap, when set).
     ///
     /// Only a bound the host declared
-    /// ([`AxiolidGeometry::with_unmeasured_bound`]) places an unmeasured
-    /// object; one without may be anywhere, so it refuses every space. The
+    /// ([`AxiolidGeometry::with_unmeasured_bounds`]) places an unmeasured
+    /// object, which then blocks a space only where one of its boxes may
+    /// lie within reach; one without may be anywhere, so it refuses every
+    /// space. The
     /// refusal names every object that blocks this space.
     #[allow(clippy::too_many_arguments)]
     fn complete_near(
@@ -190,9 +192,9 @@ impl AxiolidSpaceService {
                     && self.concerns(object, requested)
                     && affects(object)
                     && match (&extent, self.geometry.unmeasured_bound(object)) {
-                        (Some(extent), Some(bound)) => {
-                            extent_gap(extent, bound, plan) <= reach + BOUND_MARGIN_M
-                        }
+                        (Some(extent), Some(bound)) => bound
+                            .iter()
+                            .any(|piece| extent_gap(extent, piece, plan) <= reach + BOUND_MARGIN_M),
                         _ => true,
                     }
             })

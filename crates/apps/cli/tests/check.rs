@@ -20252,7 +20252,9 @@ fn refused_spaces(
 /// - proxy #106 in #46, a vertical 1 x 1 m square (x 41..42, y 2, z 1..2)
 ///   extruded 1 m along x, in its own plane, which the kernel refuses by
 ///   name. The square swept along that segment bounds it.
-fn spaces_beside_unmeasured_obstacles() -> String {
+///
+/// `extra` is written into the data section after them.
+fn spaces_beside_unmeasured_obstacles(extra: &str) -> String {
     let space = |first: u32, x: f64| {
         body(
             first,
@@ -20309,6 +20311,7 @@ fn spaces_beside_unmeasured_obstacles() -> String {
          #105=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#104));\n\
          #107=IFCPRODUCTDEFINITIONSHAPE($,$,(#105));\n\
          #106=IFCBUILDINGELEMENTPROXY('0000000000000000000106',$,$,$,$,#3,#107,$,$);\n\
+         {extra}\
          ENDSEC;\nEND-ISO-10303-21;\n",
         space(10, 2.0),
         space(20, 22.0),
@@ -20333,7 +20336,7 @@ fn spaces_beside_unmeasured_obstacles() -> String {
 fn with_geometry_unmeasured_obstacles_bounded_apart_leave_a_floor_search_decided() {
     let inventory = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../scripts/inventory");
     let case = Case::new("space-unmeasured-obstacles");
-    let model = case.write("model.ifc", &spaces_beside_unmeasured_obstacles());
+    let model = case.write("model.ifc", &spaces_beside_unmeasured_obstacles(""));
     let saved = case.path("result.json");
     let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
         .args(["check", "--geometry", "--model"])
@@ -20471,6 +20474,175 @@ fn with_geometry_unmeasured_obstacles_bounded_apart_leave_a_floor_search_decided
         "{:#}",
         result["report"]["not_evaluated"]
     );
+}
+
+/// An unmeasured whole lies within the union of its parts' bounds, and an
+/// unmeasured body within the union of its items' bounds, not the box
+/// around them (#358). Beside the obstacles of
+/// `spaces_beside_unmeasured_obstacles`, both stand either side of space
+/// #96 (x 60..64), whose free floor still decides:
+///
+/// - railing #140 of member #149 (measured, x 58..59) and member #142 (a
+///   vertical face at x 65..66 whose boundary crosses itself);
+/// - proxy #150 of two face sets whose boundaries cross themselves, at
+///   x 58.2..58.8 and x 65.2..65.8.
+///
+/// The box around either reaches over #96 and would refuse it.
+#[test]
+fn with_geometry_unmeasured_obstacles_either_side_of_a_space_leave_its_floor_search_decided() {
+    let inventory = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../scripts/inventory");
+    let case = Case::new("space-unmeasured-either-side");
+    let crossed = |list: u32, x: f64, y: f64, width: f64| {
+        let (a, b) = (x, x + width);
+        format!(
+            "#{list}=IFCCARTESIANPOINTLIST3D((({a:?},{y:?},0.),({b:?},{y:?},1.),({b:?},{y:?},0.),\
+             ({a:?},{y:?},0.5)),$);\n\
+             #{face}=IFCINDEXEDPOLYGONALFACE((1,2,3,4));\n\
+             #{set}=IFCPOLYGONALFACESET(#{list},.F.,(#{face}),$);\n",
+            face = list + 1,
+            set = list + 2,
+        )
+    };
+    let extra = format!(
+        "{}{}\
+         #163=IFCSHAPEREPRESENTATION(#5,'Body','Tessellation',(#162));\n\
+         #164=IFCPRODUCTDEFINITIONSHAPE($,$,(#163));\n\
+         #142=IFCMEMBER('0000000000000000000142',$,$,$,$,#3,#164,$,.MEMBER.);\n\
+         #140=IFCRAILING('0000000000000000000140',$,$,$,$,#3,$,$,.HANDRAIL.);\n\
+         #141=IFCRELAGGREGATES('0000000000000000000141',$,$,$,#140,(#149,#142));\n\
+         {}{}\
+         #176=IFCSHAPEREPRESENTATION(#5,'Body','Tessellation',(#172,#175));\n\
+         #177=IFCPRODUCTDEFINITIONSHAPE($,$,(#176));\n\
+         #150=IFCBUILDINGELEMENTPROXY('0000000000000000000150',$,$,$,$,#3,#177,$,$);\n",
+        body(
+            143,
+            58.5,
+            1.0,
+            1.0,
+            "IFCMEMBER('0000000000000000000149',$,$,$,$,#3,REP,$,.MEMBER.)",
+        ),
+        crossed(160, 65.0, 2.0, 1.0),
+        crossed(170, 58.2, 1.0, 0.6),
+        crossed(173, 65.2, 3.0, 0.6),
+    );
+    let model = case.write("model.ifc", &spaces_beside_unmeasured_obstacles(&extra));
+    let saved = case.path("result.json");
+    let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+        .args(["check", "--geometry", "--model"])
+        .arg(&model)
+        .args([
+            "--definitions",
+            &format!("{inventory}/definitions.json"),
+            "--ruleset",
+            &format!("{inventory}/ruleset.json"),
+            "--report",
+        ])
+        .arg(&saved)
+        .output()
+        .unwrap();
+    assert!(
+        matches!(output.status.code(), Some(3 | 4)),
+        "{}",
+        stderr(&output)
+    );
+    let result: Value = serde_json::from_str(&std::fs::read_to_string(&saved).unwrap()).unwrap();
+    let unmeasured = unmeasured_reasons(&result);
+    for object in ["#140", "#142", "#150"] {
+        assert!(unmeasured.contains_key(object), "{object}: {unmeasured:?}");
+    }
+    assert!(!unmeasured.contains_key("#149"), "{unmeasured:?}");
+
+    let refused: BTreeMap<String, String> = result["report"]["not_evaluated"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|outcome| outcome["rule_id"] == "space-free-floor")
+        .map(|outcome| {
+            (
+                outcome["object_id"]["local_id"]
+                    .as_str()
+                    .unwrap()
+                    .to_owned(),
+                outcome["message"].as_str().unwrap().to_owned(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        refused.keys().map(String::as_str).collect::<Vec<_>>(),
+        ["#16", "#26", "#46"],
+        "{refused:#?}"
+    );
+}
+
+/// An unmeasured obstacle with no sound bound refuses every floor search
+/// (#358). Member #120 is a polygonal bounded half-space less a box: a
+/// half-space reaches without end below its plane, and this one's boundary
+/// cannot exist as written (the wall's #62), so neither the member nor
+/// railing #130, made of it, is bounded. Either could be anywhere, so every
+/// space's free floor, the one apart from the bounded obstacles included,
+/// stays not evaluated rather than deciding.
+#[test]
+fn with_geometry_an_unmeasured_obstacle_without_a_sound_bound_refuses_every_floor_search() {
+    let inventory = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../scripts/inventory");
+    let case = Case::new("space-unbounded-obstacle");
+    let unbounded = "#121=IFCBOOLEANRESULT(.DIFFERENCE.,#62,#53);\n\
+                     #122=IFCSHAPEREPRESENTATION(#5,'Body','CSG',(#121));\n\
+                     #123=IFCPRODUCTDEFINITIONSHAPE($,$,(#122));\n\
+                     #120=IFCMEMBER('0000000000000000000120',$,$,$,$,#3,#123,$,.MEMBER.);\n\
+                     #130=IFCRAILING('0000000000000000000130',$,$,$,$,#3,$,$,.HANDRAIL.);\n\
+                     #131=IFCRELAGGREGATES('0000000000000000000131',$,$,$,#130,(#120));\n";
+    let model = case.write("model.ifc", &spaces_beside_unmeasured_obstacles(unbounded));
+    let saved = case.path("result.json");
+    let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+        .args(["check", "--geometry", "--model"])
+        .arg(&model)
+        .args([
+            "--definitions",
+            &format!("{inventory}/definitions.json"),
+            "--ruleset",
+            &format!("{inventory}/ruleset.json"),
+            "--report",
+        ])
+        .arg(&saved)
+        .output()
+        .unwrap();
+    assert!(
+        matches!(output.status.code(), Some(3 | 4)),
+        "{}",
+        stderr(&output)
+    );
+    let result: Value = serde_json::from_str(&std::fs::read_to_string(&saved).unwrap()).unwrap();
+    let unmeasured = unmeasured_reasons(&result);
+    assert!(
+        unmeasured.contains_key("#120") && unmeasured.contains_key("#130"),
+        "{unmeasured:?}"
+    );
+
+    // Every space's free floor is refused; the one apart from the bounded
+    // obstacles by the unbounded ones.
+    for space in ["#16", "#26", "#46", "#96"] {
+        let message = result["report"]["not_evaluated"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|outcome| {
+                outcome["rule_id"] == "space-free-floor"
+                    && outcome["object_id"]["local_id"] == space
+            })
+            .and_then(|outcome| outcome["message"].as_str())
+            .unwrap_or_else(|| panic!("{space} decides: {:#}", result["report"]));
+        let obstacles: &[&str] = if space == "#96" {
+            &["#120", "#130"]
+        } else {
+            &["#66", "#78", "#80", "#106", "#120", "#130"]
+        };
+        assert!(
+            obstacles
+                .iter()
+                .any(|obstacle| message.contains(&format!("/{obstacle}"))),
+            "{space}: {message}"
+        );
+    }
 }
 
 /// engine#314: a faceted prism 0.03 m high over a pentagon whose corner `v`

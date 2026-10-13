@@ -1476,3 +1476,75 @@ fn a_round_cornered_space_within_its_deviation_is_refused() {
         Err(SpaceError::InexactEvidence)
     );
 }
+
+/// A whole whose parts stand either side of a space lies within the union
+/// of their boxes (#358), so it refuses neither that space nor one apart
+/// from both, only the space a part reaches; the box around the parts
+/// (`parts_bound`) would refuse the space between them too.
+#[test]
+fn a_whole_is_bounded_by_the_union_of_its_parts() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("between"), body(0.0, 4.0, 0.0, 4.0, 0.0, 3.0))
+        .with_mesh(id("beside"), body(8.0, 12.0, 0.0, 4.0, 0.0, 3.0))
+        .with_mesh(id("far"), body(30.0, 34.0, 0.0, 4.0, 0.0, 3.0))
+        .with_mesh(id("west"), body(-6.0, -5.0, 0.0, 4.0, 0.0, 1.0))
+        .with_unmeasured(id("east"), "unsupported representation")
+        .with_unmeasured_bound(id("east"), [9.0, 1.0, 0.0], [10.0, 2.0, 1.0])
+        .with_no_body(id("opening"));
+    let parts = [id("west"), id("east"), id("opening")];
+    let boxes = geometry
+        .parts_bounds(&parts)
+        .expect("every part is bounded");
+    assert_eq!(
+        boxes,
+        [
+            ([-6.0, 0.0, 0.0], [-5.0, 4.0, 1.0]),
+            ([9.0, 1.0, 0.0], [10.0, 2.0, 1.0])
+        ]
+    );
+    assert_eq!(
+        geometry.parts_bound(&parts),
+        Some(([-6.0, 0.0, 0.0], [10.0, 4.0, 1.0]))
+    );
+    assert_eq!(geometry.parts_bounds(&[id("opening")]), None);
+    assert_eq!(geometry.parts_bounds(&[id("unknown")]), None);
+
+    let storeyed = |geometry: AxiolidGeometry| {
+        AxiolidSpaceService::new(geometry, source())
+            .with_space(id("between"))
+            .with_space(id("beside"))
+            .with_space(id("far"))
+            .with_storey(id("between"), id("level"))
+            .with_storey(id("beside"), id("level"))
+            .with_storey(id("far"), id("level"))
+            .with_storey(id("railing"), id("level"))
+    };
+    let whole = geometry.with_unmeasured(id("railing"), "a part is unmeasured");
+    let service = storeyed(
+        whole
+            .clone()
+            .with_unmeasured_bounds(id("railing"), boxes.clone()),
+    );
+    let gaps = |space: &str| service.measure_boundary_gaps(&id(space), &BoundaryRequest::new());
+    assert!(gaps("between").is_ok());
+    assert!(gaps("far").is_ok());
+    assert_eq!(
+        gaps("beside"),
+        Err(blocked(SpaceAspect::BoundaryGaps, &["railing"]))
+    );
+    let (min, max) = geometry_hull(&boxes);
+    let joined = storeyed(whole.with_unmeasured_bound(id("railing"), min, max));
+    assert_eq!(
+        joined.measure_boundary_gaps(&id("between"), &BoundaryRequest::new()),
+        Err(blocked(SpaceAspect::BoundaryGaps, &["railing"]))
+    );
+}
+
+fn geometry_hull(boxes: &[([f64; 3], [f64; 3])]) -> ([f64; 3], [f64; 3]) {
+    boxes.iter().fold(boxes[0], |(min, max), (low, high)| {
+        (
+            std::array::from_fn(|axis| min[axis].min(low[axis])),
+            std::array::from_fn(|axis| max[axis].max(high[axis])),
+        )
+    })
+}

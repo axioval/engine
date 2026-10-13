@@ -33,7 +33,9 @@ pub struct AxiolidGeometry {
     chord_deviations: BTreeMap<ObjectId, f64>,
     bodiless: BTreeSet<ObjectId>,
     unmeasured: BTreeMap<ObjectId, String>,
-    unmeasured_bounds: BTreeMap<ObjectId, Extent>,
+    /// The boxes an unmeasured object's body lies within the union of
+    /// ([`Self::with_unmeasured_bounds`]); never empty.
+    unmeasured_bounds: BTreeMap<ObjectId, Vec<Extent>>,
     /// Host-certified bounds on a tessellated body's true extent
     /// ([`Self::with_extent_bounds`]): `(outer, inner)`.
     extent_bounds: BTreeMap<ObjectId, (Extent, Option<Extent>)>,
@@ -149,27 +151,49 @@ impl AxiolidGeometry {
     /// is not finite or whose minimum exceeds its maximum is ignored: an
     /// object without a bound may be anywhere.
     #[must_use]
-    pub fn with_unmeasured_bound(mut self, object: ObjectId, min: [f64; 3], max: [f64; 3]) -> Self {
-        let valid = min
-            .iter()
-            .zip(&max)
-            .all(|(low, high)| low.is_finite() && high.is_finite() && low <= high);
+    pub fn with_unmeasured_bound(self, object: ObjectId, min: [f64; 3], max: [f64; 3]) -> Self {
+        self.with_unmeasured_bounds(object, vec![(min, max)])
+    }
+
+    /// Declares boxes an unmeasured object's body is known to lie within
+    /// the union of, in world metres: a whole within its parts' bounds, or
+    /// a body within its items' bounds, each a box of its own.
+    ///
+    /// As [`Self::with_unmeasured_bound`], the body stays unmeasured, and
+    /// a measurement apart from every box need not refuse. If any box is
+    /// not finite or has a minimum above its maximum, or there is none, no
+    /// bound is declared: the object may then be anywhere. More than 256
+    /// boxes are joined into the one box around them, which still holds
+    /// the body.
+    #[must_use]
+    pub fn with_unmeasured_bounds(mut self, object: ObjectId, boxes: Vec<Extent>) -> Self {
+        let valid = !boxes.is_empty()
+            && boxes.iter().all(|(min, max)| {
+                min.iter()
+                    .zip(max)
+                    .all(|(low, high)| low.is_finite() && high.is_finite() && low <= high)
+            });
         if valid {
-            self.unmeasured_bounds.insert(object, (min, max));
+            let boxes = if boxes.len() > MAX_BOUND_BOXES {
+                vec![hull(&boxes)]
+            } else {
+                boxes
+            };
+            self.unmeasured_bounds.insert(object, boxes);
         } else {
             self.unmeasured_bounds.remove(&object);
         }
         self
     }
 
-    /// The box an unmeasured object's body lies within, when the host
-    /// declared one; `None` for a measured object or one that may be
-    /// anywhere.
-    pub(crate) fn unmeasured_bound(&self, object: &ObjectId) -> Option<&Extent> {
+    /// The boxes an unmeasured object's body lies within the union of,
+    /// when the host declared them; `None` for a measured object or one
+    /// that may be anywhere.
+    pub(crate) fn unmeasured_bound(&self, object: &ObjectId) -> Option<&[Extent]> {
         if !self.is_unmeasured(object) {
             return None;
         }
-        self.unmeasured_bounds.get(object)
+        self.unmeasured_bounds.get(object).map(Vec::as_slice)
     }
 
     /// Certifies bounds on the extent of a tessellated object's true body,
@@ -558,37 +582,36 @@ impl AxiolidGeometry {
     }
 
     /// The box enclosing a whole whose body is the union of `parts` but
-    /// could not be composed, in world metres: each meshed part's mesh box
-    /// grown by its chord deviation and each unmeasured part's declared
-    /// bound ([`Self::with_unmeasured_bound`]); a bodiless part adds
-    /// nothing.
+    /// could not be composed, in world metres: the box around
+    /// [`Self::parts_bounds`]. `None` when they give none.
+    #[must_use]
+    pub fn parts_bound(&self, parts: &[ObjectId]) -> Option<([f64; 3], [f64; 3])> {
+        self.parts_bounds(parts).map(|boxes| hull(&boxes))
+    }
+
+    /// The boxes a whole whose body is the union of `parts` but could not
+    /// be composed lies within the union of, in world metres: each meshed
+    /// part's mesh box grown by its chord deviation and each unmeasured
+    /// part's declared boxes ([`Self::with_unmeasured_bounds`]); a bodiless
+    /// part adds nothing.
     ///
     /// `None` when any part is unbounded (unmeasured without a bound,
     /// undescribed, or with an invalid deviation) or none occupies
     /// material: the whole may then be anywhere. Hand the result to
-    /// [`Self::with_unmeasured_bound`] for the whole.
+    /// [`Self::with_unmeasured_bounds`] for the whole.
     #[must_use]
-    pub fn parts_bound(&self, parts: &[ObjectId]) -> Option<([f64; 3], [f64; 3])> {
-        let mut bound: Option<Extent> = None;
+    pub fn parts_bounds(&self, parts: &[ObjectId]) -> Option<Vec<([f64; 3], [f64; 3])>> {
+        let mut boxes = Vec::new();
         for part in parts {
-            let extent = if self.meshes.contains_key(part) {
-                self.enclosing_extent(part)?
+            if self.meshes.contains_key(part) {
+                boxes.push(self.enclosing_extent(part)?);
             } else if self.is_unmeasured(part) {
-                *self.unmeasured_bound(part)?
-            } else if self.bodiless.contains(part) {
-                continue;
-            } else {
+                boxes.extend_from_slice(self.unmeasured_bound(part)?);
+            } else if !self.bodiless.contains(part) {
                 return None;
-            };
-            bound = Some(match bound {
-                None => extent,
-                Some((min, max)) => (
-                    std::array::from_fn(|axis| min[axis].min(extent.0[axis])),
-                    std::array::from_fn(|axis| max[axis].max(extent.1[axis])),
-                ),
-            });
+            }
         }
-        bound
+        (!boxes.is_empty()).then_some(boxes)
     }
 
     /// Registers a whole with no body of its own, measured as the union of
@@ -744,6 +767,23 @@ impl AxiolidGeometry {
 
 /// An axis-aligned `(min, max)` extent in metres.
 pub(crate) type Extent = ([f64; 3], [f64; 3]);
+
+/// The most boxes an unmeasured object's bound keeps apart
+/// ([`AxiolidGeometry::with_unmeasured_bounds`]); more are joined into one.
+pub(crate) const MAX_BOUND_BOXES: usize = 256;
+
+/// The box around `boxes`; `boxes` must not be empty.
+fn hull(boxes: &[Extent]) -> Extent {
+    boxes
+        .iter()
+        .skip(1)
+        .fold(boxes[0], |(min, max), (low, high)| {
+            (
+                std::array::from_fn(|axis| min[axis].min(low[axis])),
+                std::array::from_fn(|axis| max[axis].max(high[axis])),
+            )
+        })
+}
 
 /// Where a body's true lowest (`bottom`) and highest (`top`) points lie,
 /// each as `(low, high)` elevations in metres.

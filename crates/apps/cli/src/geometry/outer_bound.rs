@@ -1,8 +1,11 @@
-//! A sound outer box for a product whose body is unmeasured (#358).
+//! Sound outer boxes for a product whose body is unmeasured (#358).
 //!
 //! A product the mesh compiler or the lowering refuses has no body, but
 //! much of what it is authored as still bounds where that body can be.
-//! Every `Body` item is bounded on its own and the boxes joined:
+//! Every `Body` item is bounded on its own, and the body lies within the
+//! union of those boxes, kept apart (up to 256, then joined into one) so a
+//! search between two items far apart is not refused by the box around
+//! both:
 //!
 //! - an item that lowers and compiles is bounded by its mesh, grown by the
 //!   deviation certified for it;
@@ -38,66 +41,90 @@ use super::{
     mesh_box, planar, session,
 };
 
-/// Where an item's material can be: nowhere (it holds none) or within a
-/// box.
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum Reach {
-    Empty,
-    Within(Extent),
-}
+/// Where an item's material can be: within the union of some boxes, none
+/// when it holds no material.
+#[derive(Clone, Debug, Default, PartialEq)]
+struct Reach(Vec<Extent>);
+
+/// The most boxes a reach keeps apart; more are joined into the one box
+/// around them, which still holds them.
+const MAX_BOXES: usize = 256;
 
 impl Reach {
-    fn join(self, other: Self) -> Self {
-        match (self, other) {
-            (Self::Empty, reach) | (reach, Self::Empty) => reach,
-            (Self::Within((a_min, a_max)), Self::Within((b_min, b_max))) => Self::Within((
-                std::array::from_fn(|axis| a_min[axis].min(b_min[axis])),
-                std::array::from_fn(|axis| a_max[axis].max(b_max[axis])),
-            )),
+    /// Material in either: the union of both reaches' boxes.
+    fn join(mut self, other: Self) -> Self {
+        self.0.extend(other.0);
+        if self.0.len() > MAX_BOXES {
+            self = self.hull();
         }
+        self
     }
 
-    /// The box around this one's corners, each moved by `place`.
-    fn mapped(self, place: impl Fn([f64; 3]) -> [f64; 3]) -> Option<Self> {
-        let Self::Within((min, max)) = self else {
-            return Some(self);
+    /// The one box around every box of this reach. A sweep must be read
+    /// so: its material passes between the boxes at its ends.
+    fn hull(self) -> Self {
+        let mut boxes = self.0.into_iter();
+        let Some(first) = boxes.next() else {
+            return Self::default();
         };
-        let corners = (0..8).map(|index: usize| {
-            place(std::array::from_fn(|axis| {
-                if (index >> axis) & 1 == 1 {
-                    max[axis]
-                } else {
-                    min[axis]
-                }
-            }))
-        });
-        points(corners)
+        Self(vec![boxes.fold(first, |(min, max), (low, high)| {
+            (
+                std::array::from_fn(|axis| min[axis].min(low[axis])),
+                std::array::from_fn(|axis| max[axis].max(high[axis])),
+            )
+        })])
+    }
+
+    /// Each box replaced by the box around its corners, each moved by
+    /// `place`. An affine placement carries a box into the hull of its
+    /// moved corners, so the union of those holds the moved material.
+    fn mapped(self, place: impl Fn([f64; 3]) -> [f64; 3]) -> Option<Self> {
+        let mut boxes = Vec::with_capacity(self.0.len());
+        for (min, max) in self.0 {
+            let corners = (0..8).map(|index: usize| {
+                place(std::array::from_fn(|axis| {
+                    if (index >> axis) & 1 == 1 {
+                        max[axis]
+                    } else {
+                        min[axis]
+                    }
+                }))
+            });
+            boxes.extend(points(corners)?.0);
+        }
+        Some(Self(boxes))
     }
 }
 
-/// The box around `points`, `Empty` when there are none; `None` when any
+/// The one box around `points`, none when there are none; `None` when any
 /// coordinate is not finite.
 fn points(points: impl IntoIterator<Item = [f64; 3]>) -> Option<Reach> {
-    let mut reach = Reach::Empty;
+    let mut extent: Option<Extent> = None;
     for point in points {
         if point.iter().any(|value| !value.is_finite()) {
             return None;
         }
-        reach = reach.join(Reach::Within((point, point)));
+        extent = Some(match extent {
+            None => (point, point),
+            Some((min, max)) => (
+                std::array::from_fn(|axis| min[axis].min(point[axis])),
+                std::array::from_fn(|axis| max[axis].max(point[axis])),
+            ),
+        });
     }
-    Some(reach)
+    Some(Reach(extent.into_iter().collect()))
 }
 
-/// The world box `product`'s `Body` lies within, read item by item as the
-/// module documentation says; `None` when any item cannot be bounded, the
-/// product is not placed, or its `Body` holds no material.
+/// The world boxes `product`'s `Body` lies within the union of, read item
+/// by item as the module documentation says; `None` when any item cannot
+/// be bounded, the product is not placed, or its `Body` holds no material.
 pub(super) fn outer_bound(
     backend: &Compiler,
     model: &Model,
     units: &ifc_geometry::units::UnitScale,
     linear: &Linear,
     product: EntityId,
-) -> Option<Extent> {
+) -> Option<Vec<Extent>> {
     if linear.refusal(model, product).is_some() {
         return None;
     }
@@ -122,14 +149,11 @@ pub(super) fn outer_bound(
         units,
     };
     let mut budget = NODE_BUDGET;
-    let mut reach = Reach::Empty;
+    let mut reach = Reach::default();
     for item in items {
         reach = reach.join(reader.item(item, frame, &mut budget)?);
     }
-    match reach {
-        Reach::Within(extent) => Some(extent),
-        Reach::Empty => None,
-    }
+    (!reach.0.is_empty()).then_some(reach.0)
 }
 
 struct Reader<'a> {
@@ -195,7 +219,7 @@ impl Reader<'_> {
                 )
                 .items()
                 .ok()?;
-                let mut reach = Reach::Empty;
+                let mut reach = Reach::default();
                 for inner in items {
                     reach = reach.join(self.item(inner, placed, budget)?);
                 }
@@ -219,7 +243,7 @@ fn graph(
         GeometryNode::Instance(instance) => graph(backend, graph_, instance.source, budget)?
             .mapped(|point| instance.transform.transform_point3(point.into()).to_array()),
         GeometryNode::Collection(children) => {
-            let mut reach = Reach::Empty;
+            let mut reach = Reach::default();
             for child in children {
                 reach = reach.join(graph(backend, graph_, *child, budget)?);
             }
@@ -257,13 +281,14 @@ fn graph(
                     depth,
                 }) => {
                     let region = profile_region(graph_, *profile)?;
-                    let mut reach = region;
+                    let mut reach = region.clone();
                     for sweep in [*direction * *depth, direction.normalize_or_zero() * *depth] {
-                        reach = reach.join(region.mapped(|point| {
+                        reach = reach.join(region.clone().mapped(|point| {
                             std::array::from_fn(|axis| point[axis] + sweep[axis])
                         })?);
                     }
-                    Some(reach)
+                    // The sweep passes between its ends: one box.
+                    Some(reach.hull())
                 }
                 GeometryNode::PolygonMesh(mesh) => {
                     points(mesh.positions.iter().map(Point3::to_array))
@@ -302,8 +327,9 @@ fn profile_region(graph: &GeometryGraph, id: NodeId) -> Option<Reach> {
     if !(deviation.is_finite() && deviation >= 0.0) {
         return None;
     }
-    let Reach::Within((min, max)) =
-        points(rings.outer.iter().map(|point| [point.x, point.y, 0.0]))?
+    let &[(min, max)] = points(rings.outer.iter().map(|point| [point.x, point.y, 0.0]))?
+        .0
+        .as_slice()
     else {
         return None;
     };

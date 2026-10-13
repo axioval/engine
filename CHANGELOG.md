@@ -538,6 +538,11 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **IFC**: moved to `openbim-ifc` 0.32, `ifc-geometry` 0.26, `ifc-alignment`
+  0.9, `ifc-georef` 0.7, `ifc-style` 0.5, `ifc-systems` 0.5 and `ifc-spatial`
+  0.5.1. An IFC2X3 model's map conversion and projected CRS are now read
+  from `ePSet_MapConversion` and `ePSet_ProjectedCRS` (openbimrs/ifc#451),
+  where IFC2X3 georeferencing was refused. No geometry lowering changed.
 - **Geometry**: moved to `axiolid-mesh-compile` 0.3.24, `axiolid-construct`
   0.3.18, `axiolid-overlay` 0.3.14, `axiolid-evaluate` 0.3.14 and
   `axiolid-mesh-boolean-boolmesh` 0.3.5.

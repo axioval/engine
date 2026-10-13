@@ -857,10 +857,14 @@ or `@` a selector parameter.
   enclose together (`FacadeAreaService::measure_enclosed_volume`): the sum
   of the signed tetrahedra over the faces, by the divergence theorem, and
   only where the faces close, every stretch of every edge met by a face
-  beyond it (T-junctions included, edges meeting within a nanometre). A
-  face only partly looking outside, an element the selection leaves
-  undecided, or an envelope with a hole (the windows left out of
-  `elements`) leaves it not evaluated.
+  beyond it (T-junctions included, edges meeting within a nanometre). The
+  reveals between a wall's outer face and a window or door set back from
+  it close the envelope: the volume leaves out the recess in front of the
+  window. A reveal looks into its own wall, so it adds no area to
+  `envelope_area`; the window's outer face stands in for the hole in the
+  wall's. A face only partly looking outside, an element the selection
+  leaves undecided, or an envelope with a hole (the windows left out of
+  `elements`, or a wall) leaves it not evaluated.
 - `compactness` is `envelope_area` over `envelope_volume` of the same
   elements, per metre: A/V.
 
@@ -868,7 +872,10 @@ A box building 10 × 8 m in plan and 4 m high has an envelope of 304 m²
 (160 m² of slabs, 80 m² facing south and north, 64 m² facing east and
 west) enclosing 320 m³, an A/V of 0.95 per metre; with two 3 m² windows
 facing south and one facing east, `envelope_area;elements=IfcWindow;
-toward=south` is 6 m² and `toward=east` 3 m².
+toward=south` is 6 m² and `toward=east` 3 m². With those windows set
+0.1 m back from the walls' outer faces the area stays 304 m², the volume
+is 320 m³ less the three recesses of 2 × 1.5 × 0.1 m, 319.1 m³, and A/V
+is 304 / 319.1 = 0.953 per metre.
 
 ### Dimensions
 

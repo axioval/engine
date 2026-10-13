@@ -1024,15 +1024,34 @@ outside while a slab top under a declared space does not. Each listed face
 carries its certified normal box and area (as the boundary pieces of
 `measure_face_pieces` bound them, widened for a tessellation) and its
 centroid, and is `Outside` where all four samples look outside, `Partly`
-where only some do. An open surface has no outside and refuses.
+where only some do. Probed along its normal, a face meets the object itself
+at any distance, not only within 1 m: a reveal looks across its opening
+into its own wall however wide the opening is, so it is never listed. An
+open surface has no outside and refuses.
 `measure_enclosed_volume` gathers the faces looking outside of every object
-asked about, wound outward, and refuses where one only partly looks outside
-or the faces do not close: every edge is matched against the edges on its
-line (within 1 nm), and each stretch must be run as often one way as the
-other, which also closes T-junctions. The volume is then the sum of the
-signed tetrahedra from the first corner, widened by its rounding and by a
-1 nm strip along every edge, and for a tessellation by its chord band
-over the faces; at most 30 000 edges are matched.
+asked about, wound outward, and refuses where the faces do not close: every
+edge is matched against the edges on its line (within 1 nm), and each
+stretch must be run as often one way as the other, which also closes
+T-junctions. A face that does not wholly look outside is first cut along
+the faces of the other bodies and spaces lying in its plane (a window's
+side against its reveal) and each piece probed again: a piece wholly
+outside joins the envelope, a piece some of whose samples look outside
+while others are covered refuses, a piece covered or looking into a space
+is left out, and a piece looking into its own object is a candidate. The
+candidates, grouped by the edges they share, close the envelope across
+the reveals in front of a window set back from the outer face: a group
+joins only where it has open edges and each of them closes an open edge
+of the faces gathered so far (on its lines, the open length of both
+together is theirs less the group's). The reveal on the room's side of the
+window, whose rim lies on the wall's inner face, closes nothing and stays
+out, and so does a closed group such as a cavity. Closing the envelope over
+the opening's outer outline instead would measure the recess as enclosed
+and needs the opening's outline, which the meshes do not state; the reveals
+are faces of the meshes, and the closure proof still decides. The volume is
+then the sum of the signed tetrahedra from the first corner, widened by its
+rounding and by a 1 nm strip along every edge, and for a tessellation by
+its chord band over the faces; at most 30 000 edges are matched, and 12 000
+edges of candidates.
 `AxiolidProximityService::measure_body_volume` answers the certified
 `enclosed_volume` of a closed two-manifold, widened by the chord band
 (`tube_volume`) for a tessellated one; an open surface refuses with

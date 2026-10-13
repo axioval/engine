@@ -4787,11 +4787,13 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         help: &en_de(
             "Of the project: the volume the elements' faces looking outside enclose \
              together, the gross volume of a building its walls, roofs, slabs, windows and \
-             doors bound; refused where those faces do not close.",
+             doors bound, closed across the reveals in front of windows and doors set back; \
+             refused where those faces do not close.",
             "Des Projekts: das Volumen, das die nach außen blickenden Flächen der Bauteile \
              gemeinsam umschließen, das Bruttovolumen eines Gebäudes, das seine Wände, \
-             Dächer, Decken, Fenster und Türen begrenzen; verweigert, wo diese Flächen sich \
-             nicht schließen.",
+             Dächer, Decken, Fenster und Türen begrenzen, über die Laibungen vor \
+             zurückgesetzten Fenstern und Türen geschlossen; verweigert, wo diese Flächen \
+             sich nicht schließen.",
         ),
     },
     MeasuredDescriptor {

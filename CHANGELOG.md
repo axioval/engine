@@ -661,6 +661,20 @@ All notable changes are documented here. This project follows Semantic Versionin
   has exactly nothing outside and `count_within;zone=` counts it surely;
   one touching the boundary still straddles it
   ([#364](https://github.com/axioval/engine/issues/364)).
+- **Envelope volume across recessed windows**: `envelope_volume` and
+  `compactness` close the envelope across the reveals between a wall's
+  outer face and a window or door set back from it, where the outward
+  faces left a gap and the volume was not evaluated. The Axiolid adapter
+  cuts each face that does not wholly look outside along the faces in its
+  plane, and a group of pieces looking into their own wall joins the
+  envelope only where every open edge of it closes an open edge of the
+  outward faces; the reveal on the room's side closes nothing and stays
+  out, and an envelope missing a wall still refuses. A face looking along
+  its normal meets its own body at any distance, so a wide opening's
+  reveals are never outward faces and add no `envelope_area`. The box
+  building of #333 with its windows 0.1 m back measures 304 m², 319.1 m³
+  and an A/V of 0.953 per metre
+  ([#362](https://github.com/axioval/engine/issues/362)).
 - **Geometry**: moves to openbim-ifc 0.24, ifc-geometry 0.18 and
   ifc-alignment 0.7.2. Stations on a plain `IfcCompositeCurve`, an
   `IfcTrimmedCurve` or a station-placed composite basis lower, one on a

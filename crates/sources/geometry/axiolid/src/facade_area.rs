@@ -31,6 +31,14 @@
 //! never a point. A tessellated body within reach, an unmeasured body
 //! anywhere or an unmeasured or bodiless space could change which faces
 //! count, so the measurement refuses.
+//!
+//! Outward faces (of any slope, probed along their normal) meet the object
+//! itself at any distance, so a reveal is never one, however wide its
+//! opening. The envelope's volume closes across the reveals in front of a
+//! window set back from the outer face: the pieces of a wall's faces that
+//! look into the wall itself join the outward faces where, and only where,
+//! they close open edges of them (`admit`); the closure proof still
+//! decides.
 
 use std::collections::BTreeSet;
 
@@ -186,14 +194,129 @@ struct Classified {
     soup: Vec<Triangle>,
     looked: Vec<(usize, usize)>,
     deviation: Option<f64>,
+}
+
+/// What one sample of a face sees in front of it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Look {
+    /// Nothing, or another body first: the outside.
+    Outside,
+    /// The point in front lies in another body or a space.
+    Covered,
+    /// A space first: a room.
+    Space,
+    /// The subject's own body first: a reveal, a niche.
+    Itself,
+}
+
+/// A subject ready to be probed: its triangles, their winding, the bodies
+/// near it and their winding numbers, and its chord deviation.
+struct Scene<'s> {
+    soup: Vec<Triangle>,
     /// `1` where the triangles are wound outward, `-1` where inward.
     orientation: f64,
+    near: Vec<Near<'s>>,
+    windings: Vec<WindingMesh<'s, TriMesh>>,
+    deviation: Option<f64>,
+    faces: Faces,
 }
 
 impl AxiolidFacadeAreaService {
     /// Probes `faces` of `object` and counts how many samples of each look
     /// outside; a face none of whose samples does is left out.
     fn classify(&self, object: &ObjectId, faces: Faces) -> Result<Classified, FacadeAreaError> {
+        let scene = self.scene(object, faces)?;
+        let mut looked = Vec::new();
+        for (index, triangle) in scene.soup.iter().enumerate() {
+            let Some(looks) = scene.looks(*triangle)? else {
+                continue;
+            };
+            let outside = looks.iter().filter(|look| **look == Look::Outside).count();
+            if outside > 0 {
+                looked.push((index, outside));
+            }
+        }
+        Ok(Classified {
+            soup: scene.soup,
+            looked,
+            deviation: scene.deviation,
+        })
+    }
+
+    /// The faces of `object` on the envelope, wound outward: those whose
+    /// every sample looks outside, and the candidates that may close it
+    /// across a reveal.
+    ///
+    /// A face that does not wholly look outside is cut along the faces of
+    /// the other bodies and spaces lying in its plane (a window's side
+    /// against its reveal), and each piece is probed again: a piece wholly
+    /// outside joins the envelope, a piece held against a body or looking
+    /// into a space is left out, and a piece looking only into the subject
+    /// itself (a reveal between the outer face and a window set back) is a
+    /// candidate. A piece some of whose samples look outside while others
+    /// are covered refuses, as an unsplit face did.
+    fn envelope_part(&self, object: &ObjectId) -> Result<EnvelopePart, FacadeAreaError> {
+        let scene = self.scene(object, Faces::All)?;
+        let mut part = EnvelopePart {
+            deviation: scene.deviation,
+            ..EnvelopePart::default()
+        };
+        let wound = |[a, b, c]: Triangle| {
+            let face = if scene.orientation < 0.0 {
+                [a, c, b]
+            } else {
+                [a, b, c]
+            };
+            face.map(|point| point.to_array())
+        };
+        for triangle in &scene.soup {
+            let Some(looks) = scene.looks(*triangle)? else {
+                continue;
+            };
+            if looks.iter().all(|look| *look == Look::Outside) {
+                part.sure.push(wound(*triangle));
+                continue;
+            }
+            let covers = scene.covers(*triangle);
+            let cells = if covers.is_empty() {
+                vec![triangle.map(|point| point.to_array())]
+            } else {
+                split(triangle.map(|point| point.to_array()), &covers)
+                    .map_err(FacadeAreaError::Unavailable)?
+            };
+            for cell in cells {
+                let cell = cell.map(|[x, y, z]| Point3::new(x, y, z));
+                let Some(looks) = scene.looks(cell)? else {
+                    continue;
+                };
+                let outside = looks.contains(&Look::Outside);
+                let held = looks
+                    .iter()
+                    .any(|look| matches!(look, Look::Covered | Look::Space));
+                match (outside, held) {
+                    (true, true) => {
+                        return Err(FacadeAreaError::Unavailable(format!(
+                            "a face of {object} only partly looks outside, so where the \
+                             envelope runs is undecided"
+                        )));
+                    }
+                    (_, true) => {}
+                    (true, false) if looks.iter().all(|look| *look == Look::Outside) => {
+                        part.sure.push(wound(cell));
+                    }
+                    _ => part.candidates.push(wound(cell)),
+                }
+            }
+        }
+        Ok(part)
+    }
+
+    /// `object` ready to be probed for `faces`.
+    fn scene<'s>(
+        &'s self,
+        object: &'s ObjectId,
+        faces: Faces,
+    ) -> Result<Scene<'s>, FacadeAreaError> {
         if self.geometry.has_no_body(object) {
             return Err(FacadeAreaError::Unavailable(format!(
                 "{object} is declared to have no body"
@@ -241,32 +364,6 @@ impl AxiolidFacadeAreaService {
                 })
             })
             .collect::<Result<Vec<_>, _>>()?;
-        let mut looked = Vec::new();
-        for (index, triangle) in soup.iter().enumerate() {
-            let [a, b, c] = *triangle;
-            let normal = (b - a).cross(c - a) * orientation;
-            let doubled = normal.length();
-            if doubled <= ON_SURFACE {
-                continue;
-            }
-            let steep = normal.z.abs() / doubled <= std::f64::consts::FRAC_1_SQRT_2;
-            let outward = match faces {
-                // Steep faces only: a floor, a roof or a sill faces up or down.
-                Faces::Steep if !steep => continue,
-                Faces::Steep => Vec3::new(normal.x, normal.y, 0.0).normalize(),
-                Faces::All => normal / doubled,
-            };
-            let mut outside = 0;
-            for sample in samples(*triangle) {
-                let start = sample + outward * PROBE_OFFSET;
-                if faces_outside(&near, &windings, start, outward)? {
-                    outside += 1;
-                }
-            }
-            if outside > 0 {
-                looked.push((index, outside));
-            }
-        }
         let deviation = match self.geometry.fidelity(object) {
             Ok(GeometryFidelity::Exact) => None,
             Ok(GeometryFidelity::Tessellated {
@@ -274,13 +371,90 @@ impl AxiolidFacadeAreaService {
             }) => Some(chord_deviation_metres),
             Err(_) => return Err(FacadeAreaError::InvalidMeasurement),
         };
-        Ok(Classified {
+        Ok(Scene {
             soup,
-            looked,
-            deviation,
             orientation,
+            near,
+            windings,
+            deviation,
+            faces,
         })
     }
+}
+
+impl Scene<'_> {
+    /// What each sample of `triangle`, wound as the subject's mesh is, sees
+    /// in front of it; `None` for a face without area, or a face the
+    /// classification does not probe.
+    fn looks(&self, triangle: Triangle) -> Result<Option<[Look; SAMPLES]>, FacadeAreaError> {
+        let [a, b, c] = triangle;
+        let normal = (b - a).cross(c - a) * self.orientation;
+        let doubled = normal.length();
+        if doubled <= ON_SURFACE {
+            return Ok(None);
+        }
+        let steep = normal.z.abs() / doubled <= std::f64::consts::FRAC_1_SQRT_2;
+        let outward = match self.faces {
+            // Steep faces only: a floor, a roof or a sill faces up or down.
+            Faces::Steep if !steep => return Ok(None),
+            Faces::Steep => Vec3::new(normal.x, normal.y, 0.0).normalize(),
+            Faces::All => normal / doubled,
+        };
+        let mut looks = [Look::Outside; SAMPLES];
+        for (look, sample) in looks.iter_mut().zip(samples(triangle)) {
+            let start = sample + outward * PROBE_OFFSET;
+            *look = look_from(&self.near, &self.windings, start, outward, self.faces)?;
+        }
+        Ok(Some(looks))
+    }
+
+    /// The triangles of the other bodies and spaces near the subject that
+    /// lie in the plane of `triangle` (every corner within [`ON_SURFACE`]
+    /// of it) and whose box meets its box.
+    fn covers(&self, triangle: Triangle) -> Vec<[[f64; 3]; 3]> {
+        let face = triangle.map(|point| point.to_array());
+        let normal = cross(minus(face[1], face[0]), minus(face[2], face[0]));
+        let length = norm(normal);
+        if length <= ON_SURFACE {
+            return Vec::new();
+        }
+        let normal = normal.map(|value| value / length);
+        let boxed = |points: &[[f64; 3]; 3]| -> Extent {
+            (
+                std::array::from_fn(|axis| points.iter().map(|p| p[axis]).fold(f64::MAX, f64::min)),
+                std::array::from_fn(|axis| points.iter().map(|p| p[axis]).fold(f64::MIN, f64::max)),
+            )
+        };
+        let extent = boxed(&face);
+        let mut covers = Vec::new();
+        for body in &self.near {
+            if body.met == Met::Itself || extent_gap(&extent, &body.extent, false) > ON_SURFACE {
+                continue;
+            }
+            for other in &body.triangles {
+                let other = other.map(|point| point.to_array());
+                if extent_gap(&extent, &boxed(&other), false) > ON_SURFACE {
+                    continue;
+                }
+                let flat = other
+                    .iter()
+                    .all(|corner| dot(normal, minus(*corner, face[0])).abs() <= ON_SURFACE);
+                if flat {
+                    covers.push(other);
+                }
+            }
+        }
+        covers
+    }
+}
+
+/// The faces one object adds to the envelope, wound outward: `sure` ones,
+/// and `candidates` that join it only where they close it.
+#[derive(Default)]
+struct EnvelopePart {
+    sure: Vec<[[f64; 3]; 3]>,
+    candidates: Vec<[[f64; 3]; 3]>,
+    deviation: Option<f64>,
 }
 
 impl FacadeAreaService for AxiolidFacadeAreaService {
@@ -376,36 +550,32 @@ impl FacadeAreaService for AxiolidFacadeAreaService {
                 "no objects bound the envelope".into(),
             ));
         }
-        // Every face looking outside, wound outward, and the chord band of
-        // the tessellated ones.
-        let (mut faces, mut band, mut exact) = (Vec::new(), 0.0_f64, true);
+        // Every face looking outside, wound outward, then the reveals that
+        // close it, each with the chord deviation of its object.
+        let (mut faces, mut candidates) = (Vec::new(), Vec::new());
         for object in &asked {
-            let Classified {
-                soup,
-                looked,
-                deviation,
-                orientation,
-            } = self.classify(object, Faces::All)?;
-            for (index, outside) in looked {
-                if outside != SAMPLES {
-                    return Err(FacadeAreaError::Unavailable(format!(
-                        "a face of {object} only partly looks outside, so where the envelope \
-                         runs is undecided"
-                    )));
-                }
-                let [a, b, c] = soup[index];
-                let face = if orientation < 0.0 {
-                    [a, c, b]
-                } else {
-                    [a, b, c]
-                };
-                if let Some(deviation) = deviation {
-                    exact = false;
-                    let area = (b - a).cross(c - a).length() / 2.0;
-                    let perimeter = (b - a).length() + (c - b).length() + (a - c).length();
-                    band += area * deviation + perimeter * deviation * deviation;
-                }
-                faces.push(face.map(|point| point.to_array()));
+            let part = self.envelope_part(object)?;
+            faces.extend(part.sure.into_iter().map(|face| (face, part.deviation)));
+            candidates.extend(
+                part.candidates
+                    .into_iter()
+                    .map(|face| (face, part.deviation)),
+            );
+        }
+        let (mut faces, deviations): (Vec<_>, Vec<_>) = faces.into_iter().unzip();
+        let (candidates, candidate_deviations): (Vec<_>, Vec<_>) = candidates.into_iter().unzip();
+        let admitted = admit(&mut faces, &candidates).map_err(FacadeAreaError::Unavailable)?;
+        let (mut band, mut exact) = (0.0_f64, true);
+        let deviations = deviations
+            .into_iter()
+            .chain(admitted.iter().map(|index| candidate_deviations[*index]));
+        for (face, deviation) in faces.iter().zip(deviations) {
+            if let Some(deviation) = deviation {
+                exact = false;
+                let [a, b, c] = *face;
+                let area = norm(cross(minus(b, a), minus(c, a))) / 2.0;
+                let perimeter = norm(minus(b, a)) + norm(minus(c, b)) + norm(minus(a, c));
+                band += area * deviation + perimeter * deviation * deviation;
             }
         }
         let volume = enclosed(&faces).map_err(FacadeAreaError::Unavailable)?;
@@ -421,11 +591,20 @@ impl FacadeAreaService for AxiolidFacadeAreaService {
         }
         let evidence = Evidence {
             source: asked[0].source.clone(),
-            locator: format!(
-                "enclosed-volume:objects={}:faces={}",
-                asked.len(),
-                faces.len()
-            ),
+            locator: if admitted.is_empty() {
+                format!(
+                    "enclosed-volume:objects={}:faces={}",
+                    asked.len(),
+                    faces.len()
+                )
+            } else {
+                format!(
+                    "enclosed-volume:objects={}:faces={}:reveal-faces={}",
+                    asked.len(),
+                    faces.len(),
+                    admitted.len()
+                )
+            },
             exact,
         };
         EnclosedVolume::try_new(asked, lower, upper, evidence)
@@ -544,17 +723,22 @@ fn samples([a, b, c]: Triangle) -> [Point3; SAMPLES] {
     ]
 }
 
-/// Whether a face looks outside from a probe starting at `start`.
-fn faces_outside(
+/// What a face sees from a probe starting at `start`.
+fn look_from(
     near: &[Near<'_>],
     windings: &[WindingMesh<'_, TriMesh>],
     start: Point3,
     outward: Vec3,
-) -> Result<bool, FacadeAreaError> {
+    faces: Faces,
+) -> Result<Look, FacadeAreaError> {
     if covered(near, windings, start)? {
-        return Ok(false);
+        return Ok(Look::Covered);
     }
-    Ok(first_met(near, start, outward)?.is_none_or(|met| met == Met::Other))
+    Ok(match first_met(near, start, outward, faces)? {
+        None | Some(Met::Other) => Look::Outside,
+        Some(Met::Space) => Look::Space,
+        Some(Met::Itself) => Look::Itself,
+    })
 }
 
 /// Whether `point` lies inside a body other than the subject.
@@ -581,12 +765,17 @@ fn covered(
     Ok(false)
 }
 
-/// What a horizontal ray from `start` meets first within [`REACH`]. Bodies
-/// met at the same distance count as the one that excludes the face.
+/// What a ray from `start` meets first within [`REACH`]. Bodies met at the
+/// same distance count as the one that excludes the face.
+///
+/// An outward face ([`Faces::All`]) meets the subject itself at any
+/// distance: a reveal looks across its opening into its own body however
+/// wide the opening is.
 fn first_met(
     near: &[Near<'_>],
     start: Point3,
     direction: Vec3,
+    faces: Faces,
 ) -> Result<Option<Met>, FacadeAreaError> {
     let ray = Ray3 {
         origin: start,
@@ -597,14 +786,16 @@ fn first_met(
     let tolerance = tolerance()?;
     let mut first: Option<(f64, Met)> = None;
     for body in near {
-        if extent_gap(&segment, &body.extent, false) > ON_SURFACE {
+        let unbounded = faces == Faces::All && body.met == Met::Itself;
+        if !unbounded && extent_gap(&segment, &body.extent, false) > ON_SURFACE {
             continue;
         }
+        let reach = if unbounded { f64::INFINITY } else { REACH };
         for (index, triangle) in body.triangles.iter().enumerate() {
             let hit = intersect_triangle(&ray, *triangle, tolerance, index).map_err(|error| {
                 FacadeAreaError::Unavailable(format!("ray intersection unavailable: {error:?}"))
             })?;
-            let Some(t) = hit.map(|hit| hit.t).filter(|t| (0.0..=REACH).contains(t)) else {
+            let Some(t) = hit.map(|hit| hit.t).filter(|t| (0.0..=reach).contains(t)) else {
                 continue;
             };
             first = Some(match first {
@@ -737,6 +928,305 @@ fn open_edge(faces: &[[[f64; 3]; 3]]) -> Option<[f64; 3]> {
     None
 }
 
+/// At most this many pieces one face is cut into along the faces in its
+/// plane.
+const MAX_PIECES: usize = 1024;
+
+/// `polygon`, a convex polygon, on each side of the plane through `at`
+/// normal to `normal`: `(along, against)`. A corner within [`ON_SURFACE`]
+/// of the plane lies on both sides.
+fn cut(polygon: &[[f64; 3]], at: [f64; 3], normal: [f64; 3]) -> (Vec<[f64; 3]>, Vec<[f64; 3]>) {
+    let sides: Vec<f64> = polygon
+        .iter()
+        .map(|point| dot(normal, minus(*point, at)))
+        .collect();
+    if sides.iter().all(|side| *side >= -ON_SURFACE) {
+        return (polygon.to_vec(), Vec::new());
+    }
+    if sides.iter().all(|side| *side <= ON_SURFACE) {
+        return (Vec::new(), polygon.to_vec());
+    }
+    let (mut along, mut against) = (Vec::new(), Vec::new());
+    for (index, (point, side)) in polygon.iter().zip(&sides).enumerate() {
+        let next = (index + 1) % polygon.len();
+        let (other, beyond) = (polygon[next], sides[next]);
+        if *side >= -ON_SURFACE {
+            along.push(*point);
+        }
+        if *side <= ON_SURFACE {
+            against.push(*point);
+        }
+        let crosses = (*side > ON_SURFACE && beyond < -ON_SURFACE)
+            || (*side < -ON_SURFACE && beyond > ON_SURFACE);
+        if crosses {
+            let share = side / (side - beyond);
+            let crossing: [f64; 3] =
+                std::array::from_fn(|axis| point[axis] + (other[axis] - point[axis]) * share);
+            along.push(crossing);
+            against.push(crossing);
+        }
+    }
+    (along, against)
+}
+
+/// Twice the area of a planar polygon.
+fn doubled_area(polygon: &[[f64; 3]]) -> f64 {
+    let Some(first) = polygon.first() else {
+        return 0.0;
+    };
+    let mut sum = [0.0; 3];
+    for pair in polygon[1..].windows(2) {
+        let term = cross(minus(pair[0], *first), minus(pair[1], *first));
+        sum = std::array::from_fn(|axis| sum[axis] + term[axis]);
+    }
+    norm(sum)
+}
+
+/// `triangle` cut along the triangles `covers` lying in its plane, as
+/// triangles wound as it is: each piece lies wholly inside or wholly
+/// outside every cover, up to [`ON_SURFACE`].
+fn split(triangle: [[f64; 3]; 3], covers: &[[[f64; 3]; 3]]) -> Result<Vec<[[f64; 3]; 3]>, String> {
+    let [a, b, c] = triangle;
+    let normal = cross(minus(b, a), minus(c, a));
+    let length = norm(normal);
+    if length <= ON_SURFACE {
+        return Ok(Vec::new());
+    }
+    let normal = normal.map(|value| value / length);
+    let kept = |polygon: &[[f64; 3]]| {
+        polygon.len() >= 3 && doubled_area(polygon) > ON_SURFACE * ON_SURFACE
+    };
+    let mut pieces = vec![triangle.to_vec()];
+    for cover in covers {
+        // The cover's edges as planes across the face, each normal turned
+        // towards the cover's inside.
+        let mut planes = Vec::with_capacity(3);
+        for edge in 0..3 {
+            let (from, to, opposite) = (cover[edge], cover[(edge + 1) % 3], cover[(edge + 2) % 3]);
+            let across = cross(normal, minus(to, from));
+            let size = norm(across);
+            if size <= ON_SURFACE {
+                break;
+            }
+            let mut across = across.map(|value| value / size);
+            if dot(across, minus(opposite, from)) < 0.0 {
+                across = across.map(|value| -value);
+            }
+            planes.push((from, across));
+        }
+        if planes.len() < 3 {
+            continue;
+        }
+        let mut next = Vec::with_capacity(pieces.len());
+        for piece in pieces {
+            let (mut inside, mut outside) = (piece.clone(), Vec::new());
+            for (at, across) in &planes {
+                let (along, against) = cut(&inside, *at, *across);
+                if kept(&against) {
+                    outside.push(against);
+                }
+                inside = along;
+                if !kept(&inside) {
+                    break;
+                }
+            }
+            if kept(&inside) {
+                next.extend(outside);
+                next.push(inside);
+            } else {
+                next.push(piece);
+            }
+        }
+        pieces = next;
+        if pieces.len() > MAX_PIECES {
+            return Err(format!(
+                "a face is cut into more than {MAX_PIECES} pieces by the faces in its plane, too \
+                 many to place the envelope"
+            ));
+        }
+    }
+    Ok(pieces
+        .iter()
+        .flat_map(|piece| {
+            (1..piece.len() - 1).map(move |index| [piece[0], piece[index], piece[index + 1]])
+        })
+        .collect())
+}
+
+/// An edge of a face, from its first point to its second.
+type Edge = ([f64; 3], [f64; 3]);
+
+/// The edges of `faces` longer than [`SEAM`].
+fn edges(faces: &[[[f64; 3]; 3]]) -> Vec<Edge> {
+    faces
+        .iter()
+        .flat_map(|[a, b, c]| [(*a, *b), (*b, *c), (*c, *a)])
+        .filter(|(from, to)| norm(minus(*to, *from)) > SEAM)
+        .collect()
+}
+
+/// A straight line through `start` along the unit `direction`.
+#[derive(Clone, Copy)]
+struct Line {
+    start: [f64; 3],
+    direction: [f64; 3],
+}
+
+impl Line {
+    fn of((from, to): Edge) -> Self {
+        let length = norm(minus(to, from));
+        Self {
+            start: from,
+            direction: minus(to, from).map(|value| value / length),
+        }
+    }
+
+    fn holds(&self, point: [f64; 3]) -> bool {
+        norm(cross(minus(point, self.start), self.direction)) <= SEAM
+    }
+
+    fn holds_edge(&self, (from, to): &Edge) -> bool {
+        self.holds(*from) && self.holds(*to)
+    }
+
+    /// `edge` as a stretch along the line, `1` where it runs along it and
+    /// `-1` where against it.
+    fn stretch(&self, (from, to): &Edge) -> (f64, f64, i32) {
+        let (p, q) = (
+            dot(minus(*from, self.start), self.direction),
+            dot(minus(*to, self.start), self.direction),
+        );
+        (p.min(q), p.max(q), if q > p { 1 } else { -1 })
+    }
+
+    /// The length along the line that `edges` run more often one way than
+    /// the other, counted as often as the excess.
+    fn open_length<'e>(&self, edges: impl Iterator<Item = &'e Edge>) -> f64 {
+        let stretches: Vec<(f64, f64, i32)> = edges
+            .filter(|edge| self.holds_edge(edge))
+            .map(|edge| self.stretch(edge))
+            .collect();
+        let mut stops: Vec<f64> = stretches.iter().flat_map(|(p, q, _)| [*p, *q]).collect();
+        stops.sort_by(f64::total_cmp);
+        stops.dedup_by(|later, earlier| *later - *earlier <= SEAM);
+        stops
+            .windows(2)
+            .map(|pair| {
+                let middle = f64::midpoint(pair[0], pair[1]);
+                let runs: i32 = stretches
+                    .iter()
+                    .filter(|(p, q, _)| *p < middle && middle < *q)
+                    .map(|(_, _, way)| way)
+                    .sum();
+                f64::from(runs.abs()) * (pair[1] - pair[0])
+            })
+            .sum()
+    }
+}
+
+/// The representative of `index`'s group in the union-find `parent`.
+fn root(parent: &mut [usize], mut index: usize) -> usize {
+    while parent[index] != index {
+        parent[index] = parent[parent[index]];
+        index = parent[index];
+    }
+    index
+}
+
+/// At most this many candidate face edges are matched against the
+/// envelope.
+const MAX_CANDIDATE_EDGES: usize = 12_000;
+
+/// Adds to `faces` the groups of `candidates` that close it, and returns
+/// the indices of the candidates added, in order.
+///
+/// Candidates are grouped by the edges they share (stretches along one line
+/// overlapping by more than [`SEAM`]). A group joins only where it has
+/// open edges and every one of them closes an open edge of the faces taken
+/// so far: on its lines, the open length of both together is that of the
+/// faces less that of the group. A reveal between a wall's outer face and a
+/// window set back closes the hole in the one and the rim of the other; a
+/// reveal on the room's side of the window, or a closed surface such as a
+/// cavity, does not, and is left out.
+fn admit(
+    faces: &mut Vec<[[f64; 3]; 3]>,
+    candidates: &[[[f64; 3]; 3]],
+) -> Result<Vec<usize>, String> {
+    if candidates.is_empty() {
+        return Ok(Vec::new());
+    }
+    let owned: Vec<(usize, Edge)> = candidates
+        .iter()
+        .enumerate()
+        .flat_map(|(index, face)| {
+            edges(std::slice::from_ref(face))
+                .into_iter()
+                .map(move |edge| (index, edge))
+        })
+        .collect();
+    if owned.len() > MAX_CANDIDATE_EDGES {
+        return Err(format!(
+            "the envelope has more than {MAX_CANDIDATE_EDGES} edges of faces that may close it, \
+             too many to match"
+        ));
+    }
+    // Union-find over the candidates.
+    let mut parent: Vec<usize> = (0..candidates.len()).collect();
+    for (at, (first, edge)) in owned.iter().enumerate() {
+        let line = Line::of(*edge);
+        let (start, end, _) = line.stretch(edge);
+        for (second, other) in &owned[at + 1..] {
+            if first == second || !line.holds_edge(other) {
+                continue;
+            }
+            let (from, to, _) = line.stretch(other);
+            if end.min(to) - start.max(from) > SEAM {
+                let (one, two) = (root(&mut parent, *first), root(&mut parent, *second));
+                parent[one.max(two)] = one.min(two);
+            }
+        }
+    }
+    let mut groups: Vec<Vec<usize>> = Vec::new();
+    let mut slot: Vec<Option<usize>> = vec![None; candidates.len()];
+    for index in 0..candidates.len() {
+        let top = root(&mut parent, index);
+        if let Some(group) = slot[top] {
+            groups[group].push(index);
+        } else {
+            slot[top] = Some(groups.len());
+            groups.push(vec![index]);
+        }
+    }
+    let mut taken = edges(faces);
+    let mut admitted = Vec::new();
+    for group in groups {
+        let own: Vec<Edge> = owned
+            .iter()
+            .filter(|(index, _)| group.binary_search(index).is_ok())
+            .map(|(_, edge)| *edge)
+            .collect();
+        let mut lines: Vec<Line> = Vec::new();
+        for edge in &own {
+            if !lines.iter().any(|line| line.holds_edge(edge)) {
+                lines.push(Line::of(*edge));
+            }
+        }
+        let (mut theirs, mut ours, mut both) = (0.0, 0.0, 0.0);
+        for line in &lines {
+            theirs += line.open_length(taken.iter());
+            ours += line.open_length(own.iter());
+            both += line.open_length(taken.iter().chain(own.iter()));
+        }
+        let slack = SEAM * f64::from(u32::try_from(own.len()).unwrap_or(u32::MAX));
+        if ours > slack && both <= theirs - ours + slack {
+            taken.extend(own);
+            faces.extend(group.iter().map(|index| candidates[*index]));
+            admitted.extend(group);
+        }
+    }
+    Ok(admitted)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -784,6 +1274,78 @@ mod tests {
         );
         let open = &faces[..11];
         assert!(enclosed(open).unwrap_err().contains("do not close"));
+    }
+
+    #[test]
+    fn a_face_is_cut_into_pieces_wholly_inside_or_outside_a_cover() {
+        let face = [[0.0, 0.0, 0.0], [4.0, 0.0, 0.0], [0.0, 4.0, 0.0]];
+        let cover = [[1.0, 1.0, 0.0], [2.0, 1.0, 0.0], [1.0, 2.0, 0.0]];
+        let pieces = split(face, &[cover]).unwrap();
+        let area = |piece: &[[f64; 3]; 3]| doubled_area(piece) / 2.0;
+        let total: f64 = pieces.iter().map(area).sum();
+        assert!((total - 8.0).abs() < 1e-12, "{total}");
+        // A piece lies inside every edge of the cover or wholly outside one,
+        // and the pieces inside make up the cover.
+        let sides = |point: [f64; 3]| [point[1] - 1.0, point[0] - 1.0, 3.0 - point[0] - point[1]];
+        let mut covered = 0.0;
+        for piece in &pieces {
+            let within = |edge: usize, inward: bool| {
+                piece.iter().all(|corner| {
+                    let side = sides(*corner)[edge];
+                    if inward {
+                        side >= -1e-12
+                    } else {
+                        side <= 1e-12
+                    }
+                })
+            };
+            assert!(
+                (0..3).all(|edge| within(edge, true)) || (0..3).any(|edge| within(edge, false)),
+                "{piece:?}"
+            );
+            let centre: [f64; 3] =
+                std::array::from_fn(|axis| piece.iter().map(|p| p[axis]).sum::<f64>() / 3.0);
+            if sides(centre).iter().all(|side| *side > 0.0) {
+                covered += area(piece);
+            }
+        }
+        assert!((covered - 0.5).abs() < 1e-12, "{covered}");
+        // A cover elsewhere leaves the face whole.
+        let apart = [[5.0, 5.0, 0.0], [6.0, 5.0, 0.0], [5.0, 6.0, 0.0]];
+        assert_eq!(split(face, &[apart]).unwrap(), vec![face]);
+    }
+
+    #[test]
+    fn only_faces_closing_open_edges_are_admitted() {
+        let cube = cube([0.0, 0.0, 0.0], [2.0, 2.0, 2.0]);
+        let top: Vec<[[f64; 3]; 3]> = cube
+            .iter()
+            .filter(|face| face.iter().all(|corner| (corner[2] - 2.0).abs() < 1e-12))
+            .copied()
+            .collect();
+        let open: Vec<[[f64; 3]; 3]> = cube
+            .iter()
+            .filter(|face| !top.contains(face))
+            .copied()
+            .collect();
+        // Half the lid closes only part of the rim.
+        let mut faces = open.clone();
+        assert!(admit(&mut faces, &top[..1]).unwrap().is_empty());
+        // A closed surface beside it closes nothing.
+        let apart = cube_at([5.0, 0.0, 0.0]);
+        assert!(admit(&mut faces, &apart).unwrap().is_empty());
+        assert_eq!(faces.len(), open.len());
+        // The whole lid closes it.
+        let mut candidates = apart;
+        candidates.extend(top.iter().copied());
+        let admitted = admit(&mut faces, &candidates).unwrap();
+        assert_eq!(admitted, vec![12, 13]);
+        let (lower, upper) = enclosed(&faces).unwrap();
+        assert!(lower <= 8.0 && 8.0 <= upper, "{lower} {upper}");
+    }
+
+    fn cube_at(min: [f64; 3]) -> Vec<[[f64; 3]; 3]> {
+        cube(min, min.map(|value| value + 1.0))
     }
 
     #[test]

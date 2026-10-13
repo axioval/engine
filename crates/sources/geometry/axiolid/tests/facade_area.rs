@@ -402,3 +402,144 @@ fn the_outward_faces_of_a_building_enclose_its_gross_volume() {
         );
     }
 }
+
+/// A wall `min` to `max`, its thickness along y, with a rectangular hole
+/// through it over `x` and `z`: one closed mesh wound outward.
+fn holed(min: [f64; 3], max: [f64; 3], x: [f64; 2], z: [f64; 2]) -> TriMesh {
+    let [x0, y0, z0] = min;
+    let [x1, y1, z1] = max;
+    let mut points = Vec::new();
+    for y in [y0, y1] {
+        for [px, pz] in [[x0, z0], [x1, z0], [x1, z1], [x0, z1]] {
+            points.push(Point3::new(px, y, pz));
+        }
+        for [px, pz] in [[x[0], z[0]], [x[1], z[0]], [x[1], z[1]], [x[0], z[1]]] {
+            points.push(Point3::new(px, y, pz));
+        }
+    }
+    // Front (y0) corners: outer 0..4, hole 4..8; the back's eight on.
+    let (outer, hole) = (|i: u32| i % 4, |i: u32| 4 + i % 4);
+    let mut indices = Vec::new();
+    for i in 0..4 {
+        let j = i + 1;
+        // The front's frame piece along edge i, facing -y, and the back's.
+        indices.extend([outer(i), outer(j), hole(j), outer(i), hole(j), hole(i)]);
+        indices.extend([
+            8 + outer(i),
+            8 + hole(j),
+            8 + outer(j),
+            8 + outer(i),
+            8 + hole(i),
+            8 + hole(j),
+        ]);
+        // The outer side and the reveal along edge i.
+        indices.extend([
+            outer(i),
+            8 + outer(i),
+            8 + outer(j),
+            outer(i),
+            8 + outer(j),
+            outer(j),
+        ]);
+        indices.extend([
+            hole(j),
+            8 + hole(j),
+            8 + hole(i),
+            hole(j),
+            8 + hole(i),
+            hole(i),
+        ]);
+    }
+    TriMesh::new(points, indices)
+}
+
+/// [`building`] with the south wall one piece holed over `x` and z 1..2.5
+/// and, when `window` is set, a window 0.1 m thick filling the hole 0.1 m
+/// back from the wall's outer face.
+fn recessed_building(x: [f64; 2], window: bool) -> AxiolidGeometry {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(
+            id("south"),
+            holed([0.0, 0.0, 0.0], [10.0, 0.3, 3.0], x, [1.0, 2.5]),
+        )
+        .with_mesh(id("north"), cuboid([0.0, 7.7, 0.0], [10.0, 8.0, 3.0]))
+        .with_mesh(id("west"), cuboid([0.0, 0.3, 0.0], [0.3, 7.7, 3.0]))
+        .with_mesh(id("east"), cuboid([9.7, 0.3, 0.0], [10.0, 7.7, 3.0]))
+        .with_mesh(id("floor"), cuboid([0.0, 0.0, -0.3], [10.0, 8.0, 0.0]))
+        .with_mesh(id("roof"), cuboid([0.0, 0.0, 3.0], [10.0, 8.0, 3.3]))
+        .with_mesh(id("room"), cuboid([0.3, 0.3, 0.0], [9.7, 7.7, 3.0]));
+    if window {
+        geometry.with_mesh(id("window"), cuboid([x[0], 0.1, 1.0], [x[1], 0.2, 2.5]))
+    } else {
+        geometry
+    }
+}
+
+/// The envelope of [`recessed_building`] less `left_out`.
+fn recessed_envelope(left_out: &[&str]) -> Vec<ObjectId> {
+    ["south", "window", "north", "west", "east", "floor", "roof"]
+        .into_iter()
+        .filter(|name| !left_out.contains(name))
+        .map(id)
+        .collect()
+}
+
+#[test]
+fn reveals_before_a_window_set_back_close_the_envelope() {
+    // engine#362: a 2 m wide window, whose reveals look across more than
+    // the probes' reach, and a 0.6 m wide one. Either way the envelope
+    // closes over the 0.1 m deep recess in front of the window and leaves
+    // out the reveal behind it: 288 m³ less 0.1 m times the window's face.
+    for (x, recess) in [([2.0, 4.0], 0.3), ([2.0, 2.6], 0.09)] {
+        let service =
+            AxiolidFacadeAreaService::new(recessed_building(x, true)).with_space(id("room"));
+        let volume = service
+            .measure_enclosed_volume(&recessed_envelope(&[]))
+            .unwrap();
+        let (lower, upper) = volume.cubic_metres();
+        let expected = 288.0 - recess;
+        assert!(
+            lower <= expected && expected <= upper && upper - lower < 1e-4,
+            "{x:?}: {lower} {upper}"
+        );
+        assert!(volume.evidence().exact);
+        assert!(
+            volume.evidence().locator.contains(":reveal-faces="),
+            "{volume:?}"
+        );
+        // The reveals are no outward faces: the wall's are its outer face
+        // less the hole and its two ends.
+        let faces = service.measure_facade_faces(&id("south")).unwrap();
+        let area: f64 = faces
+            .faces()
+            .iter()
+            .map(|face| face.area_square_metres().0)
+            .sum();
+        let hole = (x[1] - x[0]) * 1.5;
+        assert!(close(area, 30.0 - hole + 2.0 * 0.9), "{x:?}: {area}");
+        assert!(
+            faces
+                .faces()
+                .iter()
+                .all(|face| face.side() == FacadeFaceSide::Outside)
+        );
+    }
+}
+
+#[test]
+fn an_envelope_open_at_a_wall_or_a_hole_still_refuses() {
+    let service =
+        AxiolidFacadeAreaService::new(recessed_building([2.0, 4.0], true)).with_space(id("room"));
+    let why = service
+        .measure_enclosed_volume(&recessed_envelope(&["east"]))
+        .unwrap_err();
+    assert!(why.to_string().contains("do not close"), "{why}");
+    // A hole with no window: its reveals run from the outer face to the
+    // room and close nothing.
+    let service =
+        AxiolidFacadeAreaService::new(recessed_building([2.0, 4.0], false)).with_space(id("room"));
+    let why = service
+        .measure_enclosed_volume(&recessed_envelope(&["window"]))
+        .unwrap_err();
+    assert!(why.to_string().contains("do not close"), "{why}");
+}

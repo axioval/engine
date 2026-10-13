@@ -620,6 +620,14 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **Context zones**: a tessellated footprint's chord band no longer widens a side of a
+  context zone it cannot reach: where every projected triangle lies
+  farther than its deviation plus the zone's accuracy band from the
+  boundary, `measure_zone_area` in the Axiolid adapter reports exactly no
+  area on a side no triangle lies on. A round trunk 1 m inside a parcel
+  has exactly nothing outside and `count_within;zone=` counts it surely;
+  one touching the boundary still straddles it
+  ([#364](https://github.com/axioval/engine/issues/364)).
 - **Geometry**: moves to openbim-ifc 0.24, ifc-geometry 0.18 and
   ifc-alignment 0.7.2. Stations on a plain `IfcCompositeCurve`, an
   `IfcTrimmedCurve` or a station-placed composite basis lower, one on a

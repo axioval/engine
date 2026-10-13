@@ -333,7 +333,10 @@ Areas are intervals sure to hold the exact value under every boundary the
 zone's accuracy allows: the area surely inside is measured against the
 zone less the band within its accuracy of its boundary, the area possibly
 inside against the zone with that band, and the outside the other way
-round. A tessellated footprint widens them by its chord band. A footprint
+round. A tessellated footprint widens them by its chord band, but only
+where that band can reach the zone's boundary band: a curved footprint
+(a round trunk, a cylindrical column) well inside has exactly no area
+outside, and one well outside none inside. A footprint
 straddling a zone's boundary within its accuracy therefore has an area
 outside from zero up, and is never surely inside: a rule requiring none
 outside is not evaluated for it, never passed.

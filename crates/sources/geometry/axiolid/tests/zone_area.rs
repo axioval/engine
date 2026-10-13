@@ -139,11 +139,79 @@ fn footprints_are_united_and_a_tessellated_one_widens_the_areas() {
     assert!(near(footprint, 86.0) && near(inside, 86.0), "{footprint:?}");
     assert_eq!(outside, (0.0, 0.0));
     assert!(exact);
+    // 1 m from the north edge, its deviation band cannot reach it (#364).
     let (footprint, inside, outside, exact) = measured(&["round"], limit(), 0.0);
     assert!(!exact);
     assert!(footprint.0 < 12.0 && footprint.1 > 12.0);
     assert!(inside.0 < 12.0 && inside.1 > 12.0);
-    assert!(outside.0 <= 0.0 && outside.1 > 0.0);
+    assert_eq!(outside, (0.0, 0.0));
+}
+
+/// A closed prism over a regular `sides`-gon inscribed in the circle of
+/// `radius` about `(x, y)`, a corner at angle zero: a round trunk
+/// tessellated within `radius·(1 − cos(π/sides))`.
+fn trunk(x: f64, y: f64, radius: f64, sides: u32, height: f64) -> (TriMesh, f64) {
+    let angle = |index: u32| std::f64::consts::TAU * f64::from(index) / f64::from(sides);
+    let mut points = Vec::new();
+    for z in [0.0, height] {
+        points.extend(
+            (0..sides)
+                .map(|i| Point3::new(x + radius * angle(i).cos(), y + radius * angle(i).sin(), z)),
+        );
+    }
+    points.push(Point3::new(x, y, 0.0));
+    points.push(Point3::new(x, y, height));
+    let (bottom, top) = (2 * sides, 2 * sides + 1);
+    let mut indices = Vec::new();
+    for i in 0..sides {
+        let j = (i + 1) % sides;
+        indices.extend([bottom, j, i]);
+        indices.extend([top, sides + i, sides + j]);
+        indices.extend([i, j, sides + j, i, sides + j, sides + i]);
+    }
+    let deviation = radius * (1.0 - (std::f64::consts::PI / f64::from(sides)).cos());
+    (TriMesh::new(points, indices), deviation)
+}
+
+/// engine#364: a tessellated round footprint 1 m inside the zone has
+/// exactly nothing outside, also with the zone stated within 0.2 m; one
+/// touching the boundary straddles it, and one well outside has exactly
+/// nothing inside.
+#[test]
+fn a_tessellated_round_footprint_is_widened_only_where_it_can_reach_the_boundary() {
+    let geometry = [
+        ("deep", 5.0, 13.5),
+        ("touching", 5.0, 14.5),
+        ("beyond", 5.0, 17.0),
+    ]
+    .into_iter()
+    .fold(AxiolidGeometry::new(), |geometry, (local, x, y)| {
+        let (mesh, deviation) = trunk(x, y, 0.5, 32, 4.0);
+        geometry.with_tessellated_mesh(id(local), mesh, deviation)
+    });
+    let service = AxiolidPlanAreaService::new(geometry, source());
+    let measured = |local: &str, accuracy: f64| {
+        let request = ZoneAreaRequest::try_new(vec![id(local)], limit(), accuracy).unwrap();
+        let area = service.measure_zone_area(&request).unwrap();
+        (area.inside_square_metres(), area.outside_square_metres())
+    };
+    let disc = std::f64::consts::PI * 0.25;
+    for accuracy in [0.0, 0.2] {
+        let (inside, outside) = measured("deep", accuracy);
+        assert_eq!(outside, (0.0, 0.0), "{accuracy}");
+        assert!(
+            inside.0 > 0.7 && inside.0 < disc && inside.1 > disc,
+            "{inside:?}"
+        );
+    }
+    let (inside, outside) = measured("touching", 0.0);
+    assert!(inside.0 > 0.0 && outside.1 > 0.0, "{inside:?} {outside:?}");
+    // A boundary stated within 1.1 m may run through the trunk 1 m inside.
+    let (_, outside) = measured("deep", 1.1);
+    assert!(outside.1 > 0.0, "{outside:?}");
+    let (inside, outside) = measured("beyond", 0.0);
+    assert_eq!(inside, (0.0, 0.0));
+    assert!(outside.0 > 0.7 && outside.1 > disc, "{outside:?}");
 }
 
 #[test]

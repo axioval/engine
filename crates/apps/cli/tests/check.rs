@@ -21845,6 +21845,92 @@ fn the_units_of_a_wall_hung_extinguisher_count_within_a_walk() {
     }
 }
 
+/// Site #90 on parcel `P1` of [`PARCEL_ZONES`] (x 0..30, y 0..20) and two
+/// round trunks, `IfcGeographicElement`s extruded 4 m from a circle of
+/// 0.5 m radius, so tessellated: #19 about (5, 18.5), 1 m inside the
+/// parcel's north edge, and #29 about (10, 19.5), touching it.
+fn parcel_trunks() -> String {
+    let tree = "IFCGEOGRAPHICELEMENT('GID',$,'Tree',$,$,PL,REP,$,.NOTDEFINED.)";
+    let mut data = String::new();
+    for (first, [x, y]) in [(10, [5.0, 18.5]), (20, [10.0, 19.5])] {
+        let [p, pos, profile, solid, shape, definition, object] =
+            [3, 4, 5, 6, 7, 8, 9].map(|offset| first + offset);
+        let _ = write!(
+            data,
+            "#{p}=IFCCARTESIANPOINT(({x:.2},{y:.2}));\n\
+             #{pos}=IFCAXIS2PLACEMENT2D(#{p},$);\n\
+             #{profile}=IFCCIRCLEPROFILEDEF(.AREA.,$,#{pos},0.5);\n\
+             #{solid}=IFCEXTRUDEDAREASOLID(#{profile},#2,#4,4.);\n\
+             #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{solid}));\n\
+             #{definition}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n\
+             #{object}={};\n",
+            tree.replace("GID", &format!("{object:022}"))
+                .replace("PL", "#3")
+                .replace("REP", &format!("#{definition}")),
+        );
+    }
+    data.push_str(
+        "#90=IFCSITE('0000000000000000000090',$,'Site',$,$,$,$,$,.ELEMENT.,$,$,$,$,$);\n",
+    );
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,#8);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCDIRECTION((0.,1.));\n\
+         #9=IFCPROJECT('0000000000000000000009',$,'P',$,$,$,$,(#5),#7);\n\
+         {data}\
+         ENDSEC;\nEND-ISO-10303-21;\n"
+    )
+}
+
+/// engine#364: a tessellated round trunk 1 m inside the parcel counts
+/// surely, its deviation band far from the boundary; the one touching the
+/// boundary still may or may not: 1 to 2 trees.
+#[test]
+fn a_round_trunk_well_inside_a_parcel_counts_surely() {
+    let case = Case::new("zone-trunks");
+    case.write("model.ifc", &parcel_trunks());
+    let path = case.write("zones.geojson", PARCEL_ZONES);
+    let path = path.to_str().unwrap().to_owned();
+    let count = "count_within;to=IfcGeographicElement;zone=P1";
+    let number = |value: f64| json!({"type": "number", "value": value});
+    for (operator, limit, code) in [
+        ("greaterThanOrEquals", 1.0, 0),
+        ("lessThanOrEquals", 2.0, 0),
+        ("lessThanOrEquals", 0.0, 3),
+        ("greaterThanOrEquals", 2.0, 4),
+    ] {
+        let requirement = measured_against(count, operator, &number(limit));
+        let (output, result) = case.geometry_rule_with(
+            &["model.ifc"],
+            &[("site", "IfcSite")],
+            (
+                "axioval:capability.expression",
+                &registry_signature("axioval:capability.expression"),
+            ),
+            entity("site"),
+            json!({"requirement": {"type": "expression", "value": requirement}}),
+            &json!({}),
+            &["--zones", &path],
+        );
+        assert_eq!(
+            output.status.code(),
+            Some(code),
+            "{operator} {limit}: {}: {result:#}",
+            stderr(&output)
+        );
+        if code == 4 {
+            let open = result["report"]["not_evaluated"].to_string();
+            assert!(open.contains("1..2"), "{result:#}");
+        }
+    }
+}
+
 /// engine#327: each building's distance from the building line along
 /// y = 15: 5 m for #19, 8 m for #29, and just over 5 m for #39 past the
 /// line's end.

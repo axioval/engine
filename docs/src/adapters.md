@@ -726,7 +726,13 @@ around a disc of radius `a`, handed over as fan triangles. The area surely
 inside is the footprint's intersection with the zone less the band, the
 area possibly inside its intersection with the zone and the band, and the
 area outside the other way round. A tessellated footprint widens every
-bound by its band `2·P·d + π·d²`.
+bound by its band `2·P·d + π·d²`, except a side it cannot reach: where
+every projected triangle of the footprint lies farther than its chord
+deviation `d` plus the zone's band from the stated boundary, each lies
+wholly on one side of every boundary the accuracy allows, so a side none
+lies on holds exactly none of the footprint. A round trunk well inside a
+parcel has exactly no area outside; one within its deviation of the
+boundary still straddles it.
 
 A wall's setback (`measure_setback`) is its footprint swept along each
 outward plan direction by the depth, less the footprint: the sum of the

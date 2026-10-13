@@ -1472,11 +1472,11 @@ A disk swept round a
 polyline corner without a fillet radius is mitred at half angle, as
 `IfcSweptDiskSolid` defines it, and certified within the budget
 (axiolid/kernel#245); with `IfcSweptDiskSolidPolygonal`'s fillet radius
-each corner becomes a tangent arc and is certified too. Still refused by
-name and unmeasured (axiolid/kernel#248): a disk swept along a closed
-polyline (`the mitre where it closes`), a fillet radius equal to the disk
-radius (a horn torus), a corner beside an arc and a mitre reaching past
-its leg. Planar bodies, booleans of planar operands and clips by
+each corner becomes a tangent arc and is certified too. Since
+axiolid-mesh-compile 0.3.24 (axiolid/kernel#248) a disk swept along a
+closed polyline sweeps as a loop and a corner beside an arc is mitred, both
+measured. Still refused by name and unmeasured: a fillet radius equal to
+the disk radius (a horn torus) and a mitre reaching past its leg. Planar bodies, booleans of planar operands and clips by
 polygonally bounded half-spaces included, stay exact and are meshed
 without a deviation report. Since axiolid-mesh-compile 0.3.16 the
 compiler snaps operand vertices onto the other operand's faces before it
@@ -1533,10 +1533,16 @@ unbounded by name and leaves its object unmeasured. Stations
 (`IfcPointByDistanceExpression`, `IfcAxis2PlacementLinear` with its `Axis`
 and `RefDirection`), `IfcOffsetCurveByDistances`,
 `IfcSectionedSolidHorizontal` and `IfcSectionedSurface` lower exactly onto
-stations (openbimrs/ifc#307). A sectioned solid still leaves its
-object unmeasured: the mesh compiler samples the surface between stations
-and certifies no bound on it, so it is never declared within the chord
-tolerance. Since `ifc-geometry` 0.18 (openbimrs/ifc#346) stations also
+stations (openbimrs/ifc#307). Since axiolid-mesh-compile 0.3.24
+(axiolid/kernel#247) the mesh compiler certifies the deviation between
+stations wherever the frame law along the basis has certified derivative
+bounds (lines, polylines, circles, elevated and banked curves with line or
+circle plans), refining the stations until the bound fits the chord
+tolerance, so such a sectioned solid is measured. Elsewhere it stays
+unmeasured with the reason that the compiler certifies no bound: along a
+numerically framed basis (offsets, spirals, B-splines, ellipses), and in a
+cell beside a mitre on a curved piece or with a section that changes across
+a mitre. Since `ifc-geometry` 0.18 (openbimrs/ifc#346) stations also
 lower on a plain `IfcCompositeCurve`, an `IfcTrimmedCurve` and a
 station-placed composite basis, and one on a joint or tangent
 discontinuity reads the incoming segment, as IFC4.3 ADD2 8.9.3.48.3

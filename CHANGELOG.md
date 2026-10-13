@@ -519,6 +519,23 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **Geometry**: moved to `axiolid-mesh-compile` 0.3.24, `axiolid-construct`
+  0.3.18, `axiolid-overlay` 0.3.14, `axiolid-evaluate` 0.3.14 and
+  `axiolid-mesh-boolean-boolmesh` 0.3.5.
+  - **Sectioned solids:** an `IfcSectionedSolidHorizontal` or
+    `IfcSectionedSurface` along a line, polyline, circle or a curve elevated
+    over one is now measured within a certified deviation
+    (axiolid/kernel#247). Along offsets, spirals, B-splines and ellipses,
+    and beside a mitre with a changing section, it stays unmeasured by
+    name.
+  - **Swept disks:** a disk swept along a closed polyline sweeps as a loop,
+    and a corner beside an arc is mitred, both measured
+    (axiolid/kernel#248).
+  - **Booleans:** a boolean of authored-mesh or flat-faced B-rep operands
+    reports a certified bound against the exact boolean of its operands
+    where it was unbounded (axiolid/kernel#266).
+  - **Overlay:** exact overlay booleans run about three times faster, with
+    identical output (axiolid/kernel#218).
 - **IFC**: moved to `openbim-ifc` 0.31 and `ifc-geometry` 0.25. Sections
   along an `IfcOffsetCurveByDistances` beside an ellipse, spiral, B-spline
   or gradient curve now lower with seam windows (openbimrs/ifc#443); along

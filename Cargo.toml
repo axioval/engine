@@ -80,7 +80,7 @@ axiolid-brep = "0.3.3"
 # oblique to the profile normal (#275); 0.3.17 builds exact oblique
 # extrusions of arc profiles and oblique circles with exact tilted
 # elliptical-cylinder walls and refuses oblique ellipses by name (#280).
-axiolid-construct = "0.3.17"
+axiolid-construct = "0.3.18"
 axiolid-core = "0.3.0"
 axiolid-inspect = "0.3.5"
 axiolid-mesh = "0.3.0"
@@ -94,7 +94,7 @@ axiolid-measure = "0.3.10"
 # 0.3.12 keeps Minkowski sum and erosion memory linear in the subdivision's
 # pieces, with bit-identical results (#292); 0.3.13 decides exact edge
 # contact and accepts its own settled output fed back (#272).
-axiolid-overlay = "0.3.13"
+axiolid-overlay = "0.3.14"
 axiolid-ray-mesh = "0.4.0"
 axiolid-route = "0.3.7"
 axiolid-spatial = "0.3.0"
@@ -110,7 +110,7 @@ axiolid-curve = "0.3.9"
 # inverts points on an elliptical cylinder (axiolid/kernel#287) and reads
 # curve paths (#290); projecting onto one is still refused. 0.3.11 certifies
 # piece lengths and seam-snapping windows (#294).
-axiolid-evaluate = "0.3.13"
+axiolid-evaluate = "0.3.14"
 # 0.3.9 subtracts placed extrusions exactly (axiolid/kernel#228, through
 # axiolid-brep-boolean 0.1.2) and reports a certified deviation per mesh
 # (#232, with axiolid-reference 0.3.4); 0.3.10 clips by half-spaces (#234),
@@ -146,13 +146,16 @@ axiolid-evaluate = "0.3.13"
 # brings axiolid-triangulate 0.3.4, which covers the exact convex hull
 # (#299) and merges coincident input points (#300), in a different but
 # deterministic triangle order. 0.3.23 is the release `ifc-geometry` 0.24
-# builds on.
-axiolid-mesh-compile = "0.3.23"
+# builds on. 0.3.24 certifies runs of sections at stations along bases with
+# certified frame laws (#247), sweeps disks round closed polylines and
+# beside arcs (#248), and bounds booleans of authored-mesh and flat-faced
+# B-rep operands against their exact boolean (#266).
+axiolid-mesh-compile = "0.3.24"
 axiolid-exact-compile-contract = "0.3.1"
 # 0.3.3 adds `MeshClosure::OpenSolid` (#265).
 axiolid-mesh-compile-contract = "0.3.3"
 # 0.3.4 declares its scratch as a true upper bound on a thread pool (#226).
-axiolid-mesh-boolean-boolmesh = "0.3.4"
+axiolid-mesh-boolean-boolmesh = "0.3.5"
 # 0.3.5 adds oriented stations (#246), additively; `ifc-geometry` 0.9
 # requires it for the IFC4X3 stations it lowers.
 axiolid-model = "0.3.13"

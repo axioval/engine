@@ -763,9 +763,10 @@ registry source, not the kernel checkout, before relying on an API.
   `boolean` stays for contacts that hold only up to rounding (above).
 - Swept disks (axiolid/kernel#245, #248): sharp corners without a fillet
   radius are mitred again with a `Proven` bound (mesh-compile 0.3.12,
-  construct 0.3.13), so such pipes are measured; still refused by name: a
-  corner beside an arc, a closed polyline, a fillet radius equal to the
-  disk radius (a horn torus), a mitre reaching past its leg. The exact
+  construct 0.3.13), so such pipes are measured; since mesh-compile 0.3.24
+  a corner beside an arc is mitred and a closed polyline sweeps as a loop;
+  still refused by name: a fillet radius equal to the disk radius (a horn
+  torus), a mitre reaching past its leg. The exact
   compiler (and so `exact_boundary`) still refuses directrices with
   corners.
 - Sweeps along an `IfcGradientCurve` (axiolid/kernel#252) are built and

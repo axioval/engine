@@ -2703,8 +2703,9 @@ const SECTIONED_DECK: &str = "\
 /// IFC4X3 geometry families are lowered or refused by name: a terrain
 /// written as an `IfcTriangulatedIrregularNetwork` is measured, an
 /// `IfcSectionedSolidHorizontal` lofted between stations along its
-/// directrix lowers (ifc-geometry 0.9, openbimrs/ifc#307) but is unmeasured
-/// because its mesh has no certified deviation, one whose station gives its
+/// directrix lowers (ifc-geometry 0.9, openbimrs/ifc#307) and is measured
+/// within a certified deviation (axiolid-mesh-compile 0.3.24,
+/// axiolid/kernel#247), one whose station gives its
 /// distance as `IfcParameterValue` is refused by name, and a pipe swept along a gradient curve with a vertical arc
 /// is measured within a certified deviation; none is dropped.
 #[test]
@@ -2765,14 +2766,13 @@ fn with_geometry_ifc4x3_families_are_measured_or_unmeasured_by_name() {
             .unwrap_or_else(|| panic!("{local} must be unmeasured: {geometry:#}"))
     };
     // The deck lofts a 2 m wide rectangle into a 4 m wide one over 10 m.
-    // Since ifc-geometry 0.9 it lowers onto stations and meshes, but the
-    // mesh compiler samples the surface between stations and certifies no
-    // bound on it, so the deck is unmeasured with that reason rather than
-    // declared within the chord tolerance.
-    let sectioned = reason("#53");
+    // Since ifc-geometry 0.9 it lowers onto stations and meshes; since
+    // axiolid-mesh-compile 0.3.24 (axiolid/kernel#247) the mesh compiler
+    // certifies its deviation along the straight directrix, so the deck is
+    // measured within the chord tolerance.
     assert!(
-        sectioned.contains("certifies no bound") && sectioned.contains("stationed sections"),
-        "{sectioned}"
+        !geometry["unmeasured"].to_string().contains("\"#53\""),
+        "{geometry:#}"
     );
     // The same deck with its last station as an `IfcParameterValue` is
     // refused by name before meshing, never lofted to a guessed position.
@@ -2789,13 +2789,13 @@ fn with_geometry_ifc4x3_families_are_measured_or_unmeasured_by_name() {
     // measured as tessellated. The run is 15 m: the certificate's search
     // grows with the tube's length, and 150 m took minutes in a debug
     // build.
-    assert_eq!(geometry["tessellated"], 1, "{geometry:#}");
+    assert_eq!(geometry["tessellated"], 2, "{geometry:#}");
     assert!(
         !geometry["unmeasured"].to_string().contains("\"#83\""),
         "{geometry:#}"
     );
     assert_eq!(reason("#30"), "no shape representation");
-    assert_eq!(unmeasured.len(), 3, "{geometry:#}");
+    assert_eq!(unmeasured.len(), 2, "{geometry:#}");
 }
 
 /// Four 1 m cubes placed along the gradient curve (#79) by
@@ -19713,11 +19713,11 @@ fn with_geometry_a_wall_clipped_within_a_composite_boundary_is_measured() {
 /// kernel proves its mesh within the chord budget again
 /// (axiolid/kernel#245): the body is measured and declared within the
 /// certified 1 mm, like the same polyline with a fillet radius
-/// (`IfcSweptDiskSolidPolygonal`). Still refused by name upstream
-/// (axiolid/kernel#248), and so unmeasured with the reason and their
-/// clashes not evaluated: a closed polyline, whose closing mitre is not
-/// built, and a fillet radius equal to the disk radius, whose bend is a
-/// horn torus.
+/// (`IfcSweptDiskSolidPolygonal`). A closed polyline sweeps as a loop
+/// since axiolid-mesh-compile 0.3.24 (axiolid/kernel#248) and is measured
+/// too. Still refused by name, and so unmeasured with the reason and its
+/// clashes not evaluated: a fillet radius equal to the disk radius, whose
+/// bend is a horn torus.
 #[test]
 fn a_swept_disk_round_an_unfilleted_corner_is_certified() {
     let case = Case::new("unfilleted-corner");
@@ -19779,9 +19779,10 @@ fn a_swept_disk_round_an_unfilleted_corner_is_certified() {
     // declared within the certified chord tolerance.
     assert_eq!(reason("#68"), None, "{result:#}");
     assert_eq!(reason("#78"), None, "{result:#}");
-    assert_eq!(result["geometry"]["tessellated"], 2, "{result:#}");
-    let closed = reason("#88").unwrap_or_else(|| panic!("{result:#}"));
-    assert!(closed.contains("closed polyline"), "{closed}");
+    // Since axiolid-mesh-compile 0.3.24 (axiolid/kernel#248) a closed
+    // polyline sweeps as a loop, so the closed ring is measured too.
+    assert_eq!(reason("#88"), None, "{result:#}");
+    assert_eq!(result["geometry"]["tessellated"], 3, "{result:#}");
     let horn = reason("#98").unwrap_or_else(|| panic!("{result:#}"));
     assert!(
         horn.contains("equals the fillet radius") && horn.contains("horn torus"),
@@ -19789,13 +19790,12 @@ fn a_swept_disk_round_an_unfilleted_corner_is_certified() {
     );
     let not_evaluated = result["report"]["not_evaluated"].to_string();
     assert!(
-        !not_evaluated.contains("#68") && !not_evaluated.contains("#78"),
+        !not_evaluated.contains("#68")
+            && !not_evaluated.contains("#78")
+            && !not_evaluated.contains("#88"),
         "{result:#}"
     );
-    assert!(
-        not_evaluated.contains("#88") && not_evaluated.contains("#98"),
-        "{result:#}"
-    );
+    assert!(not_evaluated.contains("#98"), "{result:#}");
 }
 
 /// A wall #69 as an `IfcFacetedBrep`, the unit box at x 10 with its
@@ -20653,8 +20653,11 @@ fn with_geometry_a_run_along_offsets_by_distances_of_an_offset_is_refused_by_nam
 /// the same with the second polyline turned 90 degrees so the joint is a
 /// tangent discontinuity. Since ifc-geometry 0.18 (openbimrs/ifc#346) the
 /// stations lower on such a basis, the joint's on the incoming segment,
-/// where they were refused by name: the deck reaches the mesh compiler,
-/// which certifies no bound between stations, and is unmeasured for that.
+/// where they were refused by name. Since axiolid-mesh-compile 0.3.24
+/// (axiolid/kernel#247) the mesh compiler certifies the bound between
+/// stations along polylines: the straight deck is measured, while the turned
+/// one, whose section changes across the mitre at the joint, is unmeasured
+/// by that name.
 #[test]
 fn with_geometry_stations_on_a_composite_basis_lower() {
     let deck = |corner: &str| {
@@ -20689,13 +20692,17 @@ fn with_geometry_stations_on_a_composite_basis_lower() {
             .replace("FILE_SCHEMA(('IFC4'))", "FILE_SCHEMA(('IFC4X3_ADD2'))");
         let (output, result) = case.wall_clash(&model, &json!({}));
         assert!(output.status.code().is_some(), "{}", stderr(&output));
-        let reason = unmeasured_reasons(&result)
-            .remove("#53")
-            .unwrap_or_else(|| panic!("{corner}: {result:#}"));
-        assert!(
-            reason.contains("certifies no bound") && reason.contains("stationed sections"),
-            "{corner}: {reason}"
-        );
+        let reason = unmeasured_reasons(&result).remove("#53");
+        if corner == "(30.,0.,0.)" {
+            assert_eq!(reason, None, "{result:#}");
+            assert_eq!(result["geometry"]["tessellated"], 1, "{result:#}");
+        } else {
+            let reason = reason.unwrap_or_else(|| panic!("{corner}: {result:#}"));
+            assert!(
+                reason.contains("certifies no bound") && reason.contains("mitred seam"),
+                "{corner}: {reason}"
+            );
+        }
     }
 }
 

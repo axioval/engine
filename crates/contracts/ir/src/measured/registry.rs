@@ -573,6 +573,40 @@ const ENVELOPE_UNDECIDED: &str =
 const ENVELOPE_OPEN: &str =
     "the faces looking outside do not close, or a face only partly looks outside";
 
+/// Why a drainage value is not evaluated.
+const DRAINAGE_UNMEASURED: &str =
+    "the surface has no face looking up, or an outlet has no body or footprint in plan";
+
+/// The outlets a drainage value is traced to, and the least fall a face
+/// must have to shed water.
+const DRAINAGE: [MeasuredParameter; 2] = [
+    selected(
+        "outlets",
+        true,
+        &en_de(
+            "The objects taking the water, drains or gutters: their source kinds, \
+             `,`-separated, or `@` a selector parameter of the rule. Water reaching an \
+             outlet's footprint in plan (the convex hull of its body) is taken.",
+            "Die Objekte, die das Wasser aufnehmen, Abläufe oder Rinnen: ihre Quellarten, \
+             durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel. Wasser, das \
+             den Grundriss eines Ablaufs (die konvexe Hülle seines Körpers) erreicht, wird \
+             aufgenommen.",
+        ),
+    ),
+    MeasuredParameter {
+        key: "minimum_fall",
+        kind: MeasuredParameterKind::Number { minimum: 0.0 },
+        required: false,
+        default: Some("0"),
+        help: &en_de(
+            "The least fall, rise over run (0.02 for 2 %), a face must have to shed water; \
+             a face falling less holds the water on it.",
+            "Das kleinste Gefälle, Höhe durch Länge (0,02 für 2 %), mit dem eine Fläche \
+             Wasser ableitet; auf einer flacheren Fläche bleibt das Wasser stehen.",
+        ),
+    },
+];
+
 /// Why a space-validation value of selected elements is not evaluated.
 pub(super) const SPACE_UNDECIDED: &str = "the selection leaves elements undecided";
 
@@ -4529,6 +4563,29 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              angegeben, sonst aus den Flügeln, sonst die Gesamtbreite weniger dem Abzug.",
         ),
     },
+    MeasuredDescriptor {
+        name: "drainage_path",
+        parameters: &DRAINAGE,
+        dimension: Some(QuantityDimension::Length),
+        services: &["proximity", "type-hierarchy"],
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[
+            NO_GEOMETRY,
+            DRAINAGE_UNMEASURED,
+            "the selection leaves an outlet undecided",
+            "how far water runs cannot be bounded",
+        ],
+        label: &en_de("Drainage path", "Fließweg"),
+        help: &en_de(
+            "The longest path water runs on the object's top, down the steepest descent and \
+             along its valleys, from a point that drains to where it reaches an outlet's \
+             footprint, along the surface; `null` where no point drains.",
+            "Der längste Weg, den Wasser auf der Oberseite des Objekts zurücklegt, entlang \
+             des steilsten Gefälles und seiner Kehlen, von einer entwässerten Stelle bis zum \
+             Grundriss eines Ablaufs, entlang der Fläche; `null`, wo keine Stelle entwässert.",
+        ),
+    },
     plain!(
         "duplicate_count",
         None,
@@ -7942,6 +7999,28 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              boolean) where none declares itself external; 0 where one does.",
             "Wie viele Wände der Quelle keine verwertbare Lage angeben (fehlend, `null` oder \
              kein Wahrheitswert), wo keine sich als außenliegend angibt; 0, wo eine es tut.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "undrained_area",
+        parameters: &DRAINAGE,
+        dimension: Some(QuantityDimension::Area),
+        services: &["proximity", "type-hierarchy"],
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[NO_GEOMETRY, DRAINAGE_UNMEASURED],
+        label: &en_de("Undrained area", "Nicht entwässerte Fläche"),
+        help: &en_de(
+            "The plan area of the object's top whose water reaches no outlet: held in a \
+             hollow, on a level edge or on a face falling less than the minimum, or run off \
+             its edge. It drains where this is 0 m²; what cannot be decided (a face level \
+             within rounding, a tessellation) widens the upper bound.",
+            "Die Grundrissfläche der Oberseite des Objekts, deren Wasser keinen Ablauf \
+             erreicht: in einer Mulde, auf einer waagerechten Kante oder einer Fläche mit \
+             weniger als dem kleinsten Gefälle gehalten, oder über ihren Rand abgelaufen. \
+             Sie entwässert, wo diese 0 m² beträgt; was sich nicht entscheiden lässt (eine \
+             im Rundungsrahmen waagerechte Fläche, eine Tessellierung), weitet die obere \
+             Grenze.",
         ),
     },
     plain!(

@@ -21565,6 +21565,136 @@ fn a_box_building_with_windows_set_back_closes_its_envelope_across_the_reveals()
     assert!(result.to_string().contains("do not close"), "{result:#}");
 }
 
+/// A flat roof slab #30, 10 m deep (y 0..10), its top falling 0.15 m from
+/// its edges at 0.25 m to the middle of each of `cells` (`x0`, `x1`, the
+/// middle's height) over four planes, its underside at -0.3 m, one closed
+/// face set; and a 0.3 m square drain at each of `drains` in plan, #49,
+/// #59 and on.
+fn drained_roof(cells: &[(f64, f64, f64)], drains: &[[f64; 2]]) -> String {
+    const EDGE: f64 = 0.25;
+    const UNDER: f64 = -0.3;
+    let (up, down) = ([0.0, 0.0, 1.0], [0.0, 0.0, -1.0]);
+    let mut triangles: Vec<([f64; 3], [[f64; 3]; 3])> = Vec::new();
+    for &(x0, x1, middle) in cells {
+        let centre = [f64::midpoint(x0, x1), 5.0, middle];
+        let corners = [[x0, 0.0], [x1, 0.0], [x1, 10.0], [x0, 10.0]];
+        for i in 0..4 {
+            let ([ax, ay], [bx, by]) = (corners[i], corners[(i + 1) % 4]);
+            triangles.push((up, [centre, [ax, ay, EDGE], [bx, by, EDGE]]));
+        }
+        let under = corners.map(|[x, y]| [x, y, UNDER]);
+        triangles.push((down, [under[0], under[1], under[2]]));
+        triangles.push((down, [under[0], under[2], under[3]]));
+    }
+    // The sides, along y = 0 and y = 10 cell by cell, and the two ends.
+    let (first, last) = (cells[0].0, cells[cells.len() - 1].1);
+    for &(x0, x1, _) in cells {
+        for (y, outward) in [(0.0, [0.0, -1.0, 0.0]), (10.0, [0.0, 1.0, 0.0])] {
+            triangles.push((outward, [[x0, y, EDGE], [x1, y, EDGE], [x1, y, UNDER]]));
+            triangles.push((outward, [[x0, y, EDGE], [x1, y, UNDER], [x0, y, UNDER]]));
+        }
+    }
+    for (x, outward) in [(first, [-1.0, 0.0, 0.0]), (last, [1.0, 0.0, 0.0])] {
+        triangles.push((outward, [[x, 0.0, EDGE], [x, 10.0, EDGE], [x, 10.0, UNDER]]));
+        triangles.push((outward, [[x, 0.0, EDGE], [x, 10.0, UNDER], [x, 0.0, UNDER]]));
+    }
+    let drain = "IFCWASTETERMINAL('GID',$,$,$,$,PL,REP,$,.ROOFDRAIN.)";
+    let outlets: String = drains
+        .iter()
+        .zip((40..).step_by(10))
+        .map(|([x, y], first)| placed_box(first, [*x, *y, -0.2], [0.3, 0.3, 0.3], drain))
+        .collect();
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         {}\
+         #30=IFCSLAB('0000000000000000000030',$,$,$,$,#3,#13,$,.ROOF.);\n\
+         {outlets}\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        face_set_body(10, &triangles),
+    )
+}
+
+/// engine#335: a roof falling to two drains with a dished 4 m wide area
+/// between them reports the 40 m² dish as not draining; the same falls
+/// without the dish drain, the longest path running from a corner down
+/// the valley to the drain's footprint, 4.85√2 m in plan.
+#[test]
+fn a_dished_roof_area_does_not_drain_and_a_falling_roof_does() {
+    let case = Case::new("roof-drainage");
+    let types = [("roof", "IfcSlab")];
+    let quantity = |value: f64, unit: &str| json!({"kind": "literal", "value": {"type": "quantity", "value": value, "unit": unit}});
+    let between = |name: &str, low: Value, high: Value| {
+        json!({"requirement": {"type": "expression", "value": {
+                "kind": "between",
+                "operand": {"kind": "property", "propertySet": "axioval:measured",
+                            "property": name, "label": "value"},
+                "low": low, "high": high}},
+               "message": {"type": "string", "value": "measures {value}"}})
+    };
+    let rule = |model: &str, parameters: Value| {
+        case.geometry_rule(
+            model,
+            &types,
+            "axioval:capability.expression",
+            &registry_signature("axioval:capability.expression"),
+            entity("roof"),
+            parameters,
+        )
+    };
+    let undrained = "undrained_area;outlets=IfcWasteTerminal";
+    let dished = drained_roof(
+        &[(0.0, 10.0, 0.1), (10.0, 14.0, 0.15), (14.0, 24.0, 0.1)],
+        &[[5.0, 5.0], [19.0, 5.0]],
+    );
+    let (output, result) = rule(
+        &dished,
+        between(
+            undrained,
+            quantity(40.0 - 1e-6, "m2"),
+            quantity(40.0 + 1e-6, "m2"),
+        ),
+    );
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert!(finding_ids(&result).is_empty(), "{result:#}");
+    // Required to drain, it does not.
+    let (output, result) = rule(
+        &dished,
+        between(undrained, quantity(0.0, "m2"), quantity(0.0, "m2")),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(finding_ids(&result), ["#30"], "{result:#}");
+
+    let falling = drained_roof(
+        &[(0.0, 10.0, 0.1), (10.0, 20.0, 0.1)],
+        &[[5.0, 5.0], [15.0, 5.0]],
+    );
+    let longest = 4.85 * 2.0_f64.sqrt();
+    for (name, low, high) in [
+        (
+            format!("{undrained};minimum_fall=0.02"),
+            quantity(0.0, "m2"),
+            quantity(0.0, "m2"),
+        ),
+        (
+            "drainage_path;outlets=IfcWasteTerminal".to_owned(),
+            quantity(longest - 0.01, "m"),
+            quantity(7.08, "m"),
+        ),
+    ] {
+        let (output, result) = rule(&falling, between(&name, low, high));
+        assert_eq!(output.status.code(), Some(0), "{name}: {}", stderr(&output));
+        assert!(finding_ids(&result).is_empty(), "{name}: {result:#}");
+    }
+}
+
 /// Parcel `P1` (x 0..30, y 0..20) holding buildings #19 (x 2..12, y 2..10)
 /// and #29 (x 15..21, y 2..7); building #39 (x 30.3..40.3, y 2..10) beside
 /// it crosses the building limit `B1` (x 0..40, y 0..15) by 0.3 m; the

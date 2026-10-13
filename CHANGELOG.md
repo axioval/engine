@@ -53,6 +53,22 @@ All notable changes are documented here. This project follows Semantic Versionin
   `calculation-result-untraceable`. A value read cites its provenance
   (`…#entry=<key>;method=…;report=…;date=…;revision=…`)
   ([#323](https://github.com/axioval/engine/issues/323)).
+- **Drainage to outlets**: `undrained_area;outlets=<objects>[;
+  minimum_fall=<ratio>]` is the plan area of an object's top whose water
+  reaches none of the outlets (drains, gutters), 0 m² where it drains, and
+  `drainage_path` the longest path water runs along the surface to an
+  outlet's footprint, `null` where nothing drains.
+  `ProximityService::measure_drainage` (`DrainageRequest`,
+  `DrainageEvidence`, `DrainagePath`) refuses by default; the Axiolid
+  adapter traces water down each face's steepest descent, along valleys
+  and on from vertices, keeping every way it may take where a direction is
+  undecided, until an outlet's convex footprint takes it, it leaves over
+  the border or it rests in a hollow, on a level edge or on a face falling
+  less than the minimum. Undecided faces and tessellations widen the
+  undrained area's upper bound, never the drained part. A roof falling to
+  two drains with a dished area between them reports the 40 m² dish; the
+  same falls without it drain
+  ([#335](https://github.com/axioval/engine/issues/335)).
 - **Zoning plans as context**: `ContextZones::read_xplan_gml` (through
   `read_gml` for a document rooted in `XPlanAuszug`, so `check --zones
   0.05=plan.gml`) reads the regulating areas and lines of an XPlanGML

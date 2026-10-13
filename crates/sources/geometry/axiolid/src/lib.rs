@@ -15,6 +15,7 @@ pub(crate) mod containment;
 pub(crate) mod corridor_end;
 pub(crate) mod coverage;
 pub mod derived_relationships;
+mod drainage;
 pub(crate) mod elevation;
 pub mod envelope_membership;
 pub mod exact_boundary;

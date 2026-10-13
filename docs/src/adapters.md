@@ -1052,6 +1052,22 @@ then the sum of the signed tetrahedra from the first corner, widened by its
 rounding and by a 1 nm strip along every edge, and for a tessellation by
 its chord band over the faces; at most 30 000 edges are matched, and 12 000
 edges of candidates.
+`AxiolidProximityService::measure_drainage` traces water over the
+surface's faces looking up as a network of faces, edges and vertices,
+joined by exact coordinates. A face sheds water when its gradient exceeds
+the minimum fall by more than 1e-9; its flow crosses an edge only where
+its share across the edge exceeds 1e-12 (the arithmetic's rounding on
+exact positions), and otherwise runs along it. Every way water may go on
+is kept where a direction is undecided: into the face beyond, along a
+valley to its lower end, from a vertex down any face or edge that may be
+the steepest way. An outlet takes water reaching the convex hull of its
+body in plan, grown by its chord deviation; a border edge loses it unless
+a sliver or another border edge may continue the top there. The faces
+surely draining and surely holding their water are the two least
+fixpoints over the network, so a hollow, a level edge or a flat face is
+reported only when no way out may exist, and anything undecided widens
+the undrained area's upper bound. A tessellated surface may hide a hollow
+under any chord, so it never surely drains and its path is not bounded.
 `AxiolidProximityService::measure_body_volume` answers the certified
 `enclosed_volume` of a closed two-manifold, widened by the chord band
 (`tube_volume`) for a tessellated one; an open surface refuses with

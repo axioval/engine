@@ -136,8 +136,8 @@ use axioval_engine::{
     VerticalDirection, VerticalSurfaces, VolumeInterval,
 };
 use axioval_engine::{
-    BodySurface, ExactBoundaryHandle, HeightAboveEvidence, HeightAboveRequest,
-    SurfaceDistanceEvidence, SurfaceDistanceRequest,
+    BodySurface, DrainageEvidence, DrainageRequest, ExactBoundaryHandle, HeightAboveEvidence,
+    HeightAboveRequest, SurfaceDistanceEvidence, SurfaceDistanceRequest,
 };
 use axioval_ir::{Evidence, ObjectId};
 
@@ -2376,6 +2376,13 @@ impl ProximityService for AxiolidProximityService {
         request: &HeightAboveRequest,
     ) -> Result<HeightAboveEvidence, ProximityError> {
         crate::height_above::measure(self, &self.geometry, request)
+    }
+
+    fn measure_drainage(
+        &self,
+        request: &DrainageRequest,
+    ) -> Result<DrainageEvidence, ProximityError> {
+        crate::drainage::measure(self, &self.geometry, request)
     }
 
     fn measure_body_volume(&self, object: &ObjectId) -> Result<BodyVolume, ProximityError> {

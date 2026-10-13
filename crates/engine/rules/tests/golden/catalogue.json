@@ -72915,6 +72915,83 @@
       "available": true
     },
     {
+      "name": "drainage_path",
+      "parameters": [
+        {
+          "key": "outlets",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects taking the water, drains or gutters: their source kinds, `,`-separated, or `@` a selector parameter of the rule. Water reaching an outlet's footprint in plan (the convex hull of its body) is taken."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, die das Wasser aufnehmen, Abläufe oder Rinnen: ihre Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel. Wasser, das den Grundriss eines Ablaufs (die konvexe Hülle seines Körpers) erreicht, wird aufgenommen."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "minimum_fall",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": false,
+          "default": "0",
+          "help": [
+            {
+              "language": "en",
+              "text": "The least fall, rise over run (0.02 for 2 %), a face must have to shed water; a face falling less holds the water on it."
+            },
+            {
+              "language": "de",
+              "text": "Das kleinste Gefälle, Höhe durch Länge (0,02 für 2 %), mit dem eine Fläche Wasser ableitet; auf einer flacheren Fläche bleibt das Wasser stehen."
+            }
+          ],
+          "references": "number"
+        }
+      ],
+      "dimension": "length",
+      "services": [
+        "proximity",
+        "type-hierarchy"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "the surface has no face looking up, or an outlet has no body or footprint in plan",
+        "the selection leaves an outlet undecided",
+        "how far water runs cannot be bounded"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Drainage path"
+        },
+        {
+          "language": "de",
+          "text": "Fließweg"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The longest path water runs on the object's top, down the steepest descent and along its valleys, from a point that drains to where it reaches an outlet's footprint, along the surface; `null` where no point drains."
+        },
+        {
+          "language": "de",
+          "text": "Der längste Weg, den Wasser auf der Oberseite des Objekts zurücklegt, entlang des steilsten Gefälles und seiner Kehlen, von einer entwässerten Stelle bis zum Grundriss eines Ablaufs, entlang der Fläche; `null`, wo keine Stelle entwässert."
+        }
+      ],
+      "unit": "m",
+      "available": true
+    },
+    {
       "name": "duplicate_count",
       "parameters": [],
       "services": [
@@ -86726,6 +86803,81 @@
         }
       ],
       "unit": "1",
+      "available": true
+    },
+    {
+      "name": "undrained_area",
+      "parameters": [
+        {
+          "key": "outlets",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects taking the water, drains or gutters: their source kinds, `,`-separated, or `@` a selector parameter of the rule. Water reaching an outlet's footprint in plan (the convex hull of its body) is taken."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, die das Wasser aufnehmen, Abläufe oder Rinnen: ihre Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel. Wasser, das den Grundriss eines Ablaufs (die konvexe Hülle seines Körpers) erreicht, wird aufgenommen."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "minimum_fall",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": false,
+          "default": "0",
+          "help": [
+            {
+              "language": "en",
+              "text": "The least fall, rise over run (0.02 for 2 %), a face must have to shed water; a face falling less holds the water on it."
+            },
+            {
+              "language": "de",
+              "text": "Das kleinste Gefälle, Höhe durch Länge (0,02 für 2 %), mit dem eine Fläche Wasser ableitet; auf einer flacheren Fläche bleibt das Wasser stehen."
+            }
+          ],
+          "references": "number"
+        }
+      ],
+      "dimension": "area",
+      "services": [
+        "proximity",
+        "type-hierarchy"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "the surface has no face looking up, or an outlet has no body or footprint in plan"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Undrained area"
+        },
+        {
+          "language": "de",
+          "text": "Nicht entwässerte Fläche"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The plan area of the object's top whose water reaches no outlet: held in a hollow, on a level edge or on a face falling less than the minimum, or run off its edge. It drains where this is 0 m²; what cannot be decided (a face level within rounding, a tessellation) widens the upper bound."
+        },
+        {
+          "language": "de",
+          "text": "Die Grundrissfläche der Oberseite des Objekts, deren Wasser keinen Ablauf erreicht: in einer Mulde, auf einer waagerechten Kante oder einer Fläche mit weniger als dem kleinsten Gefälle gehalten, oder über ihren Rand abgelaufen. Sie entwässert, wo diese 0 m² beträgt; was sich nicht entscheiden lässt (eine im Rundungsrahmen waagerechte Fläche, eine Tessellierung), weitet die obere Grenze."
+        }
+      ],
+      "unit": "m2",
       "available": true
     },
     {

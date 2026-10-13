@@ -33,6 +33,7 @@ mod cover;
 mod distance;
 mod door_swing;
 mod door_swing_direction;
+mod drainage;
 mod effective_coverage;
 mod empty_host;
 mod envelope_area;
@@ -385,6 +386,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(height_above::HeightMeasures))
         .and_then(|registry| registry.register_measured(facade_orientation::FacingMeasures))
         .and_then(|registry| registry.register_measured(envelope_area::EnvelopeAreaMeasures))
+        .and_then(|registry| registry.register_measured(drainage::DrainageMeasures))
         .and_then(|registry| registry.register_measured(context_zone::ZoneMeasures))
         .and_then(|registry| registry.register_measured(setback::SetbackMeasures))
         .and_then(|registry| registry.register_measured(body_extent::ExtentMeasures))

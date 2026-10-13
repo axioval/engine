@@ -359,6 +359,13 @@ const COVERED: &[(&str, &str, &str)] = &[
         "tests/envelope_area.rs",
         "an_envelope_measured_on_a_tessellation_is_inexact",
     ),
+    // A drainage traced over a tessellation is inexact, and so is a path
+    // whose bounds differ.
+    (
+        "undrained_area",
+        "tests/drainage.rs",
+        "a_drainage_measured_on_a_tessellation_is_inexact",
+    ),
     // Footprints inside and outside a context zone, and their sums over a
     // parcel, over a tessellation are inexact.
     (

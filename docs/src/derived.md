@@ -539,6 +539,7 @@ ignoring ASCII case):
 | `contact_gap[;with=<objects>][;side=…;gap=…;intersection=…;polygon=…]` | the distance to the nearest object named the contact service reports, none where it reports none; refused while the selection leaves an object undecided | built in, over `ContactService` |
 | `cover;host_path=<steps>[;faces=top,side,bottom]` | the least distance from an embedded object, over its whole body, to the chosen faces of the one host the path reaches; none where it reaches none | built in, over `ProximityService::measure_face_distance` and `RelationshipSelectionService` |
 | `height_above_surface;surface=<objects>[;edge=top\|bottom]` | the least vertical distance from the object's top (or bottom) faces down to the nearest selected surface beneath them, over the whole edge | built in, over `ProximityService::measure_height_above` |
+| `undrained_area;outlets=<objects>[;minimum_fall=<ratio>]`, `drainage_path;outlets=<objects>[;minimum_fall=<ratio>]` | the plan area of the object's top whose water reaches none of the outlets, zero where it drains; and the longest path water runs to one, `null` where none drains (see [Drainage to outlets](#drainage-to-outlets)) | built in, over `ProximityService::measure_drainage` |
 | `above_terrain;terrain=original\|finished;of=point\|bottom\|top\|level[;reference=mean\|beneath][;path=<steps>][;outline=<kinds>][;outline_path=<steps>]` | the height of the object's placement origin, lowest or highest point, or level above the mean terrain along its outline, or above the terrain beneath the point (see [Heights above the terrain](#heights-above-the-terrain)) | built in, over `TerrainService`, `PlanAreaService::measure_footprint_outline`, `ObjectFrameService`, `VerticalExtentService`, `CoordinateSystemService` for a map terrain |
 | `mean_terrain_height;terrain=original\|finished[;outline=<kinds>][;outline_path=<steps>]` | the mean terrain elevation along the outline of the object's footprint, or of the outline's objects united | the same |
 | `level_rise;levels=<kinds>;order=<set/name>[;anchor=<steps>][;path=<steps>][;lowest=…][;highest=…][;contents=<steps>;content_kinds=<kinds>]`, `prevailing_rise;…[;tolerance=<m>]` | a level's rise to the next one up, and the prevailing rise among its anchor's levels, as `level-spacing` measures them | built in, over the order property and `VerticalExtentService` |
@@ -972,6 +973,46 @@ and 0.12 m at the other measures 0.12 m.
   tessellation, whose chords do not state its true faces, and a face
   within rounding of 45°. The value is exact, widened only by the
   clipping's rounding.
+
+### Drainage to outlets
+
+`undrained_area;outlets=<objects>[;minimum_fall=<ratio>]` is the plan
+area of the object's top whose water reaches none of the outlets the
+objects `outlets` names (drains, gutters: kinds or `@` a selector); the
+surface drains where it is 0 m². `drainage_path` with the same arguments
+is the longest path water runs along the surface to an outlet. The
+proximity service traces them (`measure_drainage`):
+
+- The top is the faces looking up, joined where they share an edge. Water
+  runs down each face's steepest descent; over an edge into the face
+  beyond, or, where both faces drain into it, along the edge (a valley) to
+  its lower end; from a vertex down any way that may be the steepest.
+- It is taken where it reaches an outlet's footprint in plan (the convex
+  hull of the outlet's body). It is lost where it runs over the top's
+  border, and held where it comes to rest: in a hollow no way leads down
+  from, on a level edge, or on a face falling less than `minimum_fall`
+  (rise over run, 0.02 for 2 %; 0 by default).
+- The lower bound is the area of the faces surely not draining (and of
+  faces that would hold their water but for an outlet over them, less
+  where that outlet may take it); the upper bound every face not surely
+  draining. A face level within rounding, a flow whose direction is
+  undecided or a tessellation (whose chords may hide a hollow anywhere)
+  widens the upper bound and never counts as draining. An outlet the
+  selection leaves undecided counts for the lower bound only.
+- The path's upper bound follows every way water may take, its run inside
+  a face taken from the face's corners and from where the flow line
+  through a corner comes in, and on along a valley to its lower end; its
+  lower bound is the decided run to the first edge and on along a valley,
+  never less than the plan distance to the nearest outlet. A run ends
+  where it reaches an outlet's footprint. Where no point drains the path
+  is `null`; where it cannot be bounded (a tessellation, a cycle of
+  undecided ways) it is not evaluated.
+
+A roof 24 x 10 m falling 0.15 m from its edges to two drains, with a
+dished area 4 m wide between them whose middle no drain takes, has an
+undrained area of 40 m²; the same falls without the dish measure 0 m²,
+and its longest path runs from a corner down the valley to the drain's
+footprint, 4.85√2 = 6.86 m in plan.
 
 ### Heights above the terrain
 
@@ -1419,6 +1460,7 @@ sites that cite a value exact:
 | `cover` | the face distances are (a host is exact or refused; a tessellated body's are not) | the body's chord deviation |
 | `height_above_surface` | always: the proximity service refuses tessellated bodies | the clipping's rounding, sixteen ulps of the largest coordinate |
 | `fall_in_flow` | always: the object-frame service refuses inexact placements | the arithmetic's rounding, eight ulps of the quotient outward |
+| `undrained_area`, `drainage_path` | the surface and every outlet are exact, every face's fate is decided and every outlet selected surely; the path also needs its bounds to meet | the areas' sums rounded outward; a flow within 1e-12 of an edge's direction runs along it |
 | `envelope_area`, `envelope_volume`, `compactness` | every face is of its element's exact shape, wholly outside and surely in the direction asked, and the selection decides every element | the sums and the quotient rounded outward; the enclosed volume by its rounding and a nanometre's seam along every edge |
 | `zone_inside_area`, `zone_outside_area`, `zone_distance`, `zone_area`, `zone_footprint_area`, `zone_floor_area`, `zone_neighbours` (members) | the zone (and a neighbour) is stated in the model's coordinates with no tolerance, every footprint (or line distance) is exact and the selection decides every element | the zone's area and the sums rounded outward |
 | `zone_value`, `zone_length`, `zone_angle` | always: the value is the zone's statement | an angle stated in degrees, converted to radians and rounded outward |

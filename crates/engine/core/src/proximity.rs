@@ -1865,6 +1865,146 @@ impl HeightAboveEvidence {
     }
 }
 
+/// A request for whether water on a surface's top runs to its outlets.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DrainageRequest {
+    surface: ObjectId,
+    outlets: Vec<ObjectId>,
+    minimum_fall: f64,
+}
+
+impl DrainageRequest {
+    /// How water runs off `surface`'s faces looking up to `outlets` (drains,
+    /// gutters), which are sorted and deduplicated and never the surface;
+    /// none leaves every point undrained. A face falling less than
+    /// `minimum_fall` (a ratio, rise over run, at least zero) holds water.
+    pub fn try_new(
+        surface: ObjectId,
+        mut outlets: Vec<ObjectId>,
+        minimum_fall: f64,
+    ) -> Result<Self, ProximityError> {
+        outlets.sort();
+        outlets.dedup();
+        if outlets.contains(&surface) {
+            return Err(ProximityError::SameObject);
+        }
+        if !minimum_fall.is_finite() || minimum_fall < 0.0 {
+            return Err(ProximityError::InvalidMeasurement);
+        }
+        Ok(Self {
+            surface,
+            outlets,
+            minimum_fall,
+        })
+    }
+    /// The object whose top is drained.
+    pub fn surface(&self) -> &ObjectId {
+        &self.surface
+    }
+    /// The objects taking the water, sorted.
+    pub fn outlets(&self) -> &[ObjectId] {
+        &self.outlets
+    }
+    /// The least fall a face must have to shed water, rise over run.
+    pub fn minimum_fall(&self) -> f64 {
+        self.minimum_fall
+    }
+}
+
+/// The longest path water runs on a surface to the outlet it reaches.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum DrainagePath {
+    /// Bounds on the length of the longest steepest-descent path, along the
+    /// surface, from a point that may drain to where it reaches an outlet.
+    Bounded {
+        lower_metres: f64,
+        upper_metres: f64,
+    },
+    /// No point of the surface may reach an outlet.
+    NoOutlet,
+    /// Some point may drain, but how far its water runs cannot be bounded.
+    Unbounded,
+}
+
+/// How water runs off a surface's top to its outlets.
+///
+/// Water falls on the surface's faces looking up and runs down each face's
+/// steepest descent, along the valleys where two faces drain into one edge,
+/// and on from a vertex down its steepest way, until it reaches an outlet's
+/// footprint in plan, leaves the surface over its border, or comes to rest:
+/// in a hollow, on a level edge, or on a face falling less than the
+/// request's minimum. `surface_square_metres` bounds the top's plan area,
+/// `undrained_square_metres` the plan area whose water does not reach an
+/// outlet: its lower bound the area surely not draining, its upper bound
+/// all but the area surely draining. Whatever cannot be decided (a face
+/// level within rounding, a direction on the tie between two edges, a
+/// tessellation's chords) widens the upper bound, never the drained area.
+/// The surface drains when its undrained area is zero.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DrainageEvidence {
+    request: DrainageRequest,
+    surface: (f64, f64),
+    undrained: (f64, f64),
+    path: DrainagePath,
+    evidence: Evidence,
+}
+
+impl DrainageEvidence {
+    /// Rejects incoherent areas and lengths, and evidence without a
+    /// locator.
+    pub fn try_new(
+        request: DrainageRequest,
+        surface: (f64, f64),
+        undrained: (f64, f64),
+        path: DrainagePath,
+        evidence: Evidence,
+    ) -> Result<Self, ProximityError> {
+        let ordered = |(lower, upper): (f64, f64)| {
+            lower.is_finite() && upper.is_finite() && 0.0 <= lower && lower <= upper
+        };
+        let coherent = ordered(surface)
+            && ordered(undrained)
+            && undrained.0 <= surface.1
+            && match path {
+                DrainagePath::Bounded {
+                    lower_metres,
+                    upper_metres,
+                } => ordered((lower_metres, upper_metres)),
+                DrainagePath::NoOutlet | DrainagePath::Unbounded => true,
+            };
+        if !coherent {
+            return Err(ProximityError::InvalidMeasurement);
+        }
+        if evidence.locator.trim().is_empty() {
+            return Err(ProximityError::EvidenceFidelityMismatch);
+        }
+        Ok(Self {
+            request,
+            surface,
+            undrained,
+            path,
+            evidence,
+        })
+    }
+    pub fn request(&self) -> &DrainageRequest {
+        &self.request
+    }
+    /// The least and greatest plan area of the surface's top.
+    pub fn surface_square_metres(&self) -> (f64, f64) {
+        self.surface
+    }
+    /// The least and greatest plan area whose water reaches no outlet.
+    pub fn undrained_square_metres(&self) -> (f64, f64) {
+        self.undrained
+    }
+    pub fn path(&self) -> DrainagePath {
+        self.path
+    }
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+}
+
 /// How a distance to a line is measured: in space, or between the plan
 /// projections of the body and the line.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -2103,6 +2243,20 @@ pub trait ProximityService: Send + Sync + 'static {
         Err(ProximityError::Unavailable)
     }
 
+    /// Whether water on the surface's top runs to the outlets, and how far
+    /// ([`DrainageEvidence`]).
+    ///
+    /// The default refuses with [`ProximityError::Unavailable`], so a
+    /// service that does not trace drainage fails closed.
+    // gate: measures area, length
+    fn measure_drainage(
+        &self,
+        request: &DrainageRequest,
+    ) -> Result<DrainageEvidence, ProximityError> {
+        let _ = request;
+        Err(ProximityError::Unavailable)
+    }
+
     /// The volume one closed body encloses.
     ///
     /// The default refuses with [`ProximityError::Unavailable`], so a
@@ -2225,6 +2379,18 @@ impl ProximityServiceHandle {
         request: &HeightAboveRequest,
     ) -> Result<HeightAboveEvidence, ProximityError> {
         let measured = self.0.measure_height_above(request)?;
+        if measured.request() != request {
+            return Err(ProximityError::InvalidMeasurement);
+        }
+        Ok(measured)
+    }
+    /// How water runs off a surface to its outlets. Evidence answering
+    /// another request is refused.
+    pub fn measure_drainage(
+        &self,
+        request: &DrainageRequest,
+    ) -> Result<DrainageEvidence, ProximityError> {
+        let measured = self.0.measure_drainage(request)?;
         if measured.request() != request {
             return Err(ProximityError::InvalidMeasurement);
         }
@@ -2369,6 +2535,81 @@ mod tests {
                 .unwrap();
         assert_eq!(
             handle.measure_height_above(&other),
+            Err(ProximityError::InvalidMeasurement)
+        );
+    }
+
+    /// A service answering one drainage whatever it is asked.
+    struct OneDrainage(DrainageEvidence);
+
+    impl ProximityService for OneDrainage {
+        fn bounds(&self, _: &ObjectId) -> Result<ObjectBounds, ProximityError> {
+            Err(ProximityError::Unavailable)
+        }
+        fn measure_proximity(
+            &self,
+            _: &ProximityRequest,
+        ) -> Result<ProximityEvidence, ProximityError> {
+            Err(ProximityError::Unavailable)
+        }
+        fn measure_drainage(
+            &self,
+            _: &DrainageRequest,
+        ) -> Result<DrainageEvidence, ProximityError> {
+            Ok(self.0.clone())
+        }
+    }
+
+    #[test]
+    fn a_drainage_names_its_request_and_stays_coherent() {
+        let request =
+            DrainageRequest::try_new(id("roof"), vec![id("drain-2"), id("drain-1")], 0.02).unwrap();
+        assert_eq!(request.outlets(), &[id("drain-1"), id("drain-2")]);
+        assert_eq!(
+            DrainageRequest::try_new(id("roof"), vec![id("roof")], 0.0),
+            Err(ProximityError::SameObject)
+        );
+        for fall in [-0.01, f64::NAN] {
+            assert_eq!(
+                DrainageRequest::try_new(id("roof"), Vec::new(), fall),
+                Err(ProximityError::InvalidMeasurement)
+            );
+        }
+        let path = DrainagePath::Bounded {
+            lower_metres: 7.0,
+            upper_metres: 7.1,
+        };
+        for (surface, undrained, path) in [
+            ((100.0, 100.0), (-1.0, 0.0), path),
+            ((100.0, 100.0), (0.0, f64::INFINITY), path),
+            ((100.0, 100.0), (101.0, 101.0), path),
+            (
+                (100.0, 100.0),
+                (0.0, 0.0),
+                DrainagePath::Bounded {
+                    lower_metres: 2.0,
+                    upper_metres: 1.0,
+                },
+            ),
+        ] {
+            assert_eq!(
+                DrainageEvidence::try_new(request.clone(), surface, undrained, path, exact()),
+                Err(ProximityError::InvalidMeasurement)
+            );
+        }
+        let measured = DrainageEvidence::try_new(
+            request.clone(),
+            (100.0, 100.0),
+            (40.0, 40.0),
+            DrainagePath::NoOutlet,
+            exact(),
+        )
+        .unwrap();
+        let handle = ProximityServiceHandle::new(Arc::new(OneDrainage(measured.clone())));
+        assert_eq!(handle.measure_drainage(&request), Ok(measured));
+        let other = DrainageRequest::try_new(id("roof"), vec![id("drain-1")], 0.02).unwrap();
+        assert_eq!(
+            handle.measure_drainage(&other),
             Err(ProximityError::InvalidMeasurement)
         );
     }

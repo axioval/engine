@@ -20568,6 +20568,86 @@ fn with_geometry_a_run_along_an_offset_ellipse_lowers() {
     );
 }
 
+/// A deck sectioned along an `IfcOffsetCurveByDistances` beside an
+/// `IfcEllipse`. Since ifc-geometry 0.25 its stations lower with seam
+/// windows (openbimrs/ifc#443), where they fell to a wrong reason; the
+/// kernel cannot yet certify the length of a varying offset along an
+/// ellipse (axiolid/kernel#307), so the deck is unmeasured for that by name
+/// and never bounded.
+#[test]
+fn with_geometry_a_run_along_offsets_by_distances_of_an_ellipse_is_refused_by_its_length() {
+    let deck = "#86=IFCCARTESIANPOINT((30.,0.));\n\
+                #87=IFCAXIS2PLACEMENT2D(#86,$);\n\
+                #84=IFCELLIPSE(#87,10.,6.);\n\
+                #91=IFCOFFSETCURVE2D(#84,1.5,.F.);\n\
+                #101=IFCPOINTBYDISTANCEEXPRESSION(IFCLENGTHMEASURE(2.),0.5,$,$,#84);\n\
+                #102=IFCPOINTBYDISTANCEEXPRESSION(IFCLENGTHMEASURE(20.),0.75,$,$,#84);\n\
+                #90=IFCOFFSETCURVEBYDISTANCES(#84,(#101,#102),$);\n\
+                #93=IFCRECTANGLEPROFILEDEF(.AREA.,'narrow',#95,2.,1.);\n\
+                #94=IFCRECTANGLEPROFILEDEF(.AREA.,'wide',#95,4.,1.);\n\
+                #95=IFCAXIS2PLACEMENT2D(#96,$);\n\
+                #96=IFCCARTESIANPOINT((0.,0.));\n\
+                #97=IFCAXIS2PLACEMENTLINEAR(#98,$,$);\n\
+                #98=IFCPOINTBYDISTANCEEXPRESSION(IFCLENGTHMEASURE(0.),$,$,$,#90);\n\
+                #99=IFCAXIS2PLACEMENTLINEAR(#100,$,$);\n\
+                #100=IFCPOINTBYDISTANCEEXPRESSION(IFCLENGTHMEASURE(5.),$,$,$,#90);\n\
+                #50=IFCSECTIONEDSOLIDHORIZONTAL(#90,(#93,#94),(#97,#99));\n\
+                #51=IFCSHAPEREPRESENTATION(#5,'Body','AdvancedSweptSolid',(#50));\n\
+                #52=IFCPRODUCTDEFINITIONSHAPE($,$,(#51));\n\
+                #53=IFCBUILDINGELEMENTPROXY('0000000000000000000053',$,$,$,$,#3,#52,$,$);\n";
+    let case = Case::new("geometry-offsets-by-distances-ellipse-run");
+    let model =
+        crossing_walls_with(deck).replace("FILE_SCHEMA(('IFC4'))", "FILE_SCHEMA(('IFC4X3_ADD2'))");
+    let (output, result) = case.wall_clash(&model, &json!({}));
+    assert!(output.status.code().is_some(), "{}", stderr(&output));
+    let reason = unmeasured_reasons(&result)
+        .remove("#53")
+        .unwrap_or_else(|| panic!("{result:#}"));
+    assert!(
+        reason.contains("certified length")
+            && reason.contains("an offset by distances along an ellipse"),
+        "{reason}"
+    );
+}
+
+/// The same deck with the offsets beside an `IfcOffsetCurve2D` of the
+/// ellipse: an offset of an offset, which Axiolid refuses as a station
+/// basis (axiolid/kernel#289), unmeasured by that name (openbimrs/ifc#443).
+#[test]
+fn with_geometry_a_run_along_offsets_by_distances_of_an_offset_is_refused_by_name() {
+    let deck = "#86=IFCCARTESIANPOINT((30.,0.));\n\
+                #87=IFCAXIS2PLACEMENT2D(#86,$);\n\
+                #84=IFCELLIPSE(#87,10.,6.);\n\
+                #91=IFCOFFSETCURVE2D(#84,1.5,.F.);\n\
+                #101=IFCPOINTBYDISTANCEEXPRESSION(IFCLENGTHMEASURE(2.),0.5,$,$,#91);\n\
+                #102=IFCPOINTBYDISTANCEEXPRESSION(IFCLENGTHMEASURE(20.),0.75,$,$,#91);\n\
+                #90=IFCOFFSETCURVEBYDISTANCES(#91,(#101,#102),$);\n\
+                #93=IFCRECTANGLEPROFILEDEF(.AREA.,'narrow',#95,2.,1.);\n\
+                #94=IFCRECTANGLEPROFILEDEF(.AREA.,'wide',#95,4.,1.);\n\
+                #95=IFCAXIS2PLACEMENT2D(#96,$);\n\
+                #96=IFCCARTESIANPOINT((0.,0.));\n\
+                #97=IFCAXIS2PLACEMENTLINEAR(#98,$,$);\n\
+                #98=IFCPOINTBYDISTANCEEXPRESSION(IFCLENGTHMEASURE(0.),$,$,$,#90);\n\
+                #99=IFCAXIS2PLACEMENTLINEAR(#100,$,$);\n\
+                #100=IFCPOINTBYDISTANCEEXPRESSION(IFCLENGTHMEASURE(5.),$,$,$,#90);\n\
+                #50=IFCSECTIONEDSOLIDHORIZONTAL(#90,(#93,#94),(#97,#99));\n\
+                #51=IFCSHAPEREPRESENTATION(#5,'Body','AdvancedSweptSolid',(#50));\n\
+                #52=IFCPRODUCTDEFINITIONSHAPE($,$,(#51));\n\
+                #53=IFCBUILDINGELEMENTPROXY('0000000000000000000053',$,$,$,$,#3,#52,$,$);\n";
+    let case = Case::new("geometry-offsets-by-distances-of-an-offset-run");
+    let model =
+        crossing_walls_with(deck).replace("FILE_SCHEMA(('IFC4'))", "FILE_SCHEMA(('IFC4X3_ADD2'))");
+    let (output, result) = case.wall_clash(&model, &json!({}));
+    assert!(output.status.code().is_some(), "{}", stderr(&output));
+    let reason = unmeasured_reasons(&result)
+        .remove("#53")
+        .unwrap_or_else(|| panic!("{result:#}"));
+    assert!(
+        reason.contains("an offset of an offset curve") && reason.contains("kernel#289"),
+        "{reason}"
+    );
+}
+
 /// A deck sectioned along a plain `IfcCompositeCurve` (#90 of two
 /// polylines meeting at x = 25 m), with a third station on that joint, and
 /// the same with the second polyline turned 90 degrees so the joint is a

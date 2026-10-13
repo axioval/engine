@@ -519,6 +519,13 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **IFC**: moved to `openbim-ifc` 0.31 and `ifc-geometry` 0.25. Sections
+  along an `IfcOffsetCurveByDistances` beside an ellipse, spiral, B-spline
+  or gradient curve now lower with seam windows (openbimrs/ifc#443); along
+  an ellipse or B-spline the kernel cannot yet certify the varying offset's
+  length (axiolid/kernel#307), so such a solid is unmeasured with that
+  reason. An offset of an offset as a station basis is refused by its own
+  name (axiolid/kernel#289) instead of a wrong one.
 - **IFC**: moved to `openbim-ifc` 0.30 and `ifc-geometry` 0.24, with
   `axiolid-model` 0.3.13, `axiolid-curve` 0.3.9, `axiolid-evaluate` 0.3.13
   and `axiolid-mesh-compile` 0.3.23. An `IfcOffsetCurveByDistances` along

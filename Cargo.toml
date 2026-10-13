@@ -167,7 +167,7 @@ openbim-ids = { version = "0.2.2", features = ["audit-schema"] }
 # only in the IFC facade, which joins `ifc-geometry` and `ifc-properties`; `geometry-select`
 # compiles no geometry kernel.
 # 0.24 re-exports `ifc-geometry` 0.18; its `authoring` feature stays off.
-openbim_ifc = { package = "openbim-ifc", version = "0.30.0", default-features = false, features = ["geometry-select", "properties", "ifc2x3", "ifc4", "ifc4x3"] }
+openbim_ifc = { package = "openbim-ifc", version = "0.31.0", default-features = false, features = ["geometry-select", "properties", "ifc2x3", "ifc4", "ifc4x3"] }
 ifc-classification = "0.4.0"
 # The CLI reads each `IfcAlignment`'s centreline, stationing and cant to
 # locate products along it (engine#252). 0.7 evaluates Viennese bends for
@@ -212,7 +212,9 @@ ifc-alignment = "0.8.1"
 # as curves, continued to the basis ends the kernel measures (#433), and
 # derives linear placements on ellipses and B-splines trimmed at interior
 # parameters, by points or by arc length, through bounded path pieces (#436).
-ifc-geometry = { version = "0.24.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
+# 0.25 lowers stations on such offsets by distances with seam windows and
+# refuses an offset of an offset by name (#443).
+ifc-geometry = { version = "0.25.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
 # Map conversions only: without the default `transform` feature it links no
 # geometry crate (never Axiolid).
 ifc-georef = { version = "0.6.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }

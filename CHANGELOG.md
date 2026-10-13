@@ -536,6 +536,8 @@ All notable changes are documented here. This project follows Semantic Versionin
     where it was unbounded (axiolid/kernel#266).
   - **Overlay:** exact overlay booleans run about three times faster, with
     identical output (axiolid/kernel#218).
+- **IFC**: moved to `ifc-geometry` 0.25.1, which resolves stations on
+  B-splines trimmed by points in the kernel (openbimrs/ifc#439).
 - **IFC**: moved to `openbim-ifc` 0.31 and `ifc-geometry` 0.25. Sections
   along an `IfcOffsetCurveByDistances` beside an ellipse, spiral, B-spline
   or gradient curve now lower with seam windows (openbimrs/ifc#443); along

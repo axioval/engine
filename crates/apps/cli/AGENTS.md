@@ -107,6 +107,15 @@ CLI output and exit codes are public automation contracts. Parse packages fail c
   catalogue given no file the integrity warning `catalogue-not-supplied`
   (locator `axioval:catalogue;id=<id>`); the objects reading it are not
   evaluated, never defaulted.
+- `check --model-revision [DOCUMENT=]REVISION` (`src/results.rs`, #323):
+  once the models are read, and only when a ruleset declares a results
+  catalogue, each model's revision (`ModelRevision`: the SHA-256 of its
+  file as given, plus the stated revision) is supplied for every source
+  read from it (`ExecutionPlan::supply_model_revision`), and every
+  `ExecutionPlan::stale_results` entry is the integrity warning
+  `calculation-result-stale` or `calculation-result-untraceable` (locator
+  `axioval:catalogue;id=<id>#entry=<key>`). A revision naming no model,
+  stated twice, or bare beside several models fails with status 1.
 - `check --zones FILE` (`src/zones.rs`, repeatable) reads each GeoJSON
   file with `ContextZones::read_geojson` and supplies it to the plan right
   after compiling (`ExecutionPlan::supply_context_zones`): an unreadable,

@@ -192,6 +192,9 @@ pub enum EngineError {
     /// already states.
     #[error("context zones `{origin}`: {detail}")]
     InvalidContextZones { origin: String, detail: String },
+    /// The host stated the revision of a checked model twice (#323).
+    #[error("model revision of {source_id}: {detail}")]
+    InvalidModelRevision { source_id: String, detail: String },
 }
 
 pub use schema::ColumnKind;
@@ -912,6 +915,43 @@ impl ExecutionPlan {
                 detail,
             })
     }
+    /// Whether a catalogue the rulesets declare holds the results of an
+    /// external calculation, whose reads need the checked models'
+    /// revisions ([`Self::supply_model_revision`]).
+    pub fn reads_calculation_results(&self) -> bool {
+        self.catalogues.has_results()
+    }
+    /// States the revision of the checked model `source` (#323): a result
+    /// of an external calculation is read for its objects only where it
+    /// was computed on this revision. A model whose revision is not stated
+    /// matches no result.
+    ///
+    /// # Errors
+    ///
+    /// [`EngineError::InvalidModelRevision`] when the revision of `source`
+    /// was already stated.
+    pub fn supply_model_revision(
+        &mut self,
+        source: SourceId,
+        revision: ModelRevision,
+    ) -> Result<(), EngineError> {
+        let source_id = source.to_string();
+        self.catalogues
+            .supply_revision(source, revision)
+            .map_err(|detail| EngineError::InvalidModelRevision { source_id, detail })
+    }
+    /// The revision stated for the checked model `source`, if any.
+    pub fn model_revision(&self, source: &SourceId) -> Option<&ModelRevision> {
+        self.catalogues.revision(source)
+    }
+    /// Every supplied result of an external calculation the run will not
+    /// read: computed on a revision no checked model has (stale), or
+    /// stating no method, report, date or revision (untraceable), by
+    /// catalogue and then the file's order. Reading any of them is not
+    /// evaluated; a host reports them as integrity warnings.
+    pub fn stale_results(&self) -> Vec<StaleResult> {
+        self.catalogues.stale_results()
+    }
     /// Supplies the pairs of the relation `id`, declared `by: supplied`,
     /// for this run. A supplied relation the host supplies no pairs for
     /// relates nothing surely: every rule walking it is not evaluated.
@@ -1072,7 +1112,9 @@ pub use boundary_coverage::{
     BoundaryCoverageServiceHandle, BoundaryOverlap, BoundaryPlacement, CoverageAreas,
     MeasuredBoundary, ShareInterval, SurfaceAreaInterval,
 };
-pub use catalogues::{CATALOGUE_LOCATOR_PREFIX, Catalogues, SuppliedCatalogue};
+pub use catalogues::{
+    CATALOGUE_LOCATOR_PREFIX, Catalogues, ModelRevision, StaleResult, SuppliedCatalogue,
+};
 pub use circulation::{
     CirculationContact, CirculationMap, CirculationNode, CirculationNodeKind, CirculationRequest,
 };

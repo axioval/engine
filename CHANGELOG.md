@@ -20,6 +20,22 @@ All notable changes are documented here. This project follows Semantic Versionin
   hung on a wall 12 m along a corridor counts surely within a 15 m walk
   and surely not within a 10 m one, where it stayed undecided before
   ([#361](https://github.com/axioval/engine/issues/361)).
+- **Results of external calculations as traceable stated values**: a
+  catalogue whose declaration adds `results` (`CalculationResults`:
+  the `method`, `report`, `date` and `revision` columns) holds the results
+  an external calculation computed, such as R'w per wall keyed by its
+  `GlobalId`, and is supplied and read like any catalogue. An entry is
+  read only where it states all four and its revision names the checked
+  model's: the SHA-256 of the model file (`sha256:<hex>`) or a revision
+  the host states (`ModelRevision`, `ExecutionPlan::supply_model_revision`,
+  `check --model-revision [DOCUMENT=]REVISION`). A result computed on
+  another revision is stale and one without provenance untraceable:
+  reading either is not evaluated, never a value of another model, and
+  `ExecutionPlan::stale_results` lists them, which `check` reports as the
+  integrity warnings `calculation-result-stale` and
+  `calculation-result-untraceable`. A value read cites its provenance
+  (`…#entry=<key>;method=…;report=…;date=…;revision=…`)
+  ([#323](https://github.com/axioval/engine/issues/323)).
 - **Zoning plans as context**: `ContextZones::read_xplan_gml` (through
   `read_gml` for a document rooted in `XPlanAuszug`, so `check --zones
   0.05=plan.gml`) reads the regulating areas and lines of an XPlanGML

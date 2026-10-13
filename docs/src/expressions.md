@@ -521,6 +521,75 @@ A `catalogue` node reads one entry's value:
   column it does not declare or its key column read as a value, and a key
   that is not text.
 
+### Results of external calculations
+
+Many requirements are calculation methods rather than checks on the
+model: sound insulation, the energy balance, structural design, daylight
+simulation, performance-based fire engineering. Axioval does not
+reimplement them; a check reads their results, computed by an external
+tool, as values that calculation states: the R'w of a partition, a
+building's primary energy demand, a member's utilisation ratio.
+
+Such results are a catalogue whose declaration adds `results`, naming the
+columns that trace each entry to the calculation that computed it:
+
+```json
+"catalogues": {
+  "sound": {
+    "id": "sound",
+    "name": {"default": "Sound insulation results", "translations": {}},
+    "key": "wall",
+    "columns": [
+      {"id": "wall", "header": "GlobalId", "kind": "string"},
+      {"id": "rw", "header": "R'w (dB)", "kind": "number"},
+      {"id": "method", "kind": "string"},
+      {"id": "report", "kind": "string"},
+      {"id": "date", "kind": "date"},
+      {"id": "revision", "header": "model revision", "kind": "string"}
+    ],
+    "results": {"method": "method", "report": "report", "date": "date",
+                "revision": "revision"}
+  }
+}
+```
+
+A results catalogue is a catalogue, not a second kind of input: the host
+supplies it the same way, its values are typed, read and cited the same
+way, and an entry is keyed by whatever stable key the calculation used. A
+result attached to a model object is keyed by the object's identity, read
+by the expression like any key (an IFC object's `GlobalId` is its
+attribute, `{"kind": "property", "propertySet": "axioval:attributes",
+"property": <the GlobalId property>}`); a result of the whole project, such
+as the primary energy demand, by a key the expression states as a literal.
+
+- `method`, `report` and `revision` name declared `string` columns,
+  `date` a `date` or `dateTime` column, none of them the key and no column
+  twice (`InvalidCatalogue` otherwise).
+- An entry is read only where it states all four: one stating no method,
+  report, date or revision is *untraceable*, and reading it is not
+  evaluated ("result `W1` of catalogue `sound` states no report (`report`),
+  so it cannot be traced to the calculation that computed it").
+- The checked model's revision is the SHA-256 of its file as given,
+  written `sha256:<hex>`, and any revision the host states for it
+  (`ExecutionPlan::supply_model_revision` with a `ModelRevision`; the
+  CLI's `--model-revision`). An entry is read for an object only where its
+  `revision` cell names the revision of the model the object belongs to.
+  One computed on another revision is *stale*: reading it is not
+  evaluated, the reason naming both revisions ("result `W4` of catalogue
+  `sound` is stale: it was computed on model revision `rev-11`, and the
+  checked model … is sha256:…"); so is every read where the host states no
+  revision for the model. A result of another model is never read as the
+  checked one's, and a stale result is never compared at all, so it can
+  neither pass nor fail a requirement.
+- `ExecutionPlan::stale_results` lists every supplied result no checked
+  model's revision matches, and every untraceable one, before anything
+  runs; the CLI reports each as an integrity warning
+  (`calculation-result-stale`, `calculation-result-untraceable`).
+- A value read is cited with its provenance after the entry:
+  `axioval:catalogue;id=sound;sha256=<digest>#entry=<key>;method=<method>;report=<report>;date=<date>;revision=<revision>`,
+  each field with `%`, `;`, `#`, `=` and control characters
+  percent-encoded.
+
 ## Paths
 
 Every not-evaluated outcome and type error names its subexpression by a

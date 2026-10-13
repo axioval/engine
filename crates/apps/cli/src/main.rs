@@ -28,6 +28,7 @@ mod draft;
 mod export;
 mod geometry;
 mod ids;
+mod results;
 mod server;
 mod terrain;
 mod zones;
@@ -206,6 +207,14 @@ struct CheckArgs {
         value_parser = catalogue_arg
     )]
     catalogues: Vec<CatalogueArg>,
+    /// State the revision of a checked model, for the results of external
+    /// calculations a results catalogue holds: `DOCUMENT=REVISION` names
+    /// the model by its file name, and a bare `REVISION` the one model
+    /// checked. A model's revision is always also the SHA-256 of its file
+    /// (`sha256:<hex>`); a result computed on another revision is stale,
+    /// reported as an integrity warning and never read.
+    #[arg(long = "model-revision", value_name = "[DOCUMENT=]REVISION")]
+    model_revisions: Vec<String>,
     /// Supply context zones beside the model (parcels, zoning areas,
     /// building limits and lines): a `GeoJSON` feature collection naming its
     /// reference system in `crs` (`axioval:model` for the model's own plan
@@ -1047,6 +1056,8 @@ fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     };
     let placements = zones::check_placements(&session, &plan, &mut supplied.zone_files);
     supplied.unsupplied.extend(placements);
+    let stale = results::supply_revisions(&mut plan, &args, &session)?;
+    supplied.unsupplied.extend(stale);
     let runtime = check_runtime(registry, &args, &clock, supplied.terrain.take());
     let unknown_pairs = axioval::engine::unknown_relation_objects(&plan, session.project());
     let mut result = runtime.run_session(&session, plan)?;

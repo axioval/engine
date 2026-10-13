@@ -311,6 +311,42 @@ pub struct CatalogueDefinition {
     pub key: String,
     /// Every column of the catalogue's file, the key column included.
     pub columns: Vec<TableFileColumn>,
+    /// Declares the catalogue's entries results of an external
+    /// calculation (#323), each traced to its method, report, date and the
+    /// model revision it was computed on; see [`CalculationResults`].
+    /// Omitted for a catalogue of material or product data.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub results: Option<CalculationResults>,
+}
+
+/// The columns tracing each entry of a results catalogue to the external
+/// calculation that computed it (#323): a sound insulation index per wall,
+/// a building's primary energy demand, a member's utilisation ratio. The
+/// engine never computes these; it reads them as values the calculation
+/// states, keyed by a stable object key (such as the object's `GlobalId`
+/// attribute) or by a project key.
+///
+/// Each names a declared column other than the key: `method`, `report` and
+/// `revision` `string` columns, `date` a `date` or `dateTime` column. An
+/// entry is read only where it states all four and its `revision` names the
+/// revision of the checked model the reading object belongs to (the
+/// `sha256:<hex>` digest of the model file, or a revision the host states
+/// for it). An entry computed on another revision is stale, and one
+/// stating no provenance untraceable: reading either is not evaluated,
+/// never a value of another model.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CalculationResults {
+    /// The `string` column naming the calculation method, such as a
+    /// standard and its edition.
+    pub method: String,
+    /// The `string` column naming the report the calculation tool issued.
+    pub report: String,
+    /// The `date` or `dateTime` column stating when it was computed.
+    pub date: String,
+    /// The `string` column naming the model revision it was computed on.
+    pub revision: String,
 }
 
 /// A value the ruleset names once and derives for every object from an

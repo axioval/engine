@@ -119,6 +119,10 @@ Keep this crate serializable and deterministic. It must not depend on a source f
   before; the entries are never in the package, the host supplies them.
   `Expression::Catalogue` (`catalogue`, `key`, `column`) reads one entry's
   value. The MCS ruleset and expression schemas must mirror both.
+  `CatalogueDefinition::results` (`CalculationResults`: the `method`,
+  `report`, `date` and `revision` column ids, #323) marks a catalogue of
+  external calculation results; omitted when absent, so catalogues
+  serialize as before. The MCS catalogue schema must mirror it.
 - `Finding::explanation` and `NotEvaluated::explanation` (`explanation.rs`)
   are absent on the wire unless an expression rule set them, so reports
   serialize as before. An explanation keeps its deciding path whole and at

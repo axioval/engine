@@ -209,6 +209,28 @@ Every value read cites the catalogue, the version and the entry (see
 ]
 ```
 
+### Results of external calculations and model revisions
+
+A catalogue may hold [results of external
+calculations](./expressions.md#results-of-external-calculations), such as
+the R'w per wall a sound insulation calculation computed, each stating the
+model revision it was computed on. `--catalogue sound=rw.csv` supplies
+them as any catalogue, and the check identifies the revision of each
+checked model by the SHA-256 of its file as given (`sha256:<hex>`; for an
+ifcZIP archive, the archive's bytes), plus the revision
+`--model-revision` states for it: `--model-revision rev-12` for the one
+model checked, `--model-revision structure.ifc=rev-12` naming a model by
+its file name among several. A result is read only for the objects of a
+model whose revision it names.
+
+Every supplied result the check will not read is an `integrity` warning,
+located at `axioval:catalogue;id=<catalogue>#entry=<key>`:
+`calculation-result-stale` for one computed on a revision no checked model
+has, `calculation-result-untraceable` for one stating no method, report,
+date or revision. Each object reading such a result is not evaluated, the
+reason saying why. A `--model-revision` naming no checked model, stated
+twice for one, or bare beside several models stops the check with status 1.
+
 ### Context zones supplied beside the model
 
 Parcels, zoning areas, building limits and building lines are not part of

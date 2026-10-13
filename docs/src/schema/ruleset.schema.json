@@ -148,6 +148,35 @@
       ],
       "type": "object"
     },
+    "CalculationResults": {
+      "additionalProperties": false,
+      "description": "The columns tracing each entry of a results catalogue to the external\ncalculation that computed it (#323): a sound insulation index per wall,\na building's primary energy demand, a member's utilisation ratio. The\nengine never computes these; it reads them as values the calculation\nstates, keyed by a stable object key (such as the object's `GlobalId`\nattribute) or by a project key.\n\nEach names a declared column other than the key: `method`, `report` and\n`revision` `string` columns, `date` a `date` or `dateTime` column. An\nentry is read only where it states all four and its `revision` names the\nrevision of the checked model the reading object belongs to (the\n`sha256:<hex>` digest of the model file, or a revision the host states\nfor it). An entry computed on another revision is stale, and one\nstating no provenance untraceable: reading either is not evaluated,\nnever a value of another model.",
+      "properties": {
+        "date": {
+          "description": "The `date` or `dateTime` column stating when it was computed.",
+          "type": "string"
+        },
+        "method": {
+          "description": "The `string` column naming the calculation method, such as a\nstandard and its edition.",
+          "type": "string"
+        },
+        "report": {
+          "description": "The `string` column naming the report the calculation tool issued.",
+          "type": "string"
+        },
+        "revision": {
+          "description": "The `string` column naming the model revision it was computed on.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "method",
+        "report",
+        "date",
+        "revision"
+      ],
+      "type": "object"
+    },
     "CatalogueDefinition": {
       "additionalProperties": false,
       "description": "A catalogue of material or product data that models leave out or name\nonly by reference, such as each material's thermal conductivity, read\nas values the catalogue states.\n\nThe ruleset declares only its shape: the text column `key` whose cells\nname the entries (a material name, a classification code or a product\nid) and every column the file holds, as a `tableFile` declares them\n(`id`, optional `header`, `kind`, a quantity's `unit`). The host\nsupplies the rows at check time, beside the model, as a CSV file or one\nsheet of an xlsx workbook, with the catalogue's version, so one rule\npackage serves every catalogue edition. The file is data, never code.\n\nAn expression reads an entry's value with a `catalogue` node: the\nentry whose key equals the node's `key` exactly. Its value is stated by\nthe catalogue, cited with the catalogue's id, version, file digest and\nentry, never by the model. An empty cell is a value the catalogue\nstates as absent (`null`); a key no entry has, and a catalogue the host\ndid not supply, leave the reading object not evaluated, never given a\ndefault.",
@@ -178,6 +207,17 @@
         },
         "name": {
           "$ref": "#/$defs/LocalizedText"
+        },
+        "results": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CalculationResults"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Declares the catalogue's entries results of an external\ncalculation (#323), each traced to its method, report, date and the\nmodel revision it was computed on; see [`CalculationResults`].\nOmitted for a catalogue of material or product data."
         }
       },
       "required": [

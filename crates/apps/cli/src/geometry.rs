@@ -3323,7 +3323,70 @@ enum Fit {
 /// either kind tessellated, declared within the slab width the compiler
 /// reports for them ([`warped_width`]), and leave a body that cuts or is
 /// cut by one unmeasured ([`authored_leaves`]).
+///
+/// Either fit then counts the rounding of the mesh's coordinates
+/// ([`placed`]): a mesh placed far from the origin is no longer exact.
 fn compile(
+    backend: &Compiler,
+    graph: &GeometryGraph,
+    root: NodeId,
+) -> Result<(axiolid_mesh::TriMesh, Fit), String> {
+    let (mesh, fit) = compile_unplaced(backend, graph, root)?;
+    let fit = placed(&mesh, fit);
+    Ok((mesh, fit))
+}
+
+/// Coordinates up to this many metres from the origin round by no more
+/// than [`placement_rounding`] of it, about 1.5e-11 m: a mesh within it
+/// keeps how its construction stands for the shape. Every model placed in
+/// local coordinates lies within it; one placed in map coordinates (a
+/// projected grid's eastings and northings, hundreds of kilometres out)
+/// does not.
+const EXACT_REACH: f64 = 4096.0;
+
+/// A bound on how far rounding moved a vertex of a mesh whose coordinates
+/// reach `magnitude` metres off the solid it was compiled from: the
+/// rounding of the placements applied to it and of the coordinates they
+/// produce, a few units in the last place of the largest one, taken as
+/// generously as the proximity service bounds the rounding of a distance
+/// between such points (16 machine epsilons of the magnitude).
+fn placement_rounding(magnitude: f64) -> f64 {
+    16.0 * f64::EPSILON * magnitude
+}
+
+/// How a compiled mesh stands for its shape once its coordinates' rounding
+/// is counted (engine#368).
+///
+/// A placement far from the origin rounds the mesh's coordinates: 5600 km
+/// out to about 1e-9 m. The placed mesh is then not the solid, however
+/// exact its construction, and a value read from it (a volume, an area, a
+/// distance) is the rounded mesh's: a planar wall less its openings
+/// measured 2.2075750000614 m3 there, an interval excluding its true
+/// 2.207575. Beyond [`EXACT_REACH`] the mesh is declared within
+/// [`placement_rounding`] of its largest coordinate, added to any bound its
+/// construction carries, so every service widens what it reads from it as
+/// it widens a tessellation. Within the reach the rounding is the one each
+/// coordinate of the model carries already, and the fit stands.
+fn placed(mesh: &axiolid_mesh::TriMesh, fit: Fit) -> Fit {
+    let magnitude = mesh
+        .positions
+        .iter()
+        .flat_map(|point| [point.x, point.y, point.z])
+        .fold(0.0_f64, |largest, value| largest.max(value.abs()));
+    // An infinite coordinate is left to the services, which refuse it.
+    if !magnitude.is_finite() {
+        return fit;
+    }
+    let rounding = placement_rounding(magnitude);
+    match fit {
+        Fit::Exact if magnitude <= EXACT_REACH => Fit::Exact,
+        Fit::Exact => Fit::Within(rounding),
+        Fit::Within(bound) => Fit::Within((bound + rounding).next_up()),
+    }
+}
+
+/// [`compile`] before the rounding of the mesh's coordinates is counted.
+fn compile_unplaced(
     backend: &Compiler,
     graph: &GeometryGraph,
     root: NodeId,

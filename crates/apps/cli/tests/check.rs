@@ -15740,7 +15740,8 @@ fn with_geometry_flush_openings_in_a_georeferenced_wall_are_subtracted() {
     // The mesh compiler snaps the openings onto that face, so no skin that
     // thin is left to self-intersect once placed 5600 km out
     // (axiolid/kernel#276): the volume is the net volume. A snap that
-    // small is rounding, so the wall stays exact.
+    // small is rounding; placed that far out, the wall is declared within
+    // the rounding of its coordinates (engine#368).
     let model = georeferenced_wall_with_flush_openings(site, turn, 0.124_999_999_999_995);
     let (output, result) = rule(
         &model,
@@ -15751,7 +15752,12 @@ fn with_geometry_flush_openings_in_a_georeferenced_wall_are_subtracted() {
     assert_eq!(result["report"]["findings"], json!([]), "{result:#}");
     assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
     assert!(!unmeasured(&result), "{:#}", result["geometry"]);
-    assert_eq!(result["geometry"]["exact"], 1, "{:#}", result["geometry"]);
+    assert_eq!(result["geometry"]["exact"], 0, "{:#}", result["geometry"]);
+    assert_eq!(
+        result["geometry"]["tessellated"], 1,
+        "{:#}",
+        result["geometry"]
+    );
     let (output, result) = rule(
         &model,
         json!({"kind": "compare", "operator": "lessThan", "label": "value",
@@ -15761,12 +15767,90 @@ fn with_geometry_flush_openings_in_a_georeferenced_wall_are_subtracted() {
     assert_eq!(finding_messages(&result).len(), 1, "{result:#}");
 }
 
+/// engine#368: the #303 wall placed 5600 km out has its coordinates rounded
+/// to about 1e-9 m, so its mesh is not the solid however exact its
+/// construction: measured on it, the volume came out 2.2075750000614 m3,
+/// marked exact, an interval excluding the true 2.207575. Placed there it
+/// is declared within the rounding of its coordinates, and its volume
+/// interval holds the true value: neither at least nor at most it is
+/// decided. At the origin the same wall stays exact, its volume decided
+/// within 1e-9 m3 (widened only by the rounding of coordinates a few
+/// metres out).
+#[test]
+fn with_geometry_a_georeferenced_wall_is_not_measured_as_exact() {
+    let case = Case::new("geometry-georeferenced-rounding");
+    let net = 3.65 * 0.25 * 3.67 - 2.0 * 1.01 * 2.26 * 0.25;
+    let volume = json!({"kind": "property", "propertySet": "axioval:measured",
+                        "property": "volume"});
+    let cubic = |value: f64| json!({"kind": "literal", "value": {"type": "quantity", "value": value, "unit": "m3"}});
+    let rule = |model: &str, requirement: Value| {
+        case.geometry_rule(
+            model,
+            &[("wall", "IfcWall")],
+            "axioval:capability.expression",
+            &registry_signature("axioval:capability.expression"),
+            entity("wall"),
+            json!({"requirement": {"type": "expression", "value": requirement}}),
+        )
+    };
+    let compare = |operator: &str, value: f64| {
+        json!({"kind": "compare", "operator": operator, "label": "value",
+               "left": volume, "right": cubic(value)})
+    };
+    let turn = 0.039_608_610_093_419_1_f64.atan2(0.999_215_271_103_513);
+
+    let origin = georeferenced_wall_with_flush_openings([0.0, 0.0], 0.0, 0.125);
+    let (output, result) = rule(
+        &origin,
+        json!({"kind": "between", "operand": volume,
+               "low": cubic(net - 1e-9), "high": cubic(net + 1e-9)}),
+    );
+    assert_eq!(output.status.code(), Some(0), "{result:#}");
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+    assert_eq!(result["geometry"]["exact"], 1, "{:#}", result["geometry"]);
+    assert_eq!(
+        result["geometry"]["tessellated"], 0,
+        "{:#}",
+        result["geometry"]
+    );
+
+    let far = georeferenced_wall_with_flush_openings([600_000.0, 5_600_000.0], turn, 0.125);
+    for operator in ["greaterThanOrEquals", "lessThanOrEquals"] {
+        let (output, result) = rule(&far, compare(operator, net));
+        assert_eq!(result["geometry"]["exact"], 0, "{:#}", result["geometry"]);
+        assert_eq!(
+            result["geometry"]["tessellated"], 1,
+            "{:#}",
+            result["geometry"]
+        );
+        assert_eq!(
+            result["report"]["findings"],
+            json!([]),
+            "{operator}: {result:#}"
+        );
+        let not_evaluated = result["report"]["not_evaluated"].as_array().unwrap();
+        assert_eq!(not_evaluated.len(), 1, "{operator}: {result:#}");
+        assert_ne!(output.status.code(), Some(3), "{operator}: {result:#}");
+    }
+    // Still within a micro-cubic-metre of it, wherever the site lies.
+    let (output, result) = rule(
+        &far,
+        json!({"kind": "between", "operand": volume,
+               "low": cubic(net - 1e-5), "high": cubic(net + 1e-5)}),
+    );
+    assert_eq!(output.status.code(), Some(0), "{result:#}");
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+}
+
 /// engine#356: the same openings placed 0.5 mm off the wall's face leave a
 /// skin 0.5 mm thin, which is authored geometry: the wall is measured with
 /// it, its volume the gross volume less openings 0.2495 m deep, under the
 /// origin and 5600 km out alike. Mesh-compile 0.3.16 and 0.3.17 snapped
 /// such skins away within the 1 mm tolerance (axiolid/kernel#276); since
 /// 0.3.18 the snap closes rounding residues only (axiolid/kernel#291).
+/// Placed 5600 km out, the volume is widened by the rounding of the
+/// coordinates there (engine#368), a few micro-cubic-metres over the
+/// skin's faces.
 #[test]
 fn with_geometry_a_skin_a_fraction_of_a_millimetre_thin_is_kept() {
     let case = Case::new("geometry-georeferenced-thin-skin");
@@ -15786,7 +15870,7 @@ fn with_geometry_a_skin_a_fraction_of_a_millimetre_thin_is_kept() {
             entity("wall"),
             json!({"requirement": {"type": "expression", "value":
                 {"kind": "between", "operand": volume,
-                 "low": cubic(net - 1e-6), "high": cubic(net + 1e-6)}}}),
+                 "low": cubic(net - 1e-5), "high": cubic(net + 1e-5)}}}),
         );
         assert_eq!(output.status.code(), Some(0), "{label}: {result:#}");
         assert_eq!(

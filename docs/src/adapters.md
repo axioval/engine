@@ -1070,7 +1070,10 @@ the undrained area's upper bound. A tessellated surface may hide a hollow
 under any chord, so it never surely drains and its path is not bounded.
 `AxiolidProximityService::measure_body_volume` answers the certified
 `enclosed_volume` of a closed two-manifold, widened by the chord band
-(`tube_volume`) for a tessellated one; an open surface refuses with
+(`tube_volume`) for a tessellated one and by the band of its coordinates'
+rounding (16 machine epsilons of the largest) for an exact one, since the
+kernel certifies the volume of the mesh as given and the mesh is the solid
+only up to that rounding (#368); an open surface refuses with
 that reason (`ProximityError::Refused`), and so does a kernel refusal,
 with the kernel's.
 

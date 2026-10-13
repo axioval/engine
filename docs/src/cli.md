@@ -1501,6 +1501,21 @@ every one of its 56 curved bodies is certified and meshing takes as long
 as before; on a small sample house the two upper walls clipped by the
 roof are exact.
 
+Exact means the mesh is the solid, and a placement far from the origin
+rounds the mesh's coordinates: 5600 km out, as a model placed in map
+coordinates puts its bodies, to about 1e-9 m. However exact its
+construction, such a mesh is not the solid, and a volume, area or
+distance read from it is the rounded mesh's (#368: a planar wall less its
+openings measured 2.2075750000614 m3 there, an interval excluding its
+true 2.207575). A mesh whose coordinates reach beyond 4096 m is therefore
+declared within the rounding of its largest coordinate, 16 machine
+epsilons of it (about 1.5e-11 m at the reach, 2e-8 m at 5600 km), and a
+tessellated one has that added to its bound, so every service widens what
+it reads as it widens a tessellation. Within the reach a body keeps its
+exactness: its coordinates round no more than the model's own do, and the
+proximity service still widens its own volume by the band of that
+rounding.
+
 Space validation also needs roles and storeys: `IfcSpace`, `IfcSlab`, `IfcRoof`
 and `IfcBuilding` give roles, and the spatial tree gives each object's storey.
 An element the file places twice, or anything under a structure aggregated

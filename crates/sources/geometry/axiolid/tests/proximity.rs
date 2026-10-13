@@ -912,6 +912,41 @@ fn extents_along_a_walls_own_axes_measure_its_thickness() {
     );
 }
 
+/// engine#368: an exact mesh is the solid up to the rounding of its
+/// coordinates, so its volume is widened by the band of that rounding: by
+/// next to nothing a few metres out, and by enough 5600 km out to hold a
+/// solid whose vertices rounded there.
+#[test]
+fn an_exact_body_volume_is_widened_by_the_rounding_of_its_coordinates() {
+    let (x, y) = (600_014.096_183_109_1, 5_599_984.596_242_446);
+    let service = AxiolidProximityService::new(
+        AxiolidGeometry::new()
+            .with_mesh(id("near"), cuboid([0.0, 0.0, 0.0], [1.0, 1.0, 1.0]))
+            .with_mesh(id("far"), cuboid([x, y, 200.0], [x + 1.0, y + 1.0, 201.0])),
+    );
+    let near = service.measure_body_volume(&id("near")).unwrap();
+    assert!(near.evidence().exact);
+    let (lower, upper) = (
+        near.volume().lower_cubic_metres(),
+        near.volume().upper_cubic_metres(),
+    );
+    assert!(
+        lower < 1.0 && 1.0 < upper && upper - lower < 1e-12,
+        "{near:?}"
+    );
+    let far = service.measure_body_volume(&id("far")).unwrap();
+    // Every coordinate there rounds by up to half a unit in the last place.
+    let ulp = y.next_up() - y;
+    let (lower, upper) = (
+        far.volume().lower_cubic_metres(),
+        far.volume().upper_cubic_metres(),
+    );
+    assert!(
+        lower < 1.0 - 6.0 * ulp && 1.0 + 6.0 * ulp < upper && upper - lower < 1e-6,
+        "{far:?}"
+    );
+}
+
 #[test]
 fn a_closed_body_encloses_its_certified_volume() {
     let service = AxiolidProximityService::new(

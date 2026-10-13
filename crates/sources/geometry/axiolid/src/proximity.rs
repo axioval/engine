@@ -38,7 +38,8 @@
 //!   kernel refuses (open, self-intersecting, no volume) leaves the volume
 //!   unmeasured rather than failing the measurement. A tessellation widens
 //!   each volume by the volume within its chord deviation of the mesh
-//!   (`tube_volume`).
+//!   (`tube_volume`); an exact body's own volume is widened by the band of
+//!   its coordinates' rounding (`volume_band`).
 //! - **Hausdorff distance** between the surfaces. Its lower bound is the
 //!   farthest any vertex lies from the other surface. Its upper bound holds
 //!   per triangle: a distance to one convex triangle is convex, so the
@@ -228,7 +229,7 @@ impl AxiolidProximityService {
         let deviation = self.geometry.fidelity(object)?.deviation_metres();
         let enclosed = enclosed_volume(body.mesh)
             .map_err(|error| ProximityError::Refused(volume_refusal(error)))?;
-        let band = tube_volume(&body, deviation);
+        let band = volume_band(&body, deviation);
         Ok(((enclosed.lower - band).max(0.0), enclosed.upper + band))
     }
 
@@ -252,8 +253,8 @@ impl AxiolidProximityService {
         }
         let shared = intersection_volume(one.mesh, other.mesh)
             .map_err(|error| ProximityError::Refused(volume_refusal(error)))?;
-        let band = tube_volume(&one, self.geometry.fidelity(first)?.deviation_metres())
-            + tube_volume(&other, self.geometry.fidelity(second)?.deviation_metres());
+        let band = volume_band(&one, self.geometry.fidelity(first)?.deviation_metres())
+            + volume_band(&other, self.geometry.fidelity(second)?.deviation_metres());
         Ok(((shared.lower - band).max(0.0), shared.upper + band))
     }
 
@@ -1649,17 +1650,22 @@ fn intersection(
     } else {
         intersection_volume(subject.mesh, counterpart.mesh).ok()?
     };
-    let (subject_band, counterpart_band) = (
-        tube_volume(subject, subject_deviation),
-        tube_volume(counterpart, counterpart_deviation),
-    );
     let widened = |volume: axiolid_inspect::VolumeInterval, band: f64| {
         VolumeInterval::try_new((volume.lower - band).max(0.0), volume.upper + band).ok()
     };
+    // The shared volume is widened by the declared deviations only: those
+    // who read it judge touching against the rounding of bodies that meet.
     IntersectionVolume::try_new(
-        widened(shared, subject_band + counterpart_band)?,
-        widened(subject_volume, subject_band)?,
-        widened(counterpart_volume, counterpart_band)?,
+        widened(
+            shared,
+            tube_volume(subject, subject_deviation)
+                + tube_volume(counterpart, counterpart_deviation),
+        )?,
+        widened(subject_volume, volume_band(subject, subject_deviation))?,
+        widened(
+            counterpart_volume,
+            volume_band(counterpart, counterpart_deviation),
+        )?,
     )
     .ok()
 }
@@ -1690,6 +1696,28 @@ fn tube_volume(body: &Body<'_>, deviation: f64) -> f64 {
         .sum();
     // The sum is rounded; a relative margin keeps it an upper bound.
     band * (1.0 + 1e-9)
+}
+
+/// The band a body's own volume is widened by: the volume within its
+/// declared deviation of the mesh ([`tube_volume`]), or for an exact mesh
+/// within the rounding of its coordinates.
+///
+/// An exact mesh is the solid up to that rounding, which the host declares
+/// as a deviation wherever it matters beside the solid's size (a body
+/// placed in map coordinates, engine#368). The kernel certifies the volume
+/// of the mesh as given, so the band of the rounding ([`rounding`] of the
+/// largest coordinate) still widens it, and the interval holds the solid's
+/// volume wherever the body is placed.
+fn volume_band(body: &Body<'_>, deviation: f64) -> f64 {
+    if deviation != 0.0 {
+        return tube_volume(body, deviation);
+    }
+    let (min, max) = (body.soup.bounds.min(), body.soup.bounds.max());
+    let magnitude = min
+        .iter()
+        .chain(&max)
+        .fold(0.0_f64, |largest, value| largest.max(value.abs()));
+    tube_volume(body, rounding(magnitude))
 }
 
 /// Every distinct vertex the body's triangles use.

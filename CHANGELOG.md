@@ -704,6 +704,20 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **Bodies placed in map coordinates are no longer exact**: a planar body
+  (a wall less its openings) placed by its world placement far from the
+  origin has its mesh's coordinates rounded there, about 1e-9 m at 5600
+  km, so the mesh is not the solid. It was still measured as exact: the
+  #303 wall's volume came out 2.2075750000614 m3, marked exact, an interval
+  excluding its true 2.207575. The CLI now declares a mesh whose
+  coordinates reach beyond 4096 m within the rounding of its largest
+  coordinate (16 machine epsilons of it, about 2e-8 m at 5600 km), added
+  to any bound its construction carries, so every value read from it is
+  widened as a tessellation's is; within that reach a body stays exact.
+  `AxiolidProximityService` widens an exact body's own volume by the band
+  of its coordinates' rounding, so the interval holds the solid's volume
+  wherever it lies. The public parity models keep every recorded outcome
+  ([#368](https://github.com/axioval/engine/issues/368)).
 - **Context zones**: a tessellated footprint's chord band no longer widens a side of a
   context zone it cannot reach: where every projected triangle lies
   farther than its deviation plus the zone's accuracy band from the

@@ -145,6 +145,8 @@ impl MetricRoutingService for Floor {
         request: &MetricRouteRequest,
     ) -> Result<MetricRouteOutcome, MetricRoutingError> {
         assert_eq!(request.origin().subject().local_id, "room");
+        // A counterpart is walked up to, never onto (#361).
+        assert!(request.approaches_destination());
         let to = &request.destination().subject().local_id;
         match self
             .walks
@@ -172,6 +174,10 @@ impl MetricRoutingService for Floor {
                 "a gap is too narrow".into(),
             )),
         }
+    }
+
+    fn approaches_objects(&self) -> bool {
+        true
     }
 }
 

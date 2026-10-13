@@ -165,6 +165,22 @@ rather than let a backend answer a walk on one level. A connector whose
 length or passability a backend cannot prove leaves every route through it
 undecided: never shorter, never blocked.
 
+## Walks up to an object
+
+`MetricRouteRequest::approaching` asks for a walk up to the destination's
+object rather than onto its point: the point may lie inside the object's
+own body, as a wall-hung extinguisher's centre does. The walk's length is
+the shortest walk of the body to a place it stands, plus the straight reach
+from there to the point across free floor or the object's own footprint
+(never through another body, nor across a portal too narrow for the body).
+Its lower bound is a point path to the point with the object's own body
+left out of the obstacles; `Blocked` means that no such walk exists, so a
+counterpart proven blocked is surely beyond any radius. A backend answers
+such a request only if `approaches_objects()` says so; the default is
+`false`, and the handle then refuses the request (`Unavailable`) rather
+than let a backend walk onto a point inside the body. A walk up to an
+object stays on the origin's level and carries no connectors.
+
 The engine contract contains no mesh, B-rep, IFC entity, Axiolid kernel, OpenCascade, or vendor type.
 
 ## The Axiolid backend
@@ -208,6 +224,15 @@ on exactly one surface.
   not state its side; such a route is refused, not blocked, until one-sided
   erosion (`Region::erode_inner`, 0.3.1) is published. A request without
   connectors stays on its level; one with them is measured as below.
+- A walk up to an object leaves the object's own body out of the free
+  region the lower bound and `Blocked` are measured in, and walks the body
+  through the free region with it in the way, to the place nearest the
+  point (inside the free region less an enclosure of its boundary's disc
+  sweep) whose straight reach to the point lies inside the region without
+  the object, clear of the narrow portals' bands and mid-lines. The reach
+  is the path's last segment, so the upper bound counts it; the evidence
+  names it (`approach-reach=`). An object out of the walking band is walked
+  onto as any point is.
 
 ### Many targets in the Axiolid backend
 

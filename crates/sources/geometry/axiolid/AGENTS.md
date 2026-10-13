@@ -391,6 +391,16 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   `walkable::segment_cover`: the upper bound keeps pieces within `MARGIN` of
   the boundary, the lower bound drops them. Keep the upper bound never
   short of the length along the boundary.
+  A walk up to an object (`MetricRouteRequest::approaching`, #361) leaves
+  the destination's own body out of `open`, where the lower bound and
+  `Blocked` are measured, and walks the body through `open` less what that
+  body occupies in any band of the level (`occupied`), to a
+  `walkable::standing_points` place whose straight reach to the point lies
+  in `open` less the narrow cuts and meets no barrier (`approached`); the
+  reach is the path's last segment. Never measure the lower bound or a
+  separation with the object in the way, and never prove the sweep without
+  it: either would stop the interval holding the walk. Without an approach
+  `open` and the walking region are one, so plain routes are unchanged.
   `src/metric_routing/weighted.rs` answers weighted travel (on one level
   and, through `climb.rs`, across levels) and forced walks on one level
   (`axiolid-route` 0.3.5, axiolid/kernel#195, #196, #198): costed

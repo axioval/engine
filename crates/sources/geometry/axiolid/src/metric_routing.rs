@@ -86,12 +86,22 @@ use crate::planar::projected_polygons;
 use crate::walkable::{
     Clearance, Floor, MARGIN, ON_SURFACE, Obstacle, Plan, PortalFacts, PortalFrame, REACH,
     ROUTE_BUDGET, Side, body, contains, corridor, crosses_mid_line, floor, intersect, join,
-    mid_line, mid_line_barriers, obstacles, obstruction, plan_gap, polygon, segment_cover,
-    separated, sides, subtract, touching, trapezoids, union, witness,
+    meets_barrier, mid_line, mid_line_barriers, obstacles, obstruction, plan_gap, polygon,
+    segment_cover, separated, sides, standing_points, subtract, touching, trapezoids, union,
+    witness,
 };
 
 /// Relative allowance for the rounding of a summed polyline length.
 const LENGTH_ROUNDING: f64 = 1e-12;
+
+/// How many standing places next to an object a walk up to it considers,
+/// nearest first, and how many of those whose reach is clear it tries to
+/// walk to.
+const APPROACH_CANDIDATES: usize = 32;
+const APPROACH_WITNESSES: usize = 4;
+
+/// Relative allowance for the rounding of a reach's covered length.
+const APPROACH_ROUNDING: f64 = 1e-9;
 
 /// Metric routes over host-declared walkable surfaces and portals.
 pub struct AxiolidMetricRoutingService {
@@ -614,6 +624,91 @@ impl AxiolidMetricRoutingService {
         narrow
     }
 
+    /// What the objects `own` occupy in the band above any of the level's
+    /// floors and crossings: a region enclosing them wherever the level's
+    /// free region is measured.
+    fn occupied(
+        prepared: &Prepared,
+        level: &Level,
+        own: &[Obstacle<'_>],
+        profile: MobilityProfile,
+    ) -> Result<Plan, String> {
+        let (step, height) = (profile.maximum_step_metres(), profile.height_metres());
+        let bases = level
+            .floors
+            .iter()
+            .map(|index| prepared.floors[*index].z0)
+            .chain(
+                level
+                    .crossings
+                    .iter()
+                    .map(|index| prepared.portals[*index].0.z0),
+            );
+        let mut region = Plan::empty();
+        for base in bases {
+            for obstacle in own {
+                let (min, max) = obstacle.extent;
+                let area = ([min[0], min[1]], [max[0], max[1]]);
+                region = join(
+                    &region,
+                    &obstruction(
+                        std::slice::from_ref(obstacle),
+                        &area,
+                        base + step,
+                        base + height,
+                    )?,
+                )?;
+            }
+        }
+        Ok(region)
+    }
+
+    /// A proven walk up to `to` (#361): the body's sweep from `from` to a
+    /// place it stands in `domain`, then a straight reach to `to` lying in
+    /// `open` (free floor or the object's own footprint) clear of the
+    /// narrow portals' cuts and barriers, so the walk is one the point path
+    /// in `open` bounds from below. The path ends at `to`; the reach is its
+    /// last segment's length. `None` when no standing place is proven.
+    fn approached(
+        domain: &Plan,
+        open: &Plan,
+        narrow: &Narrow,
+        (from, to): (Point2, Point2),
+        radius: f64,
+    ) -> Result<Option<(Vec<Point2>, f64)>, String> {
+        let reachable = if narrow.cuts.is_empty() {
+            open.clone()
+        } else {
+            subtract(open, &union(narrow.cuts.clone())?)?
+        };
+        let mut tried = 0;
+        for stand in standing_points(domain, to, radius)?
+            .into_iter()
+            .take(APPROACH_CANDIDATES)
+        {
+            let reach = (to - stand).length();
+            if reach > 0.0 {
+                let (inside, _) = segment_cover(&reachable, stand, to);
+                if inside < reach * (1.0 - APPROACH_ROUNDING)
+                    || meets_barrier(&narrow.barriers, stand, to)
+                {
+                    continue;
+                }
+            }
+            if tried == APPROACH_WITNESSES {
+                break;
+            }
+            tried += 1;
+            if let Some(mut path) = witness(domain, from, stand, radius)? {
+                if reach > 0.0 {
+                    path.push(to);
+                }
+                return Ok(Some((path, reach)));
+            }
+        }
+        Ok(None)
+    }
+
     /// Refuses a route that crosses a door whose leaf and lining may not
     /// admit the body.
     fn admitted(prepared: &Prepared, path: &[Point2], body: f64) -> Result<(), String> {
@@ -633,7 +728,14 @@ impl AxiolidMetricRoutingService {
 
     #[allow(clippy::too_many_lines)]
     fn measure(&self, request: &MetricRouteRequest) -> Result<MetricRouteOutcome, String> {
+        let approach = request.approaches_destination();
         if let Some(routing) = request.connectors() {
+            if approach {
+                return Err(
+                    "a walk up to an object stays on the origin's level and climbs no connector"
+                        .into(),
+                );
+            }
             return self.route_across(request, routing);
         }
         let profile = request.profile();
@@ -644,7 +746,15 @@ impl AxiolidMetricRoutingService {
             return Err("the clear height does not exceed the maximum step".into());
         }
         let prepared = self.prepared();
-        let obstacles = self.obstacles()?;
+        // A walk up to an object (#361) leaves the object's own body out of
+        // the region its lower bound and separation are measured in: the
+        // reach from where the body stands may cross it.
+        let target = approach.then(|| request.destination().subject());
+        let (obstacles, own): (Vec<Obstacle<'_>>, Vec<Obstacle<'_>>) = self
+            .obstacles()?
+            .into_iter()
+            .partition(|obstacle| Some(obstacle.id) != target);
+        let counted = obstacles.len() + own.len();
 
         let origin = Self::locate(prepared, request.origin(), step)?;
         let destination = Self::locate(prepared, request.destination(), step)?;
@@ -658,7 +768,7 @@ impl AxiolidMetricRoutingService {
                  height={height:.6}",
                 self.surfaces.len(),
                 self.portals.len(),
-                obstacles.len(),
+                counted,
                 self.connectors.len(),
             ))?;
             Ok(MetricRouteOutcome::Blocked(
@@ -675,13 +785,23 @@ impl AxiolidMetricRoutingService {
             ));
         }
 
-        let domain = Self::domain(prepared, &level, &obstacles, profile, false)?;
+        // `open` is the free region with the object walked up to left out
+        // of the obstacles; `domain`, where the body walks, is it less what
+        // that object occupies in any band of the level. Without an
+        // approach both are the free region.
+        let open = Self::domain(prepared, &level, &obstacles, profile, false)?;
+        let occupied = Self::occupied(prepared, &level, &own, profile)?;
+        let domain = if occupied.is_empty() {
+            open.clone()
+        } else {
+            subtract(&open, &occupied)?
+        };
         let narrow = Self::narrow(prepared, &level, &domain, radius);
 
         let [ox, oy, _] = request.origin().coordinates_metres();
         let [dx, dy, _] = request.destination().coordinates_metres();
         let (from, to) = (Point2::new(ox, oy), Point2::new(dx, dy));
-        if complete && separated(&domain, narrow.cuts.clone(), from, to)? {
+        if complete && separated(&open, narrow.cuts.clone(), from, to)? {
             return blocked(&format!(
                 "separated:narrow-portals=[{}]",
                 narrow.names.join(",")
@@ -692,7 +812,7 @@ impl AxiolidMetricRoutingService {
         let mut point_bound = false;
         if complete {
             match axiolid_route::shortest_path_within(
-                domain.polygons(),
+                open.polygons(),
                 &narrow.barriers,
                 from,
                 to,
@@ -712,7 +832,16 @@ impl AxiolidMetricRoutingService {
             }
         }
 
-        let path = witness(&domain, from, to, radius)?;
+        // An object out of the walking band is walked onto as any point is;
+        // only one standing in its own way is walked up to.
+        let (path, reach) = if occupied.is_empty() {
+            (witness(&domain, from, to, radius)?, None)
+        } else {
+            match Self::approached(&domain, &open, &narrow, (from, to), radius)? {
+                Some((path, reach)) => (Some(path), Some(reach)),
+                None => (None, None),
+            }
+        };
         let Some(path) = path else {
             let open = if complete {
                 String::new()
@@ -752,7 +881,7 @@ impl AxiolidMetricRoutingService {
                     } else {
                         format!("straight-line={lower:.6}")
                     }
-                ),
+                ) + &reach.map_or_else(String::new, |reach| format!(":approach-reach={reach:.6}")),
             ),
         )
         .map_err(|e| e.to_string())?;
@@ -1412,6 +1541,10 @@ impl MetricRoutingService for AxiolidMetricRoutingService {
     }
 
     fn climbs_connectors(&self) -> bool {
+        true
+    }
+
+    fn approaches_objects(&self) -> bool {
         true
     }
 

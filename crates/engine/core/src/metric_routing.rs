@@ -427,6 +427,7 @@ pub struct MetricRouteRequest {
     destination: MetricPoint,
     profile: MobilityProfile,
     connectors: Option<ConnectorRouting>,
+    approach: bool,
 }
 
 impl MetricRouteRequest {
@@ -437,7 +438,29 @@ impl MetricRouteRequest {
             destination,
             profile,
             connectors: None,
+            approach: false,
         }
+    }
+
+    /// The same request, walking up to the destination's object rather
+    /// than onto its point: the destination's subject is an object whose
+    /// own body may stand in the way (a wall-hung extinguisher, a cabinet),
+    /// and its point may lie inside that body. The measured length is the
+    /// shortest walk of the body to a position from which a straight reach
+    /// across free floor or the object's own footprint meets the point,
+    /// plus that reach; a `Blocked` answer means no such walk exists. Only
+    /// a backend that [approaches
+    /// objects](MetricRoutingService::approaches_objects) is asked.
+    #[must_use]
+    pub fn approaching(mut self) -> Self {
+        self.approach = true;
+        self
+    }
+
+    /// Whether the route walks up to the destination's object
+    /// ([`Self::approaching`]) rather than onto its point.
+    pub fn approaches_destination(&self) -> bool {
+        self.approach
     }
 
     /// The same request, climbing through `connectors` between levels
@@ -493,7 +516,7 @@ impl CompleteMetricEvidence {
 /// A negative route verdict bound to the exact request and complete evidence.
 #[derive(Clone, Debug, PartialEq)]
 pub struct BlockedMetricRouteEvidence {
-    request: MetricRouteRequest,
+    request: Box<MetricRouteRequest>,
     completeness: CompleteMetricEvidence,
 }
 
@@ -501,7 +524,7 @@ impl BlockedMetricRouteEvidence {
     /// Binds complete topology and obstacle evidence to one request.
     pub fn new(request: MetricRouteRequest, completeness: CompleteMetricEvidence) -> Self {
         Self {
-            request,
+            request: Box::new(request),
             completeness,
         }
     }
@@ -1337,6 +1360,15 @@ pub trait MetricRoutingService: Send + Sync + 'static {
         false
     }
 
+    /// Whether [`Self::route`] honours
+    /// [`MetricRouteRequest::approaching`]. The default is `false`, and the
+    /// handle then refuses an approaching request rather than let the
+    /// backend walk onto a point inside the object's body.
+    // gate: reads
+    fn approaches_objects(&self) -> bool {
+        false
+    }
+
     /// Measures how much of a polyline lies over each requested object. The
     /// default refuses.
     // gate: measures length
@@ -1364,6 +1396,11 @@ impl MetricRoutingServiceHandle {
         request: &MetricRouteRequest,
     ) -> Result<MetricRouteOutcome, MetricRoutingError> {
         self.climbing(request.connectors())?;
+        if request.approaches_destination() && !self.0.approaches_objects() {
+            return Err(MetricRoutingError::Unavailable(
+                "this backend does not walk up to objects".into(),
+            ));
+        }
         let outcome = self.0.route(request)?;
         if let MetricRouteOutcome::Reachable(route) = &outcome {
             let (Some(first), Some(last)) = (route.waypoints.first(), route.waypoints.last())

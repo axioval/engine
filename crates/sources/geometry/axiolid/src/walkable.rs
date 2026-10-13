@@ -1116,8 +1116,7 @@ pub(crate) fn witness(
     if sweep_inside(domain, &[from, to], radius)? {
         return Ok(Some(vec![from, to]));
     }
-    let slack = 0.005 + 0.002 * radius;
-    let eroded = erode(domain, radius + slack)?;
+    let eroded = erode(domain, radius + witness_slack(radius))?;
     if eroded.is_empty() {
         return Ok(None);
     }
@@ -1125,6 +1124,55 @@ pub(crate) fn witness(
         Ok(Ok(route)) if sweep_inside(domain, &route.polyline, radius)? => Ok(Some(route.polyline)),
         _ => Ok(None),
     }
+}
+
+/// How much more than a body's radius [`witness`] erodes the domain by to
+/// propose a path.
+fn witness_slack(radius: f64) -> f64 {
+    0.005 + 0.002 * radius
+}
+
+/// Where a disc of `radius` may stand in `domain` nearest `to`, nearest
+/// first: `to` itself where it lies in `domain` less an enclosure of its
+/// boundary's disc sweep, else the closest points to `to` on each edge of
+/// that eroded region. The erosion is by twice the slack [`witness`]
+/// erodes with, so every point lies inside what `witness` proposes paths
+/// through. They only propose: a walk to one is proven by `witness`, and
+/// what lies between one and `to` by the caller.
+pub(crate) fn standing_points(
+    domain: &Plan,
+    to: Point2,
+    radius: f64,
+) -> Result<Vec<Point2>, String> {
+    let eroded = erode(domain, radius + 2.0 * witness_slack(radius))?;
+    if contains(&eroded, to) {
+        return Ok(vec![to]);
+    }
+    let mut points: Vec<(f64, Point2)> = rings(&eroded)
+        .flat_map(edges)
+        .map(|edge| {
+            let point = nearest_on(to, edge);
+            ((point - to).length(), point)
+        })
+        .collect();
+    points.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let mut kept: Vec<Point2> = Vec::new();
+    for (_, point) in points {
+        if kept.iter().all(|other| (*other - point).length() > MARGIN) {
+            kept.push(point);
+        }
+    }
+    Ok(kept)
+}
+
+/// Whether the segment `a`–`b` meets any of the polylines `barriers`,
+/// touching included.
+pub(crate) fn meets_barrier(barriers: &[Vec<Point2>], a: Point2, b: Point2) -> bool {
+    barriers.iter().any(|barrier| {
+        barrier
+            .windows(2)
+            .any(|pair| segment_distance((a, b), (pair[0], pair[1])) <= ON_SURFACE)
+    })
 }
 
 /// `plan` less every point within `radius` of its boundary: the plan less

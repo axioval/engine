@@ -145,6 +145,22 @@ fn typed_service_handle_is_backend_neutral() {
     );
 }
 
+/// engine#361: a walk up to an object is asked only of a backend that
+/// approaches objects; any other would walk onto a point inside the body.
+#[test]
+fn a_walk_up_to_an_object_is_asked_only_of_a_backend_that_approaches_it() {
+    let request =
+        MetricRouteRequest::new(point("cad", "a", 0.0), point("cad", "b", 3.0), profile());
+    assert!(!request.approaches_destination());
+    let request = request.approaching();
+    assert!(request.approaches_destination());
+    let service = MetricRoutingServiceHandle::new(Arc::new(DeterministicRouter));
+    assert!(matches!(
+        service.route(&request),
+        Err(MetricRoutingError::Unavailable(reason)) if reason.contains("walk up to objects")
+    ));
+}
+
 #[test]
 fn typed_service_handle_registers_in_rule_context_registry() {
     let mut services = ServiceRegistry::new();

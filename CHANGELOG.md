@@ -6,6 +6,20 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Walks up to an object**: `MetricRouteRequest::approaching` asks for a
+  walk up to the destination's object rather than onto its point, which
+  may lie inside the object's own body (a wall-hung extinguisher): the
+  body's walk to where it stands next to it plus the straight reach from
+  there to the point. Its lower bound and a `Blocked` verdict are measured
+  with the object's own body left out of the obstacles, so `Blocked`
+  still means no such walk exists. A backend answers it only if
+  `approaches_objects()` says so (the default refuses);
+  `AxiolidMetricRoutingService` does, on one level. The walking reach of
+  `sum_within`, `min_within`, `max_within` and `mean_within`
+  (`measure=walking`) walks up to every counterpart, so an extinguisher
+  hung on a wall 12 m along a corridor counts surely within a 15 m walk
+  and surely not within a 10 m one, where it stayed undecided before
+  ([#361](https://github.com/axioval/engine/issues/361)).
 - **Zoning plans as context**: `ContextZones::read_xplan_gml` (through
   `read_gml` for a document rooted in `XPlanAuszug`, so `check --zones
   0.05=plan.gml`) reads the regulating areas and lines of an XPlanGML

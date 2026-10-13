@@ -11,8 +11,9 @@
 //!
 //! A value over the counterparts within a walk (`measure=walking`) walks
 //! to those the plan broad phase proposes within the radius, through the
-//! metric-routing service, between the representative points
-//! `space-distance` walks between. One over a shared derived group
+//! metric-routing service, from the representative point `space-distance`
+//! walks from up to each counterpart: to where the body stands next to
+//! it, and the straight reach from there to its representative point. One over a shared derived group
 //! (`group=`) reads the run's groups and measures nothing. One over a
 //! context zone (`zone=`, also a reach of `count_within`) locates every
 //! counterpart against the zone by its footprint or, lacking one of any
@@ -236,10 +237,13 @@ impl<'c> Reached<'c> {
     }
 
     /// Those within `[from, radius]` walking from the object's
-    /// representative point to each counterpart's, among the candidates
-    /// the plan broad phase proposes within `radius`: no walk is shorter
-    /// than the plan distance between the bodies its ends stand in, so one
-    /// it does not propose is surely beyond.
+    /// representative point up to each counterpart (#361): to where the
+    /// body stands next to it, plus the straight reach from there to its
+    /// representative point, which may lie inside the counterpart's own
+    /// body (a wall-hung extinguisher), among the candidates the plan
+    /// broad phase proposes within `radius`: no walk is shorter than the
+    /// plan distance between the bodies its ends stand in, so one it does
+    /// not propose is surely beyond.
     ///
     /// A walk the route service proves blocked is surely beyond; one it
     /// bounds counts as a measured distance does, surely where its whole
@@ -266,7 +270,7 @@ impl<'c> Reached<'c> {
             let walked = crate::space_distance::representative_point(context, counterpart)
                 .and_then(|(end, cited)| {
                     routes
-                        .route(&MetricRouteRequest::new(origin.clone(), end, profile))
+                        .route(&MetricRouteRequest::new(origin.clone(), end, profile).approaching())
                         .map(|outcome| (outcome, cited))
                         .map_err(|error| {
                             crate::space_distance::incomplete(format!(

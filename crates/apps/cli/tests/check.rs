@@ -21731,6 +21731,120 @@ fn the_trees_of_a_parcel_are_counted_and_summed_as_an_interval() {
     assert!(open.contains("3..5"), "{result:#}");
 }
 
+/// The corridor #19 (x -3..21, y 0..2, 3 m high) under the north wall #29
+/// (y 2..2.2), the floor marking #39 (an `IfcCovering` 1 cm thick at x
+/// -2.5..-1.5) and the extinguisher #49 hung on the wall at x 9.9..10.1,
+/// 0.2 m deep from 0.9 m to 1.4 m above the floor, stating
+/// `Pset_Extinguisher.Units` 2.
+fn corridor_extinguisher() -> String {
+    let mut data = placed_box(
+        10,
+        [9.0, 1.0, 0.0],
+        [24.0, 2.0, 3.0],
+        "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,$,$)",
+    );
+    data.push_str(&placed_box(
+        20,
+        [9.0, 2.1, 0.0],
+        [24.0, 0.2, 3.0],
+        "IFCWALL('GID',$,$,$,$,PL,REP,$,.NOTDEFINED.)",
+    ));
+    data.push_str(&placed_box(
+        30,
+        [-2.0, 1.0, 0.0],
+        [1.0, 1.0, 0.01],
+        "IFCCOVERING('GID',$,'Marking',$,$,PL,REP,$,.FLOORING.)",
+    ));
+    data.push_str(&placed_box(
+        40,
+        [10.0, 1.9, 0.9],
+        [0.2, 0.2, 0.5],
+        "IFCFIRESUPPRESSIONTERMINAL('GID',$,'Extinguisher',$,$,PL,REP,$,.NOTDEFINED.)",
+    ));
+    data.push_str(
+        "#149=IFCPROPERTYSINGLEVALUE('Units',$,IFCREAL(2.0),$);\n\
+         #249=IFCPROPERTYSET('0000000000000000000249',$,'Pset_Extinguisher',$,(#149));\n\
+         #349=IFCRELDEFINESBYPROPERTIES('0000000000000000000349',$,$,$,(#49),#249);\n",
+    );
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         {data}\
+         ENDSEC;\nEND-ISO-10303-21;\n"
+    )
+}
+
+/// engine#361: the extinguisher's representative point lies inside its own
+/// body, which stands in the walking band. Walked up to from the marking,
+/// about 12 m along the corridor, its 2 units count surely within a 15 m
+/// walk and surely not within a 10 m one.
+#[test]
+fn the_units_of_a_wall_hung_extinguisher_count_within_a_walk() {
+    let case = Case::new("walk-extinguisher");
+    case.write("model.ifc", &corridor_extinguisher());
+    let bound = |id: &str, name: &str| {
+        json!({
+            "id": format!("axioval:example.ifc.{id}"),
+            "name": {"default": name, "translations": {}},
+            "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": name}],
+            "citations": [],
+        })
+    };
+    let mut units = bound("extinguisher-units", "Units");
+    units["valueKind"] = json!("number");
+    let extra = json!({
+        "definitions:propertySets": {
+            "axioval:example.ifc.pset-extinguisher": bound("pset-extinguisher", "Pset_Extinguisher")
+        },
+        "definitions:properties": {"axioval:example.ifc.extinguisher-units": units},
+    });
+    let within = |radius: f64| {
+        format!(
+            "sum_within;to=IfcFireSuppressionTerminal;\
+             value=axioval:example.ifc.pset-extinguisher/axioval:example.ifc.extinguisher-units;\
+             radius={radius};measure=walking;walking_radius=0.3;walking_height=2;walking_step=0.02"
+        )
+    };
+    let number = |value: f64| json!({"type": "number", "value": value});
+    for (radius, operator, limit, code) in [
+        (15.0, "greaterThanOrEquals", 2.0, 0),
+        (15.0, "lessThanOrEquals", 2.0, 0),
+        (15.0, "lessThanOrEquals", 1.0, 3),
+        (10.0, "lessThanOrEquals", 0.0, 0),
+        (10.0, "greaterThanOrEquals", 1.0, 3),
+    ] {
+        let requirement = measured_against(&within(radius), operator, &number(limit));
+        let (output, result) = case.geometry_rule_with(
+            &["model.ifc"],
+            &[("marking", "IfcCovering")],
+            (
+                "axioval:capability.expression",
+                &registry_signature("axioval:capability.expression"),
+            ),
+            entity("marking"),
+            json!({"requirement": {"type": "expression", "value": requirement}}),
+            &extra,
+            &[],
+        );
+        assert_eq!(
+            output.status.code(),
+            Some(code),
+            "{radius} {operator} {limit}: {}: {result:#}",
+            stderr(&output)
+        );
+        if code == 3 {
+            assert_eq!(finding_ids(&result), ["#39"], "{result:#}");
+        }
+    }
+}
+
 /// engine#327: each building's distance from the building line along
 /// y = 15: 5 m for #19, 8 m for #29, and just over 5 m for #39 past the
 /// line's end.

@@ -198,3 +198,99 @@ fn an_unmeasured_body_refuses() {
         "{outcome:?}"
     );
 }
+
+/// A corridor (x 0..20, y 0..2, 3 m high) between two walls, with an
+/// extinguisher hung on the north wall at x 11.9..12.1, its body 0.2 m deep
+/// from 0.9 m to 1.4 m above the floor; `partition`, when given, closes the
+/// corridor at x 8..8.2.
+fn corridor(partition: bool) -> AxiolidGeometry {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("corridor"), cuboid([0.0, 0.0, 0.0], [20.0, 2.0, 3.0]))
+        .with_mesh(id("wall-s"), cuboid([0.0, -0.2, 0.0], [20.0, 0.0, 3.0]))
+        .with_mesh(id("wall-n"), cuboid([0.0, 2.0, 0.0], [20.0, 2.2, 3.0]))
+        .with_mesh(
+            id("extinguisher"),
+            cuboid([11.9, 1.8, 0.9], [12.1, 2.0, 1.4]),
+        );
+    if partition {
+        geometry.with_mesh(id("partition"), cuboid([8.0, -0.1, 0.0], [8.2, 2.1, 3.0]))
+    } else {
+        geometry
+    }
+}
+
+/// From near the corridor's west end to the extinguisher's representative
+/// point, the centre of its footprint at its bottom.
+fn to_the_extinguisher() -> MetricRouteRequest {
+    MetricRouteRequest::new(
+        MetricPoint::try_new(id("corridor"), [0.5, 1.0, 0.0]).unwrap(),
+        MetricPoint::try_new(id("extinguisher"), [12.0, 1.9, 0.9]).unwrap(),
+        MobilityProfile::try_new(0.3, 2.0, 0.02, 0.06).unwrap(),
+    )
+}
+
+fn corridor_service(partition: bool) -> AxiolidMetricRoutingService {
+    AxiolidMetricRoutingService::new(corridor(partition), source()).with_surface(id("corridor"))
+}
+
+/// engine#361: the extinguisher's point lies inside its own body, which
+/// obstructs the walking band, so a walk onto it refuses.
+#[test]
+fn a_walk_onto_a_point_inside_an_obstacle_refuses() {
+    let outcome = route(corridor_service(false), &to_the_extinguisher());
+    assert!(
+        matches!(outcome, Err(MetricRoutingError::Unavailable(ref reason)) if reason.contains("not in free walkable space")),
+        "{outcome:?}"
+    );
+}
+
+/// engine#361: a walk up to the extinguisher stands the body in front of it
+/// and reaches across its footprint to its point. The lower bound is the
+/// point path with the extinguisher left out (the straight line, 11.535
+/// m); the upper bound the proven walk to a standing place in front of it
+/// (its body 0.3 m clear of the extinguisher's face at y 1.8) plus the
+/// straight reach from there, about 0.41 m.
+#[test]
+fn a_walk_up_to_an_object_in_its_own_way_stands_in_front_of_it() {
+    let request = to_the_extinguisher().approaching();
+    assert!(request.approaches_destination());
+    let outcome = route(corridor_service(false), &request).unwrap();
+    let MetricRouteOutcome::Reachable(found) = outcome else {
+        panic!("expected a route, got {outcome:?}");
+    };
+    let distance = found.shortest_distance();
+    let straight = (11.5_f64.powi(2) + 0.9_f64.powi(2)).sqrt();
+    assert!(distance.lower_metres() >= straight - 1e-9, "{distance:?}");
+    assert!(distance.lower_metres() <= distance.upper_metres());
+    assert!(distance.upper_metres() < straight + 0.5, "{distance:?}");
+    assert_eq!(found.waypoints().last(), Some(request.destination()));
+    let locator = &found.evidence().locator;
+    assert!(locator.contains(":approach-reach=0.4"), "{locator}");
+    assert!(locator.contains("point-path="), "{locator}");
+}
+
+/// engine#361: a proven `Blocked` still means no walk up to the object
+/// exists, even with its own body left out.
+#[test]
+fn a_walk_up_to_an_object_behind_a_partition_is_blocked() {
+    let request = to_the_extinguisher().approaching();
+    let outcome = route(corridor_service(true), &request).unwrap();
+    let MetricRouteOutcome::Blocked(blocked) = outcome else {
+        panic!("expected blocked, got {outcome:?}");
+    };
+    assert_eq!(blocked.request(), &request);
+}
+
+/// engine#361: a walk up to an object stays on its level.
+#[test]
+fn a_walk_up_to_an_object_climbs_no_connector() {
+    use axioval_engine::{ClimbLength, ConnectorRouting};
+    let request = to_the_extinguisher()
+        .approaching()
+        .with_connectors(ConnectorRouting::try_new(Vec::new(), ClimbLength::slope()).unwrap());
+    let outcome = route(corridor_service(false), &request);
+    assert!(
+        matches!(outcome, Err(MetricRoutingError::Unavailable(ref reason)) if reason.contains("climbs no connector")),
+        "{outcome:?}"
+    );
+}

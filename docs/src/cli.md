@@ -1557,9 +1557,13 @@ sections along such a basis lowers with seam windows, mitred at its joints
 (openbimrs/ifc#429; `tests/check.rs`
 `with_geometry_a_run_along_an_offset_ellipse_lowers`), and a linear
 placement derived on one works through open-ended path pieces
-(openbimrs/ifc#427). Still refused by name: a station given as
-`IfcParameterValue`, a run of offsets by distances along such a basis
-(openbimrs/ifc#433), a relation mixing
+(openbimrs/ifc#427). Since `ifc-geometry` 0.24 an
+`IfcOffsetCurveByDistances` along such a basis lowers as a curve, continued
+to its basis's ends, which the kernel measures (openbimrs/ifc#433), and a
+linear placement on an ellipse or B-spline trimmed at interior parameters
+derives through bounded path pieces (openbimrs/ifc#436). Still refused by
+name: a station given as `IfcParameterValue`, a sectioned solid along such an
+`IfcOffsetCurveByDistances`, a relation mixing
 plan-measured and arc-length pieces, and an `IfcSegmentedReferenceCurve`. A product placed by an
 `IfcLinearPlacement` is placed where its linear expression puts it: every
 lowering derives the frame from the basis curve with the Axiolid reference

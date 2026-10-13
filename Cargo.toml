@@ -104,13 +104,13 @@ axiolid-contracts = "0.3.3"
 # 0.3.3 and model 0.3.4 carry the exact alignment relations (CUBIC
 # transitions, vertical arcs and clothoids, cant) `ifc-geometry` 0.8 lowers to;
 # 0.3.6 adds curve paths (#289, #290), additively.
-axiolid-curve = "0.3.6"
+axiolid-curve = "0.3.9"
 # The CLI derives IFC4X3 linear placements with its reference evaluator
 # (`ReferenceCurveEvaluator`, through `ifc-geometry` 0.10, engine#224); 0.3.10
 # inverts points on an elliptical cylinder (axiolid/kernel#287) and reads
 # curve paths (#290); projecting onto one is still refused. 0.3.11 certifies
 # piece lengths and seam-snapping windows (#294).
-axiolid-evaluate = "0.3.11"
+axiolid-evaluate = "0.3.13"
 # 0.3.9 subtracts placed extrusions exactly (axiolid/kernel#228, through
 # axiolid-brep-boolean 0.1.2) and reports a certified deviation per mesh
 # (#232, with axiolid-reference 0.3.4); 0.3.10 clips by half-spaces (#234),
@@ -145,8 +145,9 @@ axiolid-evaluate = "0.3.11"
 # updates adjacency locally per flip (#268), with identical output; 0.3.22
 # brings axiolid-triangulate 0.3.4, which covers the exact convex hull
 # (#299) and merges coincident input points (#300), in a different but
-# deterministic triangle order.
-axiolid-mesh-compile = "0.3.22"
+# deterministic triangle order. 0.3.23 is the release `ifc-geometry` 0.24
+# builds on.
+axiolid-mesh-compile = "0.3.23"
 axiolid-exact-compile-contract = "0.3.1"
 # 0.3.3 adds `MeshClosure::OpenSolid` (#265).
 axiolid-mesh-compile-contract = "0.3.3"
@@ -154,7 +155,7 @@ axiolid-mesh-compile-contract = "0.3.3"
 axiolid-mesh-boolean-boolmesh = "0.3.4"
 # 0.3.5 adds oriented stations (#246), additively; `ifc-geometry` 0.9
 # requires it for the IFC4X3 stations it lowers.
-axiolid-model = "0.3.7"
+axiolid-model = "0.3.13"
 axiolid-primitive = "0.3.0"
 axiolid-profile = "0.3.0"
 axiolid-surface = "0.3.0"
@@ -166,7 +167,7 @@ openbim-ids = { version = "0.2.2", features = ["audit-schema"] }
 # only in the IFC facade, which joins `ifc-geometry` and `ifc-properties`; `geometry-select`
 # compiles no geometry kernel.
 # 0.24 re-exports `ifc-geometry` 0.18; its `authoring` feature stays off.
-openbim_ifc = { package = "openbim-ifc", version = "0.29.0", default-features = false, features = ["geometry-select", "properties", "ifc2x3", "ifc4", "ifc4x3"] }
+openbim_ifc = { package = "openbim-ifc", version = "0.30.0", default-features = false, features = ["geometry-select", "properties", "ifc2x3", "ifc4", "ifc4x3"] }
 ifc-classification = "0.4.0"
 # The CLI reads each `IfcAlignment`'s centreline, stationing and cant to
 # locate products along it (engine#252). 0.7 evaluates Viennese bends for
@@ -207,8 +208,11 @@ ifc-alignment = "0.8.1"
 # through Axiolid's seam window (#423). 0.23 lowers sectioned runs along such
 # bases with seam windows, mitred at their joints (#429), and derives linear
 # placements on them through open-ended path pieces (#427); runs by distances
-# along them stay refused (#433).
-ifc-geometry = { version = "0.23.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
+# along them stay refused (#433). 0.24 lowers offsets by distances along them
+# as curves, continued to the basis ends the kernel measures (#433), and
+# derives linear placements on ellipses and B-splines trimmed at interior
+# parameters, by points or by arc length, through bounded path pieces (#436).
+ifc-geometry = { version = "0.24.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
 # Map conversions only: without the default `transform` feature it links no
 # geometry crate (never Axiolid).
 ifc-georef = { version = "0.6.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }

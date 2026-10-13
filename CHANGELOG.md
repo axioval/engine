@@ -519,6 +519,15 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **IFC**: moved to `openbim-ifc` 0.30 and `ifc-geometry` 0.24, with
+  `axiolid-model` 0.3.13, `axiolid-curve` 0.3.9, `axiolid-evaluate` 0.3.13
+  and `axiolid-mesh-compile` 0.3.23. An `IfcOffsetCurveByDistances` along
+  an offset of a gradient, spiral, B-spline or elliptical basis now lowers
+  as a curve, continued to its basis's ends, which the kernel measures
+  (openbimrs/ifc#433); a sectioned solid along one stays refused by name.
+  Linear placements derived on ellipses or B-splines trimmed at interior
+  parameters, by points or by arc length, work through bounded path pieces
+  (openbimrs/ifc#436). Every graph that lowered before lowers unchanged.
 - **IFC**: moved to `openbim-ifc` 0.29 and `ifc-geometry` 0.23. Sectioned
   runs along offsets of gradient, spiral, B-spline and elliptical bases now
   lower with seam windows (openbimrs/ifc#429), so such a deck reaches the

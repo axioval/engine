@@ -56,18 +56,21 @@ enum Scope<'a> {
     Member(&'a MeasuredMember),
 }
 
+/// A measured value's set and name, as a run reads it ahead.
+pub(crate) type ReadKey = (Option<Arc<str>>, Arc<str>);
+
 /// A measured value of the object in scope read ahead of its read, by set
-/// and name: what [`resolve`] would answer for it, read for many objects
-/// together through the run's `MeasuredValues`.
-pub(crate) type Prefetched = (
-    Option<Arc<str>>,
-    Arc<str>,
+/// and name (the run's, borrowed: no object's read counts them again):
+/// what [`resolve`] would answer for it, read for many objects together
+/// through the run's `MeasuredValues`.
+pub(crate) type Prefetched<'k> = (
+    &'k ReadKey,
     Result<MeasuredRead, (NotEvaluatedReason, String)>,
 );
 
 /// An object's values read ahead, on the heap: the object's leaves and
 /// judgement move them several times, which an inline list would copy.
-pub(crate) type Prefetch = Vec<Prefetched>;
+pub(crate) type Prefetch<'k> = Vec<Prefetched<'k>>;
 
 /// A measured value naming the rule's parameters, read ahead with its
 /// arguments bound, by its name as written.
@@ -98,7 +101,7 @@ pub(crate) struct ObjectLeaves<'a> {
     /// The evidence of the measured member list last listed.
     listed: Vec<Evidence>,
     /// Properties of the object resolved ahead in a batch, each read once.
-    prefetched: Prefetch,
+    prefetched: Prefetch<'a>,
     /// Measured values naming the rule's parameters, read ahead in a batch.
     bound: Vec<BoundPrefetched>,
     /// What the rule's measured values bind, read once per rule.
@@ -161,23 +164,41 @@ impl<'a> ObjectLeaves<'a> {
         object: &'a Object,
         parameters: Option<&'a BTreeMap<String, ParameterValue>>,
     ) -> Self {
+        Self::built(
+            (context, context.services.get::<Arc<EvaluationBudget>>()),
+            (object, parameters),
+            (Prefetch::new(), Vec::new()),
+            None,
+            false,
+        )
+    }
+
+    /// Leaves of `object` with everything [`Self::read_ahead`] states,
+    /// written straight into place: the leaves are large to move.
+    fn built(
+        (context, budget): (&'a RuleContext<'a>, Option<&'a Arc<EvaluationBudget>>),
+        (object, parameters): (&'a Object, Option<&'a BTreeMap<String, ParameterValue>>),
+        (prefetched, bound): (Prefetch<'a>, Vec<BoundPrefetched>),
+        arguments: Option<&'a Arguments>,
+        cached: bool,
+    ) -> Self {
         Self {
             context,
-            budget: context.services.get::<Arc<EvaluationBudget>>(),
+            budget,
             object,
             subject: object,
             parameters,
             reasons: RefCell::new(smallvec::SmallVec::new()),
             stated: RefCell::new(smallvec::SmallVec::new()),
             resolved: RefCell::new(Vec::new()),
-            cached: false,
+            cached,
             measured: RefCell::new(Vec::new()),
             fields: None,
             listed: Vec::new(),
-            prefetched: Prefetch::new(),
+            prefetched,
             supplied: Vec::new(),
-            bound: Vec::new(),
-            arguments: None,
+            bound,
+            arguments,
             related: RefCell::new(Vec::new()),
             notes: RefCell::new(Vec::new()),
             sources: RefCell::new(Vec::new()),
@@ -267,7 +288,7 @@ impl<'a> ObjectLeaves<'a> {
     /// The leaves of the object, with properties resolved ahead in a batch
     /// (`support::resolve_batch`): a read of one takes its answer instead
     /// of resolving it again, and reads it exactly as a resolved one.
-    pub(crate) fn with_prefetched(mut self, prefetched: Prefetch) -> Self {
+    pub(crate) fn with_prefetched(mut self, prefetched: Prefetch<'a>) -> Self {
         self.prefetched = prefetched;
         self
     }
@@ -278,18 +299,19 @@ impl<'a> ObjectLeaves<'a> {
     /// resolved, for values that read again what other values read. Built
     /// in place, the leaves being large to move.
     pub(crate) fn read_ahead(
-        context: &'a RuleContext<'a>,
+        (context, budget): (&'a RuleContext<'a>, Option<&'a Arc<EvaluationBudget>>),
         (object, parameters): (&'a Object, &'a BTreeMap<String, ParameterValue>),
         arguments: &'a Arguments,
-        (prefetched, bound): (Prefetch, Vec<BoundPrefetched>),
+        (prefetched, bound): (Prefetch<'a>, Vec<BoundPrefetched>),
         cached: bool,
     ) -> Self {
-        let mut leaves = Self::new(context, object, Some(parameters));
-        leaves.prefetched = prefetched;
-        leaves.bound = bound;
-        leaves.arguments = Some(arguments);
-        leaves.cached = cached;
-        leaves
+        Self::built(
+            (context, budget),
+            (object, Some(parameters)),
+            (prefetched, bound),
+            Some(arguments),
+            cached,
+        )
     }
 
     /// The same leaves of a part of `subject`, the rule's checked object a
@@ -1097,55 +1119,58 @@ impl ExpressionContext for ObjectLeaves<'_> {
                 }
             };
         }
-        let (key, read) =
-            if let Some(index) = self.prefetched.iter().position(|(read_set, read_name, _)| {
-                read_set.as_deref() == set && &**read_name == name
-            }) {
-                {
-                    let (read_set, read_name, read) = self.prefetched.swap_remove(index);
-                    let read = read.map(|read| match read {
-                        MeasuredRead::Value(value, evidence) => {
-                            (Some(value), evidence.into_iter().collect())
-                        }
-                        MeasuredRead::Absent(evidence) => (None, vec![evidence]),
-                    });
-                    ((read_set, read_name), read)
-                }
-            } else {
-                {
-                    let key: (Option<Arc<str>>, Arc<str>) = (set.map(Arc::from), Arc::from(name));
-                    let read = resolve(self.context, self.object, PropertyRef { set, name }).map(
-                        |resolved| match resolved {
+        let (key, read) = if let Some(index) =
+            self.prefetched
+                .iter()
+                .position(|((read_set, read_name), _)| {
+                    read_set.as_deref() == set && &**read_name == name
+                }) {
+            {
+                let (key, read) = self.prefetched.swap_remove(index);
+                let read = read.map(|read| match read {
+                    MeasuredRead::Value(value, evidence) => {
+                        (Some(value), evidence.into_iter().collect())
+                    }
+                    MeasuredRead::Absent(evidence) => (None, vec![evidence]),
+                });
+                (std::borrow::Cow::Borrowed(key), read)
+            }
+        } else {
+            {
+                let key: ReadKey = (set.map(Arc::from), Arc::from(name));
+                let read =
+                    resolve(self.context, self.object, PropertyRef { set, name }).map(|resolved| {
+                        match resolved {
                             Resolved::Present(property) => (
                                 Some(property.value),
                                 property.evidence.into_iter().collect(),
                             ),
                             Resolved::Absent(evidence) => (None, vec![evidence]),
-                        },
-                    );
-                    if self.cached {
-                        // Exact evidence is cited once: none is kept.
-                        let kept = match &read {
-                            Ok((stated, evidence)) => Ok((
-                                stated.clone(),
-                                if evidence.iter().all(|evidence| evidence.exact) {
-                                    Vec::new()
-                                } else {
-                                    evidence.clone()
-                                },
-                            )),
-                            Err(error) => Err(error.clone()),
-                        };
-                        self.resolved.borrow_mut().push((
-                            self.object.id.clone(),
-                            key.0.clone(),
-                            key.1.clone(),
-                            kept,
-                        ));
-                    }
-                    (key, read)
+                        }
+                    });
+                if self.cached {
+                    // Exact evidence is cited once: none is kept.
+                    let kept = match &read {
+                        Ok((stated, evidence)) => Ok((
+                            stated.clone(),
+                            if evidence.iter().all(|evidence| evidence.exact) {
+                                Vec::new()
+                            } else {
+                                evidence.clone()
+                            },
+                        )),
+                        Err(error) => Err(error.clone()),
+                    };
+                    self.resolved.borrow_mut().push((
+                        self.object.id.clone(),
+                        key.0.clone(),
+                        key.1.clone(),
+                        kept,
+                    ));
                 }
-            };
+                (std::borrow::Cow::Owned(key), read)
+            }
+        };
         match read {
             Ok((stated, evidence)) => {
                 let value = match &stated {
@@ -1153,7 +1178,8 @@ impl ExpressionContext for ObjectLeaves<'_> {
                     None => Ok(Value::Null),
                     Some(value) => Value::from_property(value),
                 };
-                self.stated.borrow_mut().push((key.0, key.1, stated));
+                let (read_set, read_name) = key.into_owned();
+                self.stated.borrow_mut().push((read_set, read_name, stated));
                 if value.is_err() {
                     self.reasons
                         .borrow_mut()

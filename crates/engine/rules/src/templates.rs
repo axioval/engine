@@ -26,7 +26,7 @@ mod requirements;
 mod scopes;
 
 use axioval_engine::expression::{
-    Evaluation, ExpressionContext, NotEvaluated, Reason, Value, evaluate_untraced,
+    Evaluation, EvaluationBudget, ExpressionContext, NotEvaluated, Reason, Value, evaluate_untraced,
 };
 use axioval_engine::template::{
     Check, Condition, Decision, Derived, End, Expect, Form, Members, Operand, Refusals, Sign,
@@ -45,7 +45,7 @@ use serde_json::Value as Json;
 
 use crate::body_extent::rounding_slack;
 use crate::counts::{Population, Tally, relation_text, same_ends, tally};
-use crate::expression_leaves::{BoundPrefetched, Candidate, ObjectLeaves, Prefetch};
+use crate::expression_leaves::{BoundPrefetched, Candidate, ObjectLeaves, Prefetch, ReadKey};
 use crate::expression_requirement::reason_of;
 use crate::level_spacing::{metres, shown};
 use crate::measured_arguments::Arguments;
@@ -1891,6 +1891,15 @@ fn of_object<'t>(text: &'t str, object: &ObjectId) -> Option<&'t str> {
         .strip_prefix(": ")
 }
 
+/// The words `template` puts before a refusal's, where it is only those
+/// words and `{why}` (as [`render`] words it): `None` for any other.
+fn prefixed_why<'t>(plan: &Plan<'_>, template: &'t str) -> Option<&'t str> {
+    template
+        .strip_suffix("{why}")
+        .filter(|prefix| !prefix.contains('{'))
+        .filter(|_| !plan.template.texts.iter().any(|text| text.name == "why"))
+}
+
 /// `template` with its placeholders rendered.
 fn render(plan: &Plan<'_>, read: &Read, template: &str) -> String {
     // Room for the placeholders' words (a refusal's whole), so a message
@@ -2514,9 +2523,71 @@ fn cited(read: &Read, name: &str) -> Vec<ObjectId> {
 }
 
 /// What an object's values were read ahead as.
-struct Ahead {
-    prefetched: Prefetch,
+struct Ahead<'a> {
+    prefetched: Prefetch<'a>,
     bound: Vec<BoundPrefetched>,
+    /// The run's evaluation budget, looked up once for every object.
+    budget: Option<&'a Arc<EvaluationBudget>>,
+}
+
+/// Whether each of the form's `unless` values applies to the rule, worked
+/// out once for the plan.
+fn unless_applying<'p>(plan: &'p Plan<'_>) -> &'p [bool] {
+    plan.bound.unless_applies.get_or_init(|| {
+        plan.form
+            .unless
+            .iter()
+            .map(|unless| each::applies(plan, &unless.applies))
+            .collect()
+    })
+}
+
+/// The outcome of the form's first applying `unless` where it is a guard
+/// whose plain measured read was read ahead for `object` and refused:
+/// open exactly as reading it through the object's leaves leaves it
+/// ([`read_values`]), the budget spent alike, without building the leaves
+/// and the read of an object refused before anything else of it is read.
+/// The refusal's words are kept in their own buffer, the guard's words put
+/// before them. `None` where the object is judged as any other.
+fn refused_ahead(plan: &Plan<'_>, object: &Object, ahead: &mut Ahead<'_>) -> Option<Outcome> {
+    let index = unless_applying(plan).iter().position(|applies| *applies)?;
+    let unless = &plan.form.unless[index];
+    let expression = plan.bound.unless.get(index)?;
+    let Expression::Property {
+        property_set,
+        property,
+        of: None,
+        ..
+    } = expression
+    else {
+        return None;
+    };
+    let at = ahead.prefetched.iter().position(|((set, name), _)| {
+        set.as_deref() == property_set.as_deref() && **name == **property
+    })?;
+    if !unless.guard || ahead.prefetched[at].1.is_ok() {
+        return None;
+    }
+    // A guard wording more than words before the refusal's is rendered
+    // where the leaves read it.
+    let prefix = match unless.value.refused {
+        Some(refused) => prefixed_why(plan, refused)?,
+        None => "",
+    };
+    // A spent budget is worded where the leaves read it (spending a spent
+    // budget again changes nothing).
+    if !ahead.budget.is_none_or(|budget| budget.spend()) {
+        return None;
+    }
+    let (_, Err((reason, mut message))) = ahead.prefetched.swap_remove(at) else {
+        return None;
+    };
+    let start = {
+        let kept = refused_tail(&message, expression, object);
+        kept.as_ptr() as usize - message.as_ptr() as usize
+    };
+    message.replace_range(..start, prefix);
+    Some(Outcome::Open(reason, message))
 }
 
 /// The form's `unless` values of `object`, each read where it applies:
@@ -2528,13 +2599,7 @@ fn unless(
     object: &Object,
     leaves: &mut ObjectLeaves<'_>,
 ) -> Option<Outcome> {
-    let applying = plan.bound.unless_applies.get_or_init(|| {
-        plan.form
-            .unless
-            .iter()
-            .map(|unless| each::applies(plan, &unless.applies))
-            .collect()
-    });
+    let applying = unless_applying(plan);
     for (index, unless) in plan.form.unless.iter().enumerate() {
         if !applying.get(index).copied().unwrap_or(false) {
             continue;
@@ -3242,8 +3307,11 @@ fn judge_object(
     (context, arguments): (&RuleContext<'_>, &Arguments),
     rule: &CompiledRule,
     (object, once): (&Object, &Read),
-    ahead: Ahead,
+    mut ahead: Ahead<'_>,
 ) -> Judgement {
+    if let Some(outcome) = refused_ahead(plan, object, &mut ahead) {
+        return outcome.into();
+    }
     // Values composing reads (a truth over properties other values read)
     // read them again: keep each once resolved.
     let composed = plan
@@ -3252,7 +3320,7 @@ fn judge_object(
         .iter()
         .any(|step| property_read(&step.expression).is_none());
     let mut leaves = ObjectLeaves::read_ahead(
-        context,
+        (context, ahead.budget),
         (object, &plan.bound.parameters),
         arguments,
         (ahead.prefetched, ahead.bound),
@@ -4096,6 +4164,7 @@ pub(crate) fn run(
         arguments
     };
     let (batched, bound) = read_ahead(&plan, context, &arguments, selected.first().copied());
+    let budget = context.services.get::<Arc<EvaluationBudget>>();
     for chunk in selected.chunks(BATCH) {
         let prefetched = prefetch(context, &batched, chunk);
         let bound_reads = prefetch_bound(context, &bound, chunk);
@@ -4109,7 +4178,11 @@ pub(crate) fn run(
                 (context, &arguments),
                 rule,
                 (object, &ran.once),
-                Ahead { prefetched, bound },
+                Ahead {
+                    prefetched,
+                    bound,
+                    budget,
+                },
             );
             if let (Some(table), Some(row)) = (&mut table, row) {
                 // Selected objects are distinct, so rows never collide.
@@ -4290,7 +4363,7 @@ fn batched<'e>(
 }
 
 /// The measured values read for many objects together, as `(set, name)`.
-type Batched = Vec<(Option<Arc<str>>, Arc<str>)>;
+type Batched = Vec<ReadKey>;
 
 /// The measured values naming the rule's parameters (not the anchor) that
 /// the plan's form and checks read directly, each bound once for the rule:
@@ -4357,7 +4430,11 @@ fn prefetch_bound(
 /// Each of `batched` measured for every object of `chunk` together, as
 /// each object's prefetched reads, in `chunk`'s order: an object reads
 /// them as it would resolve them alone.
-fn prefetch(context: &RuleContext<'_>, batched: &Batched, chunk: &[&Object]) -> Vec<Prefetch> {
+fn prefetch<'k>(
+    context: &RuleContext<'_>,
+    batched: &'k Batched,
+    chunk: &[&Object],
+) -> Vec<Prefetch<'k>> {
     let ids: Vec<&ObjectId> = chunk.iter().map(|object| &object.id).collect();
     let mut columns: Vec<_> = match context.services.get::<MeasuredValues>() {
         Some(values) => batched
@@ -4377,9 +4454,7 @@ fn prefetch(context: &RuleContext<'_>, batched: &Batched, chunk: &[&Object]) -> 
             batched
                 .iter()
                 .zip(columns.iter_mut())
-                .filter_map(|((set, name), column)| {
-                    column.next().map(|read| (set.clone(), name.clone(), read))
-                })
+                .filter_map(|(key, column)| column.next().map(|read| (key, read)))
                 .collect()
         })
         .collect()

@@ -7,7 +7,8 @@ use std::sync::Arc;
 
 use axioval_engine::expression::{
     EvaluationBudget, ExpressionContext, Interval, Leaf, Member, PairRead, Ranked, RuleRead,
-    Sequenced, Unit, Value, catalogue_value, derived_value, evaluate, evaluate_untraced,
+    Sequenced, Unit, Value, ZoneNamed, catalogue_value, catalogue_value_at, derived_value,
+    evaluate, evaluate_untraced,
 };
 use axioval_engine::{
     MeasuredMember, MeasuredRead, Measurement, MemberValue, ObjectVerdict, RuleContext,
@@ -1474,6 +1475,59 @@ impl ExpressionContext for ObjectLeaves<'_> {
                 .push(NotEvaluatedReason::IncompleteEvidence);
         }
         leaf
+    }
+
+    fn catalogue_at(&mut self, catalogue: &str, key: &str, at: &Value, column: &str) -> Leaf {
+        let leaf = catalogue_value_at(
+            self.context.services,
+            (catalogue, key, at),
+            column,
+            &self.object.id.source,
+        );
+        if leaf.value.is_err() {
+            self.reasons
+                .borrow_mut()
+                .push(NotEvaluatedReason::IncompleteEvidence);
+        }
+        leaf
+    }
+
+    fn zone(
+        &mut self,
+        zone: &ZoneNamed<'_>,
+        value: Option<&str>,
+    ) -> Result<(String, Leaf), String> {
+        let named = match zone {
+            ZoneNamed::Id(id) => Ok(((*id).to_owned(), None)),
+            ZoneNamed::StandsIn(kind) => {
+                crate::context_zone::stands_in(self.context, kind, &self.object.id)
+                    .map(|(id, chosen)| (id, Some(chosen)))
+            }
+        };
+        let read = named.and_then(|(id, chosen)| {
+            crate::context_zone::zone_statement(
+                self.context,
+                &id,
+                value,
+                &self.object.id.source,
+                chosen,
+            )
+            .map(|leaf| (id, leaf))
+        });
+        match read {
+            Ok((id, leaf)) => {
+                if leaf.value.is_err() {
+                    self.reasons
+                        .borrow_mut()
+                        .push(NotEvaluatedReason::InvalidEvidence);
+                }
+                Ok((id, leaf))
+            }
+            Err((reason, why)) => {
+                self.reasons.borrow_mut().push(reason);
+                Err(format!("{zone}: {why}"))
+            }
+        }
     }
 }
 

@@ -123,8 +123,10 @@ pub struct ContextZone {
 /// A value a zone states (#321), such as a zoning area's greatest coverage
 /// ratio, by its key ([`axioval_ir::measured::ZONE_NUMBERS`],
 /// [`axioval_ir::measured::ZONE_LENGTHS`] or
-/// [`axioval_ir::measured::ZONE_ANGLES`]). A key a zone does not hold is a
-/// value its file does not state: `null`, never a default.
+/// [`axioval_ir::measured::ZONE_ANGLES`]), or, from a `GeoJSON` feature's
+/// `values` (#324), by any key: text, a plain number or a quantity, such
+/// as a snow load zone and its characteristic load. A key a zone does not
+/// hold is a value its file does not state: `null`, never a default.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ZoneValue {
     /// Stated: a plain number, a length in metres, or an angle in
@@ -144,6 +146,23 @@ pub enum ZoneValue {
     Unread {
         /// Why it is not read.
         why: String,
+    },
+    /// Stated as text (#324), such as a load zone's name.
+    Text {
+        /// The text.
+        text: String,
+        /// What in the file stated it.
+        statement: String,
+    },
+    /// Stated as a quantity of a unit the engine reads (#324), such as a
+    /// characteristic snow load in kN/m².
+    Quantity {
+        /// The value, in `unit`.
+        value: f64,
+        /// The unit, as stated.
+        unit: String,
+        /// What in the file stated it.
+        statement: String,
     },
 }
 
@@ -658,13 +677,19 @@ impl ContextZones {
             };
             let shape =
                 shape(&feature["geometry"]).map_err(|why| refuse(format!("zone `{id}`: {why}")))?;
+            let values = match properties.get("values") {
+                None | Some(Value::Null) => BTreeMap::new(),
+                Some(values) => {
+                    stated_values(values).map_err(|why| refuse(format!("zone `{id}`: {why}")))?
+                }
+            };
             zones.push(ContextZone {
                 id,
                 kind,
                 shape,
                 accuracy_metres,
                 feature: number,
-                values: BTreeMap::new(),
+                values,
             });
         }
         Self::new(
@@ -795,6 +820,132 @@ impl SuppliedZones {
     }
 }
 
+/// The values a `GeoJSON` feature states under `properties.values` (#324),
+/// by key: a key of lowercase letters, digits and `_`; a string is text, a
+/// number a plain number, `{"value": …, "unit": …}` a quantity of a unit
+/// the engine reads, `null` no value. A key of the zoning plan's neutral
+/// lists keeps its dimension: a plain number for
+/// [`axioval_ir::measured::ZONE_NUMBERS`], a length for
+/// [`axioval_ir::measured::ZONE_LENGTHS`] and an angle for
+/// [`axioval_ir::measured::ZONE_ANGLES`], each stated in coherent units.
+/// Anything else is refused, never skipped or guessed.
+fn stated_values(values: &Value) -> Result<BTreeMap<String, ZoneValue>, String> {
+    use axioval_ir::measured::{ZONE_ANGLES, ZONE_LENGTHS, ZONE_NUMBERS};
+    let Value::Object(values) = values else {
+        return Err("its `values` is not an object of values by key".into());
+    };
+    let mut stated = BTreeMap::new();
+    for (key, value) in values {
+        if key.is_empty()
+            || !key.starts_with(|c: char| c.is_ascii_lowercase())
+            || !key
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+        {
+            return Err(format!(
+                "the value key `{key}` is not lowercase letters, digits and `_`"
+            ));
+        }
+        let statement = format!("properties.values.{key}");
+        let refuse = |why: &str| format!("its value `{key}` {why}");
+        let read = match value {
+            Value::Null => continue,
+            Value::String(text) if text.trim().is_empty() => return Err(refuse("is blank")),
+            Value::String(text)
+                if ZONE_NUMBERS.contains(&key.as_str())
+                    || ZONE_LENGTHS.contains(&key.as_str())
+                    || ZONE_ANGLES.contains(&key.as_str()) =>
+            {
+                return Err(refuse(&format!("is the text `{text}`, not a number")));
+            }
+            Value::String(text) => ZoneValue::Text {
+                text: text.clone(),
+                statement,
+            },
+            Value::Number(number) => {
+                let number = number
+                    .as_f64()
+                    .filter(|number| number.is_finite())
+                    .ok_or_else(|| refuse("is not a finite number"))?;
+                if ZONE_LENGTHS.contains(&key.as_str()) || ZONE_ANGLES.contains(&key.as_str()) {
+                    return Err(refuse("states no unit (`{\"value\": …, \"unit\": …}`)"));
+                }
+                ZoneValue::Stated {
+                    value: number,
+                    degrees: false,
+                    statement,
+                }
+            }
+            Value::Object(quantity) => stated_quantity(key, quantity, statement)?,
+            _ => return Err(refuse("is no text, number or quantity")),
+        };
+        stated.insert(key.clone(), read);
+    }
+    Ok(stated)
+}
+
+/// A quantity a `GeoJSON` feature states under `key` (#324):
+/// `{"value": <number>, "unit": <unit>}`, a neutral length or angle in
+/// coherent units, any other key as stated; a neutral plain number takes
+/// no unit.
+fn stated_quantity(
+    key: &str,
+    quantity: &serde_json::Map<String, Value>,
+    statement: String,
+) -> Result<ZoneValue, String> {
+    use axioval_ir::measured::{ZONE_ANGLES, ZONE_LENGTHS, ZONE_NUMBERS};
+    let refuse = |why: &str| format!("its value `{key}` {why}");
+    let dimension = |unit: &str| {
+        crate::expression::parse_unit(unit)
+            .map(|(_, unit)| unit)
+            .map_err(|why| refuse(&format!("states the unit `{unit}`: {why}")))
+    };
+    let (Some(number), Some(Value::String(unit)), 2) = (
+        quantity.get("value").and_then(Value::as_f64),
+        quantity.get("unit"),
+        quantity.len(),
+    ) else {
+        return Err(refuse(
+            "is no quantity: `{\"value\": <number>, \"unit\": <unit>}`",
+        ));
+    };
+    if !number.is_finite() {
+        return Err(refuse("is not a finite number"));
+    }
+    let found = dimension(unit)?;
+    // In coherent units, as an expression reads a quantity.
+    let coherent =
+        match crate::expression::Value::from_literal(&axioval_ir::contract::ScalarValue::Quantity {
+            value: number,
+            unit: unit.clone(),
+        }) {
+            Ok(crate::expression::Value::Number { value, .. }) => value.lower,
+            _ => return Err(refuse("overflows in coherent units")),
+        };
+    let wanted = if ZONE_LENGTHS.contains(&key) {
+        Some(("a length", dimension("m")?))
+    } else if ZONE_ANGLES.contains(&key) {
+        Some(("an angle", dimension("rad")?))
+    } else if ZONE_NUMBERS.contains(&key) {
+        return Err(refuse("is a plain number, stated without a unit"));
+    } else {
+        None
+    };
+    Ok(match wanted {
+        Some((_, wanted)) if wanted == found => ZoneValue::Stated {
+            value: coherent,
+            degrees: false,
+            statement,
+        },
+        Some((what, _)) => return Err(refuse(&format!("is {what}, not stated in `{unit}`"))),
+        None => ZoneValue::Quantity {
+            value: number,
+            unit: unit.clone(),
+            statement,
+        },
+    })
+}
+
 /// The zones a plan's rules and values read: every `zone` a measured name
 /// states or a rule's parameter binds, and whether any reads a zone the
 /// plan cannot name before it runs.
@@ -857,6 +1008,15 @@ pub(crate) fn zone_reads(
             }
         }
         Value::Object(fields) => {
+            // A `zone` expression (#324) reads its zone too.
+            if fields.get("kind").and_then(Value::as_str) == Some("zone") {
+                for (key, read) in [("zone", &mut reads.zones), ("standsIn", &mut reads.kinds)] {
+                    if let Some(Value::String(named)) = fields.get(key) {
+                        reads.any = true;
+                        read.insert(named.clone());
+                    }
+                }
+            }
             for item in fields.values() {
                 zone_reads(item, parameters, reads);
             }
@@ -1081,5 +1241,85 @@ mod tests {
             reads.zones.into_iter().collect::<Vec<_>>(),
             ["P1".to_owned(), "P2".to_owned(), "P3".to_owned()]
         );
+        // A `zone` expression reads its zone or kind.
+        let mut reads = ZoneReads::default();
+        zone_reads(
+            &serde_json::json!({"left": {"kind": "zone", "standsIn": "snow-load-zone",
+                                         "value": "load_zone"},
+                                "right": {"kind": "zone", "zone": "S1"}}),
+            &|_| None,
+            &mut reads,
+        );
+        assert!(reads.any);
+        assert_eq!(
+            reads.kinds.into_iter().collect::<Vec<_>>(),
+            ["snow-load-zone"]
+        );
+        assert_eq!(reads.zones.into_iter().collect::<Vec<_>>(), ["S1"]);
+    }
+
+    fn zone_with(values: &str) -> Result<ContextZone, String> {
+        let feature = format!(
+            r#"{{"type": "Feature", "id": "S1", "properties": {{"kind": "snow-load-zone",
+                "values": {values}}},
+                "geometry": {{"type": "Polygon", "coordinates": [[[0, 0], [9, 0], [9, 9], [0, 0]]]}}}}"#
+        );
+        ContextZones::read_geojson(file(MODEL_REFERENCE, &feature).as_bytes(), "s.geojson")
+            .map(|file| file.zones()[0].clone())
+    }
+
+    #[test]
+    fn a_geojson_feature_states_values_by_key() {
+        let zone = zone_with(
+            r#"{"load_zone": "2a", "characteristic_load": {"value": 0.85, "unit": "kN/m²"},
+                "altitude_class": 3, "eaves_height_max": {"value": 6500, "unit": "mm"},
+                "roof_pitch_max": {"value": 45, "unit": "°"}, "note": null}"#,
+        )
+        .unwrap();
+        let values = zone.values();
+        assert_eq!(
+            values["load_zone"],
+            ZoneValue::Text {
+                text: "2a".into(),
+                statement: "properties.values.load_zone".into()
+            }
+        );
+        assert!(matches!(
+            &values["characteristic_load"],
+            ZoneValue::Quantity { value, unit, .. } if (*value - 0.85).abs() < 1e-12 && unit == "kN/m²"
+        ));
+        assert!(matches!(
+            values["altitude_class"],
+            ZoneValue::Stated { value, degrees: false, .. } if (value - 3.0).abs() < 1e-12
+        ));
+        // A neutral length or angle is stated in coherent units.
+        assert!(matches!(
+            values["eaves_height_max"],
+            ZoneValue::Stated { value, .. } if (value - 6.5).abs() < 1e-12
+        ));
+        assert!(matches!(
+            values["roof_pitch_max"],
+            ZoneValue::Stated { value, .. } if (value - std::f64::consts::FRAC_PI_4).abs() < 1e-12
+        ));
+        assert!(!values.contains_key("note"));
+        // Anything else is refused by name.
+        for (values, why) in [
+            (r#"{"Load": 1}"#, "is not lowercase"),
+            (r#"{"load_zone": ""}"#, "is blank"),
+            (r#"{"load_zone": true}"#, "no text, number or quantity"),
+            (r#"{"eaves_height": 6}"#, "states no unit"),
+            (
+                r#"{"eaves_height": {"value": 6, "unit": "kg"}}"#,
+                "is a length",
+            ),
+            (r#"{"storeys": {"value": 2, "unit": "m"}}"#, "plain number"),
+            (r#"{"storeys": "II"}"#, "not a number"),
+            (r#"{"load": {"value": 1, "unit": "furlong"}}"#, "furlong"),
+            (r#"{"load": {"value": 1}}"#, "is no quantity"),
+            (r"[1]", "not an object"),
+        ] {
+            let refused = zone_with(values).unwrap_err();
+            assert!(refused.contains(why), "{values}: {refused}");
+        }
     }
 }

@@ -136,10 +136,36 @@ pub enum Expression {
     /// cited with its id, version and entry, never as the model's. An
     /// empty cell is `null`, and so is a `null` key; a key no entry has,
     /// and a catalogue the host did not supply, are not evaluated.
+    ///
+    /// A catalogue stating its entries per range (#324: a design speed per
+    /// station range of an alignment) is read `at` a position along them,
+    /// such as an object's station: the value of the key's range holding
+    /// it. `at` stands only for such a catalogue, and such a catalogue is
+    /// read only `at` a position.
     Catalogue {
         catalogue: String,
         key: Box<Expression>,
         column: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        at: Option<Box<Expression>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        label: Option<String>,
+    },
+    /// A value a context zone supplied beside the model states (#324),
+    /// such as the snow load zone of a zone map: of the zone named by its
+    /// id (`zone`), or of the zone of kind `standsIn` the object stands in,
+    /// exactly one of them. `value` names the key the zone states, read as
+    /// stated (text, a number or a quantity) and cited as the zone's
+    /// statement; a key the zone does not state is `null`. Without
+    /// `value`, the zone's id. A zone the object may stand in but surely
+    /// does not, or several it may, is not evaluated, never chosen.
+    Zone {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        zone: Option<String>,
+        #[serde(rename = "standsIn", default, skip_serializing_if = "Option::is_none")]
+        stands_in: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        value: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         label: Option<String>,
     },
@@ -688,11 +714,13 @@ pub enum ExpressionError {
     MeasuredMembers { detail: String },
     #[error("a `{kind}` expression is read only within the `value` of a `pairs` expression")]
     OutsidePairs { kind: &'static str },
+    #[error("a `zone` expression names exactly one of `zone` and `standsIn`")]
+    ZoneNamed,
 }
 
 impl Expression {
     /// Every node `kind`, in declaration order.
-    pub const KINDS: [&'static str; 55] = [
+    pub const KINDS: [&'static str; 56] = [
         "literal",
         "null",
         "property",
@@ -702,6 +730,7 @@ impl Expression {
         "interpolate",
         "lookup2",
         "catalogue",
+        "zone",
         "not",
         "and",
         "or",
@@ -763,6 +792,7 @@ impl Expression {
             Self::Interpolate { .. } => "interpolate",
             Self::Lookup2 { .. } => "lookup2",
             Self::Catalogue { .. } => "catalogue",
+            Self::Zone { .. } => "zone",
             Self::Not { .. } => "not",
             Self::And { .. } => "and",
             Self::Or { .. } => "or",
@@ -825,6 +855,7 @@ impl Expression {
             | Self::Interpolate { label, .. }
             | Self::Lookup2 { label, .. }
             | Self::Catalogue { label, .. }
+            | Self::Zone { label, .. }
             | Self::Not { label, .. }
             | Self::And { label, .. }
             | Self::Or { label, .. }
@@ -884,12 +915,16 @@ impl Expression {
             | Self::Property { .. }
             | Self::Parameter { .. }
             | Self::Derived { .. }
+            | Self::Zone { .. }
             | Self::RuleOutcome { .. }
             | Self::Selected { .. }
             | Self::FindingCount { .. }
             | Self::Deviation { .. } => Vec::new(),
             Self::Lookup { keys, .. } => keys.values().collect(),
-            Self::Interpolate { key, .. } | Self::Catalogue { key, .. } => vec![key],
+            Self::Interpolate { key, .. } => vec![key],
+            Self::Catalogue { key, at, .. } => {
+                std::iter::once(key.as_ref()).chain(at.as_deref()).collect()
+            }
             Self::Lookup2 {
                 row_key,
                 column_key,
@@ -1050,8 +1085,12 @@ impl Expression {
                 }
             }
             Self::Lookup { keys, .. } => keys.values_mut().for_each(|key| key.rename_rules(rename)),
-            Self::Interpolate { key, .. } | Self::Catalogue { key, .. } => {
+            Self::Interpolate { key, .. } => key.rename_rules(rename),
+            Self::Catalogue { key, at, .. } => {
                 key.rename_rules(rename);
+                if let Some(at) = at {
+                    at.rename_rules(rename);
+                }
             }
             Self::Lookup2 {
                 row_key,
@@ -1147,7 +1186,8 @@ impl Expression {
             | Self::Null { .. }
             | Self::Property { .. }
             | Self::Parameter { .. }
-            | Self::Derived { .. } => {}
+            | Self::Derived { .. }
+            | Self::Zone { .. } => {}
         }
     }
 
@@ -1276,6 +1316,7 @@ impl Expression {
     /// `paired` is whether the node lies within the `value` of a `pairs`
     /// (and in no member scope nested within it), where `previous` and
     /// `next` read the pair.
+    #[allow(clippy::too_many_lines)] // One check per node kind that needs one.
     fn validate_at(&self, depth: usize, paired: bool) -> Result<(), ExpressionError> {
         if depth > MAX_EXPRESSION_DEPTH {
             return Err(ExpressionError::TooDeep);
@@ -1328,6 +1369,12 @@ impl Expression {
                 blank(kind, "catalogue", catalogue)?;
                 blank(kind, "column", column)?;
             }
+            Self::Zone {
+                zone,
+                stands_in,
+                value,
+                ..
+            } => validate_zone(zone.as_deref(), stands_in.as_deref(), value.as_deref())?,
             Self::Interpolate { .. } | Self::Lookup2 { .. } => {
                 for (field, name) in self.table_names() {
                     blank(kind, field, name)?;
@@ -1379,6 +1426,21 @@ impl Expression {
             .into_iter()
             .try_for_each(|child| child.validate_at(depth + 1, paired))
     }
+}
+
+/// A `zone` names its zone by exactly one of an id and a kind it stands
+/// in, and no field is blank.
+fn validate_zone(
+    zone: Option<&str>,
+    stands_in: Option<&str>,
+    value: Option<&str>,
+) -> Result<(), ExpressionError> {
+    match (zone, stands_in) {
+        (Some(zone), None) => blank("zone", "zone", zone)?,
+        (None, Some(stands_in)) => blank("zone", "standsIn", stands_in)?,
+        _ => return Err(ExpressionError::ZoneNamed),
+    }
+    value.map_or(Ok(()), |value| blank("zone", "value", value))
 }
 
 /// An aggregate takes a `value` unless it counts, and its source is valid.

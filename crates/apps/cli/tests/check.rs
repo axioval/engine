@@ -3143,6 +3143,74 @@ fn with_geometry_products_are_judged_by_their_station_and_offset_along_an_alignm
     assert_eq!(open, ["#133", "#153", "#203"], "{result:#}");
 }
 
+/// engine#324 end to end: a design speed stated per station range of the
+/// alignment, supplied with `--catalogue`, is read at each cube's station
+/// along it (#252): 50 km/h up to station 4, 70 km/h from there to the
+/// end. A rule of at most 60 km/h finds the cubes at station 5 (#143,
+/// #163) and keeps the one at station 3 (#183) and the bodiless proxy at
+/// the start (#30); a cube whose station is not measured, or beyond the
+/// end, is not evaluated.
+#[test]
+fn with_geometry_a_design_speed_stated_per_station_range_is_read_at_a_station() {
+    let case = Case::new("geometry-alignment-design-speed");
+    case.write("model.ifc", &cubes_along_an_alignment());
+    case.write(
+        "speeds.csv",
+        "alignment,from,to,speed\n\
+         ex-axis-1,0,4,50\n\
+         ex-axis-1,4,15,70\n",
+    );
+    let catalogues = json!({"speeds": {
+        "id": "speeds",
+        "name": {"default": "Design speeds", "translations": {}},
+        "key": "alignment",
+        "columns": [
+            {"id": "alignment", "kind": "string"},
+            {"id": "from", "kind": "quantity", "unit": "m"},
+            {"id": "to", "kind": "quantity", "unit": "m"},
+            {"id": "speed", "kind": "quantity", "unit": "km/h"},
+        ],
+        "ranges": {"from": "from", "to": "to"},
+    }});
+    let requirement = json!({"kind": "compare", "operator": "lessThanOrEquals",
+        "left": {"kind": "catalogue", "catalogue": "speeds", "column": "speed",
+                 "label": "design speed",
+                 "key": {"kind": "literal", "value": {"type": "string", "value": "ex-axis-1"}},
+                 "at": {"kind": "property", "propertySet": "axioval:measured",
+                        "property": "station;alignment=IfcAlignment"}},
+        "right": {"kind": "literal", "value": {"type": "quantity", "value": 60, "unit": "km/h"}}});
+    let (output, result) = case.geometry_rule_with(
+        &["model.ifc"],
+        &[("proxy", "IfcBuildingElementProxy")],
+        (
+            "axioval:capability.expression",
+            &registry_signature("axioval:capability.expression"),
+        ),
+        entity("proxy"),
+        json!({"requirement": {"type": "expression", "value": requirement}}),
+        &json!({"ruleset:catalogues": catalogues}),
+        &["--catalogue", "speeds=speeds.csv"],
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let (mut findings, mut open) = subjects_of(&result);
+    findings.sort();
+    open.sort();
+    assert_eq!(findings, ["#143", "#163"], "{result:#}");
+    assert_eq!(open, ["#133", "#153", "#203"], "{result:#}");
+    let message = result["report"]["findings"][0]["message"].to_string();
+    // 70 km/h, in metres per second, at the station measured (about 5 m).
+    assert!(
+        message.contains("catalogue speeds[ex-axis-1 at 4.99999")
+            && message.contains("].speed = 19.444"),
+        "{message}"
+    );
+    let cited = result["report"]["findings"][0]["evidence"].to_string();
+    assert!(
+        cited.contains("#entry=ex-axis-1;range=4 m..15 m"),
+        "{cited}"
+    );
+}
+
 /// engine#253 end to end: an `expression` rule on the alignment over the
 /// number of proxies reaching into a clearance envelope swept along it, and
 /// one on each proxy over its section area at station 5. Of the cubes

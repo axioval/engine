@@ -25,8 +25,8 @@ use std::fmt::Write as _;
 use std::sync::Arc;
 
 use axioval_ir::contract::{
-    CalculationResults, CatalogueDefinition, ColumnKind, ParameterValue, ScalarValue,
-    TableFileColumn, TableRow,
+    CalculationResults, CatalogueDefinition, CatalogueRanges, ColumnKind, ParameterValue,
+    ScalarValue, TableFileColumn, TableRow,
 };
 use axioval_ir::{Evidence, SourceId};
 
@@ -168,7 +168,162 @@ pub(crate) fn check_definition(id: &str, definition: &CatalogueDefinition) -> Re
     if let Some(results) = &definition.results {
         check_results(definition, results)?;
     }
+    if let Some(ranges) = &definition.ranges {
+        check_ranges(definition, ranges)?;
+    }
     Ok(())
+}
+
+/// The range columns of a catalogue stated per range, checked: two
+/// distinct declared columns other than the key, both `number` or both
+/// `quantity` of one unit.
+fn check_ranges(definition: &CatalogueDefinition, ranges: &CatalogueRanges) -> Result<(), String> {
+    let column = |role: &str, id: &str| {
+        let column = definition
+            .columns
+            .iter()
+            .find(|column| column.id == id)
+            .ok_or_else(|| format!("its ranges' {role} column `{id}` is not declared"))?;
+        if id == definition.key {
+            return Err(format!(
+                "its ranges' {role} column `{id}` is its key, which names the entries"
+            ));
+        }
+        if !matches!(column.kind, ColumnKind::Number | ColumnKind::Quantity) {
+            return Err(format!(
+                "its ranges' {role} column `{id}` is declared {}, not number or quantity",
+                column.kind.as_str()
+            ));
+        }
+        Ok(column)
+    };
+    let (from, to) = (column("from", &ranges.from)?, column("to", &ranges.to)?);
+    if from.id == to.id {
+        return Err(format!(
+            "its ranges name the column `{}` as both from and to",
+            from.id
+        ));
+    }
+    let unit = |column: &TableFileColumn| column.unit.as_deref().map(parse_unit);
+    let same = match (unit(from), unit(to)) {
+        (None, None) => from.kind == to.kind,
+        (Some(Ok((_, from_unit))), Some(Ok((_, to_unit)))) => from_unit == to_unit,
+        _ => false,
+    };
+    if !same {
+        return Err(format!(
+            "its ranges' columns `{}` and `{}` state positions of different kinds or units",
+            from.id, to.id
+        ));
+    }
+    Ok(())
+}
+
+/// One range of a catalogue stated per range: its ends in coherent units
+/// (`[from, to)`), as stated for the locator, and its entry's row.
+#[derive(Clone, Debug, PartialEq)]
+struct Range {
+    from: f64,
+    to: f64,
+    stated: String,
+    row: usize,
+}
+
+/// A range column's cell in coherent units, and as stated.
+fn position(cell: Option<&ParameterValue>) -> Option<(f64, String)> {
+    let cell = cell?;
+    let stated = match cell {
+        ParameterValue::Number { value } => value.to_string(),
+        ParameterValue::Quantity { value, unit } => format!("{value} {unit}"),
+        _ => return None,
+    };
+    match ScalarValue::try_from(cell.clone())
+        .ok()
+        .and_then(|scalar| Value::from_literal(&scalar).ok())?
+    {
+        Value::Number { value, .. } if value.is_point() => Some((value.lower, stated)),
+        _ => None,
+    }
+}
+
+/// The unit of the positions a catalogue's ranges state: its `from`
+/// column's, plain for a number.
+fn range_unit(definition: &CatalogueDefinition) -> Result<crate::expression::Unit, String> {
+    definition
+        .ranges
+        .as_ref()
+        .and_then(|ranges| {
+            definition
+                .columns
+                .iter()
+                .find(|column| column.id == ranges.from)
+        })
+        .and_then(|column| column.unit.as_deref())
+        .map_or(Ok(crate::expression::Unit::NONE), |unit| {
+            parse_unit(unit).map(|(_, unit)| unit)
+        })
+}
+
+/// The `column` value of an entry's `row` of `catalogue`: `null` for an
+/// empty cell.
+fn cell_value(catalogue: &str, column: &str, row: &TableRow) -> Result<Value, String> {
+    match row.get(column) {
+        None => Ok(Value::Null),
+        Some(cell) => ScalarValue::try_from(cell.clone())
+            .map_err(|_| format!("catalogue `{catalogue}` column `{column}` states no value"))
+            .and_then(|scalar| Value::from_literal(&scalar)),
+    }
+}
+
+/// The ranges of each key of a catalogue stated per range, sorted by
+/// start: every entry stating both ends, its start below its end, and no
+/// two ranges of one key overlapping.
+fn index_ranges(
+    ranges: &CatalogueRanges,
+    key: &str,
+    rows: &[TableRow],
+) -> Result<BTreeMap<String, Vec<Range>>, String> {
+    let mut keyed: BTreeMap<String, Vec<Range>> = BTreeMap::new();
+    for (row, cells) in rows.iter().enumerate() {
+        let entry = row + 1;
+        let Some(ParameterValue::String { value: name }) = cells.get(key) else {
+            continue;
+        };
+        let (Some(from), Some(to)) = (
+            position(cells.get(&ranges.from)),
+            position(cells.get(&ranges.to)),
+        ) else {
+            return Err(format!(
+                "entry {entry} states no range (`{}` and `{}`)",
+                ranges.from, ranges.to
+            ));
+        };
+        if from.0 >= to.0 {
+            return Err(format!(
+                "entry {entry}'s range starts at {} and ends at {}, not after it",
+                from.1, to.1
+            ));
+        }
+        keyed.entry(name.clone()).or_default().push(Range {
+            from: from.0,
+            to: to.0,
+            stated: format!("{}..{}", from.1, to.1),
+            row,
+        });
+    }
+    for (name, ranges) in &mut keyed {
+        ranges.sort_by(|a, b| a.from.total_cmp(&b.from));
+        if let Some(pair) = ranges.windows(2).find(|pair| pair[1].from < pair[0].to) {
+            return Err(format!(
+                "entries {} and {} of `{name}` state overlapping ranges {} and {}",
+                pair[0].row + 1,
+                pair[1].row + 1,
+                pair[0].stated,
+                pair[1].stated
+            ));
+        }
+    }
+    Ok(keyed)
 }
 
 /// The provenance columns of a results catalogue, checked: each a declared
@@ -382,6 +537,11 @@ fn index(
             Some(ParameterValue::String { value }) if !value.trim().is_empty() => value,
             _ => return Err(format!("entry {entry} names no key")),
         };
+        // Stated per range, a key names an entry per range.
+        if definition.ranges.is_some() {
+            entries.entry(key.clone()).or_insert(index);
+            continue;
+        }
         if let Some(earlier) = entries.insert(key.clone(), index) {
             return Err(format!(
                 "entries {} and {entry} both name the key `{key}`",
@@ -422,6 +582,8 @@ fn cell_fits(column: &TableFileColumn, cell: &ParameterValue) -> Result<(), Stri
 struct Indexed {
     supplied: SuppliedCatalogue,
     entries: BTreeMap<String, usize>,
+    /// Stated per range: each key's ranges, sorted.
+    ranges: BTreeMap<String, Vec<Range>>,
 }
 
 /// The catalogues of a run: every one the plan declares, with the entries
@@ -474,8 +636,19 @@ impl Catalogues {
         }
         let entries = index(definition, &supplied.rows)
             .map_err(|detail| format!("the entries of `{}`: {detail}", supplied.origin))?;
-        self.supplied
-            .insert(id.to_owned(), Indexed { supplied, entries });
+        let ranges = match &definition.ranges {
+            None => BTreeMap::new(),
+            Some(ranges) => index_ranges(ranges, &definition.key, &supplied.rows)
+                .map_err(|detail| format!("the entries of `{}`: {detail}", supplied.origin))?,
+        };
+        self.supplied.insert(
+            id.to_owned(),
+            Indexed {
+                supplied,
+                entries,
+                ranges,
+            },
+        );
         Ok(())
     }
 
@@ -509,7 +682,7 @@ impl Catalogues {
     /// provenance, by catalogue and then the file's order.
     pub(crate) fn stale_results(&self) -> Vec<StaleResult> {
         let mut stale = Vec::new();
-        for (id, Indexed { supplied, entries }) in &self.supplied {
+        for (id, Indexed { supplied, .. }) in &self.supplied {
             let Some(results) = self
                 .declared
                 .get(id)
@@ -517,10 +690,12 @@ impl Catalogues {
             else {
                 continue;
             };
-            let mut ordered: Vec<(&String, &usize)> = entries.iter().collect();
-            ordered.sort_by_key(|(_, index)| **index);
-            for (key, &index) in ordered {
-                match provenance(results, &supplied.rows[index]) {
+            let key_column = &self.declared[id].key;
+            for row in &supplied.rows {
+                let Some(ParameterValue::String { value: key }) = row.get(key_column) else {
+                    continue;
+                };
+                match provenance(results, row) {
                     Err(why) => stale.push(StaleResult {
                         catalogue: id.clone(),
                         key: key.clone(),
@@ -581,12 +756,20 @@ impl Catalogues {
         let Some(definition) = self.declared.get(catalogue) else {
             return Leaf::unreadable(format!("no catalogue `{catalogue}` is declared"));
         };
-        let Some(Indexed { supplied, entries }) = self.supplied.get(catalogue) else {
+        let Some(Indexed {
+            supplied, entries, ..
+        }) = self.supplied.get(catalogue)
+        else {
             return Leaf::unreadable(format!(
                 "catalogue `{catalogue}` takes its entries from the host at check time, and \
                  none were supplied, so its entry `{key}` cannot be read"
             ));
         };
+        if definition.ranges.is_some() {
+            return Leaf::unreadable(format!(
+                "catalogue `{catalogue}` states its entries per range, so it is read at a position"
+            ));
+        }
         let edition = supplied
             .version
             .as_ref()
@@ -617,20 +800,133 @@ impl Catalogues {
                 supplied.sha256
             ),
         );
-        let value = match supplied.rows[index].get(column) {
-            None => Ok(Value::Null),
-            Some(cell) => ScalarValue::try_from(cell.clone())
-                .map_err(|_| format!("catalogue `{catalogue}` column `{column}` states no value"))
-                .and_then(|scalar| Value::from_literal(&scalar)),
-        };
         Leaf {
-            value,
+            value: cell_value(catalogue, column, &supplied.rows[index]),
             evidence: vec![evidence],
         }
     }
 }
 
 impl Catalogues {
+    /// The `column` value of the entry of `catalogue` whose key is `key`
+    /// and whose range `[from, to)` holds the position `at` (#324), for an
+    /// object of `source`, as [`Catalogues::read`] reads one entry, its
+    /// evidence citing the range (`#entry=<key>;range=<from>..<to>`). A
+    /// position whose interval reaches several ranges reads their value
+    /// where they state one alike; one reaching ranges stating different
+    /// values, or reaching no range or a gap between ranges, is
+    /// unreadable, naming the position, never a value picked.
+    #[must_use]
+    pub fn read_at(
+        &self,
+        catalogue: &str,
+        key: &str,
+        at: &Value,
+        column: &str,
+        source: &SourceId,
+    ) -> Leaf {
+        let Some(definition) = self.declared.get(catalogue) else {
+            return Leaf::unreadable(format!("no catalogue `{catalogue}` is declared"));
+        };
+        if definition.ranges.is_none() {
+            return Leaf::unreadable(format!(
+                "catalogue `{catalogue}` states one entry per key, not ranges, so it is not read \
+                 at a position"
+            ));
+        }
+        let Some(Indexed {
+            supplied, ranges, ..
+        }) = self.supplied.get(catalogue)
+        else {
+            return Leaf::unreadable(format!(
+                "catalogue `{catalogue}` takes its entries from the host at check time, and \
+                 none were supplied, so `{key}` at {at} cannot be read"
+            ));
+        };
+        let edition = supplied
+            .version
+            .as_ref()
+            .map_or_else(String::new, |version| format!(" (version {version})"));
+        let Some(stated) = ranges.get(key) else {
+            return Leaf::unreadable(format!(
+                "catalogue `{catalogue}`{edition} has no entry whose `{}` is `{key}`",
+                definition.key
+            ));
+        };
+        let Value::Number { value: held, unit } = at else {
+            return Leaf::unreadable(format!(
+                "catalogue `{catalogue}` is read at a number, not {}",
+                at.kind()
+            ));
+        };
+        if range_unit(definition).as_ref() != Ok(unit) {
+            return Leaf::unreadable(format!(
+                "catalogue `{catalogue}` states its ranges in another unit than {at}"
+            ));
+        }
+        let reached: Vec<&Range> = stated
+            .iter()
+            .filter(|range| range.from <= held.upper && held.lower < range.to)
+            .collect();
+        let covered = reached
+            .first()
+            .is_some_and(|first| first.from <= held.lower)
+            && reached.last().is_some_and(|last| held.upper < last.to)
+            && reached.windows(2).all(|pair| pair[0].to >= pair[1].from);
+        if !covered {
+            let listed: Vec<&str> = stated.iter().map(|range| range.stated.as_str()).collect();
+            return Leaf::unreadable(format!(
+                "catalogue `{catalogue}`{edition} states no range of `{key}` holding {at} \
+                 (its ranges: {})",
+                listed.join(", ")
+            ));
+        }
+        let version = supplied
+            .version
+            .as_ref()
+            .map_or_else(String::new, |version| format!(";version={version}"));
+        let mut value: Option<Result<Value, String>> = None;
+        let mut evidence = Vec::with_capacity(reached.len());
+        for range in &reached {
+            let row = &supplied.rows[range.row];
+            let traced = match &definition.results {
+                None => String::new(),
+                Some(results) => match self.traced(catalogue, key, results, row, source) {
+                    Ok(traced) => traced,
+                    Err(why) => return Leaf::unreadable(why),
+                },
+            };
+            evidence.push(Evidence::exact(
+                source.clone(),
+                format!(
+                    "{CATALOGUE_LOCATOR_PREFIX};id={catalogue}{version};sha256={}#entry={key};\
+                     range={}{traced}",
+                    supplied.sha256,
+                    locator_text(&range.stated)
+                ),
+            ));
+            let read = cell_value(catalogue, column, row);
+            match &value {
+                None => value = Some(read),
+                Some(earlier) if *earlier == read => {}
+                Some(_) => {
+                    let listed: Vec<&str> =
+                        reached.iter().map(|range| range.stated.as_str()).collect();
+                    return Leaf::unreadable(format!(
+                        "{at} may lie in any of the ranges {} of `{key}` in catalogue \
+                         `{catalogue}`{edition}, which state different `{column}`, so which \
+                         one holds it is undecided",
+                        listed.join(", ")
+                    ));
+                }
+            }
+        }
+        Leaf {
+            value: value.unwrap_or(Ok(Value::Null)),
+            evidence,
+        }
+    }
+
     /// The locator fields tracing the result `key` of `catalogue` read for
     /// an object of `source` (`;method=…;report=…;date=…;revision=…`), or
     /// why it is not read: untraceable, the checked model's revision
@@ -671,6 +967,24 @@ impl Catalogues {
             locator_text(&traced.date),
             locator_text(&traced.revision)
         ))
+    }
+}
+
+/// The `column` value of the entry `key` of `catalogue` whose range holds
+/// `at`, in the run whose services these are, for an object of `source`
+/// ([`Catalogues::read_at`]); unreadable outside a run.
+#[must_use]
+pub fn catalogue_value_at(
+    services: &crate::ServiceRegistry,
+    (catalogue, key, at): (&str, &str, &Value),
+    column: &str,
+    source: &SourceId,
+) -> Leaf {
+    match services.get::<Arc<Catalogues>>() {
+        Some(catalogues) => catalogues.read_at(catalogue, key, at, column, source),
+        None => Leaf::unreadable(format!(
+            "catalogue `{catalogue}` cannot be read outside a run"
+        )),
     }
 }
 
@@ -1026,5 +1340,160 @@ mod tests {
             .supply_revision(source(), revision.clone())
             .unwrap();
         assert!(catalogues.supply_revision(source(), revision).is_err());
+    }
+
+    /// Design speeds per station range of two alignments.
+    fn speeds() -> CatalogueDefinition {
+        serde_json::from_value(serde_json::json!({
+            "id": "speeds",
+            "name": {"default": "Design speeds", "translations": {}},
+            "key": "alignment",
+            "columns": [
+                {"id": "alignment", "kind": "string"},
+                {"id": "from", "kind": "quantity", "unit": "m"},
+                {"id": "to", "kind": "quantity", "unit": "m"},
+                {"id": "speed", "kind": "quantity", "unit": "km/h"},
+                {"id": "category", "kind": "string"},
+            ],
+            "ranges": {"from": "from", "to": "to"},
+        }))
+        .unwrap()
+    }
+
+    fn ranged(csv: &str) -> Result<Catalogues, String> {
+        let definition = speeds();
+        check_definition("speeds", &definition)?;
+        let mut catalogues = Catalogues::declared(std::slice::from_ref(&definition));
+        let supplied =
+            SuppliedCatalogue::read(&definition, csv.as_bytes(), "speeds.csv", None, None)?;
+        catalogues.supply("speeds", supplied)?;
+        Ok(catalogues)
+    }
+
+    fn metres(lower: f64, upper: f64) -> Value {
+        Value::Number {
+            value: crate::expression::Interval { lower, upper },
+            unit: parse_unit("m").unwrap().1,
+        }
+    }
+
+    const SPEEDS: &str = "alignment,from,to,speed,category\n\
+                          ex-axis-1,0,120,60,urban\n\
+                          ex-axis-1,250,400,80,rural\n\
+                          ex-axis-1,120,250,80,rural\n\
+                          ex-axis-2,0,1000,100,rural\n";
+
+    #[test]
+    fn a_value_stated_per_station_range_is_read_at_a_station() {
+        let catalogues = ranged(SPEEDS).unwrap();
+        let read = |key: &str, at: Value, column: &str| {
+            catalogues.read_at("speeds", key, &at, column, &source())
+        };
+        let leaf = read("ex-axis-1", metres(150.0, 150.0), "speed");
+        let Ok(Value::Number { value, .. }) = &leaf.value else {
+            panic!("{leaf:?}");
+        };
+        assert!((value.lower - 80.0 / 3.6).abs() < 1e-9, "{value:?}");
+        assert_eq!(leaf.evidence.len(), 1);
+        assert!(
+            leaf.evidence[0]
+                .locator
+                .ends_with("#entry=ex-axis-1;range=120 m..250 m"),
+            "{}",
+            leaf.evidence[0].locator
+        );
+        // A range holds its start, never its end.
+        assert_eq!(
+            read("ex-axis-1", metres(120.0, 120.0), "category").value,
+            Ok(Value::Text("rural".into()))
+        );
+        assert_eq!(
+            read("ex-axis-1", metres(0.0, 0.0), "category").value,
+            Ok(Value::Text("urban".into()))
+        );
+        // A station across two ranges stating one value reads it, citing both.
+        let across = read("ex-axis-1", metres(240.0, 260.0), "speed");
+        assert!(
+            across.value.is_ok() && across.evidence.len() == 2,
+            "{across:?}"
+        );
+        // Across ranges stating different values: undecided, never one picked.
+        let straddling = read("ex-axis-1", metres(119.0, 121.0), "speed");
+        assert!(
+            straddling
+                .value
+                .as_ref()
+                .is_err_and(|why| why.contains("undecided") && why.contains("0 m..120 m")),
+            "{straddling:?}"
+        );
+        // Beyond every range, or at the last one's end: no range holds it.
+        let beyond = read("ex-axis-1", metres(400.0, 400.0), "speed");
+        assert!(
+            beyond
+                .value
+                .as_ref()
+                .is_err_and(|why| why.contains("states no range of `ex-axis-1` holding")),
+            "{beyond:?}"
+        );
+        assert!(
+            read("ex-axis-3", metres(1.0, 1.0), "speed")
+                .value
+                .is_err_and(|why| why.contains("has no entry whose `alignment` is `ex-axis-3`"))
+        );
+        // A position of another unit, and a plain read, are refused.
+        assert!(
+            read(
+                "ex-axis-1",
+                Value::Number {
+                    value: crate::expression::Interval {
+                        lower: 1.0,
+                        upper: 1.0
+                    },
+                    unit: crate::expression::Unit::NONE
+                },
+                "speed"
+            )
+            .value
+            .is_err()
+        );
+        assert!(
+            catalogues
+                .read("speeds", "ex-axis-1", "speed", &source())
+                .value
+                .is_err_and(|why| why.contains("read at a position"))
+        );
+    }
+
+    #[test]
+    fn ranges_are_checked_when_declared_and_supplied() {
+        fn ranges(definition: &mut CatalogueDefinition) -> &mut CatalogueRanges {
+            definition.ranges.as_mut().unwrap()
+        }
+        assert!(
+            ranged(
+                "alignment,from,to,speed,category\nex-axis-1,0,120,60,u\nex-axis-1,100,200,80,r\n"
+            )
+            .is_err_and(|why| why.contains("overlapping ranges 0 m..120 m and 100 m..200 m"))
+        );
+        assert!(
+            ranged("alignment,from,to,speed,category\nex-axis-1,120,120,60,u\n")
+                .is_err_and(|why| why.contains("not after it"))
+        );
+        assert!(
+            ranged("alignment,from,to,speed,category\nex-axis-1,,120,60,u\n")
+                .is_err_and(|why| why.contains("states no range"))
+        );
+        let checked = |edit: &dyn Fn(&mut CatalogueDefinition)| {
+            let mut definition = speeds();
+            edit(&mut definition);
+            check_definition("speeds", &definition)
+        };
+        assert!(checked(&|d| ranges(d).to = "from".into()).is_err());
+        assert!(checked(&|d| ranges(d).to = "category".into()).is_err());
+        assert!(
+            checked(&|d| ranges(d).to = "speed".into()).is_err_and(|why| why.contains("units"))
+        );
+        assert!(checked(&|d| ranges(d).from = "alignment".into()).is_err());
+        assert!(checked(&|d| ranges(d).from = "station".into()).is_err());
     }
 }

@@ -174,6 +174,7 @@ fn operands<'e>(node: &'e Expression, path: &str) -> Vec<(String, &'e Expression
         | Expression::Property { .. }
         | Expression::Parameter { .. }
         | Expression::Derived { .. }
+        | Expression::Zone { .. }
         | Expression::RuleOutcome { .. }
         | Expression::Selected { .. }
         | Expression::FindingCount { .. }
@@ -182,9 +183,10 @@ fn operands<'e>(node: &'e Expression, path: &str) -> Vec<(String, &'e Expression
             .iter()
             .map(|(key, value)| (format!("{path}.lookup.keys[{key}]"), value))
             .collect(),
-        Expression::Interpolate { key, .. } | Expression::Catalogue { key, .. } => {
-            vec![(field("key"), key.as_ref())]
-        }
+        Expression::Interpolate { key, .. } => vec![(field("key"), key.as_ref())],
+        Expression::Catalogue { key, at, .. } => std::iter::once((field("key"), key.as_ref()))
+            .chain(at.as_deref().map(|at| (field("at"), at)))
+            .collect(),
         Expression::Lookup2 {
             row_key,
             column_key,

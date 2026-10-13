@@ -1,0 +1,6 @@
+{
+  "kind": "zone",
+  "standsIn": "snow-load-zone",
+  "value": "load_zone",
+  "label": "snow load zone"
+}

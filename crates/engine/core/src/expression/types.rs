@@ -209,6 +209,16 @@ pub trait TypeEnvironment {
         let _ = column;
         Err(format!("no catalogue `{catalogue}` is declared"))
     }
+
+    /// The type of the positions the ranges of the catalogue `catalogue`
+    /// state (#324), `None` for a catalogue of one entry per key.
+    ///
+    /// # Errors
+    ///
+    /// The catalogue is not declared.
+    fn catalogue_ranges(&self, catalogue: &str) -> Result<Option<Type>, String> {
+        Err(format!("no catalogue `{catalogue}` is declared"))
+    }
 }
 
 /// The types of a catalogue's value columns, by column id, the key
@@ -285,6 +295,7 @@ pub struct DeclaredTypes {
     properties: BTreeMap<String, Type>,
     values: BTreeMap<String, Type>,
     catalogues: BTreeMap<String, CatalogueTypes>,
+    ranges: BTreeMap<String, Type>,
 }
 
 impl DeclaredTypes {
@@ -295,6 +306,7 @@ impl DeclaredTypes {
             properties,
             values,
             catalogues: BTreeMap::new(),
+            ranges: BTreeMap::new(),
         }
     }
 
@@ -303,6 +315,26 @@ impl DeclaredTypes {
     pub fn with_catalogues(mut self, catalogues: BTreeMap<String, CatalogueTypes>) -> Self {
         self.catalogues = catalogues;
         self
+    }
+
+    /// These types, and the types of the positions the ranges of the
+    /// catalogues stating their entries per range state, by id (#324).
+    #[must_use]
+    pub fn with_catalogue_ranges(mut self, ranges: BTreeMap<String, Type>) -> Self {
+        self.ranges = ranges;
+        self
+    }
+
+    /// The type of the positions the ranges of `catalogue` state: `None`
+    /// for a declared catalogue of one entry per key, [`Type::Any`] for one
+    /// not declared.
+    #[must_use]
+    pub fn catalogue_ranges(&self, catalogue: &str) -> Option<Type> {
+        match self.ranges.get(catalogue) {
+            Some(found) => Some(found.clone()),
+            None if self.catalogues.contains_key(catalogue) => None,
+            None => Some(Type::Any),
+        }
     }
 
     /// The type of the value column `column` of `catalogue`;
@@ -331,6 +363,12 @@ impl DeclaredTypes {
                 .catalogues
                 .iter()
                 .map(|(id, columns)| (id.clone(), columns.clone())),
+        );
+        self.ranges.extend(
+            other
+                .ranges
+                .iter()
+                .map(|(id, found)| (id.clone(), found.clone())),
         );
     }
 
@@ -394,6 +432,12 @@ pub(super) fn member_value_unit(
             Ok(self
                 .0
                 .map_or(Type::Any, |declared| declared.catalogue(catalogue, column)))
+        }
+
+        fn catalogue_ranges(&self, catalogue: &str) -> Result<Option<Type>, String> {
+            Ok(self.0.map_or(Some(Type::Any), |declared| {
+                declared.catalogue_ranges(catalogue)
+            }))
         }
     }
     let unread = Declared(declared);
@@ -722,6 +766,7 @@ impl<'e> Checker<'e> {
                 catalogue,
                 key,
                 column,
+                at,
                 ..
             } => {
                 let result = self
@@ -736,7 +781,56 @@ impl<'e> Checker<'e> {
                         kind: TypeErrorKind::NotText(found),
                     });
                 }
+                let ranges = self
+                    .environment
+                    .catalogue_ranges(catalogue)
+                    .map_err(|why| here(TypeErrorKind::Unknown(why)))?;
+                match (at, ranges) {
+                    (Some(at), Some(position)) => {
+                        let at_path = child("at");
+                        let found = self.check(at, &at_path)?;
+                        if !found.is_numeric() {
+                            return Err(TypeError {
+                                path: at_path,
+                                kind: TypeErrorKind::NotNumeric(found),
+                            });
+                        }
+                        if let (Some(left), Some(right)) = (found.unit(), position.unit())
+                            && left != right
+                        {
+                            return Err(TypeError {
+                                path: at_path,
+                                kind: TypeErrorKind::UnitMismatch {
+                                    operation: "compares",
+                                    left,
+                                    right,
+                                },
+                            });
+                        }
+                    }
+                    (Some(_), None) => {
+                        return Err(here(TypeErrorKind::Unknown(format!(
+                            "catalogue `{catalogue}` states one entry per key, not ranges, so \
+                             it is read without `at`"
+                        ))));
+                    }
+                    (None, Some(_)) => {
+                        return Err(here(TypeErrorKind::Unknown(format!(
+                            "catalogue `{catalogue}` states its entries per range, so it is \
+                             read `at` a position"
+                        ))));
+                    }
+                    (None, None) => {}
+                }
                 result
+            }
+            // A zone's id is text; what it states is known once read.
+            Expression::Zone { value, .. } => {
+                if value.is_some() {
+                    Type::Any
+                } else {
+                    Type::Text
+                }
             }
             Expression::Not { operand, .. } => {
                 self.boolean(operand, &child("operand"))?;

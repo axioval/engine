@@ -277,7 +277,17 @@ fn read_values(evaluation: &Evaluation) -> String {
                 catalogue,
                 key,
                 column,
-            } => format!("catalogue {catalogue}[{key}].{column}"),
+                at,
+            } => match at {
+                None => format!("catalogue {catalogue}[{key}].{column}"),
+                Some(at) => format!("catalogue {catalogue}[{key} at {at}].{column}"),
+            },
+            // A context zone's statement, never the model's, by its id.
+            axioval_engine::expression::Source::Zone { zone, value } => match value {
+                None if zone.is_empty() => continue,
+                None => format!("zone {zone}"),
+                Some(value) => format!("zone {zone}.{value}"),
+            },
             // Its members' values are cited, not listed; a value read within
             // a pair is shown by the pair's.
             axioval_engine::expression::Source::Aggregate(_)

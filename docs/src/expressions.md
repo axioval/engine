@@ -521,6 +521,62 @@ A `catalogue` node reads one entry's value:
   column it does not declare or its key column read as a value, and a key
   that is not text.
 
+### Values stated per range
+
+Some data is stated per range of a position rather than per key: the
+design speed or the road category of an alignment from one station to
+another. A catalogue declares such ranges with `ranges`, naming its two
+columns stating where each entry's range starts and ends:
+
+```json
+"design_speeds": {
+  "id": "design_speeds",
+  "name": {"default": "Design speeds", "translations": {}},
+  "key": "alignment",
+  "columns": [
+    {"id": "alignment", "kind": "string"},
+    {"id": "from", "header": "from station", "kind": "quantity", "unit": "m"},
+    {"id": "to", "header": "to station", "kind": "quantity", "unit": "m"},
+    {"id": "speed", "header": "design speed", "kind": "quantity", "unit": "km/h"}
+  ],
+  "ranges": {"from": "from", "to": "to"}
+}
+```
+
+A key then names an entry per range, and a `catalogue` node reads one
+`at` a position, such as an object's station along the alignment
+([measured](./derived.md) `station;alignment=<kinds>`):
+
+```json
+{"kind": "catalogue", "catalogue": "design_speeds", "column": "speed",
+ "key": {"kind": "literal", "value": {"type": "string", "value": "ex-axis-1"}},
+ "at": {"kind": "property", "propertySet": "axioval:measured",
+        "property": "station;alignment=IfcAlignment"}}
+```
+
+- `from` and `to` are two declared `number` or `quantity` columns of one
+  unit, neither the key. Each entry states both, its start below its end;
+  a range holds its start and not its end (`[from, to)`), and two ranges
+  of one key that overlap refuse the file, naming both.
+- `at` is a number of the ranges' unit (a length for stations; the type
+  checker refuses another unit, and a ranged catalogue read without `at`
+  or another read with it). A `null` position names no range: `null`.
+- The value is that of the range holding the position, cited
+  `…#entry=<key>;range=<from>..<to>`, and listed as
+  `catalogue design_speeds[ex-axis-1 at 1500 m].speed = …`. A measured
+  station is an interval: one reaching several ranges reads their value
+  where they state one alike (citing each), and is not evaluated where
+  they state different values, never a range picked. A position no range
+  holds (before the first, in a gap, at or beyond the last one's end) is
+  not evaluated, naming the key's ranges; never the nearest range's value.
+
+Data stated per area rather than per key, a zone map of snow or wind load
+zones, is read by the `zone` node from [context
+zones](./context-zones.md#the-zone-expression):
+`{"kind": "zone", "standsIn": "snow-load-zone", "value": "load_zone"}` is
+what the zone the object stands in states under `load_zone`, a value of
+any type, usable as a `lookup` key.
+
 ### Results of external calculations
 
 Many requirements are calculation methods rather than checks on the

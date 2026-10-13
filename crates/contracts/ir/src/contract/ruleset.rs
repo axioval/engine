@@ -317,6 +317,29 @@ pub struct CatalogueDefinition {
     /// Omitted for a catalogue of material or product data.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub results: Option<CalculationResults>,
+    /// Declares the catalogue's entries stated per range of a position
+    /// (#324), such as a design speed per station range of an alignment:
+    /// a key then names several entries, each holding its range; see
+    /// [`CatalogueRanges`]. Omitted for a catalogue of one entry per key.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ranges: Option<CatalogueRanges>,
+}
+
+/// The columns stating the range of each entry of a catalogue keyed by
+/// key and range (#324), such as the stations an alignment's design speed
+/// holds between. Each names a declared `number` or `quantity` column
+/// other than the key, both of one unit. The entries of one key state
+/// ranges `[from, to)` that do not overlap, `from` below `to`; a
+/// `catalogue` node reads one `at` a position, the value of the range
+/// holding it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CatalogueRanges {
+    /// The column stating where an entry's range starts (held).
+    pub from: String,
+    /// The column stating where it ends (not held).
+    pub to: String,
 }
 
 /// The columns tracing each entry of a results catalogue to the external

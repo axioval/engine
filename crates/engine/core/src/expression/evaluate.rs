@@ -373,7 +373,36 @@ pub enum Source {
         key: String,
         /// The column read.
         column: String,
+        /// The position its range was read at, for a catalogue stating
+        /// its entries per range (#324).
+        at: Option<String>,
     },
+    /// A value a context zone supplied beside the model states (#324),
+    /// never the model's: its evidence cites the zone's file and feature.
+    Zone {
+        /// The zone, by id.
+        zone: String,
+        /// The key read; `None` for the zone's id.
+        value: Option<String>,
+    },
+}
+
+/// How a `zone` expression names its zone (#324).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ZoneNamed<'a> {
+    /// By its id.
+    Id(&'a str),
+    /// As the zone of this kind the object in scope stands in.
+    StandsIn(&'a str),
+}
+
+impl fmt::Display for ZoneNamed<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Id(id) => write!(f, "context zone `{id}`"),
+            Self::StandsIn(kind) => write!(f, "the context zone of kind `{kind}` it stands in"),
+        }
+    }
 }
 
 /// A leaf's answer: its value, or why it has none, and the evidence it
@@ -568,6 +597,31 @@ pub trait ExpressionContext {
     fn catalogue(&mut self, catalogue: &str, key: &str, column: &str) -> Leaf {
         let _ = (key, column);
         Leaf::unreadable(format!("catalogue `{catalogue}` cannot be read here"))
+    }
+
+    /// The `column` value of the entry of the catalogue `catalogue` whose
+    /// key is `key` and whose range holds the position `at` (#324), as
+    /// [`ExpressionContext::catalogue`] reads one entry.
+    fn catalogue_at(&mut self, catalogue: &str, key: &str, at: &Value, column: &str) -> Leaf {
+        let _ = (key, at, column);
+        Leaf::unreadable(format!("catalogue `{catalogue}` cannot be read here"))
+    }
+
+    /// The value the context zone `zone` names states under `value` (its
+    /// id without one), and the zone's id (#324): `zone` names it by id
+    /// or by the kind the object in scope stands in.
+    ///
+    /// # Errors
+    ///
+    /// Why the zone cannot be named; its value's own refusal is in the
+    /// leaf.
+    fn zone(
+        &mut self,
+        zone: &ZoneNamed<'_>,
+        value: Option<&str>,
+    ) -> Result<(String, Leaf), String> {
+        let _ = value;
+        Err(format!("{zone} cannot be read here"))
     }
 
     /// What the rule `rule` of the ruleset concluded about the object in
@@ -1022,6 +1076,7 @@ impl Evaluator<'_> {
                 catalogue,
                 key,
                 column,
+                at,
                 ..
             } => {
                 let key = match self.eval(key, &child("key"))? {
@@ -1035,7 +1090,24 @@ impl Evaluator<'_> {
                         ))));
                     }
                 };
-                let leaf = self.context.catalogue(catalogue, &key, column);
+                let (leaf, at) = match at {
+                    None => (self.context.catalogue(catalogue, &key, column), None),
+                    Some(at) => match self.eval(at, &child("at"))? {
+                        // No position is stated, so no range is named.
+                        Value::Null => return Ok(Value::Null),
+                        position @ Value::Number { .. } => (
+                            self.context
+                                .catalogue_at(catalogue, &key, &position, column),
+                            Some(position.to_string()),
+                        ),
+                        other => {
+                            return Err(here(Reason::Mismatch(format!(
+                                "a catalogue's position is a number, not {}",
+                                other.kind()
+                            ))));
+                        }
+                    },
+                };
                 self.read(
                     expression,
                     path,
@@ -1043,6 +1115,36 @@ impl Evaluator<'_> {
                         catalogue: catalogue.clone(),
                         key,
                         column: column.clone(),
+                        at,
+                    },
+                    leaf,
+                )
+            }
+            Expression::Zone {
+                zone,
+                stands_in,
+                value,
+                ..
+            } => {
+                let named = match (zone, stands_in) {
+                    (Some(zone), None) => ZoneNamed::Id(zone),
+                    (None, Some(kind)) => ZoneNamed::StandsIn(kind),
+                    _ => {
+                        return Err(here(Reason::Unreadable(
+                            "a zone is named by exactly one of `zone` and `standsIn`".into(),
+                        )));
+                    }
+                };
+                let (id, leaf) = match self.context.zone(&named, value.as_deref()) {
+                    Ok(read) => read,
+                    Err(why) => (String::new(), Leaf::unreadable(why)),
+                };
+                self.read(
+                    expression,
+                    path,
+                    Source::Zone {
+                        zone: id,
+                        value: value.clone(),
                     },
                     leaf,
                 )

@@ -1,0 +1,18 @@
+{
+  "kind": "catalogue",
+  "catalogue": "design-speeds",
+  "key": {
+    "kind": "literal",
+    "value": {
+      "type": "string",
+      "value": "axis-1"
+    }
+  },
+  "column": "speed",
+  "at": {
+    "kind": "property",
+    "propertySet": "axioval:measured",
+    "property": "station;alignment=IfcAlignment"
+  },
+  "label": "design speed"
+}

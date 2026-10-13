@@ -1,0 +1,16 @@
+{
+  "expression": {
+    "kind": "zone",
+    "standsIn": "snow-load-zone",
+    "value": "load_zone",
+    "label": "snow load zone"
+  },
+  "blocks": {
+    "type": "expression.zone",
+    "label": "snow load zone",
+    "fields": {
+      "standsIn": "snow-load-zone",
+      "value": "load_zone"
+    }
+  }
+}

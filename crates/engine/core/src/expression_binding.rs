@@ -24,6 +24,7 @@ struct RuleEnvironment<'a> {
     properties: &'a BTreeMap<&'a str, &'a PropertyDefinition>,
     values: &'a BTreeMap<String, Type>,
     catalogues: &'a BTreeMap<String, CatalogueTypes>,
+    ranges: &'a BTreeMap<String, Type>,
     rule: &'a str,
     parameters: &'a BTreeMap<String, ParameterValue>,
     declared: &'a BTreeMap<String, ParameterDefinition>,
@@ -90,6 +91,27 @@ impl TypeEnvironment for RuleEnvironment<'_> {
     fn catalogue(&self, catalogue: &str, column: &str) -> Result<Type, String> {
         catalogue_column(self.catalogues, catalogue, column)
     }
+
+    fn catalogue_ranges(&self, catalogue: &str) -> Result<Option<Type>, String> {
+        if !self.catalogues.contains_key(catalogue) {
+            return Err(format!("the ruleset declares no catalogue `{catalogue}`"));
+        }
+        Ok(self.ranges.get(catalogue).cloned())
+    }
+}
+
+/// The type of the positions each catalogue stating its entries per range
+/// states (its `from` column's), by catalogue id (#324).
+pub(crate) fn catalogue_ranges(catalogues: &[CatalogueDefinition]) -> BTreeMap<String, Type> {
+    let types = catalogue_types(catalogues);
+    catalogues
+        .iter()
+        .filter_map(|catalogue| {
+            let ranges = catalogue.ranges.as_ref()?;
+            let found = types.get(&catalogue.id)?.get(&ranges.from)?.clone();
+            Some((catalogue.id.clone(), found))
+        })
+        .collect()
 }
 
 /// The types of each catalogue's value columns, by catalogue id: the
@@ -291,6 +313,7 @@ pub(crate) fn check_rule_expressions(
         properties: vocabulary.properties,
         values: &vocabulary.values,
         catalogues: &vocabulary.catalogues,
+        ranges: &vocabulary.ranges,
         rule,
         parameters,
         declared,
@@ -419,6 +442,7 @@ impl Vocabulary<'_> {
             .collect();
         crate::expression::DeclaredTypes::new(properties, self.values.clone())
             .with_catalogues(self.catalogues.clone())
+            .with_catalogue_ranges(self.ranges.clone())
     }
 }
 
@@ -429,6 +453,7 @@ pub(crate) struct Vocabulary<'a> {
     pub(crate) properties: &'a BTreeMap<&'a str, &'a PropertyDefinition>,
     pub(crate) values: BTreeMap<String, Type>,
     pub(crate) catalogues: BTreeMap<String, CatalogueTypes>,
+    pub(crate) ranges: BTreeMap<String, Type>,
 }
 
 /// Checks a ruleset's derived values in dependency order, then every
@@ -441,6 +466,7 @@ pub(crate) fn check_values<'a>(
     ruleset: &axioval_ir::RuleSetPackage,
 ) -> Result<(Vocabulary<'a>, BTreeMap<String, Expression>), EngineError> {
     let values = &ruleset.values;
+    let ranges = catalogue_ranges(catalogues);
     let catalogues = catalogue_types(catalogues);
     let mut types = BTreeMap::new();
     let none = BTreeMap::new();
@@ -465,6 +491,7 @@ pub(crate) fn check_values<'a>(
             properties,
             values: &types,
             catalogues: &catalogues,
+            ranges: &ranges,
             rule: &name,
             parameters: &none,
             declared: &undeclared,
@@ -482,6 +509,7 @@ pub(crate) fn check_values<'a>(
         properties,
         values: types,
         catalogues,
+        ranges,
     };
     check_ruleset_selectors(&vocabulary, ruleset)?;
     Ok((vocabulary, expressions))
@@ -548,6 +576,7 @@ pub(crate) fn check_selector(
         properties: vocabulary.properties,
         values: &vocabulary.values,
         catalogues: &vocabulary.catalogues,
+        ranges: &vocabulary.ranges,
         rule: owner,
         parameters: &none,
         declared: &undeclared,

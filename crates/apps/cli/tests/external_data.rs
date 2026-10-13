@@ -391,3 +391,100 @@ fn calculation_results_joined_to_walls_are_compared_and_a_stale_one_is_reported(
     );
     assert_eq!(output.status.code(), Some(1), "{}", stderr(&output));
 }
+
+/// A synthetic snow load zone map in EPSG:25832, two bands along the
+/// easting, each stating its zone and characteristic load on the ground.
+const SNOW_MAP: &str = r#"{"type": "FeatureCollection",
+  "crs": {"type": "name", "properties": {"name": "EPSG:25832"}},
+  "accuracy": 0.5,
+  "features": [
+    {"type": "Feature", "id": "SL-1", "properties": {"kind": "snow-load-zone",
+      "values": {"load_zone": "1", "characteristic_load": {"value": 0.65, "unit": "kN/m²"}}},
+     "geometry": {"type": "Polygon", "coordinates": [[[500000, 5600000], [500100, 5600000], [500100, 5600100], [500000, 5600100], [500000, 5600000]]]}},
+    {"type": "Feature", "id": "SL-2a", "properties": {"kind": "snow-load-zone",
+      "values": {"load_zone": "2a", "characteristic_load": {"value": 1.06, "unit": "kN/m²"}}},
+     "geometry": {"type": "Polygon", "coordinates": [[[500100, 5600000], [500200, 5600000], [500200, 5600100], [500100, 5600100], [500100, 5600000]]]}}
+  ]}"#;
+
+/// Buildings as proxies 3 m high: #19 at easting 20 (zone 1), #29 at
+/// easting 150 (zone 2a) and #39 across the zones' boundary at 100.
+fn buildings() -> String {
+    let proxy = "IFCBUILDINGELEMENTPROXY('GID',$,'B',$,$,PL,REP,$,$)";
+    [
+        placed_box(10, [20.0, 20.0], [12.0, 10.0, 3.0], proxy),
+        placed_box(20, [150.0, 20.0], [12.0, 10.0, 3.0], proxy),
+        placed_box(30, [100.0, 60.0], [12.0, 10.0, 3.0], proxy),
+    ]
+    .concat()
+}
+
+/// The design load for the zone each building stands in, keyed by the
+/// zone the map states there, at most 1.0 kN/m².
+fn snow_rule() -> Rule {
+    let loads = json!({
+    "id": "loads", "name": text("snow loads"), "kind": "table", "required": true,
+    "allowedValues": [], "citations": [],
+    "columns": [
+        {"id": "zone", "name": text("zone"), "kind": "textPattern", "required": false},
+        {"id": "load", "name": text("load"), "kind": "number", "required": false},
+    ]});
+    let row = |zone: &str, load: f64| json!({"zone": {"type": "string", "value": zone}, "load": {"type": "number", "value": load}});
+    Rule {
+        entity: "IfcBuildingElementProxy",
+        requirement: json!({"kind": "compare", "operator": "lessThanOrEquals",
+            "left": {"kind": "lookup", "table": "loads", "column": "load",
+                     "keys": {"zone": {"kind": "zone", "standsIn": "snow-load-zone",
+                                       "value": "load_zone", "label": "snow load zone"}}},
+            "right": {"kind": "literal", "value": {"type": "number", "value": 1.0}}}),
+        parameters: vec![(
+            loads,
+            json!({"type": "table", "value": [row("1", 0.65), row("2a", 1.06), row("3", 1.10)]}),
+        )],
+        ruleset: json!({}),
+    }
+}
+
+/// engine#324 end to end: a synthetic snow load zone map in EPSG:25832,
+/// supplied with `--zones`, gives the zone at each building's position in
+/// the georeferenced model, used as a `lookup` key: #29 stands in zone 2a,
+/// whose 1.06 kN/m² exceed the rule's 1.0, #19 in zone 1, and #39, across
+/// the zones' boundary, in neither surely: not evaluated, never given one.
+#[test]
+fn a_snow_load_zone_map_gives_the_zone_at_each_buildings_position() {
+    let case = Case::new("external-snow-load-zones");
+    let georeference = "#90=IFCPROJECTEDCRS('EPSG:25832',$,$,$,$,$,#6);\n\
+                        #91=IFCMAPCONVERSION(#5,#90,500000.,5600000.,0.,$,$,$);\n";
+    case.write("model.ifc", &model(&buildings(), georeference));
+    case.write("snow.geojson", SNOW_MAP);
+    let rule = snow_rule();
+    let (output, result) = case.check(&rule, &["--zones", "snow.geojson"]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = result["report"]["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert_eq!(findings[0]["object_id"]["local_id"], "#29", "{result:#}");
+    let message = findings[0]["message"].as_str().unwrap();
+    assert!(message.contains("zone SL-2a.load_zone = `2a`"), "{message}");
+    let cited = findings[0]["evidence"].to_string();
+    assert!(
+        cited.contains("axioval:zone;stands_in=snow-load-zone;id=SL-2a")
+            && cited.contains(";value=load_zone;stated=properties.values.load_zone"),
+        "{cited}"
+    );
+    let open = result["report"]["not_evaluated"].as_array().unwrap();
+    assert_eq!(open.len(), 1, "{result:#}");
+    assert_eq!(open[0]["object_id"]["local_id"], "#39", "{result:#}");
+    assert!(
+        open[0]["message"].as_str().unwrap().contains("undecided"),
+        "{result:#}"
+    );
+
+    // Without the map every building is open, and the result says why.
+    let (output, result) = case.check(&rule, &[]);
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    assert!(
+        result["integrity"]
+            .to_string()
+            .contains("zones-not-supplied"),
+        "{result:#}"
+    );
+}

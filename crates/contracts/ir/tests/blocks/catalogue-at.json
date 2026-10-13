@@ -1,0 +1,49 @@
+{
+  "expression": {
+    "kind": "catalogue",
+    "catalogue": "design-speeds",
+    "key": {
+      "kind": "literal",
+      "value": {
+        "type": "string",
+        "value": "axis-1"
+      }
+    },
+    "column": "speed",
+    "at": {
+      "kind": "property",
+      "propertySet": "axioval:measured",
+      "property": "station;alignment=IfcAlignment"
+    },
+    "label": "design speed"
+  },
+  "blocks": {
+    "type": "expression.catalogue",
+    "label": "design speed",
+    "fields": {
+      "catalogue": "design-speeds",
+      "column": "speed"
+    },
+    "inputs": {
+      "at": {
+        "block": {
+          "type": "measured.station",
+          "fields": {
+            "alignment": "IfcAlignment"
+          }
+        }
+      },
+      "key": {
+        "block": {
+          "type": "expression.literal",
+          "fields": {
+            "value": {
+              "type": "string",
+              "value": "axis-1"
+            }
+          }
+        }
+      }
+    }
+  }
+}

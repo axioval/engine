@@ -239,7 +239,10 @@ a model. `--zones zones.geojson` supplies them for this check as
 its reference system in `crs` (`axioval:model` for the model's own plan
 coordinates, or a map system such as `EPSG:25832` that the model's map
 conversion names), each feature a zone with an `id`, a `kind`, an
-`accuracy` in metres and a polygon, multipolygon or line string.
+`accuracy` in metres and a polygon, multipolygon or line string, and
+optionally the `values` it states, such as the zone of a snow load zone
+map (see [Location-dependent design
+data](./context-zones.md#location-dependent-design-data)).
 `--zones 0.05=alkis.xml` supplies a GML document instead: cadastral
 parcels and public traffic areas (see
 [Cadastral parcels](./context-zones.md#cadastral-parcels-gml)), or a

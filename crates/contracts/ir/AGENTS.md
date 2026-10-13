@@ -123,6 +123,12 @@ Keep this crate serializable and deterministic. It must not depend on a source f
   `report`, `date` and `revision` column ids, #323) marks a catalogue of
   external calculation results; omitted when absent, so catalogues
   serialize as before. The MCS catalogue schema must mirror it.
+  `CatalogueDefinition::ranges` (`CatalogueRanges`: `from` and `to`
+  column ids, #324) states the entries per range of a position, read by
+  `Expression::Catalogue`'s optional `at`; `Expression::Zone` (`zone` or
+  `standsIn`, exactly one, `ExpressionError::ZoneNamed` otherwise, and an
+  optional `value`) reads what a context zone states. All are omitted when
+  absent; the MCS ruleset and expression schemas must mirror them.
 - `Finding::explanation` and `NotEvaluated::explanation` (`explanation.rs`)
   are absent on the wire unless an expression rule set them, so reports
   serialize as before. An explanation keeps its deciding path whole and at

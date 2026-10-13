@@ -78,8 +78,36 @@ A GeoJSON `FeatureCollection` names its reference system in the member
 - The geometry is a `Polygon`, a `MultiPolygon` or a `LineString`; a third
   coordinate is ignored. A ring needs three points enclosing an area, a
   line two points, and no point may repeat beside itself.
-- Other properties are kept in the file and never read; a GeoJSON zone
-  states no [values](#stated-values).
+- The property `values` states the zone's [values](#stated-values) by
+  key (#324); every other property is kept in the file and never read.
+
+### Location-dependent design data
+
+A zone map of design data (snow or wind load zones, earthquake zones,
+frost depths) is a GeoJSON file of zones of one kind whose features state
+their values:
+
+```json
+{ "type": "Feature", "id": "SL-2a",
+  "properties": { "kind": "snow-load-zone",
+                  "values": { "load_zone": "2a",
+                              "characteristic_load": { "value": 1.06, "unit": "kN/m²" } } },
+  "geometry": { "type": "Polygon", "coordinates": [[[500100, 5600000], …]] } }
+```
+
+- A key is lowercase letters, digits and `_`. A string is text, a number a
+  plain number, `{"value": …, "unit": …}` a quantity of a unit the engine
+  reads, and `null` states none (read as `null`). Anything else, a blank
+  text and an unread unit refuse the file, naming the zone and the key.
+- A key of the [zoning plan's neutral keys](#stated-values) keeps its
+  dimension: a plain number for `coverage_ratio_…`, `floor_area_ratio_…`
+  and `storeys…`, a quantity of a length for the heights and of an angle
+  for the roof pitches (stated in metres and radians whatever unit the
+  file uses), so `zone_value`, `zone_length` and `zone_angle` read them as
+  they read a zoning plan's.
+- Every key, text and quantities included, is read by the
+  [`zone` expression](#the-zone-expression). A raster map is not read;
+  state its classes as polygons.
 
 ## Cadastral parcels (GML)
 
@@ -215,6 +243,40 @@ stands in states is
 
 A plan that states no greatest coverage ratio there leaves it `null`, and
 the comparison is not a pass.
+
+### The `zone` expression
+
+The measured values above read numbers of the neutral keys. The
+expression node `zone` reads any value a zone states, of any type, so a
+zone map's class can be a [`lookup`](./expressions.md#tables) key (#324):
+
+```json
+{ "kind": "lookup", "table": "snow_loads", "column": "load",
+  "keys": { "zone": { "kind": "zone", "standsIn": "snow-load-zone", "value": "load_zone" } } }
+```
+
+- The zone is named by its id (`"zone": "SL-2a"`) or as the zone of a kind
+  the object stands in (`"standsIn": "snow-load-zone"`, located as
+  [below](#the-zone-an-object-stands-in)), exactly one of them; a zone
+  named by id is not placed to read what it states.
+- `value` names the key: text as text, a plain number as a number, a
+  quantity in its unit (`characteristic_load` above compares with
+  `1.0 kN/m²`), a neutral length or angle as one. A key the zone does not
+  state is `null`. Without `value`, the node is the zone's id.
+- Its type is known once read; the type checker accepts it anywhere, and a
+  value of the wrong kind is not evaluated when compared.
+- It cites the statement (`…#feature=<n>;value=<key>;stated=properties.values.<key>`)
+  and, with `standsIn`, how the zone was chosen
+  (`axioval:zone;stands_in=<kind>;id=<id>:<object>`); a finding lists it
+  as ``zone SL-2a.load_zone = `2a` ``.
+- A building that may stand in several zones of the kind, in none, or
+  cannot be located is not evaluated with the reason, never given a zone;
+  without any zone file every reading object is not evaluated, and
+  `check` warns `zones-not-supplied` or `zone-kind-not-supplied`
+  (`ExecutionPlan::context_zone_reads` lists the kinds `zone` expressions
+  read).
+- A `zone` node reads in a rule's expressions, not in a ruleset's derived
+  values, which are computed before any zone is located.
 
 ## The zone an object stands in
 

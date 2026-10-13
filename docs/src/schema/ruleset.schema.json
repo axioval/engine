@@ -208,6 +208,17 @@
         "name": {
           "$ref": "#/$defs/LocalizedText"
         },
+        "ranges": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CatalogueRanges"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Declares the catalogue's entries stated per range of a position\n(#324), such as a design speed per station range of an alignment:\na key then names several entries, each holding its range; see\n[`CatalogueRanges`]. Omitted for a catalogue of one entry per key."
+        },
         "results": {
           "anyOf": [
             {
@@ -225,6 +236,25 @@
         "name",
         "key",
         "columns"
+      ],
+      "type": "object"
+    },
+    "CatalogueRanges": {
+      "additionalProperties": false,
+      "description": "The columns stating the range of each entry of a catalogue keyed by\nkey and range (#324), such as the stations an alignment's design speed\nholds between. Each names a declared `number` or `quantity` column\nother than the key, both of one unit. The entries of one key state\nranges `[from, to)` that do not overlap, `from` below `to`; a\n`catalogue` node reads one `at` a position, the value of the range\nholding it.",
+      "properties": {
+        "from": {
+          "description": "The column stating where an entry's range starts (held).",
+          "type": "string"
+        },
+        "to": {
+          "description": "The column stating where it ends (not held).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from",
+        "to"
       ],
       "type": "object"
     },
@@ -771,8 +801,18 @@
         },
         {
           "additionalProperties": false,
-          "description": "The `column` value of the entry of the ruleset's catalogue\n`catalogue` whose key equals `key` exactly (a material name, a\nclassification code or a product id), as the catalogue states it:\ncited with its id, version and entry, never as the model's. An\nempty cell is `null`, and so is a `null` key; a key no entry has,\nand a catalogue the host did not supply, are not evaluated.",
+          "description": "The `column` value of the entry of the ruleset's catalogue\n`catalogue` whose key equals `key` exactly (a material name, a\nclassification code or a product id), as the catalogue states it:\ncited with its id, version and entry, never as the model's. An\nempty cell is `null`, and so is a `null` key; a key no entry has,\nand a catalogue the host did not supply, are not evaluated.\n\nA catalogue stating its entries per range (#324: a design speed per\nstation range of an alignment) is read `at` a position along them,\nsuch as an object's station: the value of the key's range holding\nit. `at` stands only for such a catalogue, and such a catalogue is\nread only `at` a position.",
           "properties": {
+            "at": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Expression"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "catalogue": {
               "type": "string"
             },
@@ -798,6 +838,44 @@
             "catalogue",
             "key",
             "column"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "A value a context zone supplied beside the model states (#324),\nsuch as the snow load zone of a zone map: of the zone named by its\nid (`zone`), or of the zone of kind `standsIn` the object stands in,\nexactly one of them. `value` names the key the zone states, read as\nstated (text, a number or a quantity) and cited as the zone's\nstatement; a key the zone does not state is `null`. Without\n`value`, the zone's id. A zone the object may stand in but surely\ndoes not, or several it may, is not evaluated, never chosen.",
+          "properties": {
+            "kind": {
+              "const": "zone",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "standsIn": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "value": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "zone": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind"
           ],
           "type": "object"
         },

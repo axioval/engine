@@ -321,6 +321,13 @@ impl ExpressionContext for ObjectReads<'_> {
         }
     }
 
+    fn catalogue_at(&mut self, catalogue: &str, key: &str, at: &Value, column: &str) -> Leaf {
+        match &self.values.catalogues {
+            Some(catalogues) => catalogues.read_at(catalogue, key, at, column, &self.object.source),
+            None => Leaf::unreadable(format!("catalogue `{catalogue}` cannot be read here")),
+        }
+    }
+
     fn derived(&mut self, name: &str) -> Leaf {
         match self.values.compute(self.object, name, self.resolver) {
             Ok((value, evidence)) => Leaf {

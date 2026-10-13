@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.5.0",
+  "schemaVersion": "1.6.0",
   "languages": [
     "en",
     "de"
@@ -118333,6 +118333,18 @@
             "refers": "catalogueColumn"
           },
           "required": true
+        },
+        {
+          "name": "at",
+          "kind": {
+            "type": "expression",
+            "accepts": [
+              "integer",
+              "number",
+              "angle"
+            ]
+          },
+          "required": false
         }
       ],
       "result": {
@@ -118351,11 +118363,65 @@
       "help": [
         {
           "language": "en",
-          "text": "A column of the catalogue entry whose key equals the key exactly, such as a material's thermal conductivity by its name: a value the catalogue states, cited with its version and entry. An empty cell is no value; a key without an entry is not evaluated."
+          "text": "A column of the catalogue entry whose key equals the key exactly, such as a material's thermal conductivity by its name: a value the catalogue states, cited with its version and entry. An empty cell is no value; a key without an entry is not evaluated. A catalogue stated per range, such as a design speed per station range of an alignment, is read at a position: the entry whose range holds it."
         },
         {
           "language": "de",
-          "text": "Eine Spalte des Katalogeintrags, dessen Schlüssel dem Schlüssel genau entspricht, etwa die Wärmeleitfähigkeit eines Materials nach seinem Namen: ein Wert, den der Katalog angibt, belegt mit seiner Version und seinem Eintrag. Eine leere Zelle ist kein Wert; ein Schlüssel ohne Eintrag wird nicht ausgewertet."
+          "text": "Eine Spalte des Katalogeintrags, dessen Schlüssel dem Schlüssel genau entspricht, etwa die Wärmeleitfähigkeit eines Materials nach seinem Namen: ein Wert, den der Katalog angibt, belegt mit seiner Version und seinem Eintrag. Eine leere Zelle ist kein Wert; ein Schlüssel ohne Eintrag wird nicht ausgewertet. Ein Katalog, der Werte je Bereich angibt, etwa eine Entwurfsgeschwindigkeit je Stationsbereich einer Achse, wird an einer Stelle gelesen: der Eintrag, dessen Bereich sie enthält."
+        }
+      ]
+    },
+    {
+      "kind": "zone",
+      "category": "value",
+      "fields": [
+        {
+          "name": "zone",
+          "kind": {
+            "type": "name",
+            "refers": "zone"
+          },
+          "required": false
+        },
+        {
+          "name": "standsIn",
+          "kind": {
+            "type": "name",
+            "refers": "zoneKind"
+          },
+          "required": false
+        },
+        {
+          "name": "value",
+          "kind": {
+            "type": "name",
+            "refers": "zoneValue"
+          },
+          "required": false
+        }
+      ],
+      "result": {
+        "type": "fixed",
+        "value": "any"
+      },
+      "label": [
+        {
+          "language": "en",
+          "text": "Zone value"
+        },
+        {
+          "language": "de",
+          "text": "Zonenwert"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "A value a context zone supplied beside the model states, such as the snow load zone of a zone map: of the zone named by its id, or of the zone of a kind the object stands in. Without a value, the zone's id. A key the zone does not state is no value; a zone the object may or may not stand in is not evaluated."
+        },
+        {
+          "language": "de",
+          "text": "Ein Wert, den eine neben dem Modell gelieferte Kontextzone angibt, etwa die Schneelastzone einer Zonenkarte: der Zone mit dieser Kennung oder der Zone einer Art, in der das Objekt steht. Ohne Wert die Kennung der Zone. Ein Schlüssel, den die Zone nicht angibt, ist kein Wert; eine Zone, in der das Objekt stehen kann, aber nicht sicher steht, wird nicht ausgewertet."
         }
       ]
     },

@@ -13,12 +13,12 @@ mod text;
 mod types;
 mod unit;
 
-pub use crate::catalogues::catalogue_value;
+pub use crate::catalogues::{catalogue_value, catalogue_value_at};
 pub use crate::values::derived_value;
 pub use evaluate::{
     DEFAULT_EVALUATION_BUDGET, Evaluation, EvaluationBudget, ExpressionContext, Leaf, Member,
-    NotEvaluated, PairRead, Ranked, Read, Reason, RuleRead, Sequenced, Source, Value, evaluate,
-    evaluate_untraced,
+    NotEvaluated, PairRead, Ranked, Read, Reason, RuleRead, Sequenced, Source, Value, ZoneNamed,
+    evaluate, evaluate_untraced,
 };
 pub use interval::{Interval, IntervalFailure, IntervalResult};
 pub use text::{MAX_TEXT_LENGTH, parse_text};

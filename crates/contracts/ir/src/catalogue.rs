@@ -17,7 +17,7 @@ use crate::measured::{LocalizedText, en_de};
 /// A consumer reads any catalogue of its own major version: a minor
 /// version only adds entries or optional fields, a patch only changes
 /// texts. Removing or renaming anything raises the major version.
-pub const CATALOGUE_SCHEMA_VERSION: &str = "1.5.0";
+pub const CATALOGUE_SCHEMA_VERSION: &str = "1.6.0";
 
 /// A value type an expression field takes or a node yields.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -174,6 +174,12 @@ pub enum Refers {
     Catalogue,
     /// A column of that catalogue.
     CatalogueColumn,
+    /// A context zone supplied beside the model, by its id.
+    Zone,
+    /// A kind of context zone, such as `parcel` or `snow-load-zone`.
+    ZoneKind,
+    /// A key a context zone states a value under.
+    ZoneValue,
     Rule,
     ObjectType,
     Classification,
@@ -580,6 +586,11 @@ pub const EXPRESSION_KINDS: &[NodeKind] = &[
             named("catalogue", Refers::Catalogue, true),
             one("key", TEXTUAL),
             named("column", Refers::CatalogueColumn, true),
+            Field {
+                name: "at",
+                kind: FieldKind::Expression { accepts: NUMERIC },
+                required: false,
+            },
         ],
         result: ResultRule::Declared,
         label: &en_de("Catalogue value", "Katalogwert"),
@@ -587,11 +598,37 @@ pub const EXPRESSION_KINDS: &[NodeKind] = &[
             "A column of the catalogue entry whose key equals the key exactly, such as a \
              material's thermal conductivity by its name: a value the catalogue states, cited \
              with its version and entry. An empty cell is no value; a key without an entry is \
-             not evaluated.",
+             not evaluated. A catalogue stated per range, such as a design speed per station \
+             range of an alignment, is read at a position: the entry whose range holds it.",
             "Eine Spalte des Katalogeintrags, dessen Schlüssel dem Schlüssel genau entspricht, \
              etwa die Wärmeleitfähigkeit eines Materials nach seinem Namen: ein Wert, den der \
              Katalog angibt, belegt mit seiner Version und seinem Eintrag. Eine leere Zelle ist \
-             kein Wert; ein Schlüssel ohne Eintrag wird nicht ausgewertet.",
+             kein Wert; ein Schlüssel ohne Eintrag wird nicht ausgewertet. Ein Katalog, der \
+             Werte je Bereich angibt, etwa eine Entwurfsgeschwindigkeit je Stationsbereich \
+             einer Achse, wird an einer Stelle gelesen: der Eintrag, dessen Bereich sie \
+             enthält.",
+        ),
+    },
+    NodeKind {
+        kind: "zone",
+        category: "value",
+        fields: &[
+            named("zone", Refers::Zone, false),
+            named("standsIn", Refers::ZoneKind, false),
+            named("value", Refers::ZoneValue, false),
+        ],
+        result: ResultRule::Fixed { value: V::Any },
+        label: &en_de("Zone value", "Zonenwert"),
+        help: &en_de(
+            "A value a context zone supplied beside the model states, such as the snow load \
+             zone of a zone map: of the zone named by its id, or of the zone of a kind the \
+             object stands in. Without a value, the zone's id. A key the zone does not state \
+             is no value; a zone the object may or may not stand in is not evaluated.",
+            "Ein Wert, den eine neben dem Modell gelieferte Kontextzone angibt, etwa die \
+             Schneelastzone einer Zonenkarte: der Zone mit dieser Kennung oder der Zone einer \
+             Art, in der das Objekt steht. Ohne Wert die Kennung der Zone. Ein Schlüssel, den \
+             die Zone nicht angibt, ist kein Wert; eine Zone, in der das Objekt stehen kann, \
+             aber nicht sicher steht, wird nicht ausgewertet.",
         ),
     },
     NodeKind {
@@ -1907,7 +1944,7 @@ mod tests {
             E::Property { .. } => "property", E::Parameter { .. } => "parameter",
             E::Derived { .. } => "derived", E::Lookup { .. } => "lookup",
             E::Interpolate { .. } => "interpolate", E::Lookup2 { .. } => "lookup2",
-            E::Catalogue { .. } => "catalogue",
+            E::Catalogue { .. } => "catalogue", E::Zone { .. } => "zone",
             E::Not { .. } => "not", E::And { .. } => "and", E::Or { .. } => "or",
             E::Implies { .. } => "implies", E::Xor { .. } => "xor",
             E::Compare { .. } => "compare", E::Between { .. } => "between",

@@ -19,6 +19,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use axioval_engine::PointBox;
+use axioval_engine::expression::{Leaf, Value as ExpressionValue};
 use axioval_engine::{
     Citation, CoordinateSystemServiceHandle, LineDistanceRequest, LineProjection, MeasuredMember,
     MeasuredMemo, MeasuredProvider, Measurement, MemberValue, NotEvaluatedReason, PlacedZone,
@@ -26,6 +27,7 @@ use axioval_engine::{
     SuppliedZones, ZONE_LOCATOR_PREFIX, ZoneArea, ZoneAreaRequest, ZoneReference, ZoneShape,
     ZoneValue,
 };
+use axioval_ir::contract::ScalarValue;
 use axioval_ir::measured::{MeasuredArgument, MeasuredCall};
 use axioval_ir::{Evidence, ObjectId, QuantityDimension, SourceId};
 
@@ -678,6 +680,16 @@ fn stated(
             locator.push_str(statement);
             (*value, *degrees)
         }
+        Some(ZoneValue::Text { statement, .. } | ZoneValue::Quantity { statement, .. }) => {
+            return Err((
+                NotEvaluatedReason::InvalidEvidence,
+                format!(
+                    "zone `{id}` states `{key}` ({statement}) as text or a quantity of its own \
+                     unit, not as `{}` reads it; read it with a `zone` expression",
+                    call.name()
+                ),
+            ));
+        }
     };
     let dimension = call.descriptor.dimension;
     let bounds = if degrees && dimension == Some(QuantityDimension::PlaneAngle) {
@@ -701,6 +713,95 @@ fn stated(
             sources: Vec::new(),
         },
     ))
+}
+
+/// What the context zone `id` states under `value` (its id without one),
+/// as a `zone` expression reads it (#324), for an object of `source`: as
+/// stated and cited as the zone's statement (`…;value=<key>;stated=…`),
+/// beside the evidence of how the zone was chosen; a key the zone does not
+/// state `null`; one it states in a way that is not read unreadable. A
+/// zone named by id is not placed to read what it states.
+pub(crate) fn zone_statement(
+    context: &RuleContext<'_>,
+    id: &str,
+    value: Option<&str>,
+    source: &SourceId,
+    chosen: Option<Evidence>,
+) -> Result<Leaf, Unavailable> {
+    use axioval_ir::measured::{ZONE_ANGLES, ZONE_LENGTHS};
+    let supplied = supplied(context, &format!("`{id}`"))?;
+    let (file, zone) = supplied.zone(id).ok_or_else(|| {
+        (
+            NotEvaluatedReason::IncompleteEvidence,
+            format!("no supplied context zone is `{id}`"),
+        )
+    })?;
+    let mut evidence: Vec<Evidence> = chosen.into_iter().collect();
+    let cite = |locator: String, evidence: &mut Vec<Evidence>| {
+        evidence.push(Evidence {
+            source: source.clone(),
+            locator,
+            exact: true,
+        });
+    };
+    let Some(key) = value else {
+        cite(zone.locator(file), &mut evidence);
+        return Ok(Leaf {
+            value: Ok(ExpressionValue::Text(id.to_owned())),
+            evidence,
+        });
+    };
+    let locator = format!("{};value={key}", zone.locator(file));
+    let quantity = |value: f64, unit: &str| {
+        ExpressionValue::from_literal(&ScalarValue::Quantity {
+            value,
+            unit: unit.to_owned(),
+        })
+    };
+    let (read, statement) = match zone.values().get(key) {
+        None => {
+            cite(locator, &mut evidence);
+            return Ok(Leaf {
+                value: Ok(ExpressionValue::Null),
+                evidence,
+            });
+        }
+        Some(ZoneValue::Unread { why }) => {
+            return Err((
+                NotEvaluatedReason::IncompleteEvidence,
+                format!("zone `{id}` states `{key}` in a way that is not read: {why}"),
+            ));
+        }
+        Some(ZoneValue::Stated {
+            value,
+            degrees,
+            statement,
+        }) => {
+            let read = if *degrees {
+                quantity(*value, "deg")
+            } else if ZONE_LENGTHS.contains(&key) {
+                quantity(*value, "m")
+            } else if ZONE_ANGLES.contains(&key) {
+                quantity(*value, "rad")
+            } else {
+                ExpressionValue::from_literal(&ScalarValue::Number { value: *value })
+            };
+            (read, statement)
+        }
+        Some(ZoneValue::Text { text, statement }) => {
+            (Ok(ExpressionValue::Text(text.clone())), statement)
+        }
+        Some(ZoneValue::Quantity {
+            value,
+            unit,
+            statement,
+        }) => (quantity(*value, unit), statement),
+    };
+    cite(format!("{locator};stated={statement}"), &mut evidence);
+    Ok(Leaf {
+        value: read,
+        evidence,
+    })
 }
 
 /// A refusal of `name` of the project, as a property resolution states it.

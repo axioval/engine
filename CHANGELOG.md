@@ -20,6 +20,23 @@ All notable changes are documented here. This project follows Semantic Versionin
   hung on a wall 12 m along a corridor counts surely within a 15 m walk
   and surely not within a 10 m one, where it stayed undecided before
   ([#361](https://github.com/axioval/engine/issues/361)).
+- **Location-dependent design data as context**: a GeoJSON zone's
+  feature states values under `properties.values` (text, a plain number
+  or `{"value", "unit"}` quantity; the zoning plan's neutral keys keep
+  their dimension; `ZoneValue::Text` and `ZoneValue::Quantity`), so a snow
+  or wind load zone map is a zone file of one kind. The expression node
+  `zone` (`zone` or `standsIn`, optional `value`) reads what the zone
+  named, or the zone of the kind the object stands in, states, of any
+  type and cited as the zone's statement (without `value`, the zone's
+  id), so a zone map's class is a `lookup` key; an object that may stand
+  in several zones or in none is not evaluated. A catalogue declaring
+  `ranges` (`CatalogueRanges`: its `from` and `to` columns) states its
+  entries per range of a position, such as a design speed per station
+  range of an alignment, and the `catalogue` node reads one `at` a
+  position (`Catalogues::read_at`), composing with the measured
+  `station`: a station reaching ranges of different values, or no range,
+  is not evaluated, never the nearest range's value
+  ([#324](https://github.com/axioval/engine/issues/324)).
 - **Results of external calculations as traceable stated values**: a
   catalogue whose declaration adds `results` (`CalculationResults`:
   the `method`, `report`, `date` and `revision` columns) holds the results

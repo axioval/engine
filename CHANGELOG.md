@@ -538,6 +538,10 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **IFC**: moved to `openbim-ifc` 0.34 and `ifc-geometry` 0.27, which
+  compile curved advanced B-rep faces bounded by edge curves alone (ifc#454)
+  and mesh a body that mixes curves with solids (ifc#458). The public
+  models' outcomes are unchanged.
 - **Geometry**: moved to `axiolid-mesh-compile` 0.3.26, `axiolid-overlay`
   0.3.15, `axiolid-evaluate` 0.3.16 and `axiolid-mesh-compile-contract`
   0.3.4.

@@ -9,7 +9,7 @@ use axioval_engine::{
     ContainmentRequest, DoorLeaf, DoorLeaves, DoorLeavesError, FreeAreaEvidence, FreeAreaRequest,
     FreeSpaceError, FreeSpaceService, FreeSpaceServiceHandle, HingeSide, LeafMotion, LeafPosition,
     MetricDirection, ObjectFrame, ObjectFrameError, ObjectFrameService, ObjectFrameServiceHandle,
-    PlacementOutcome, PlacementRequest, SourceSnapshot, SwingSector,
+    PlacementOutcome, PlacementRequest, SourceSnapshot, SwingSector, UnplacedLeaf,
 };
 use axioval_ir::{Evidence, ObjectId};
 
@@ -156,6 +156,25 @@ impl Doors {
         .unwrap();
         self.leaves.insert(door, Ok(answer));
         self
+    }
+
+    /// `local` is a door `overall` metres wide whose one swinging leaf,
+    /// `width` metres wide and 0.04 m thick, is stated at `MIDDLE`, which
+    /// does not place it (#378).
+    pub fn unplaced(self, local: &str, overall: f64, lining: Option<f64>, width: f64) -> Self {
+        let leaf = UnplacedLeaf::try_new(
+            id(local),
+            overall,
+            lining,
+            LeafPosition::Middle,
+            LeafMotion::Swing,
+            width,
+            Some(0.04),
+            "UnplacedPanel { set: EntityId(1) }",
+            Evidence::exact(source(), format!("unplaced:{local}")),
+        )
+        .unwrap();
+        self.unknown(local, DoorLeavesError::Unplaced(Box::new(leaf)))
     }
 
     /// `local` is a door whose leaves cannot be read.

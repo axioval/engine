@@ -1290,6 +1290,86 @@ fn a_widest_leaf_too_narrow_is_found_although_the_passage_is_wide() {
     );
 }
 
+/// A door whose one swinging leaf the source states without its place
+/// along the opening (#378) is measured as a placed one: its passage and
+/// its leaf do not depend on that place. Without a lining thickness it
+/// moves on to the deduction, as a placed leaf does.
+#[test]
+fn a_clear_width_is_derived_from_a_leaf_stated_without_its_place() {
+    use common::doors::Doors;
+    let model = || {
+        doors(&[
+            // Passage 1 m less 2 × 0.05 m and 0.04 m: 0.86 m; the leaf
+            // 0.96 m less the same: 0.82 m.
+            ("d1", "SINGLE_SWING_LEFT", Some(1.0), None),
+            // Passage 1.2 m less 0.14 m: 1.06 m; the leaf 1.1 m: 0.96 m.
+            ("d2", "SINGLE_SWING_LEFT", Some(1.2), None),
+            // No lining: the deduction, 1 m less 0.2 m.
+            ("d3", "SINGLE_SWING_LEFT", Some(1.0), None),
+        ])
+    };
+    let frames = || {
+        Doors::default()
+            .unplaced("d1", 1.0, Some(0.05), 0.96)
+            .unplaced("d2", 1.2, Some(0.05), 1.1)
+            .unplaced("d3", 1.0, None, 0.96)
+            .handle()
+    };
+    let evaluate = |mode: &str| {
+        let mut parameters = door_keys(Some(0.2));
+        parameters.push(("clear_width_from_leaves", string(mode)));
+        model().evaluate_with(&HELD, &rule(ID, kind("door"), parameters), |services| {
+            services.register(frames()).unwrap();
+        })
+    };
+    let row = "required at least 0.9 m (limit row 0: Attributes.OperationType \
+               `SINGLE_SWING_LEFT`)";
+    let deduced = format!(
+        "clear width (Attributes.OverallWidth 1 m less the rule's deduction 0.2 m, an \
+         approximation) is 0.8 m; {row}"
+    );
+    let evaluation = evaluate("passage");
+    assert_eq!(
+        findings(&evaluation),
+        [
+            (
+                "d1".to_owned(),
+                format!(
+                    "clear width (overall width 1 m less 2 × 0.05 m lining and 0.04 m of open \
+                     leaf, as the door states them) is 0.86 m; {row}"
+                )
+            ),
+            ("d3".to_owned(), deduced.clone()),
+        ]
+    );
+    assert!(unevaluated(&evaluation).is_empty());
+    let cited = &evaluation.findings()[0].evidence;
+    assert!(
+        cited
+            .iter()
+            .any(|evidence| evidence.locator == "unplaced:d1" && evidence.exact),
+        "{cited:?}"
+    );
+    assert!(cited.iter().any(|evidence| {
+        evidence.locator.ends_with("d1:step=lining-and-leaves") && !evidence.exact
+    }));
+    let evaluation = evaluate("widest-leaf");
+    assert_eq!(
+        findings(&evaluation),
+        [
+            (
+                "d1".to_owned(),
+                format!(
+                    "clear width of the widest leaf (leaf 0.96 m less 2 × 0.05 m lining and 0.04 \
+                     m of open leaf, as the door states them) is 0.82 m; {row}"
+                )
+            ),
+            ("d3".to_owned(), deduced),
+        ]
+    );
+    assert!(unevaluated(&evaluation).is_empty());
+}
+
 /// Doors `(name, overall height, lining, threshold, stated clear height)`.
 type TallDoor<'a> = (&'a str, f64, Option<f64>, Option<f64>, Option<f64>);
 

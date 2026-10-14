@@ -810,6 +810,22 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **A door's clear width from a single leaf stated without its place**:
+  `door_clear_width;from_leaves=passage` (and `widest-leaf`, and
+  `keyed-limit`'s `clear_width_from_leaves`) left every door not evaluated
+  whose one swinging panel is narrower than the opening at `MIDDLE` or
+  `NOTDEFINED`, as IFC2X3 exports commonly state it
+  (`UnplacedPanel`). Neither width depends on where the one leaf stands,
+  so such a door is now measured as a placed one: the overall width less
+  both linings and the open leaf, or the leaf (`PanelWidth` × the overall
+  width) less both linings and its thickness. The engine's new
+  `DoorLeavesError::Unplaced` carries an `UnplacedLeaf` (overall width,
+  lining, width, thickness, exact evidence) and reads as the refusal it
+  was everywhere the place matters, so swings and clearances stay not
+  evaluated. Sliding and rolling panels, several panels without a place
+  and a `PanelWidth` above 1 stay refused, and a refusal still never falls
+  through to the overall width less the deduction
+  ([#378](https://github.com/axioval/engine/issues/378)).
 - **Georeferenced models are measured exactly again**: since #368 every
   body of a model placed in map coordinates (its site 5600 km out) was
   declared within the rounding of its coordinates, so services needing

@@ -246,7 +246,13 @@ impl ObjectFrameService for IfcObjectFrames {
         cache
             .entry(id)
             .or_insert_with(|| {
-                crate::doors::door_leaves(&self.model, self.snapshots[0].fingerprint(), door, id)
+                crate::doors::door_leaves(
+                    &self.model,
+                    self.release.schema,
+                    self.snapshots[0].fingerprint(),
+                    door,
+                    id,
+                )
             })
             .clone()
     }

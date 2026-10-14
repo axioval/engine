@@ -63,6 +63,15 @@ pub enum DoorLeavesError {
     /// panels).
     #[error("the door's leaves cannot be derived exactly: {0}")]
     Refused(String),
+    /// The source states the door's one leaf and its width, but not where
+    /// it stands along the opening (a panel narrower than the opening whose
+    /// position does not place it), so the leaf cannot be placed:
+    /// everything that needs its place (its closed edge, its swing) is
+    /// refused as for [`Self::Refused`], and reads it as such. A width that
+    /// does not depend on the place, such as the passage a single hinged
+    /// leaf leaves, may be read from the [`UnplacedLeaf`] (#378).
+    #[error("the door's leaves cannot be derived exactly: {}", .0.reason())]
+    Unplaced(Box<UnplacedLeaf>),
     /// The door, its placement or a unit cannot be read exactly.
     #[error("the door cannot be read exactly: {0}")]
     Unreadable(String),
@@ -727,6 +736,155 @@ impl DoorLeaves {
     }
 }
 
+/// A door's one hinged leaf whose width the source states but whose place
+/// along the opening it does not ([`DoorLeavesError::Unplaced`], #378).
+///
+/// With one leaf in the opening, the passage it leaves standing open and
+/// its own width do not depend on where along the opening it stands; its
+/// closed edge and its swing do, and this type carries neither. Only a
+/// swinging or double-acting leaf is unplaced: a sliding or rolling leaf
+/// leaves the opening by moving along or above it, so its source refuses
+/// one it cannot place as [`DoorLeavesError::Refused`].
+#[derive(Clone, Debug, PartialEq)]
+pub struct UnplacedLeaf {
+    door: ObjectId,
+    overall_width: f64,
+    lining_thickness: Option<f64>,
+    position: LeafPosition,
+    motion: LeafMotion,
+    width: f64,
+    depth: Option<f64>,
+    reason: String,
+    evidence: Evidence,
+}
+
+/// Every number is checked finite on construction, so equality is
+/// reflexive.
+impl Eq for UnplacedLeaf {}
+
+impl UnplacedLeaf {
+    /// The one leaf of `door`, which is `overall_width` metres wide with
+    /// the lining thickness the source states: stated at `position`, which
+    /// does not place it, moving as `motion`, `width` metres wide and
+    /// `depth` thick where stated. `reason` says, in the source's terms,
+    /// why it cannot be placed.
+    ///
+    /// # Errors
+    ///
+    /// [`DoorLeavesError::InvalidLeaves`] for a motion other than
+    /// [`LeafMotion::Swing`] or [`LeafMotion::DoubleSwing`], a width that
+    /// is not positive or is wider than the door, a negative lining, a
+    /// depth that is not positive, or no reason;
+    /// [`DoorLeavesError::InexactEvidence`] for evidence that is not exact,
+    /// reviewable and from the door's source.
+    #[allow(clippy::too_many_arguments)]
+    pub fn try_new(
+        door: ObjectId,
+        overall_width: f64,
+        lining_thickness: Option<f64>,
+        position: LeafPosition,
+        motion: LeafMotion,
+        width: f64,
+        depth: Option<f64>,
+        reason: impl Into<String>,
+        evidence: Evidence,
+    ) -> Result<Self, DoorLeavesError> {
+        let reason = reason.into();
+        if !matches!(motion, LeafMotion::Swing | LeafMotion::DoubleSwing) {
+            return Err(invalid(
+                "an unplaced leaf swings or is double-acting; any other leaf needs its place",
+            ));
+        }
+        if !overall_width.is_finite() || overall_width <= 0.0 {
+            return Err(invalid("a door's overall width must be positive"));
+        }
+        if !width.is_finite() || width <= 0.0 || width > overall_width * (1.0 + TOLERANCE) {
+            return Err(invalid(
+                "an unplaced leaf is positive and no wider than its door",
+            ));
+        }
+        if lining_thickness.is_some_and(|thickness| !thickness.is_finite() || thickness < 0.0) {
+            return Err(invalid("a lining thickness must not be negative"));
+        }
+        if depth.is_some_and(|depth| !depth.is_finite() || depth <= 0.0) {
+            return Err(invalid("a leaf's depth must be positive"));
+        }
+        if reason.trim().is_empty() {
+            return Err(invalid("an unplaced leaf says why it is not placed"));
+        }
+        if !reviewable_exact_evidence(&evidence) || evidence.source != door.source {
+            return Err(DoorLeavesError::InexactEvidence);
+        }
+        Ok(Self {
+            door,
+            overall_width,
+            lining_thickness,
+            position,
+            motion,
+            width,
+            depth,
+            reason,
+            evidence,
+        })
+    }
+
+    /// The door.
+    #[must_use]
+    pub fn door(&self) -> &ObjectId {
+        &self.door
+    }
+
+    /// The door's overall width in metres, lining included.
+    #[must_use]
+    pub fn overall_width_metres(&self) -> f64 {
+        self.overall_width
+    }
+
+    /// The lining's thickness across the opening in metres, where the
+    /// source states it.
+    #[must_use]
+    pub fn lining_thickness_metres(&self) -> Option<f64> {
+        self.lining_thickness
+    }
+
+    /// The position the source states, which does not place the leaf.
+    #[must_use]
+    pub fn position(&self) -> LeafPosition {
+        self.position
+    }
+
+    /// How the leaf moves: [`LeafMotion::Swing`] or
+    /// [`LeafMotion::DoubleSwing`].
+    #[must_use]
+    pub fn motion(&self) -> LeafMotion {
+        self.motion
+    }
+
+    /// The leaf's width in metres.
+    #[must_use]
+    pub fn width_metres(&self) -> f64 {
+        self.width
+    }
+
+    /// The leaf's thickness in metres, where the source states it.
+    #[must_use]
+    pub fn depth_metres(&self) -> Option<f64> {
+        self.depth
+    }
+
+    /// Why the leaf cannot be placed, in the source's terms.
+    #[must_use]
+    pub fn reason(&self) -> &str {
+        &self.reason
+    }
+
+    /// Reviewable provenance.
+    #[must_use]
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+}
+
 /// How far below a floor a swept sector's hinge may lie and still stand
 /// on that floor: a door's leaf starts at its sill, which may sit below
 /// the finished floor of the space it opens into, but never a storey
@@ -863,6 +1021,66 @@ mod tests {
             Some(sector),
         )
         .unwrap()
+    }
+
+    #[test]
+    fn an_unplaced_leaf_swings_and_fits_its_door() {
+        let evidence = Evidence::exact(source(), "panel:a");
+        let unplaced = |motion, width, depth| {
+            UnplacedLeaf::try_new(
+                door(),
+                1.0,
+                Some(0.05),
+                LeafPosition::Middle,
+                motion,
+                width,
+                depth,
+                "the panel at MIDDLE has no place",
+                evidence.clone(),
+            )
+        };
+        let leaf = unplaced(LeafMotion::Swing, 0.96, Some(0.04)).unwrap();
+        assert!((leaf.width_metres() - 0.96).abs() < 1e-12);
+        assert_eq!(leaf.position(), LeafPosition::Middle);
+        let refused = DoorLeavesError::Unplaced(Box::new(leaf));
+        assert_eq!(
+            refused.to_string(),
+            "the door's leaves cannot be derived exactly: the panel at MIDDLE has no place"
+        );
+        assert!(unplaced(LeafMotion::DoubleSwing, 1.0, None).is_ok());
+        for (motion, width, depth) in [
+            (LeafMotion::RollUp, 0.9, None),
+            (LeafMotion::Slide(direction([1.0, 0.0, 0.0])), 0.9, None),
+            (LeafMotion::Fixed, 0.9, None),
+            (LeafMotion::Swing, 1.01, None),
+            (LeafMotion::Swing, 0.0, None),
+            (LeafMotion::Swing, f64::NAN, None),
+            (LeafMotion::Swing, 0.9, Some(0.0)),
+        ] {
+            assert!(
+                matches!(
+                    unplaced(motion, width, depth),
+                    Err(DoorLeavesError::InvalidLeaves(_))
+                ),
+                "{motion:?} {width} {depth:?}"
+            );
+        }
+        let mut inexact = evidence.clone();
+        inexact.exact = false;
+        assert_eq!(
+            UnplacedLeaf::try_new(
+                door(),
+                1.0,
+                None,
+                LeafPosition::NotDefined,
+                LeafMotion::Swing,
+                0.9,
+                None,
+                "unplaced",
+                inexact,
+            ),
+            Err(DoorLeavesError::InexactEvidence)
+        );
     }
 
     #[test]

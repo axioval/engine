@@ -154,6 +154,7 @@ pub(crate) fn reason(error: &DoorLeavesError) -> NotEvaluatedReason {
         | DoorLeavesError::NotADoor(_)
         | DoorLeavesError::NotStated(_)
         | DoorLeavesError::Refused(_)
+        | DoorLeavesError::Unplaced(_)
         | DoorLeavesError::Unreadable(_) => NotEvaluatedReason::IncompleteEvidence,
         DoorLeavesError::InvalidLeaves(_)
         | DoorLeavesError::InexactEvidence

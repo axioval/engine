@@ -197,7 +197,12 @@ impl ObjectFrameServiceHandle {
         {
             return Err(DoorLeavesError::UncoveredSource(door.source.clone()));
         }
-        let leaves = self.0.leaves(door)?;
+        let leaves = match self.0.leaves(door) {
+            Err(DoorLeavesError::Unplaced(leaf)) if leaf.door() != door => {
+                return Err(DoorLeavesError::ResponseRequestMismatch);
+            }
+            answer => answer?,
+        };
         if leaves.door() != door {
             return Err(DoorLeavesError::ResponseRequestMismatch);
         }
@@ -378,5 +383,44 @@ mod tests {
             handle.leaves(&foreign),
             Err(DoorLeavesError::UncoveredSource(_))
         ));
+    }
+
+    /// Answers every door with the one unplaced leaf of door `b`.
+    struct Unplaced(Vec<SourceSnapshot>);
+    impl ObjectFrameService for Unplaced {
+        fn source_snapshots(&self) -> &[SourceSnapshot] {
+            &self.0
+        }
+        fn object_frame(&self, object: &ObjectId) -> Result<ObjectFrame, ObjectFrameError> {
+            Err(ObjectFrameError::UnknownObject(object.clone()))
+        }
+        fn leaves(&self, _: &ObjectId) -> Result<DoorLeaves, DoorLeavesError> {
+            let leaf = crate::UnplacedLeaf::try_new(
+                id("b"),
+                1.0,
+                None,
+                crate::LeafPosition::Middle,
+                crate::LeafMotion::Swing,
+                0.9,
+                None,
+                "unplaced",
+                exact(),
+            )?;
+            Err(DoorLeavesError::Unplaced(Box::new(leaf)))
+        }
+    }
+
+    #[test]
+    fn an_unplaced_leaf_is_bound_to_the_request() {
+        let snapshot = SourceSnapshot::try_new(source(), "r1", "sha256:1").unwrap();
+        let handle = ObjectFrameServiceHandle::new(Arc::new(Unplaced(vec![snapshot])));
+        assert!(matches!(
+            handle.leaves(&id("b")),
+            Err(DoorLeavesError::Unplaced(leaf)) if leaf.door() == &id("b")
+        ));
+        assert_eq!(
+            handle.leaves(&id("a")),
+            Err(DoorLeavesError::ResponseRequestMismatch)
+        );
     }
 }

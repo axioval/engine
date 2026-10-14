@@ -23,8 +23,8 @@ use axioval_ir::contract::ParameterValue;
 use axioval_engine::{
     AdjacentSide, CapabilityEvaluation, ColumnKind, CompiledRule, DoorLeaf, DoorLeaves,
     DoorLeavesError, LeafMotion, NotEvaluatedReason, ObjectFrameServiceHandle, ParameterDescriptor,
-    ParameterType, RuleCapability, RuleContext, TableColumn, TraversalDirection, VerticalExtent,
-    adjacent_side,
+    ParameterType, RuleCapability, RuleContext, TableColumn, TraversalDirection, UnplacedLeaf,
+    VerticalExtent, adjacent_side,
 };
 use std::sync::Arc;
 
@@ -314,7 +314,11 @@ impl<'a> ClearWidth<'a> {
     /// lining at each jamb it meets and its own thickness. `None` (move on)
     /// when the source states no leaves, no lining thickness or a leaf
     /// thickness, or when a leaf slides or rolls (for the passage, also when
-    /// one is fixed), so that this derivation does not apply.
+    /// one is fixed), so that this derivation does not apply. A door whose
+    /// one hinged leaf the source states without its place along the
+    /// opening ([`DoorLeavesError::Unplaced`]) is measured alike, since
+    /// neither width depends on that place; every other refusal stops the
+    /// chain.
     fn from_leaves(
         context: &RuleContext<'_>,
         object: &Object,
@@ -328,19 +332,24 @@ impl<'a> ClearWidth<'a> {
                     .into(),
             ));
         };
-        let leaves = match frames.leaves(&object.id) {
-            Ok(leaves) => leaves,
+        let (derived, cited) = match frames.leaves(&object.id) {
+            Ok(leaves) => (
+                match mode {
+                    LeafMode::Passage => passage(&leaves),
+                    LeafMode::WidestLeaf => widest_leaf(&leaves),
+                },
+                leaves.evidence().clone(),
+            ),
             Err(DoorLeavesError::NotStated(_)) => return Ok(None),
+            Err(DoorLeavesError::Unplaced(leaf)) => {
+                (unplaced(&leaf, mode), leaf.evidence().clone())
+            }
             Err(error) => {
                 return Err((
                     door_swing::reason(&error),
                     format!("the door's leaves are unknown: {error}"),
                 ));
             }
-        };
-        let derived = match mode {
-            LeafMode::Passage => passage(&leaves),
-            LeafMode::WidestLeaf => widest_leaf(&leaves),
         };
         let Some(derived) = derived else {
             return Ok(None);
@@ -357,7 +366,7 @@ impl<'a> ClearWidth<'a> {
                 ),
             ));
         }
-        evidence.push(leaves.evidence().clone());
+        evidence.push(cited);
         evidence.push(Self::record(&object.id, derived.step, false));
         Ok(Some(Measured {
             lower,
@@ -504,8 +513,27 @@ fn passage(leaves: &DoorLeaves) -> Option<FromLeaves> {
     for leaf in leaves.hinged() {
         depth += leaf.depth_metres()?;
     }
-    let overall = leaves.overall_width_metres();
-    Some(FromLeaves {
+    Some(whole_passage(leaves.overall_width_metres(), lining, depth))
+}
+
+/// The clear width of a door whose one hinged leaf the source states
+/// without its place along the opening, as [`passage`] or [`widest_leaf`]
+/// measure a placed one: the passage needs no place, and the one leaf is
+/// the widest and its closed edge meets both jambs wherever it stands.
+/// `None` when a thickness is not stated.
+fn unplaced(leaf: &UnplacedLeaf, mode: LeafMode) -> Option<FromLeaves> {
+    let lining = leaf.lining_thickness_metres()?;
+    let depth = leaf.depth_metres()?;
+    Some(match mode {
+        LeafMode::Passage => whole_passage(leaf.overall_width_metres(), lining, depth),
+        LeafMode::WidestLeaf => leaf_passage(leaf.width_metres(), 2, lining, depth),
+    })
+}
+
+/// The `overall` width less the `lining` on both jambs and `depth` of open
+/// leaves.
+fn whole_passage(overall: f64, lining: f64, depth: f64) -> FromLeaves {
+    FromLeaves {
         from: "overall width",
         width: overall,
         deduction: 2.0 * lining + depth,
@@ -517,7 +545,7 @@ fn passage(leaves: &DoorLeaves) -> Option<FromLeaves> {
             shown(lining, lining),
             shown(depth, depth)
         ),
-    })
+    }
 }
 
 /// The widest hinged leaf's passage: its width less the lining at each
@@ -558,34 +586,37 @@ fn widest_leaf(leaves: &DoorLeaves) -> Option<FromLeaves> {
         } else {
             leaves.lining_thickness_metres()?
         };
-        let depth = leaf.depth_metres()?;
-        let width = leaf.width_metres();
-        let deduction = f64::from(jambs).mul_add(lining, depth);
-        if best
-            .as_ref()
-            .is_some_and(|best| best.width - best.deduction >= width - deduction)
-        {
+        let candidate = leaf_passage(leaf.width_metres(), jambs, lining, leaf.depth_metres()?);
+        if best.as_ref().is_some_and(|best| {
+            best.width - best.deduction >= candidate.width - candidate.deduction
+        }) {
             continue;
         }
-        let jamb_words = match jambs {
-            0 => String::new(),
-            1 => format!(" {} m lining at one jamb and", shown(lining, lining)),
-            _ => format!(" 2 × {} m lining and", shown(lining, lining)),
-        };
-        best = Some(FromLeaves {
-            from: "widest leaf",
-            width,
-            deduction,
-            step: "widest-leaf",
-            what: format!(
-                "clear width of the widest leaf (leaf {} m less{jamb_words} {} m of open leaf, as \
-                 the door states them)",
-                shown(width, width),
-                shown(depth, depth)
-            ),
-        });
+        best = Some(candidate);
     }
     best
+}
+
+/// One leaf's passage: its `width` less the `lining` at the `jambs` its
+/// closed edge meets and its `depth` standing open.
+fn leaf_passage(width: f64, jambs: u8, lining: f64, depth: f64) -> FromLeaves {
+    let jamb_words = match jambs {
+        0 => String::new(),
+        1 => format!(" {} m lining at one jamb and", shown(lining, lining)),
+        _ => format!(" 2 × {} m lining and", shown(lining, lining)),
+    };
+    FromLeaves {
+        from: "widest leaf",
+        width,
+        deduction: f64::from(jambs).mul_add(lining, depth),
+        step: "widest-leaf",
+        what: format!(
+            "clear width of the widest leaf (leaf {} m less{jamb_words} {} m of open leaf, as the \
+             door states them)",
+            shown(width, width),
+            shown(depth, depth)
+        ),
+    }
 }
 
 /// A door's clear height: the length `quantity_property` states, else the

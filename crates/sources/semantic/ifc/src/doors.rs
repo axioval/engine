@@ -16,14 +16,15 @@
 
 use axioval_engine::{
     DoorLeaf, DoorLeaves, DoorLeavesError, HingeSide, LeafMotion, LeafPosition, MetricDirection,
-    SwingSector,
+    SwingSector, UnplacedLeaf,
 };
 use axioval_ir::{Evidence, ObjectId};
-use ifc_model::{EntityId, Model};
+use ifc_model::{EntityId, Model, Value};
 use ifc_properties::{
     ExactPredefinedSet, ExactPropertyError, ExactSource, ExactValue, exact_predefined_sets,
     exact_unit,
 };
+use ifc_schema::Schema;
 use openbim_ifc::{
     DoorOperation, DoorOperationError, DoorOperationType, Leaf, PanelPosition, Side, door_operation,
 };
@@ -127,6 +128,127 @@ fn length(
         )));
     }
     Ok(Some(metres))
+}
+
+/// The one panel of a single-leaf door that `door_operation` refuses to
+/// place (`UnplacedPanel`: narrower than the opening at `MIDDLE` or
+/// `NOTDEFINED`), as an [`UnplacedLeaf`] when it swings or is
+/// double-acting (#378), else refused with `refusal`, upstream's words.
+///
+/// Upstream refuses a panel's place only after it has read and checked
+/// everything else: the operation type is a single-leaf one, exactly one
+/// panel set governs, its `PanelOperation` is the operation's and its
+/// `PanelWidth` lies in `(0, 1)` (a ratio above 1 is `InvalidPanelWidth`,
+/// refused before the position is read), and `OverallWidth` is a positive
+/// length. Only what the [`UnplacedLeaf`] states is read again here, with
+/// the same exact readers as the placed leaves: the panel's operation,
+/// position and width, `OverallWidth` in the exact length unit, the
+/// lining and the panel's depth. A sliding or rolling panel stays refused:
+/// where it goes when open depends on where it stands.
+fn unplaced(
+    model: &Model,
+    schema: &Schema,
+    fingerprint: &str,
+    door: &ObjectId,
+    (id, set): (EntityId, EntityId),
+    refusal: String,
+) -> DoorLeavesError {
+    let read = || -> Result<Option<UnplacedLeaf>, DoorLeavesError> {
+        let panels = exact_predefined_sets(model, id, "IfcDoorPanelProperties")
+            .map_err(|error| property_error(&error))?;
+        let Some(panel) = panels.iter().find(|panel| panel.set_id == set) else {
+            return Err(DoorLeavesError::Unreadable(format!(
+                "panel set #{} is not the door's",
+                set.0
+            )));
+        };
+        let text = |name: &str| match panel.attribute(name).map(|property| &property.value) {
+            Some(ExactValue::Enum(value)) => Some(value.to_string()),
+            _ => None,
+        };
+        let motion = match text("PanelOperation").as_deref() {
+            Some("SWINGING") => LeafMotion::Swing,
+            Some("DOUBLE_ACTING") => LeafMotion::DoubleSwing,
+            _ => return Ok(None),
+        };
+        let position = match text("PanelPosition").as_deref() {
+            Some("MIDDLE") => LeafPosition::Middle,
+            Some("NOTDEFINED") => LeafPosition::NotDefined,
+            _ => return Ok(None),
+        };
+        let ratio = match panel
+            .attribute("PanelWidth")
+            .map(|property| &property.value)
+        {
+            Some(ExactValue::Real(ratio)) if *ratio > 0.0 && *ratio <= 1.0 => *ratio,
+            _ => return Ok(None),
+        };
+        let overall = overall_width(model, schema, id)?;
+        let (lining_thickness, lining_set) = lining(model, id, "IfcDoorLiningProperties")?;
+        let depth = panel_depth(model, &panels, set)?;
+        let lining = lining_set.map_or(String::new(), |set| format!(":lining=#{}", set.0));
+        let evidence = Evidence::exact(
+            door.source.clone(),
+            format!(
+                "ifc:{fingerprint}:door-operation:{id}:unplaced:panel=#{}:{}:{}:width={ratio}{lining}",
+                set.0,
+                text("PanelOperation").unwrap_or_default(),
+                text("PanelPosition").unwrap_or_default(),
+            ),
+        );
+        UnplacedLeaf::try_new(
+            door.clone(),
+            overall,
+            lining_thickness,
+            position,
+            motion,
+            ratio * overall,
+            depth,
+            refusal.clone(),
+            evidence,
+        )
+        .map(Some)
+    };
+    match read() {
+        Ok(Some(leaf)) => DoorLeavesError::Unplaced(Box::new(leaf)),
+        Ok(None) => DoorLeavesError::Refused(refusal),
+        Err(error) => error,
+    }
+}
+
+/// `IfcDoor.OverallWidth` of `door` in metres, through the exact project
+/// length unit.
+fn overall_width(model: &Model, schema: &Schema, door: EntityId) -> Result<f64, DoorLeavesError> {
+    let unreadable =
+        |why: &str| DoorLeavesError::Unreadable(format!("OverallWidth of #{} {why}", door.0));
+    let entity = model.get(door).ok_or_else(|| unreadable("has no door"))?;
+    let slot = schema
+        .attributes(&entity.type_name)
+        .iter()
+        .position(|attribute| attribute.name.eq_ignore_ascii_case("OverallWidth"))
+        .ok_or_else(|| unreadable("is not declared"))?;
+    let value = match entity.attribute(slot) {
+        Some(Value::Real(value)) => *value,
+        Some(Value::Typed { value, .. }) => match &**value {
+            Value::Real(value) => *value,
+            _ => return Err(unreadable("is not a stated length")),
+        },
+        _ => return Err(unreadable("is not a stated length")),
+    };
+    let unit = exact_unit(model, "IFCPOSITIVELENGTHMEASURE", None).map_err(|error| {
+        unreadable(&format!(
+            "has a unit that cannot be resolved exactly: {error}"
+        ))
+    })?;
+    if unit.dimensions != [1, 0, 0, 0, 0, 0, 0] || unit.offset != 0.0 {
+        return Err(unreadable("is not a length"));
+    }
+    let metres = value * unit.scale;
+    if metres.is_finite() && metres > 0.0 {
+        Ok(metres)
+    } else {
+        Err(unreadable("is not a finite positive length"))
+    }
 }
 
 /// The governing sets of `entity`: the occurrence's own, else its type's.
@@ -243,6 +365,7 @@ fn leaf(leaf: &Leaf, depth: Option<f64>) -> Result<DoorLeaf, DoorLeavesError> {
 /// leaves, or a window's panels (`crate::windows`) when it is a window.
 pub(crate) fn door_leaves(
     model: &Model,
+    schema: &Schema,
     fingerprint: &str,
     door: &ObjectId,
     id: EntityId,
@@ -251,6 +374,16 @@ pub(crate) fn door_leaves(
         Ok(operation) => operation,
         Err(DoorOperationError::NotADoor { .. }) => {
             return crate::windows::window_leaves(model, fingerprint, door, id);
+        }
+        Err(error @ DoorOperationError::UnplacedPanel { set }) => {
+            return Err(unplaced(
+                model,
+                schema,
+                fingerprint,
+                door,
+                (id, set),
+                format!("{error:?}"),
+            ));
         }
         Err(error) => return Err(operation_error(door, &error)),
     };

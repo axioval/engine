@@ -5,6 +5,7 @@
 
 use axioval_engine::{
     DoorLeaves, DoorLeavesError, HingeSide, LeafMotion, LeafPosition, ObjectFrameServiceHandle,
+    UnplacedLeaf,
 };
 use axioval_ifc::import_ifc_session;
 use axioval_ir::{ObjectId, SourceId};
@@ -23,6 +24,8 @@ struct Door {
     panels: Vec<Panel>,
     axis: &'static str,
     reference: &'static str,
+    /// Written in IFC2X3, typed by an `IfcDoorStyle`, rather than IFC4.
+    ifc2x3: bool,
 }
 
 impl Door {
@@ -33,10 +36,25 @@ impl Door {
             panels,
             axis: "(0.,0.,1.)",
             reference: "(1.,0.,0.)",
+            ifc2x3: false,
         }
     }
 
+    /// The same door written in IFC2X3.
+    fn in_ifc2x3(mut self) -> Self {
+        self.ifc2x3 = true;
+        self
+    }
+
     fn step(&self) -> String {
+        // IFC2X3 has no door `PredefinedType`, `OperationType` and
+        // `UserDefinedOperationType`, no wall `PredefinedType` and no
+        // lining-to-panel offsets.
+        let (door_tail, wall_tail, lining_tail) = if self.ifc2x3 {
+            ("", "", "")
+        } else {
+            (",$,$,$", ",$", ",$,$")
+        };
         let mut data = format!(
             "#1=IFCSIUNIT(*,.LENGTHUNIT.,.MILLI.,.METRE.);
 #2=IFCUNITASSIGNMENT((#1));
@@ -46,10 +64,10 @@ impl Door {
 #12=IFCDIRECTION({reference});
 #13=IFCAXIS2PLACEMENT3D(#10,#11,#12);
 #14=IFCLOCALPLACEMENT($,#13);
-#20=IFCDOOR('000000000000000000000D',$,'Door',$,$,#14,$,$,2100.,{width},$,$,$);
+#20=IFCDOOR('000000000000000000000D',$,'Door',$,$,#14,$,$,2100.,{width}{door_tail});
 #22=IFCRELDEFINESBYTYPE('000000000000000000000R',$,$,$,(#20),#21);
-#23=IFCWALL('000000000000000000000W',$,'Wall',$,$,#14,$,$,$);
-#40=IFCDOORLININGPROPERTIES('000000000000000000000L',$,$,$,100.,50.,$,20.,$,$,$,$,$,$,$,$,$);
+#23=IFCWALL('000000000000000000000W',$,'Wall',$,$,#14,$,${wall_tail});
+#40=IFCDOORLININGPROPERTIES('000000000000000000000L',$,$,$,100.,50.,$,20.,$,$,$,$,$,$,${lining_tail});
 ",
             axis = self.axis,
             reference = self.reference,
@@ -63,13 +81,22 @@ impl Door {
                 "#{id}=IFCDOORPANELPROPERTIES('00000000000000000000P{index}',$,$,$,40.,.{operation}.,{ratio},.{position}.,$);\n"
             ));
         }
-        data.push_str(&format!(
-            "#21=IFCDOORTYPE('000000000000000000000T',$,'Type',$,$,({}),$,$,$,.DOOR.,.{}.,.F.,$);\n",
-            sets.join(","),
-            self.operation
-        ));
+        if self.ifc2x3 {
+            data.push_str(&format!(
+                "#21=IFCDOORSTYLE('000000000000000000000T',$,'Type',$,$,({}),$,$,.{}.,.NOTDEFINED.,.F.,.F.);\n",
+                sets.join(","),
+                self.operation
+            ));
+        } else {
+            data.push_str(&format!(
+                "#21=IFCDOORTYPE('000000000000000000000T',$,'Type',$,$,({}),$,$,$,.DOOR.,.{}.,.F.,$);\n",
+                sets.join(","),
+                self.operation
+            ));
+        }
+        let schema = if self.ifc2x3 { "IFC2X3" } else { "IFC4" };
         format!(
-            "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n{data}ENDSEC;\nEND-ISO-10303-21;\n"
+            "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('{schema}'));\nENDSEC;\nDATA;\n{data}ENDSEC;\nEND-ISO-10303-21;\n"
         )
     }
 
@@ -255,4 +282,107 @@ fn what_the_source_does_not_state_is_refused_never_defaulted() {
         door.leaves_of("#99"),
         Err(DoorLeavesError::UnknownObject(_))
     ));
+}
+
+/// The leaf a single-leaf door states without its place along the opening
+/// (#378).
+fn unplaced(door: &Door) -> UnplacedLeaf {
+    match door.leaves_of("#20") {
+        Err(DoorLeavesError::Unplaced(leaf)) => *leaf,
+        other => panic!("an unplaced leaf: {other:?}"),
+    }
+}
+
+#[test]
+fn a_single_panel_at_middle_is_measured_without_its_place() {
+    for ifc2x3 in [false, true] {
+        let mut door = Door::new(
+            "SINGLE_SWING_LEFT",
+            vec![Panel("SWINGING", "MIDDLE", "0.96")],
+        );
+        door.ifc2x3 = ifc2x3;
+        let leaf = unplaced(&door);
+        assert_eq!(leaf.door().local_id, "#20");
+        assert_eq!(leaf.position(), LeafPosition::Middle);
+        assert_eq!(leaf.motion(), LeafMotion::Swing);
+        near(leaf.overall_width_metres(), 0.9);
+        near(leaf.width_metres(), 0.96 * 0.9);
+        near(leaf.lining_thickness_metres().unwrap(), 0.05);
+        near(leaf.depth_metres().unwrap(), 0.04);
+        assert!(leaf.evidence().exact);
+        assert!(
+            leaf.evidence().locator.contains(
+                ":door-operation:#20:unplaced:panel=#30:SWINGING:MIDDLE:width=0.96:lining=#40"
+            ),
+            "{}",
+            leaf.evidence().locator
+        );
+        // Everything that needs the leaf's place reads the refusal as it
+        // was.
+        let refusal = DoorLeavesError::Unplaced(Box::new(leaf)).to_string();
+        assert!(
+            refusal.starts_with("the door's leaves cannot be derived exactly: UnplacedPanel"),
+            "{refusal}"
+        );
+    }
+    let undefined = Door::new(
+        "DOUBLE_SWING_RIGHT",
+        vec![Panel("DOUBLE_ACTING", "NOTDEFINED", "0.8")],
+    )
+    .in_ifc2x3();
+    let leaf = unplaced(&undefined);
+    assert_eq!(leaf.position(), LeafPosition::NotDefined);
+    assert_eq!(leaf.motion(), LeafMotion::DoubleSwing);
+    near(leaf.width_metres(), 0.72);
+}
+
+#[test]
+fn a_single_panel_at_left_narrower_than_the_opening_is_placed_as_before() {
+    for ifc2x3 in [false, true] {
+        let mut door = Door::new("SINGLE_SWING_LEFT", vec![Panel("SWINGING", "LEFT", "0.96")]);
+        door.ifc2x3 = ifc2x3;
+        let leaves = door.leaves();
+        let [leaf] = leaves.leaves() else {
+            panic!("one leaf")
+        };
+        assert_eq!(leaf.position(), LeafPosition::Left);
+        near(leaf.width_metres(), 0.96 * 0.9);
+        close(leaf.origin(), [1.0, 2.0, 0.0]);
+        assert!(leaf.swing().is_some());
+    }
+}
+
+#[test]
+fn panels_that_cannot_be_placed_stay_refused() {
+    for ifc2x3 in [false, true] {
+        let refused = |mut door: Door| {
+            door.ifc2x3 = ifc2x3;
+            match door.leaves_of("#20") {
+                Err(DoorLeavesError::Refused(why)) => why,
+                other => panic!("refused: {other:?}"),
+            }
+        };
+        // Two panels, one of them without a place: neither can be placed.
+        let why = refused(Door::new(
+            "DOUBLE_DOOR_SINGLE_SWING",
+            vec![
+                Panel("SWINGING", "LEFT", "0.5"),
+                Panel("SWINGING", "MIDDLE", "0.5"),
+            ],
+        ));
+        assert!(why.contains("PanelMismatch"), "{why}");
+        // A ratio above 1 is invalid wherever the panel stands.
+        let why = refused(Door::new(
+            "SINGLE_SWING_LEFT",
+            vec![Panel("SWINGING", "MIDDLE", "1.2")],
+        ));
+        assert!(why.contains("InvalidPanelWidth"), "{why}");
+        // A sliding leaf leaves the opening along it, so where it goes
+        // depends on where it stands.
+        let why = refused(Door::new(
+            "SLIDING_TO_LEFT",
+            vec![Panel("SLIDING", "MIDDLE", "0.96")],
+        ));
+        assert!(why.contains("UnplacedPanel"), "{why}");
+    }
 }

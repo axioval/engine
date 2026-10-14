@@ -538,6 +538,16 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **Geometry**: moved to `axiolid-mesh-compile` 0.3.26, `axiolid-overlay`
+  0.3.15, `axiolid-evaluate` 0.3.16 and `axiolid-mesh-compile-contract`
+  0.3.4.
+  - **Slender overlaps:** the overlay unions and intersects overlapping
+    slender regions about ten times faster, with identical output
+    (axiolid/kernel#315, #371).
+  - **Placed bounds:** a placed body's bound includes the rounding of its
+    placement (axiolid/kernel#295), and booleans of flat-faced bodies are
+    bounded at rounding scale (axiolid/kernel#314). The public models'
+    outcomes are unchanged.
 - **IFC geometry**: moved to `ifc-geometry` 0.26.1, which lowers stations
   on bases offset at stations (ifc#443). Their deviation stays unbounded
   until the kernel certifies the frame law's derivatives

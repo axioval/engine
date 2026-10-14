@@ -168,7 +168,10 @@ fn restricted(report: &Report, rules: &BTreeSet<&str>) -> Value {
 }
 
 /// What a case's comparisons showed: every difference by model, side and
-/// difference, and how many scopes each side's comparisons covered.
+/// difference, and how many scopes each side's comparisons covered: those
+/// either side reported about, or, for a rule that reported about none,
+/// the objects its summary says it checked (a pass is a judgement too, and
+/// the summaries are compared).
 #[derive(Default)]
 struct Tally {
     shown: BTreeSet<(String, String, String)>,
@@ -176,17 +179,33 @@ struct Tally {
 }
 
 impl Tally {
-    /// Prints `evidence` as one JSON line and counts it.
-    fn add(&mut self, model: &str, side: &str, evidence: &axioval::rules::parity::ParityEvidence) {
+    /// Prints `evidence` as one JSON line and counts it, with `checked` the
+    /// objects the rule's summary in this run says it checked.
+    fn add(
+        &mut self,
+        model: &str,
+        side: &str,
+        evidence: &axioval::rules::parity::ParityEvidence,
+        checked: usize,
+    ) {
         let mut line = serde_json::to_value(evidence).unwrap();
         line["model"] = model.into();
         println!("{line}");
-        *self.covered.entry(side.to_owned()).or_default() += evidence.objects;
+        *self.covered.entry(side.to_owned()).or_default() += evidence.objects.max(checked);
         for difference in &evidence.differences {
             self.shown
                 .insert((model.to_owned(), side.to_owned(), difference.to_string()));
         }
     }
+}
+
+/// How many objects the summary of `rule` in `report` says it checked.
+fn checked(report: &Report, rule: &str) -> usize {
+    report
+        .rules()
+        .iter()
+        .find(|summary| summary.rule_id.to_string() == rule)
+        .map_or(0, |summary| summary.checked)
 }
 
 /// Writes the outcomes the recorded rules reported in `report` to `path`.
@@ -285,7 +304,7 @@ fn run_case(case: &Path, models: &[(String, PathBuf)]) -> Vec<String> {
                 (capability, &Observations::of_report(&report, capability)),
                 (expression, &Observations::of_report(&report, expression)),
             );
-            tally.add(name, capability, &evidence);
+            tally.add(name, capability, &evidence, checked(&report, capability));
         }
         if stored.is_empty() {
             continue;
@@ -304,7 +323,7 @@ fn run_case(case: &Path, models: &[(String, PathBuf)]) -> Vec<String> {
                 (&retired, &Observations::of_report(&before, rule)),
                 (rule, &Observations::of_report(&report, rule)),
             );
-            tally.add(name, &retired, &evidence);
+            tally.add(name, &retired, &evidence, checked(&report, rule));
         }
     }
     if recording_now {

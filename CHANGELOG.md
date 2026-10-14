@@ -565,6 +565,18 @@ All notable changes are documented here. This project follows Semantic Versionin
   boxes once. Outcomes are unchanged. On a large georeferenced model
   measured without the rounding of its map coordinates, the rule ran in
   about a quarter of its time (#371).
+- **Free floor at any orientation**: the angle search proves over every
+  angle at once what it would otherwise prove interval by interval. After
+  the first interval, a room whose clear part holds no octagon inside every
+  first interval's shrunk rectangle has none of them fit, and a search with
+  no witness at any angle, where the rectangle at the period's end fits
+  clear of the sure obstacles, spends its budget at once. Later intervals
+  take the absence proof first and skip the witness it rules out, and the
+  scope less the obstacles is taken once per scene, not once per angle.
+  Verdicts, messages and evidence are unchanged: on a large georeferenced
+  model every one of the rule's 449 findings and 670 not-evaluated
+  outcomes is the same, and the rule took 1,505 s instead of 4,160 s
+  ([#371](https://github.com/axioval/engine/issues/371)).
 - **IFC**: moved to `openbim-ifc` 0.32, `ifc-geometry` 0.26, `ifc-alignment`
   0.9, `ifc-georef` 0.7, `ifc-style` 0.5, `ifc-systems` 0.5 and `ifc-spatial`
   0.5.1. An IFC2X3 model's map conversion and projected CRS are now read

@@ -122,7 +122,19 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   on m14; keep the threshold so smaller scenes stay bit-identical. The
   eroded path also admits centres where the shape only touches an
   obstacle, so it only widens what an absence must rule out, and its
-  witnesses rely on the overlap check below). Witnesses are re-verified by direct overlap;
+  witnesses rely on the overlap check below; the difference is taken once
+  per scene, `Scene::clear`). `any_rectangle` takes its first interval
+  witness first, as it always did, then may end the search over every
+  angle at once (#371): `Scene::fits_nowhere` (the clear part eroded by an
+  octagon inside every first interval's shrunk rectangle, less
+  `KNIFE_EDGE_METRES`, is empty) proves `Nowhere`, and no witness at any
+  angle together with `Scene::fits_somewhere` (the rectangle at the
+  period's end, grown by the margin, fits clear of the sure obstacles, so
+  the depth-first descent towards it is never pruned) spends the budget.
+  Later intervals take the absence first. Keep the first interval as it
+  was: its refusals are what m14's not-evaluated outcomes rest on, and
+  `placement::tests` compares the search with the one before it.
+  Witnesses are re-verified by direct overlap;
   `NoPlacement` needs the shape shrunk by `KNIFE_EDGE_METRES` (plus the
   rotation margin) to fit nowhere, so a fit by contact refuses. Never drop a
   margin or return `NoPlacement` from an undecided interval. Only the scope's

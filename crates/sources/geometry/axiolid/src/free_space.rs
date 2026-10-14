@@ -751,6 +751,7 @@ impl AxiolidFreeSpaceService {
             window: None,
             reach: None,
             bracketed,
+            clear: Default::default(),
         };
         Ok((scene, floor))
     }

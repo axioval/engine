@@ -35,6 +35,7 @@
 //! [`KNIFE_EDGE_METRES`], so rounding its corners cannot hide a centre on
 //! its edge. For a fixed orientation this is exact up to the same margins.
 
+use std::cell::OnceCell;
 use std::f64::consts::PI;
 
 use axiolid_core::{Point2, Tolerance};
@@ -103,6 +104,10 @@ pub(crate) struct Scene {
     pub(crate) reach: Option<Reached>,
     /// The tessellated bodies bracketed by their chord deviation, with it.
     pub(crate) bracketed: Vec<(axioval_ir::ObjectId, f64)>,
+    /// `scope` less `obstacles` (`[0]`) and `room` less `sure` (`[1]`),
+    /// each taken once a search first erodes it: every shape and angle
+    /// erodes the same difference ([`Self::free_for`]).
+    pub(crate) clear: [OnceCell<Region>; 2],
 }
 
 /// The pieces of the free area eroded by half a path's width that come
@@ -268,9 +273,79 @@ impl Scene {
             (&self.scope, &self.obstacles)
         };
         if region_points(obstacles) > OBSTACLE_SUM_POINTS {
-            return eroded_free(scope, obstacles, shape, self.tolerance);
+            return self
+                .clear(absence)?
+                .minkowski_erosion(shape, self.tolerance)
+                .map_err(|e| unavailable("erosion", e));
         }
         summed_free(scope, obstacles, shape, self.tolerance)
+    }
+
+    /// The scope less the obstacles ([`clear_of`]): `scope` less
+    /// `obstacles` for a witness, `room` less `sure` for an absence
+    /// (`absence`). Taken once per scene; a refusal is not kept, so each
+    /// search asking for it is refused alike.
+    fn clear(&self, absence: bool) -> Result<&Region, FreeSpaceError> {
+        let (scope, obstacles) = if absence {
+            (&self.room, &self.sure)
+        } else {
+            (&self.scope, &self.obstacles)
+        };
+        let cell = &self.clear[usize::from(absence)];
+        if let Some(clear) = cell.get() {
+            return Ok(clear);
+        }
+        let clear = clear_of(scope, obstacles, self.tolerance)?;
+        Ok(cell.get_or_init(|| clear))
+    }
+
+    /// Whether no rotation of a centred rectangle whose half-sizes are at
+    /// least `half` fits anywhere clear: `scope` less `obstacles` for a
+    /// witness, `room` less `sure` for an absence (`absence`), eroded by a
+    /// regular octagon inscribed in the circle of radius `half` less
+    /// [`KNIFE_EDGE_METRES`], is empty. Every such rectangle holds that
+    /// circle grown by the margin, so the centres it may take lie in the
+    /// erosion shrunk by the margin, which rounding cannot empty. `false`
+    /// where the erosion is refused or leaves anything: the angle search
+    /// then decides.
+    fn fits_nowhere(&self, absence: bool, half: f64) -> bool {
+        let radius = (half - KNIFE_EDGE_METRES) * (1.0 - 1.0e-9);
+        if radius <= 0.0 {
+            return false;
+        }
+        let Ok(clear) = self.clear(absence) else {
+            return false;
+        };
+        clear.is_empty()
+            || clear
+                .minkowski_erosion(&octagon(radius), self.tolerance)
+                .is_ok_and(|free| free.is_empty())
+    }
+
+    /// Whether `shape` fits somewhere in the room clear of the sure
+    /// obstacles: the room less them, eroded by it, is not empty. `false`
+    /// where the erosion is refused or leaves nothing.
+    fn fits_somewhere(&self, shape: &Ring) -> bool {
+        let Ok(clear) = self.clear(true) else {
+            return false;
+        };
+        !clear.is_empty()
+            && clear
+                .minkowski_erosion(shape, self.tolerance)
+                .is_ok_and(|free| !free.is_empty())
+    }
+}
+
+/// A regular octagon about the origin with its corners `corner` from it,
+/// counter-clockwise.
+fn octagon(corner: f64) -> Ring {
+    Ring {
+        points: (0..8)
+            .map(|i| {
+                let angle = PI * f64::from(i) / 4.0;
+                Point2::new(corner * angle.cos(), corner * angle.sin())
+            })
+            .collect(),
     }
 }
 
@@ -316,22 +391,32 @@ fn summed_free(
     }
 }
 
+/// `scope` less `obstacles`, which [`eroded_free`] erodes.
+fn clear_of(
+    scope: &Region,
+    obstacles: &Region,
+    tolerance: Tolerance,
+) -> Result<Region, FreeSpaceError> {
+    if obstacles.is_empty() {
+        return Ok(scope.clone());
+    }
+    scope
+        .difference(obstacles, tolerance)
+        .map_err(|e| unavailable("difference", e))
+}
+
 /// `scope` less `obstacles`, eroded by `shape`: [`summed_free`]'s centres
-/// and those where the shape only touches an obstacle.
+/// and those where the shape only touches an obstacle. A scene takes the
+/// difference once and erodes it per shape ([`Scene::free_for`]).
+#[cfg(test)]
 fn eroded_free(
     scope: &Region,
     obstacles: &Region,
     shape: &Ring,
     tolerance: Tolerance,
 ) -> Result<Region, FreeSpaceError> {
-    let free = if obstacles.is_empty() {
-        scope.clone()
-    } else {
-        scope
-            .difference(obstacles, tolerance)
-            .map_err(|e| unavailable("difference", e))?
-    };
-    free.minkowski_erosion(shape, tolerance)
+    clear_of(scope, obstacles, tolerance)?
+        .minkowski_erosion(shape, tolerance)
         .map_err(|e| unavailable("erosion", e))
 }
 
@@ -619,6 +704,19 @@ pub(crate) fn fixed_rectangle(
 }
 
 /// A rectangle at any rotation about the vertical.
+///
+/// The angle intervals are searched depth first, the higher half of a
+/// split first, so an interval never proven empty is split towards the end
+/// of the period until the budget runs out. After the first interval, taken
+/// as it always was, two proofs over every angle at once may end the
+/// search with the verdict it would reach: every interval proven empty
+/// ([`Scene::fits_nowhere`]), or no witness at any angle while the
+/// rectangle at the period's end, grown by [`KNIFE_EDGE_METRES`], fits
+/// where no absence can exclude it, so that the descent towards it spends
+/// the budget ([`Scene::fits_somewhere`]). Both need no reach, which
+/// narrows each interval's centres apart. Later intervals take the absence
+/// first: where it is proven, the witness region, which lies inside it, is
+/// empty too.
 pub(crate) fn any_rectangle(
     scene: &Scene,
     width: f64,
@@ -640,6 +738,15 @@ pub(crate) fn any_rectangle(
     let mut open: Vec<(f64, f64)> = (0..8)
         .map(|i| (period * f64::from(i) / 8.0, period * f64::from(i + 1) / 8.0))
         .collect();
+    // Turning by at most half an interval moves any point of the rectangle
+    // by at most the half-diagonal times that angle, so a rectangle that
+    // deep inside the middle one is inside every rotation.
+    let shrink_by =
+        |(low, high): (f64, f64)| half_diagonal * (high - low) / 2.0 + KNIFE_EDGE_METRES;
+    let first_shrink = shrink_by(open[0]);
+    // Whether no witness region holds anything at any angle; asked after
+    // the first interval, as the proofs over every angle.
+    let mut witnessless = false;
     let mut spent = 0usize;
     while let Some((low, high)) = open.pop() {
         if spent >= ANGLE_BUDGET {
@@ -647,37 +754,74 @@ pub(crate) fn any_rectangle(
                 "orientation search budget exhausted before a verdict",
             ));
         }
+        if spent == 1 && scene.reach.is_none() {
+            // Every first interval's shrunk rectangle holds the circle of
+            // its smaller half-size, so where that fits nowhere, each is
+            // proven empty.
+            let (w, d) = (width - 2.0 * first_shrink, depth - 2.0 * first_shrink);
+            if w > 0.0 && d > 0.0 && scene.fits_nowhere(true, w.min(d) / 2.0) {
+                return Ok(Search::Nowhere);
+            }
+            witnessless = scene.fits_nowhere(false, width.min(depth) / 2.0);
+            // Every shrunk rectangle of an interval reaching the period's
+            // end lies inside the rectangle there shrunk by the margin;
+            // where that, grown by the margin, fits clear of the sure
+            // obstacles, no such interval is ever proven empty.
+            let end = rectangle(
+                origin,
+                width + 2.0 * KNIFE_EDGE_METRES,
+                depth + 2.0 * KNIFE_EDGE_METRES,
+                Axis::at(period),
+            );
+            if witnessless && scene.fits_somewhere(&end) {
+                return Ok(Search::Undecided(
+                    "orientation search budget exhausted before a verdict",
+                ));
+            }
+        }
         spent += 1;
         let middle = f64::midpoint(low, high);
         let right = Axis::at(middle);
-        let shape = rectangle(origin, width, depth, right);
-        let free = scene.reaching(scene.free_for(&shape, false)?, &shape, false)?;
-        let place = |c| rectangle(c, width, depth, right);
-        if !free.is_empty()
-            && let Some(centre) = scene.witness(&free, place, place)?
-        {
-            return Ok(Search::Found { centre, right });
-        }
-        // Turning by at most half the interval moves any point of the
-        // rectangle by at most the half-diagonal times that angle, so a
-        // rectangle that deep inside the middle one is inside every rotation.
-        let shrink = half_diagonal * (high - low) / 2.0 + KNIFE_EDGE_METRES;
+        let shrink = shrink_by((low, high));
         let (w, d) = (width - 2.0 * shrink, depth - 2.0 * shrink);
         // Every rotation within the interval lies inside the middle
         // rectangle grown by the shrink, so it meets the reached region
         // only where that one does.
         let grown = rectangle(origin, width + 2.0 * shrink, depth + 2.0 * shrink, right);
-        if w > 0.0
-            && d > 0.0
-            && scene
-                .reaching(
-                    scene.free_for(&rectangle(origin, w, d, right), true)?,
-                    &grown,
-                    true,
-                )?
-                .is_empty()
-        {
+        let absence = || {
+            (w > 0.0 && d > 0.0).then(|| {
+                scene
+                    .free_for(&rectangle(origin, w, d, right), true)
+                    .and_then(|free| scene.reaching(free, &grown, true))
+                    .map(|free| free.is_empty())
+            })
+        };
+        // The first interval takes the witness first; a later one the
+        // absence, and the witness only where that is not proven. A
+        // refusal of the absence is raised only where no witness is found,
+        // as when it came second.
+        let first = spent == 1;
+        let mut absent = if first { None } else { absence() };
+        if matches!(absent, Some(Ok(true))) {
             continue;
+        }
+        if !witnessless {
+            let shape = rectangle(origin, width, depth, right);
+            let free = scene.reaching(scene.free_for(&shape, false)?, &shape, false)?;
+            let place = |c| rectangle(c, width, depth, right);
+            if !free.is_empty()
+                && let Some(centre) = scene.witness(&free, place, place)?
+            {
+                return Ok(Search::Found { centre, right });
+            }
+        }
+        if first {
+            absent = absence();
+        }
+        match absent {
+            Some(Ok(true)) => continue,
+            Some(Err(refused)) => return Err(refused),
+            _ => {}
         }
         open.push((low, middle));
         open.push((middle, high));
@@ -805,5 +949,171 @@ mod tests {
         // A region of more corners than are summed: the floor of m14 that
         // outgrew memory had about 3,200.
         assert!(region_points(&walls(18, tolerance)) > OBSTACLE_SUM_POINTS);
+    }
+
+    /// The angle search as it ran before #371: every interval takes its
+    /// witness, then its absence, until one is found, all are proven empty
+    /// or the budget runs out.
+    fn any_rectangle_before(
+        scene: &Scene,
+        width: f64,
+        depth: f64,
+    ) -> Result<Search, FreeSpaceError> {
+        let period = if (width - depth).abs() <= f64::EPSILON * width.max(depth) {
+            PI / 2.0
+        } else {
+            PI
+        };
+        let half_diagonal = width.hypot(depth) / 2.0;
+        let origin = Point2::new(0.0, 0.0);
+        let mut open: Vec<(f64, f64)> = (0..8)
+            .map(|i| (period * f64::from(i) / 8.0, period * f64::from(i + 1) / 8.0))
+            .collect();
+        let mut spent = 0usize;
+        while let Some((low, high)) = open.pop() {
+            if spent >= ANGLE_BUDGET {
+                return Ok(Search::Undecided(
+                    "orientation search budget exhausted before a verdict",
+                ));
+            }
+            spent += 1;
+            let middle = f64::midpoint(low, high);
+            let right = Axis::at(middle);
+            let shape = rectangle(origin, width, depth, right);
+            let free = scene.reaching(scene.free_for(&shape, false)?, &shape, false)?;
+            let place = |c| rectangle(c, width, depth, right);
+            if !free.is_empty()
+                && let Some(centre) = scene.witness(&free, place, place)?
+            {
+                return Ok(Search::Found { centre, right });
+            }
+            let shrink = half_diagonal * (high - low) / 2.0 + KNIFE_EDGE_METRES;
+            let (w, d) = (width - 2.0 * shrink, depth - 2.0 * shrink);
+            let grown = rectangle(origin, width + 2.0 * shrink, depth + 2.0 * shrink, right);
+            if w > 0.0
+                && d > 0.0
+                && scene
+                    .reaching(
+                        scene.free_for(&rectangle(origin, w, d, right), true)?,
+                        &grown,
+                        true,
+                    )?
+                    .is_empty()
+            {
+                continue;
+            }
+            open.push((low, middle));
+            open.push((middle, high));
+        }
+        Ok(Search::Nowhere)
+    }
+
+    fn rect(x: f64, y: f64, w: f64, h: f64) -> Polygon {
+        Polygon {
+            outer: Ring {
+                points: vec![
+                    Point2::new(x, y),
+                    Point2::new(x + w, y),
+                    Point2::new(x + w, y + h),
+                    Point2::new(x, y + h),
+                ],
+            },
+            holes: Vec::new(),
+        }
+    }
+
+    /// A scene of a scope and room `room`, possible obstacles `obstacles`
+    /// and sure ones `sure`, all at `(x, y)` plus the offset.
+    fn scene(
+        (x, y): (f64, f64),
+        room: (f64, f64),
+        obstacles: &[(f64, f64, f64, f64)],
+        sure: &[(f64, f64, f64, f64)],
+    ) -> Scene {
+        let tolerance = Tolerance::new(1.0e-9, 1.0e-9).unwrap();
+        let region = |parts: &[(f64, f64, f64, f64)]| {
+            let rings: Vec<Ring> = parts
+                .iter()
+                .map(|&(a, b, w, h)| rect(x + a, y + b, w, h).outer)
+                .collect();
+            union(&rings, tolerance).unwrap()
+        };
+        let scope = region(&[(0.0, 0.0, room.0, room.1)]);
+        Scene {
+            room: scope.clone(),
+            scope,
+            obstacles: region(obstacles),
+            sure: region(sure),
+            tolerance,
+            window: None,
+            reach: None,
+            bracketed: Vec::new(),
+            clear: Default::default(),
+        }
+    }
+
+    /// A named room with its possible and its sure obstacles.
+    type Case = (&'static str, (f64, f64), Vec<Rect>, Vec<Rect>);
+
+    /// A rectangle by its corner and size.
+    type Rect = (f64, f64, f64, f64);
+
+    /// The search proves over every angle at once only what the angle
+    /// search proves interval by interval (#371): on rooms that fit, that
+    /// fit nowhere, and that leave the verdict open, a square and an oblong
+    /// get the verdict, and a found centre and axis, the search before it
+    /// gave, near the origin and at georeferenced coordinates.
+    #[test]
+    fn the_search_over_every_angle_gives_the_verdicts_of_the_angle_search() {
+        let cases: Vec<Case> = vec![
+            ("an empty room", (3.0, 3.0), vec![], vec![]),
+            (
+                "a room with a column",
+                (3.0, 3.0),
+                vec![(1.0, 1.0, 0.4, 0.4)],
+                vec![(1.0, 1.0, 0.4, 0.4)],
+            ),
+            (
+                "a covered room",
+                (3.0, 3.0),
+                vec![(-0.1, -0.1, 3.2, 3.2)],
+                vec![(-0.1, -0.1, 3.2, 3.2)],
+            ),
+            ("a corridor too narrow", (0.8, 4.0), vec![], vec![]),
+            ("a corridor just wide enough", (0.95, 4.0), vec![], vec![]),
+            (
+                "a room covered only possibly",
+                (3.0, 3.0),
+                vec![(-0.1, -0.1, 3.2, 3.2)],
+                vec![],
+            ),
+            (
+                "a room possibly blocked in the middle",
+                (0.95, 0.95),
+                vec![(0.4, 0.4, 0.15, 0.15)],
+                vec![],
+            ),
+            (
+                "a room surely blocked in the middle",
+                (0.95, 0.95),
+                vec![(0.4, 0.4, 0.15, 0.15)],
+                vec![(0.4, 0.4, 0.15, 0.15)],
+            ),
+        ];
+        for offset in [(0.0, 0.0), (643_692.0, 5_649_156.0)] {
+            for (name, room, obstacles, sure) in &cases {
+                for (width, depth) in [(0.9, 0.9), (0.9, 1.2)] {
+                    let before = format!(
+                        "{:?}",
+                        any_rectangle_before(&scene(offset, *room, obstacles, sure), width, depth)
+                    );
+                    let now = format!(
+                        "{:?}",
+                        any_rectangle(&scene(offset, *room, obstacles, sure), width, depth)
+                    );
+                    assert_eq!(now, before, "{name} at {offset:?}, {width} x {depth}");
+                }
+            }
+        }
     }
 }

@@ -770,20 +770,7 @@
       "severity": "warning"
     }
   ],
-  "not_evaluated": [
-    {
-      "message": "whether it lies in ifc-step:bs-ifc4x3-building-architecture.ifc/#85 cannot be decided: the shared volume is 0.0000 to 1.0000 of the smaller body, ratio 0.9000",
-      "object_id": {
-        "local_id": "#116",
-        "source": {
-          "document": "bs-ifc4x3-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "containment-furniture"
-    }
-  ],
+  "not_evaluated": [],
   "rules": [
     {
       "checked": 0,
@@ -795,9 +782,9 @@
     {
       "checked": 1,
       "failed": 0,
-      "not_evaluated": 1,
+      "not_evaluated": 0,
       "rule_id": "containment-furniture",
-      "status": "not_evaluated"
+      "status": "passed"
     },
     {
       "checked": 0,

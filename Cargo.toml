@@ -82,7 +82,7 @@ axiolid-brep = "0.3.3"
 # elliptical-cylinder walls and refuses oblique ellipses by name (#280).
 axiolid-construct = "0.3.18"
 axiolid-core = "0.3.0"
-axiolid-inspect = "0.3.5"
+axiolid-inspect = "0.3.6"
 axiolid-mesh = "0.3.0"
 # 0.3.10 stops the exact boundary distance early on a shown touch or
 # crossing (axiolid/kernel#273).
@@ -110,7 +110,7 @@ axiolid-curve = "0.3.9"
 # inverts points on an elliptical cylinder (axiolid/kernel#287) and reads
 # curve paths (#290); projecting onto one is still refused. 0.3.11 certifies
 # piece lengths and seam-snapping windows (#294).
-axiolid-evaluate = "0.3.14"
+axiolid-evaluate = "0.3.15"
 # 0.3.9 subtracts placed extrusions exactly (axiolid/kernel#228, through
 # axiolid-brep-boolean 0.1.2) and reports a certified deviation per mesh
 # (#232, with axiolid-reference 0.3.4); 0.3.10 clips by half-spaces (#234),
@@ -149,13 +149,17 @@ axiolid-evaluate = "0.3.14"
 # builds on. 0.3.24 certifies runs of sections at stations along bases with
 # certified frame laws (#247), sweeps disks round closed polylines and
 # beside arcs (#248), and bounds booleans of authored-mesh and flat-faced
-# B-rep operands against their exact boolean (#266).
-axiolid-mesh-compile = "0.3.24"
+# B-rep operands against their exact boolean (#266). 0.3.25 snaps boolean
+# operands within the rounding of the coordinates the result is placed at
+# (#312) and certifies lengths of varying offsets along ellipses and
+# B-splines (#307); booleans outgrowing their declared operand bound are
+# refused by memory budget (#308), which the engine does not set.
+axiolid-mesh-compile = "0.3.25"
 axiolid-exact-compile-contract = "0.3.1"
 # 0.3.3 adds `MeshClosure::OpenSolid` (#265).
 axiolid-mesh-compile-contract = "0.3.3"
 # 0.3.4 declares its scratch as a true upper bound on a thread pool (#226).
-axiolid-mesh-boolean-boolmesh = "0.3.5"
+axiolid-mesh-boolean-boolmesh = "0.3.6"
 # 0.3.5 adds oriented stations (#246), additively; `ifc-geometry` 0.9
 # requires it for the IFC4X3 stations it lowers.
 axiolid-model = "0.3.13"

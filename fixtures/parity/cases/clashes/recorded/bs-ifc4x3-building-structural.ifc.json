@@ -139,8 +139,8 @@
           }
         }
       ],
-      "id": "8782ed8d-c28e-5499-9855-cfdc64ef4999",
-      "message": "3 clashes: [ifc-step:bs-ifc4x3-building-structural.ifc/#197] hard clash with ifc-step:bs-ifc4x3-building-structural.ifc/#147: penetration 0.0000 m exceeds tolerance 0.0000 m, graded error: the most severe grade its shared volume of 0.000000 to 0.116000 m³ may reach; [ifc-step:bs-ifc4x3-building-structural.ifc/#197] clearance clash with ifc-step:bs-ifc4x3-building-structural.ifc/#69: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4x3-building-structural.ifc/#197] clearance clash with ifc-step:bs-ifc4x3-building-structural.ifc/#93: separation 0.0000 m below required 0.0100 m",
+      "id": "a402fff7-d3e9-56c4-b420-487268c3f14f",
+      "message": "3 clashes: [ifc-step:bs-ifc4x3-building-structural.ifc/#197] hard clash with ifc-step:bs-ifc4x3-building-structural.ifc/#147: penetration 0.0000 m exceeds tolerance 0.0000 m, graded info by its shared volume of 0.000000 to 0.000000 m³; [ifc-step:bs-ifc4x3-building-structural.ifc/#197] clearance clash with ifc-step:bs-ifc4x3-building-structural.ifc/#69: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4x3-building-structural.ifc/#197] clearance clash with ifc-step:bs-ifc4x3-building-structural.ifc/#93: separation 0.0000 m below required 0.0100 m",
       "object_id": {
         "local_id": "#197",
         "source": {
@@ -172,7 +172,7 @@
         }
       ],
       "rule_id": "clash-subjects",
-      "severity": "error"
+      "severity": "info"
     },
     {
       "evidence": [
@@ -462,8 +462,8 @@
           }
         }
       ],
-      "id": "41aaab7f-f670-5121-a362-9c7a6e6c940f",
-      "message": "3 clashes: [ifc-step:bs-ifc4x3-building-structural.ifc/#261] hard clash with ifc-step:bs-ifc4x3-building-structural.ifc/#147: penetration 0.0000 m exceeds tolerance 0.0000 m, graded error: the most severe grade its shared volume of 0.000000 to 0.116000 m³ may reach; [ifc-step:bs-ifc4x3-building-structural.ifc/#261] clearance clash with ifc-step:bs-ifc4x3-building-structural.ifc/#69: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4x3-building-structural.ifc/#261] clearance clash with ifc-step:bs-ifc4x3-building-structural.ifc/#93: separation 0.0000 m below required 0.0100 m",
+      "id": "a91fe168-2145-539a-865e-55bc197bf0e1",
+      "message": "3 clashes: [ifc-step:bs-ifc4x3-building-structural.ifc/#261] hard clash with ifc-step:bs-ifc4x3-building-structural.ifc/#147: penetration 0.0000 m exceeds tolerance 0.0000 m, graded info by its shared volume of 0.000000 to 0.000000 m³; [ifc-step:bs-ifc4x3-building-structural.ifc/#261] clearance clash with ifc-step:bs-ifc4x3-building-structural.ifc/#69: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4x3-building-structural.ifc/#261] clearance clash with ifc-step:bs-ifc4x3-building-structural.ifc/#93: separation 0.0000 m below required 0.0100 m",
       "object_id": {
         "local_id": "#261",
         "source": {
@@ -495,7 +495,7 @@
         }
       ],
       "rule_id": "clash-subjects",
-      "severity": "error"
+      "severity": "info"
     },
     {
       "evidence": [

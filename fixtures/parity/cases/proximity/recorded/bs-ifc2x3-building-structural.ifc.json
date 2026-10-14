@@ -479,6 +479,52 @@
       ],
       "rule_id": "distance-walls-nearest",
       "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "containment_counts;counterparts=@counterparts;minimum_volume_ratio=@minimum_volume_ratio;combine_adjacent=@combine_adjacent;cover=@cover;minimum_count=@minimum_count;maximum_count=@maximum_count;report_orphans=@report_orphans;selection=@selection#3",
+          "source": {
+            "document": "project",
+            "system": "axioval"
+          }
+        }
+      ],
+      "id": "435dc9a7-0716-5791-94f0-d0fed7f2a516",
+      "message": "holds 0 inner elements, fewer than the minimum 1",
+      "object_id": {
+        "local_id": "#463",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "containment-cover",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "containment_counts;counterparts=@counterparts;minimum_volume_ratio=@minimum_volume_ratio;combine_adjacent=@combine_adjacent;cover=@cover;minimum_count=@minimum_count;maximum_count=@maximum_count;report_orphans=@report_orphans;selection=@selection#4",
+          "source": {
+            "document": "project",
+            "system": "axioval"
+          }
+        }
+      ],
+      "id": "850bac02-989d-57c8-8811-5e4b1ca8d144",
+      "message": "holds 0 inner elements, fewer than the minimum 1",
+      "object_id": {
+        "local_id": "#685",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "containment-cover",
+      "severity": "warning"
     }
   ],
   "not_evaluated": [
@@ -531,18 +577,6 @@
       "rule_id": "containment-cover"
     },
     {
-      "message": "its cover to ifc-step:bs-ifc2x3-building-structural.ifc/#685 is not checked: whether it lies in ifc-step:bs-ifc2x3-building-structural.ifc/#685 cannot be decided: the shared volume is 0.0000 to 1.0000 of the smaller body, ratio 0.5000",
-      "object_id": {
-        "local_id": "#1054",
-        "source": {
-          "document": "bs-ifc2x3-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "containment-cover"
-    },
-    {
       "message": "holds between 0 and 5 inner elements, so its count cannot be judged",
       "object_id": {
         "local_id": "#153",
@@ -558,42 +592,6 @@
       "message": "holds between 0 and 3 inner elements, so its count cannot be judged",
       "object_id": {
         "local_id": "#309",
-        "source": {
-          "document": "bs-ifc2x3-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "containment-cover"
-    },
-    {
-      "message": "holds between 0 and 1 inner elements, so its count cannot be judged",
-      "object_id": {
-        "local_id": "#463",
-        "source": {
-          "document": "bs-ifc2x3-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "containment-cover"
-    },
-    {
-      "message": "holds between 0 and 3 inner elements, so its count cannot be judged",
-      "object_id": {
-        "local_id": "#685",
-        "source": {
-          "document": "bs-ifc2x3-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "containment-cover"
-    },
-    {
-      "message": "its cover to ifc-step:bs-ifc2x3-building-structural.ifc/#463 is not checked: whether it lies in ifc-step:bs-ifc2x3-building-structural.ifc/#463 cannot be decided: the shared volume is 0.0000 to 1.0000 of the smaller body, ratio 0.5000",
-      "object_id": {
-        "local_id": "#837",
         "source": {
           "document": "bs-ifc2x3-building-structural.ifc",
           "system": "ifc-step"
@@ -627,18 +625,6 @@
       "rule_id": "containment-cover"
     },
     {
-      "message": "its cover to ifc-step:bs-ifc2x3-building-structural.ifc/#685 is not checked: whether it lies in ifc-step:bs-ifc2x3-building-structural.ifc/#685 cannot be decided: the shared volume is 0.0000 to 1.0000 of the smaller body, ratio 0.5000",
-      "object_id": {
-        "local_id": "#886",
-        "source": {
-          "document": "bs-ifc2x3-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "containment-cover"
-    },
-    {
       "message": "its cover to ifc-step:bs-ifc2x3-building-structural.ifc/#153 is not checked: the volume shared with ifc-step:bs-ifc2x3-building-structural.ifc/#153 is not measured, so whether it lies inside cannot be decided: the volume of ifc-step:bs-ifc2x3-building-structural.ifc/#153 is unavailable: the geometry kernel refused the measurement: the volume kernel refused a self-intersecting mesh (SelfIntersecting)",
       "object_id": {
         "local_id": "#928",
@@ -652,18 +638,6 @@
     },
     {
       "message": "its cover to ifc-step:bs-ifc2x3-building-structural.ifc/#153 is not checked: the volume shared with ifc-step:bs-ifc2x3-building-structural.ifc/#153 is not measured, so whether it lies inside cannot be decided: the volume of ifc-step:bs-ifc2x3-building-structural.ifc/#153 is unavailable: the geometry kernel refused the measurement: the volume kernel refused a self-intersecting mesh (SelfIntersecting)",
-      "object_id": {
-        "local_id": "#970",
-        "source": {
-          "document": "bs-ifc2x3-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "containment-cover"
-    },
-    {
-      "message": "its cover to ifc-step:bs-ifc2x3-building-structural.ifc/#685 is not checked: whether it lies in ifc-step:bs-ifc2x3-building-structural.ifc/#685 cannot be decided: the shared volume is 0.0000 to 1.0000 of the smaller body, ratio 0.5000",
       "object_id": {
         "local_id": "#970",
         "source": {
@@ -1686,10 +1660,10 @@
   "rules": [
     {
       "checked": 6,
-      "failed": 0,
-      "not_evaluated": 10,
+      "failed": 2,
+      "not_evaluated": 7,
       "rule_id": "containment-cover",
-      "status": "not_evaluated"
+      "status": "failed"
     },
     {
       "checked": 0,

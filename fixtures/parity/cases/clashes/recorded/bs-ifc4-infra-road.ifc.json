@@ -4221,8 +4221,8 @@
           }
         }
       ],
-      "id": "689aa40f-7155-50f1-bf51-89d7841cee8e",
-      "message": "16 clashes: [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#207: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#276: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#323: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#337: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#350: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#188] duplicate of ifc-step:bs-ifc4-infra-road.ifc/#398: the surfaces lie within 0.0000 m of each other, tolerance 0.0000 m; the copies agree in type; whether they differ in volume is unknown; [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#412: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#460: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#188] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#560: penetration 0.0000 m exceeds tolerance 0.0000 m, graded error: the most severe grade its shared volume of 0.000000 to 0.720584 m³ may reach; [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#578: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#596: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#61: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#85: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#188] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#919: penetration 0.0000 m exceeds tolerance 0.0000 m, graded info by its shared volume of 0.000000 to 0.000000 m³; [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#936: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#998: separation 0.0000 m below required 0.0100 m",
+      "id": "fdf7c807-4926-58be-a458-ca5aefb2a4da",
+      "message": "16 clashes: [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#207: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#276: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#323: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#337: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#350: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#188] duplicate of ifc-step:bs-ifc4-infra-road.ifc/#398: the surfaces lie within 0.0000 m of each other, tolerance 0.0000 m; the copies agree in type; whether they differ in volume is unknown; [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#412: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#460: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#188] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#560: penetration 0.0000 m exceeds tolerance 0.0000 m, graded info by its shared volume of 0.000000 to 0.000000 m³; [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#578: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#596: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#61: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#85: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#188] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#919: penetration 0.0000 m exceeds tolerance 0.0000 m, graded info by its shared volume of 0.000000 to 0.000000 m³; [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#936: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#188] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#998: separation 0.0000 m below required 0.0100 m",
       "object_id": {
         "local_id": "#188",
         "source": {
@@ -4345,7 +4345,7 @@
         }
       ],
       "rule_id": "clash-subjects",
-      "severity": "error"
+      "severity": "info"
     },
     {
       "evidence": [
@@ -4430,8 +4430,8 @@
           }
         }
       ],
-      "id": "ef1c8498-8c29-58f7-b8d7-f4acb2bf85a8",
-      "message": "10 clashes: [ifc-step:bs-ifc4-infra-road.ifc/#207] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#323: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#207] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#337: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#207] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#398: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#207] duplicate of ifc-step:bs-ifc4-infra-road.ifc/#412: the surfaces lie within 0.0000 m of each other, tolerance 0.0000 m; the copies agree in type; whether they differ in volume is unknown; [ifc-step:bs-ifc4-infra-road.ifc/#207] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#560: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#207] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#596: penetration 0.0000 m exceeds tolerance 0.0000 m, graded error: the most severe grade its shared volume of 0.000000 to 0.359428 m³ may reach; [ifc-step:bs-ifc4-infra-road.ifc/#207] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#61: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#207] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#85: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#207] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#919: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#207] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#936: penetration 0.0000 m exceeds tolerance 0.0000 m, graded info by its shared volume of 0.000000 to 0.000000 m³",
+      "id": "ba145c7f-aeac-502b-853a-d0bbb88889a0",
+      "message": "10 clashes: [ifc-step:bs-ifc4-infra-road.ifc/#207] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#323: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#207] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#337: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#207] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#398: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#207] duplicate of ifc-step:bs-ifc4-infra-road.ifc/#412: the surfaces lie within 0.0000 m of each other, tolerance 0.0000 m; the copies agree in type; whether they differ in volume is unknown; [ifc-step:bs-ifc4-infra-road.ifc/#207] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#560: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#207] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#596: penetration 0.0000 m exceeds tolerance 0.0000 m, graded info by its shared volume of 0.000000 to 0.000000 m³; [ifc-step:bs-ifc4-infra-road.ifc/#207] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#61: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#207] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#85: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#207] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#919: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#207] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#936: penetration 0.0000 m exceeds tolerance 0.0000 m, graded info by its shared volume of 0.000000 to 0.000000 m³",
       "object_id": {
         "local_id": "#207",
         "source": {
@@ -4512,7 +4512,7 @@
         }
       ],
       "rule_id": "clash-subjects",
-      "severity": "error"
+      "severity": "info"
     },
     {
       "evidence": [
@@ -5269,8 +5269,8 @@
           }
         }
       ],
-      "id": "65be377c-2eff-5ed0-ae62-c72f16d536b7",
-      "message": "10 clashes: [ifc-step:bs-ifc4-infra-road.ifc/#398] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#412: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#398] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#460: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#398] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#560: penetration 0.0000 m exceeds tolerance 0.0000 m, graded error: the most severe grade its shared volume of 0.000000 to 0.720584 m³ may reach; [ifc-step:bs-ifc4-infra-road.ifc/#398] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#578: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#398] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#596: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#398] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#61: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#398] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#85: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#398] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#919: penetration 0.0000 m exceeds tolerance 0.0000 m, graded info by its shared volume of 0.000000 to 0.000000 m³; [ifc-step:bs-ifc4-infra-road.ifc/#398] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#936: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#398] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#998: separation 0.0000 m below required 0.0100 m",
+      "id": "33db8a85-1812-5c1a-92db-a10bdab3b1ca",
+      "message": "10 clashes: [ifc-step:bs-ifc4-infra-road.ifc/#398] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#412: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#398] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#460: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#398] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#560: penetration 0.0000 m exceeds tolerance 0.0000 m, graded info by its shared volume of 0.000000 to 0.000000 m³; [ifc-step:bs-ifc4-infra-road.ifc/#398] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#578: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#398] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#596: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#398] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#61: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#398] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#85: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#398] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#919: penetration 0.0000 m exceeds tolerance 0.0000 m, graded info by its shared volume of 0.000000 to 0.000000 m³; [ifc-step:bs-ifc4-infra-road.ifc/#398] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#936: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#398] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#998: separation 0.0000 m below required 0.0100 m",
       "object_id": {
         "local_id": "#398",
         "source": {
@@ -5351,7 +5351,7 @@
         }
       ],
       "rule_id": "clash-subjects",
-      "severity": "error"
+      "severity": "info"
     },
     {
       "evidence": [
@@ -5404,8 +5404,8 @@
           }
         }
       ],
-      "id": "52d89b07-0af8-546e-b012-6ab292536313",
-      "message": "6 clashes: [ifc-step:bs-ifc4-infra-road.ifc/#412] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#560: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#412] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#596: penetration 0.0000 m exceeds tolerance 0.0000 m, graded error: the most severe grade its shared volume of 0.000000 to 0.359428 m³ may reach; [ifc-step:bs-ifc4-infra-road.ifc/#412] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#61: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#412] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#85: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#412] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#919: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#412] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#936: penetration 0.0000 m exceeds tolerance 0.0000 m, graded info by its shared volume of 0.000000 to 0.000000 m³",
+      "id": "4f3f4ae7-b44a-55f8-9447-57eb4ac530ee",
+      "message": "6 clashes: [ifc-step:bs-ifc4-infra-road.ifc/#412] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#560: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#412] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#596: penetration 0.0000 m exceeds tolerance 0.0000 m, graded info by its shared volume of 0.000000 to 0.000000 m³; [ifc-step:bs-ifc4-infra-road.ifc/#412] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#61: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#412] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#85: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#412] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#919: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#412] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#936: penetration 0.0000 m exceeds tolerance 0.0000 m, graded info by its shared volume of 0.000000 to 0.000000 m³",
       "object_id": {
         "local_id": "#412",
         "source": {
@@ -5458,7 +5458,7 @@
         }
       ],
       "rule_id": "clash-subjects",
-      "severity": "error"
+      "severity": "info"
     },
     {
       "evidence": [
@@ -5860,8 +5860,8 @@
           }
         }
       ],
-      "id": "f0f10dc9-7a8e-5bea-a3b0-e61bc5058797",
-      "message": "5 clashes: [ifc-step:bs-ifc4-infra-road.ifc/#659] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#672: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#659] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#685: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#659] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#744: penetration 0.0000 m exceeds tolerance 0.0000 m, graded error: the most severe grade its shared volume of 0.000000 to 0.720584 m³ may reach; [ifc-step:bs-ifc4-infra-road.ifc/#659] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#761: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#659] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#823: separation 0.0000 m below required 0.0100 m",
+      "id": "b2f081a7-cd2b-5357-a436-612eaa03da95",
+      "message": "5 clashes: [ifc-step:bs-ifc4-infra-road.ifc/#659] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#672: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#659] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#685: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#659] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#744: penetration 0.0000 m exceeds tolerance 0.0000 m, graded info by its shared volume of 0.000000 to 0.000000 m³; [ifc-step:bs-ifc4-infra-road.ifc/#659] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#761: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#659] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#823: separation 0.0000 m below required 0.0100 m",
       "object_id": {
         "local_id": "#659",
         "source": {
@@ -5907,7 +5907,7 @@
         }
       ],
       "rule_id": "clash-subjects",
-      "severity": "error"
+      "severity": "info"
     },
     {
       "evidence": [
@@ -5990,8 +5990,8 @@
           }
         }
       ],
-      "id": "15779934-5f14-5044-8e8b-22999e3d9293",
-      "message": "2 clashes: [ifc-step:bs-ifc4-infra-road.ifc/#685] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#744: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#685] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#761: penetration 0.0000 m exceeds tolerance 0.0000 m, graded error: the most severe grade its shared volume of 0.000000 to 0.359428 m³ may reach",
+      "id": "8ba5e0a2-b213-53ed-bbc2-e5f17d7ad3ce",
+      "message": "2 clashes: [ifc-step:bs-ifc4-infra-road.ifc/#685] clearance clash with ifc-step:bs-ifc4-infra-road.ifc/#744: separation 0.0000 m below required 0.0100 m; [ifc-step:bs-ifc4-infra-road.ifc/#685] hard clash with ifc-step:bs-ifc4-infra-road.ifc/#761: penetration 0.0000 m exceeds tolerance 0.0000 m, graded info by its shared volume of 0.000000 to 0.000000 m³",
       "object_id": {
         "local_id": "#685",
         "source": {
@@ -6016,7 +6016,7 @@
         }
       ],
       "rule_id": "clash-subjects",
-      "severity": "error"
+      "severity": "info"
     },
     {
       "evidence": [

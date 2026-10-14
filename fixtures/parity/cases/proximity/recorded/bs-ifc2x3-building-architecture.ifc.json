@@ -844,18 +844,6 @@
       "rule_id": "containment-furniture"
     },
     {
-      "message": "whether it lies in ifc-step:bs-ifc2x3-building-architecture.ifc/#183 cannot be decided: the shared volume is 0.0000 to 1.0000 of the smaller body, ratio 0.9000",
-      "object_id": {
-        "local_id": "#215",
-        "source": {
-          "document": "bs-ifc2x3-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "containment-furniture"
-    },
-    {
       "message": "`IfcDuctSegment` is not an IFC2X3 entity",
       "object_id": {
         "local_id": "#25",
@@ -2019,7 +2007,7 @@
     {
       "checked": 1,
       "failed": 0,
-      "not_evaluated": 36,
+      "not_evaluated": 35,
       "rule_id": "containment-furniture",
       "status": "not_evaluated"
     },

@@ -538,6 +538,20 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **Geometry**: moved to `axiolid-mesh-compile` 0.3.25, `axiolid-inspect`
+  0.3.6, `axiolid-evaluate` 0.3.15 and `axiolid-mesh-boolean-boolmesh`
+  0.3.6.
+  - **Openings near a face:** openings a rounding error short of a
+    georeferenced host's face are snapped onto it, so the host's volume is
+    measured (axiolid/kernel#312, #306).
+  - **Shared volumes:** volumes shared by bodies flush within rounding are
+    bounded tightly (axiolid/kernel#313). On the public models, 12
+    furniture and cover containments that were not evaluated now decide,
+    and 8 touching clash pairs are graded `info` by their certified zero
+    shared volume instead of `error` for an undecided one.
+  - **Sections along an ellipse:** they now have certified lengths
+    (axiolid/kernel#307), and stop at the mesh compiler's missing frame
+    bound.
 - **Space validation runs faster on large models**: the space service
   measures each object's plan footprint and each space and candidate's
   shared plan area once and keeps them, where it measured them again for

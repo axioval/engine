@@ -15765,6 +15765,22 @@ fn with_geometry_flush_openings_in_a_georeferenced_wall_are_subtracted() {
     );
     assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
     assert_eq!(finding_messages(&result).len(), 1, "{result:#}");
+    // Real files leave gaps of 2e-14 to 1e-12 m from composed storey
+    // placements, beyond a snap scaled by the operands alone. Since
+    // axiolid-mesh-compile 0.3.25 the snap reaches the rounding of the
+    // coordinates the result is placed at (axiolid/kernel#312), so the skin
+    // no longer self-intersects 5600 km out (engine#306).
+    for gap in [2e-14, 1e-13, 1e-12, 1e-11] {
+        let model = georeferenced_wall_with_flush_openings(site, turn, 0.125 - gap);
+        let (output, result) = rule(
+            &model,
+            json!({"kind": "between", "operand": volume,
+                   "low": cubic(net - 1e-6), "high": cubic(net + 1e-6)}),
+        );
+        assert_eq!(output.status.code(), Some(0), "gap {gap}: {result:#}");
+        assert_eq!(result["report"]["not_evaluated"], json!([]), "gap {gap}");
+        assert!(!unmeasured(&result), "gap {gap}: {:#}", result["geometry"]);
+    }
 }
 
 /// engine#368: the #303 wall placed 5600 km out has its coordinates rounded
@@ -20826,12 +20842,13 @@ fn with_geometry_a_run_along_an_offset_ellipse_lowers() {
 
 /// A deck sectioned along an `IfcOffsetCurveByDistances` beside an
 /// `IfcEllipse`. Since ifc-geometry 0.25 its stations lower with seam
-/// windows (openbimrs/ifc#443), where they fell to a wrong reason; the
-/// kernel cannot yet certify the length of a varying offset along an
-/// ellipse (axiolid/kernel#307), so the deck is unmeasured for that by name
-/// and never bounded.
+/// windows (openbimrs/ifc#443), where they fell to a wrong reason. Since
+/// axiolid-mesh-compile 0.3.25 the kernel certifies the length of a varying
+/// offset along an ellipse (axiolid/kernel#307), so the deck reaches the
+/// mesh compiler, which has no certified derivative bounds for a frame read
+/// by quadrature on an ellipse: unmeasured by that name, never bounded.
 #[test]
-fn with_geometry_a_run_along_offsets_by_distances_of_an_ellipse_is_refused_by_its_length() {
+fn with_geometry_a_run_along_offsets_by_distances_of_an_ellipse_reaches_the_mesh_compiler() {
     let deck = "#86=IFCCARTESIANPOINT((30.,0.));\n\
                 #87=IFCAXIS2PLACEMENT2D(#86,$);\n\
                 #84=IFCELLIPSE(#87,10.,6.);\n\
@@ -20860,8 +20877,7 @@ fn with_geometry_a_run_along_offsets_by_distances_of_an_ellipse_is_refused_by_it
         .remove("#53")
         .unwrap_or_else(|| panic!("{result:#}"));
     assert!(
-        reason.contains("certified length")
-            && reason.contains("an offset by distances along an ellipse"),
+        reason.contains("certifies no bound") && reason.contains("no certified derivative bounds"),
         "{reason}"
     );
 }

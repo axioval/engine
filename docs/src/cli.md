@@ -1588,11 +1588,12 @@ to its basis's ends, which the kernel measures (openbimrs/ifc#433), and a
 linear placement on an ellipse or B-spline trimmed at interior parameters
 derives through bounded path pieces (openbimrs/ifc#436). Since `ifc-geometry`
 0.25 a sectioned solid along such an `IfcOffsetCurveByDistances` lowers
-with seam windows (openbimrs/ifc#443), but the kernel cannot yet certify
-the length of a varying offset along an ellipse or B-spline
-(axiolid/kernel#307), so the solid is unmeasured with that reason
-(`tests/check.rs`
-`with_geometry_a_run_along_offsets_by_distances_of_an_ellipse_is_refused_by_its_length`).
+with seam windows (openbimrs/ifc#443), and since axiolid-mesh-compile
+0.3.25 the kernel certifies the length of a varying offset along an ellipse
+or B-spline (axiolid/kernel#307); the solid then reaches the mesh compiler,
+which has no certified derivative bounds for a frame read by quadrature on
+such a basis, so it is unmeasured with that reason (`tests/check.rs`
+`with_geometry_a_run_along_offsets_by_distances_of_an_ellipse_reaches_the_mesh_compiler`).
 Still refused by name: a station given as `IfcParameterValue`, a station
 basis that is an offset of an offset curve (axiolid/kernel#289), a relation mixing
 plan-measured and arc-length pieces, and an `IfcSegmentedReferenceCurve`. A product placed by an

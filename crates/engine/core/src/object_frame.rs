@@ -26,7 +26,8 @@ use thiserror::Error;
 
 use crate::services::reviewable_exact_evidence;
 use crate::{
-    DoorLeaves, DoorLeavesError, MetricDirection, MetricFrame, SnapshotBoundService, SourceSnapshot,
+    DoorLeaves, DoorLeavesError, LocalOrigins, MetricDirection, MetricFrame, SnapshotBoundService,
+    SourceSnapshot,
 };
 
 /// Failure to supply an object's frame.
@@ -207,6 +208,58 @@ impl ObjectFrameServiceHandle {
 impl SnapshotBoundService for ObjectFrameServiceHandle {
     fn source_snapshots(&self) -> &[SourceSnapshot] {
         self.0.source_snapshots()
+    }
+}
+
+impl ObjectFrameServiceHandle {
+    /// The same service answering every frame and leaf in its source's
+    /// local frame (#372): its horizontal position less the source's
+    /// [`LocalOrigin`](crate::LocalOrigin), its axes, front and evidence unchanged. A source
+    /// without an origin is answered as before.
+    pub(crate) fn in_local_frames(&self, origins: LocalOrigins) -> Self {
+        Self(Arc::new(LocalFrames {
+            inner: self.0.clone(),
+            origins,
+        }))
+    }
+}
+
+/// An object-frame service answering in local frames
+/// ([`ObjectFrameServiceHandle::in_local_frames`]).
+struct LocalFrames {
+    inner: Arc<dyn ObjectFrameService>,
+    origins: LocalOrigins,
+}
+
+/// Moves a model point into the local frame about `origin`.
+fn into_local(origin: crate::LocalOrigin) -> impl Fn([f64; 3]) -> [f64; 3] {
+    move |point| origin.point_to_local(point)
+}
+
+impl ObjectFrameService for LocalFrames {
+    fn source_snapshots(&self) -> &[SourceSnapshot] {
+        self.inner.source_snapshots()
+    }
+
+    fn object_frame(&self, object: &ObjectId) -> Result<ObjectFrame, ObjectFrameError> {
+        let frame = self.inner.object_frame(object)?;
+        if self.origins.of(&object.source).is_zero() {
+            return Ok(frame);
+        }
+        Ok(ObjectFrame {
+            frame: frame
+                .frame
+                .placed_by(into_local(self.origins.of(&object.source))),
+            ..frame
+        })
+    }
+
+    fn leaves(&self, door: &ObjectId) -> Result<DoorLeaves, DoorLeavesError> {
+        let leaves = self.inner.leaves(door)?;
+        if self.origins.of(&door.source).is_zero() {
+            return Ok(leaves);
+        }
+        Ok(leaves.placed_by(&into_local(self.origins.of(&door.source))))
     }
 }
 

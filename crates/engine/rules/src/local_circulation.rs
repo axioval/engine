@@ -949,6 +949,12 @@ struct Context<'a> {
 }
 
 impl Context<'_> {
+    /// A point of the space's map in model coordinates, as messages report
+    /// it (#372).
+    fn shown(&self, [x, y, _]: [f64; 3]) -> [f64; 2] {
+        crate::support::local_origin(self.judge.context, &self.space.source).to_model([x, y])
+    }
+
     fn describe_width(&self) -> String {
         metres(self.judge.declared.width)
     }
@@ -1214,7 +1220,7 @@ impl Context<'_> {
                 match self.end(area, node) {
                     Ok(End::Free | End::Exempt) => {}
                     Ok(End::Missing(proof)) => {
-                        let [x, y, _] = at.point();
+                        let [x, y] = self.shown(at.point());
                         missing.push(format!("({}, {})", metres(x), metres(y)));
                         proofs.push(proof);
                     }
@@ -1287,12 +1293,15 @@ impl Context<'_> {
             (PlacementOutcome::NoPlacement(proof), Exemption::No) => {
                 Ok(End::Missing(proof.evidence().clone()))
             }
-            (PlacementOutcome::NoPlacement(_), _) => Err(incomplete(format!(
-                "the path end at ({}, {}) has no free area, and whether it is short or \
-                 narrow enough to need none is not proven either way",
-                metres(x),
-                metres(y)
-            ))),
+            (PlacementOutcome::NoPlacement(_), _) => {
+                let [x, y] = self.shown([x, y, z]);
+                Err(incomplete(format!(
+                    "the path end at ({}, {}) has no free area, and whether it is short or \
+                     narrow enough to need none is not proven either way",
+                    metres(x),
+                    metres(y)
+                )))
+            }
         }
     }
 

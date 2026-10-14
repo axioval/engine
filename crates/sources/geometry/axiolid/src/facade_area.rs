@@ -578,7 +578,11 @@ impl FacadeAreaService for AxiolidFacadeAreaService {
                 band += area * deviation + perimeter * deviation * deviation;
             }
         }
-        let volume = enclosed(&faces).map_err(FacadeAreaError::Unavailable)?;
+        let origin = objects
+            .first()
+            .map(|object| self.geometry.local_origin(&object.source))
+            .unwrap_or_default();
+        let volume = enclosed(&faces, origin).map_err(FacadeAreaError::Unavailable)?;
         let band = band * (1.0 + 8.0 * f64::EPSILON);
         let (lower, upper) = (
             (volume.0 - band).next_down().max(0.0),
@@ -846,14 +850,18 @@ fn norm(a: [f64; 3]) -> f64 {
 /// Edges meet within [`SEAM`]; the volume a gap that thin may hide, along
 /// every edge at the faces' distance, widens the interval with the
 /// arithmetic's rounding.
-pub(crate) fn enclosed(faces: &[[[f64; 3]; 3]]) -> Result<(f64, f64), String> {
+pub(crate) fn enclosed(
+    faces: &[[[f64; 3]; 3]],
+    origin: axioval_engine::LocalOrigin,
+) -> Result<(f64, f64), String> {
     if faces.len() * 3 > MAX_ENVELOPE_EDGES {
         return Err(format!(
             "the envelope has more than {MAX_ENVELOPE_EDGES} face edges to match, too many to \
              prove it closed"
         ));
     }
-    if let Some([x, y, z]) = open_edge(faces) {
+    // Reported in model coordinates (#372).
+    if let Some([x, y, z]) = open_edge(faces).map(|edge| origin.point_to_model(edge)) {
         return Err(format!(
             "the faces looking outside do not close: nothing lies beyond the edge at \
              ({x:.3}, {y:.3}, {z:.3})"
@@ -1267,13 +1275,17 @@ mod tests {
     #[test]
     fn a_closed_box_encloses_its_volume_and_an_open_one_nothing() {
         let faces = cube([0.0, 0.0, 0.0], [10.0, 8.0, 3.6]);
-        let (lower, upper) = enclosed(&faces).unwrap();
+        let (lower, upper) = enclosed(&faces, axioval_engine::LocalOrigin::default()).unwrap();
         assert!(
             lower <= 288.0 && 288.0 <= upper && upper - lower < 1e-5,
             "{lower} {upper}"
         );
         let open = &faces[..11];
-        assert!(enclosed(open).unwrap_err().contains("do not close"));
+        assert!(
+            enclosed(open, axioval_engine::LocalOrigin::default())
+                .unwrap_err()
+                .contains("do not close")
+        );
     }
 
     #[test]
@@ -1340,7 +1352,7 @@ mod tests {
         candidates.extend(top.iter().copied());
         let admitted = admit(&mut faces, &candidates).unwrap();
         assert_eq!(admitted, vec![12, 13]);
-        let (lower, upper) = enclosed(&faces).unwrap();
+        let (lower, upper) = enclosed(&faces, axioval_engine::LocalOrigin::default()).unwrap();
         assert!(lower <= 8.0 && 8.0 <= upper, "{lower} {upper}");
     }
 
@@ -1358,7 +1370,7 @@ mod tests {
             faces.push([[x0, 0.0, 3.0], [x1, 0.0, 3.0], [x1, 8.0, 3.0]]);
             faces.push([[x0, 0.0, 3.0], [x1, 8.0, 3.0], [x0, 8.0, 3.0]]);
         }
-        let (lower, upper) = enclosed(&faces).unwrap();
+        let (lower, upper) = enclosed(&faces, axioval_engine::LocalOrigin::default()).unwrap();
         assert!(lower <= 240.0 && 240.0 <= upper, "{lower} {upper}");
     }
 }

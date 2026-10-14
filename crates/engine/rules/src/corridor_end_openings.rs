@@ -115,11 +115,19 @@ pub(crate) enum Judged<'a> {
 }
 
 /// How the opening `index` of the request stands against every end.
-pub(crate) fn judge(margins: Margins, ends: &CorridorEnds, index: usize) -> Judged<'_> {
+///
+/// Positions are worded in model coordinates, the local frame's `origin`
+/// added back (#372).
+pub(crate) fn judge(
+    margins: Margins,
+    ends: &CorridorEnds,
+    index: usize,
+    origin: axioval_engine::LocalOrigin,
+) -> Judged<'_> {
     let mut walls = Vec::new();
     let mut unknown = Vec::new();
     for corridor_end in ends.ends() {
-        let [x, y] = corridor_end.point();
+        let [x, y] = origin.to_model(corridor_end.point());
         match corridor_end.wall() {
             EndWall::Undecided(why) => unknown.push(format!(
                 "the wall the end near ({}, {}) runs into is undecided: {why}",
@@ -133,7 +141,9 @@ pub(crate) fn judge(margins: Margins, ends: &CorridorEnds, index: usize) -> Judg
             } => match standing(margins, &contacts[index]) {
                 Standing::In => walls.push((*start, *end, &contacts[index])),
                 Standing::Out => {}
-                Standing::Unknown(why) => unknown.push(format!("{why} ({})", wall(*start, *end))),
+                Standing::Unknown(why) => {
+                    unknown.push(format!("{why} ({})", wall(*start, *end, origin)));
+                }
             },
         }
     }
@@ -147,14 +157,17 @@ pub(crate) fn judge(margins: Margins, ends: &CorridorEnds, index: usize) -> Judg
 }
 
 /// The end walls an opening sits in, worded as a finding names them.
-pub(crate) fn described(walls: &[([f64; 2], [f64; 2], &WallContact)]) -> String {
+pub(crate) fn described(
+    walls: &[([f64; 2], [f64; 2], &WallContact)],
+    origin: axioval_engine::LocalOrigin,
+) -> String {
     walls
         .iter()
         .map(|(start, end, contact)| {
             format!(
                 "{} m from the wall {} and facing {} m of it",
                 shown(contact.gap().lower_metres(), contact.gap().upper_metres()),
-                wall(*start, *end),
+                wall(*start, *end, origin),
                 shown(
                     contact.facing().lower_metres(),
                     contact.facing().upper_metres()
@@ -165,7 +178,8 @@ pub(crate) fn described(walls: &[([f64; 2], [f64; 2], &WallContact)]) -> String 
         .join("; ")
 }
 
-fn wall(start: [f64; 2], end: [f64; 2]) -> String {
+fn wall(start: [f64; 2], end: [f64; 2], origin: axioval_engine::LocalOrigin) -> String {
+    let (start, end) = (origin.to_model(start), origin.to_model(end));
     format!(
         "({}, {})–({}, {})",
         shown(start[0], start[0]),

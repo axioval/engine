@@ -75,7 +75,10 @@ impl RuleCapability for RecessWidth {
                     (recess.width().lower_metres(), recess.width().upper_metres());
                 let described = format!(
                     "{} is {} wide and {} deep",
-                    located(recess),
+                    located(
+                        recess,
+                        crate::support::local_origin(context, &object.id.source)
+                    ),
                     shown(width_low, width_high),
                     shown(depth_low, depth_high)
                 );

@@ -9,8 +9,8 @@ use std::sync::Arc;
 use axiolid_brep::ExactBRep;
 use axiolid_core::Point3;
 use axiolid_mesh::{TriMesh, TriangleMeshView};
-use axioval_engine::{GeometryFidelity, ProximityError};
-use axioval_ir::ObjectId;
+use axioval_engine::{GeometryFidelity, LocalOrigin, LocalOrigins, ProximityError};
+use axioval_ir::{ObjectId, SourceId};
 
 use crate::exact_boundary::ExactBody;
 
@@ -49,6 +49,9 @@ pub struct AxiolidGeometry {
     /// Bodies the host subtracted some wholes' openings from
     /// ([`Self::with_whole_openings`]).
     whole_openings: BTreeMap<ObjectId, Vec<ObjectId>>,
+    /// The local frames the host states sources' meshes in
+    /// ([`Self::with_local_origins`]).
+    origins: LocalOrigins,
 }
 
 /// How a whole's body is built from its parts.
@@ -120,6 +123,23 @@ impl AxiolidGeometry {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// States that the meshes of each source `origins` names are in its
+    /// local frame (#372): its model coordinates less the origin. Services
+    /// measure in it as given and report positions (in evidence and
+    /// reasons) back in model coordinates ([`Self::local_origin`]).
+    #[must_use]
+    pub fn with_local_origins(mut self, origins: LocalOrigins) -> Self {
+        self.origins = origins;
+        self
+    }
+
+    /// The origin of the local frame `source`'s meshes are stated in, zero
+    /// when they are in its model coordinates.
+    #[must_use]
+    pub fn local_origin(&self, source: &SourceId) -> LocalOrigin {
+        self.origins.of(source)
     }
 
     /// Declares that an object occupies no volume, e.g. a storey or a zone.

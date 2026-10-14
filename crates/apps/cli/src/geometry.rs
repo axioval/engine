@@ -128,12 +128,12 @@ use axioval::engine::{
     EnvelopeMembershipEvidence, EnvelopeMembershipRequest, EnvelopeMembershipService,
     EnvelopeMembershipServiceHandle, EvidenceSession, FacadeAreaServiceHandle,
     FreeSpaceServiceHandle, GuardServiceHandle, LeafGlazingServiceHandle,
-    LinearQuantityServiceHandle, MetricRoutingServiceHandle, PlanAreaServiceHandle,
-    PlanSpanServiceHandle, PropertyRequest, PropertyResolution, PropertyResolutionServiceHandle,
-    ProximityRequest, ProximityService, ProximityServiceHandle, RelationshipEdgesRequest,
-    RelationshipQuery, RelationshipSelectionRequest, RelationshipSelectionServiceHandle,
-    SemanticRelationship, SightServiceHandle, SourceSnapshot, SpaceServiceHandle,
-    TraversalDirection, TriangleCountServiceHandle, TypeHierarchyServiceHandle,
+    LinearQuantityServiceHandle, LocalOrigin, LocalOrigins, MetricRoutingServiceHandle,
+    PlanAreaServiceHandle, PlanSpanServiceHandle, PropertyRequest, PropertyResolution,
+    PropertyResolutionServiceHandle, ProximityRequest, ProximityService, ProximityServiceHandle,
+    RelationshipEdgesRequest, RelationshipQuery, RelationshipSelectionRequest,
+    RelationshipSelectionServiceHandle, SemanticRelationship, SightServiceHandle, SourceSnapshot,
+    SpaceServiceHandle, TraversalDirection, TriangleCountServiceHandle, TypeHierarchyServiceHandle,
     VerticalExtentServiceHandle, WalkabilityServiceHandle, WalkingSurfaceServiceHandle,
 };
 use axioval::ir::{ObjectId, PropertyValue, Report, SourceId};
@@ -153,6 +153,7 @@ use std::sync::{Arc, OnceLock};
 mod alignment;
 mod authored_faces;
 mod glazing;
+mod local_frame;
 mod outer_bound;
 pub mod timings;
 
@@ -219,6 +220,9 @@ pub struct GeometryReport {
     /// Every meshed object's triangles, kept only when asked for, to draw
     /// BCF snapshots from.
     pub meshes: BTreeMap<ObjectId, bcf_snapshot::Mesh>,
+    /// The origin of the local frame the models are measured in, in
+    /// model metres (east, north), when they are placed far out (#372).
+    pub local_origin: Option<[f64; 2]>,
 }
 
 /// The integrity code of a physical product with no shape representation
@@ -399,6 +403,20 @@ pub struct Options {
     pub exact_boundaries: bool,
     /// Print each phase's time on stderr (`--timings`).
     pub timings: bool,
+    /// The frame the models are measured in (#372).
+    pub frame: Frame,
+}
+
+/// The frame [`attach`] measures models in (#372).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Frame {
+    /// About a local origin where the models are placed far from theirs
+    /// ([`local_frame`]), else their model coordinates.
+    #[default]
+    Local,
+    /// Always their model coordinates: for sessions whose geometry is
+    /// compared with another session's, which may choose another origin.
+    Model,
 }
 
 impl Options {
@@ -408,6 +426,7 @@ impl Options {
             keep_meshes: keep,
             exact_boundaries: false,
             timings: false,
+            frame: Frame::Local,
         }
     }
 
@@ -416,6 +435,15 @@ impl Options {
     pub fn with_timings(self, on: bool) -> Self {
         Self {
             timings: on,
+            ..self
+        }
+    }
+
+    /// The same, measured in model coordinates when `model` is set.
+    #[must_use]
+    pub fn with_model_frame(self, model: bool) -> Self {
+        Self {
+            frame: if model { Frame::Model } else { Frame::Local },
             ..self
         }
     }
@@ -859,7 +887,15 @@ pub fn attach(
     // cited under one source; evidence about one object cites its own.
     let source = first.source().clone();
     let mut clock = timings::Stopwatch::new(options.timings);
-    let parsed = parse(&snapshots, models)?;
+    let mut parsed = parse(&snapshots, models)?;
+    // A model placed far out is measured about a local origin (#372).
+    let origins = if options.frame == Frame::Model {
+        None
+    } else {
+        local_frame::localize(&mut parsed, &source)
+    }
+    .unwrap_or_default();
+    let origin = origins.of(&source);
     clock.lap("geometry: parse");
     let hierarchy = session
         .service::<TypeHierarchyServiceHandle>()
@@ -879,8 +915,11 @@ pub fn attach(
 
     let unaligned = unaligned(&session, &snapshots);
     let backend = ifc_geometry::compile::default_backend();
-    let mut geometry = AxiolidGeometry::new();
-    let mut report = GeometryReport::default();
+    let mut geometry = AxiolidGeometry::new().with_local_origins(origins.clone());
+    let mut report = GeometryReport {
+        local_origin: (!origin.is_zero()).then(|| origin.metres()),
+        ..GeometryReport::default()
+    };
     let mut voids: Vec<(ObjectId, Void)> = Vec::new();
     // Each built boundary, and whether its object's mesh is tessellated.
     let mut boundaries: Vec<(ObjectId, ExactBoundary, bool)> = Vec::new();
@@ -1044,7 +1083,7 @@ pub fn attach(
             geometry = geometry.with_whole_openings(id.clone(), openings.clone());
         }
         if options.keep_meshes
-            && let Some(kept) = snapshot_mesh(&body.mesh)
+            && let Some(kept) = snapshot_mesh(&body.mesh, origins.of(&id.source))
         {
             report.meshes.insert(id.clone(), kept);
         }
@@ -1097,6 +1136,7 @@ pub fn attach(
         openings: cuts,
         report: &mut report,
         keep_meshes: options.keep_meshes,
+        origins: origins.clone(),
         model_data: BTreeMap::new(),
     }
     .compose_all(&wholes);
@@ -1145,6 +1185,8 @@ pub fn attach(
         Arc::new(glazing::BodyItems::new(Arc::new(parsed))),
     );
     clock.lap("geometry: alignments and facades");
+    // Object frames and door leaves in the frame the bodies are measured in.
+    let session = session.with_local_origins(origins)?;
     let session = register(session, &snapshots, geometry, space, envelope, routes)?
         .with_host_service(FacadeAreaServiceHandle::new(Arc::new(facade)), &snapshots)?
         .with_host_service(LeafGlazingServiceHandle::new(Arc::new(glazing)), &snapshots)?
@@ -1206,6 +1248,8 @@ struct Composer<'r> {
     openings: WholeOpenings,
     report: &'r mut GeometryReport,
     keep_meshes: bool,
+    /// The local frames the models are measured in.
+    origins: LocalOrigins,
     /// Wholes unmeasured only because parts are unmeasured for model data,
     /// each with the code of the part named and that part.
     model_data: ModelDataWholes,
@@ -1305,7 +1349,7 @@ impl Composer<'_> {
                     self.report.exact_boundaries += 1;
                 }
                 if self.keep_meshes
-                    && let Some(kept) = snapshot_mesh(body.mesh())
+                    && let Some(kept) = snapshot_mesh(body.mesh(), self.origins.of(&whole.source))
                 {
                     self.report.meshes.insert(whole.clone(), kept);
                 }
@@ -3695,9 +3739,14 @@ fn applied(host: &ObjectId, body: Option<Body>) -> Meshed {
 type Meshed = Result<Option<Body>, String>;
 
 /// A mesh as the snapshot renderer takes it: positions and triangles.
-fn snapshot_mesh(mesh: &axiolid_mesh::TriMesh) -> Option<bcf_snapshot::Mesh> {
+/// A mesh's triangles for BCF snapshots, in model coordinates: a mesh
+/// measured in a local frame is moved back by its `origin` (#372).
+fn snapshot_mesh(mesh: &axiolid_mesh::TriMesh, origin: LocalOrigin) -> Option<bcf_snapshot::Mesh> {
     bcf_snapshot::Mesh::new(
-        mesh.positions.iter().map(|p| [p.x, p.y, p.z]).collect(),
+        mesh.positions
+            .iter()
+            .map(|p| origin.point_to_model([p.x, p.y, p.z]))
+            .collect(),
         mesh.triangles().collect(),
     )
 }
@@ -4272,10 +4321,28 @@ pub fn bounds(sessions: &[&EvidenceSession], report: &Report) -> BTreeMap<Object
         let measured = sessions
             .iter()
             .filter(|session| session.project().object(object).is_some())
-            .filter_map(|session| session.service::<ProximityServiceHandle>())
-            .find_map(|service| service.bounds(object).ok())
-            .map(|measured| measured.enclosing())
-            .and_then(|extent| bcf::Bounds::new(extent.min(), extent.max()));
+            .find_map(|session| {
+                let measured = session
+                    .service::<ProximityServiceHandle>()?
+                    .bounds(object)
+                    .ok()?;
+                // In model coordinates, wherever the bodies are measured.
+                let origin = session
+                    .service::<LocalOrigins>()
+                    .map(|origins| origins.of(&object.source))
+                    .unwrap_or_default();
+                let extent = measured.enclosing();
+                let grow = origin.rounding(
+                    extent
+                        .min()
+                        .into_iter()
+                        .chain(extent.max())
+                        .fold(0.0_f64, |largest, value| largest.max(value.abs())),
+                );
+                let [x0, y0, z0] = origin.point_to_model(extent.min());
+                let [x1, y1, z1] = origin.point_to_model(extent.max());
+                bcf::Bounds::new([x0 - grow, y0 - grow, z0], [x1 + grow, y1 + grow, z1])
+            });
         if let Some(measured) = measured {
             bounds.insert(object.clone(), measured);
         }

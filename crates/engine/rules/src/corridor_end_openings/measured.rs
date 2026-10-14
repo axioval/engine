@@ -78,6 +78,7 @@ impl CorridorEndSearch {
                 }
             }
         }
+        let origin = crate::support::local_origin(context, &space.id.source); // #372
         let members = request
             .subjects()
             .iter()
@@ -90,8 +91,8 @@ impl CorridorEndSearch {
                     value,
                     locator: format!("{CORRIDOR_END_OPENINGS}:{}:{opening}", space.id),
                 };
-                let (sits, walls) = match judge(margins, &ends, index) {
-                    Judged::In(walls) => (truth(true), described(&walls)),
+                let (sits, walls) = match judge(margins, &ends, index, origin) {
+                    Judged::In(walls) => (truth(true), described(&walls, origin)),
                     Judged::Out => (truth(false), String::new()),
                     Judged::Unknown(why) => (
                         MemberValue::Undecided {
@@ -103,12 +104,10 @@ impl CorridorEndSearch {
                 let (chosen, unpicked) = match picked.reasons.get(opening) {
                     _ if picked.matched.contains(opening) => (truth(true), String::new()),
                     Some((_, why)) => (MemberValue::Undecided { why: why.clone() }, why.clone()),
-                    None => (
-                        MemberValue::Undecided {
-                            why: format!("whether {opening} is selected is undecided"),
-                        },
-                        format!("whether {opening} is selected is undecided"),
-                    ),
+                    None => {
+                        let why = format!("whether {opening} is selected is undecided");
+                        (MemberValue::Undecided { why: why.clone() }, why)
+                    }
                 };
                 MeasuredMember {
                     certain: true,

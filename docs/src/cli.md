@@ -1520,6 +1520,41 @@ exactness: its coordinates round no more than the model's own do, and the
 proximity service still widens its own volume by the band of that
 rounding.
 
+A model placed far out is therefore measured in a local frame (#372). When
+the outermost placement of the first model (a placement relative to
+nothing, typically the site's) lies more than 4096 m from the origin in
+plan, its plan position becomes the local origin: every placement relative
+to nothing in every model has it subtracted from its location, in the
+file's units, before any placement is composed, so each chain composes at
+the magnitudes it reaches below the site and every mesh is built a few
+hundred metres out at most. The chosen location becomes the origin exactly,
+and another lying within a factor of two of it moves exactly too; one lying
+farther stays far out, where the reach above still counts its rounding.
+Heights never move, so storey elevations, vertical extents and heights
+above the terrain read alike in both frames. The bodies are then exact
+where their construction is, as at the origin. A model is measured in its
+model coordinates instead, as before, when any model of the check derives a
+placement from curves (an `IfcLinearPlacement`, an `IfcGridPlacement`, an
+alignment), states a representation context whose world coordinate system
+is rotated, has a product with a body but no placement, or has a placement
+whose location cannot be read: every model is measured about one origin, or
+none is. `compare` always measures in model coordinates, since it compares
+bodies and extents across two sessions.
+
+Everything that is not a length, an area or a volume moves back into model
+coordinates where it leaves the engine or meets context stated outside the
+model. Object frames and door leaves are answered in the same local frame
+as the bodies (`EvidenceSession::with_local_origins`), so clearances,
+swings and frame-based positions keep comparing like with like. Context
+zones are placed into the local frame (`ContextZone::place_in`, their
+accuracy widened by the rounding of the move unless every point moves
+exactly), measured plan points are moved back before they are placed on a
+terrain, the `x` and `y` measured values, `body_position`, positions named
+in findings, reasons and evidence, the zones' placement check and BCF
+cameras, section boxes and snapshots are all in model coordinates. The
+result's `geometry.local_origin` (additive, absent otherwise) names the
+origin in model metres.
+
 Space validation also needs roles and storeys: `IfcSpace`, `IfcSlab`, `IfcRoof`
 and `IfcBuilding` give roles, and the spatial tree gives each object's storey.
 An element the file places twice, or anything under a structure aggregated

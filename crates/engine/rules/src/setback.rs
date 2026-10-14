@@ -405,8 +405,9 @@ fn others(
     Ok((others, evidence))
 }
 
-/// The polygons of the setback at the most, as a note a reviewer reads.
-fn polygon_note(setback: &SetbackArea) -> Option<String> {
+/// The polygons of the setback at the most, as a note a reviewer reads, in
+/// model coordinates: the local frame's `origin` added back (#372).
+fn polygon_note(setback: &SetbackArea, origin: axioval_engine::LocalOrigin) -> Option<String> {
     let rings: Vec<String> = setback
         .most_polygons()
         .iter()
@@ -414,6 +415,7 @@ fn polygon_note(setback: &SetbackArea) -> Option<String> {
             polygon
                 .outer()
                 .iter()
+                .map(|point| origin.to_model(*point))
                 .map(|[x, y]| format!("{x:.3} {y:.3}"))
                 .collect::<Vec<_>>()
                 .join(", ")
@@ -594,7 +596,10 @@ fn of_area(
                 .ok_or_else(|| missing("overlap"))?
         }
     };
-    citation.notes.extend(polygon_note(&setback));
+    citation.notes.extend(polygon_note(
+        &setback,
+        crate::support::local_origin(context, &wall.source),
+    ));
     citation.related.sort();
     citation.related.dedup();
     Ok((

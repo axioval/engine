@@ -183,9 +183,10 @@ pub(crate) fn unavailable(object: &ObjectId, error: &PlanSpanError) -> Unavailab
     )
 }
 
-/// Where a recess's mouth lies, as findings name it.
-pub(crate) fn located(recess: &PlanRecess) -> String {
-    let [a, b] = recess.mouth();
+/// Where a recess's mouth lies, as findings name it: in model coordinates,
+/// the local frame's `origin` added back (#372).
+pub(crate) fn located(recess: &PlanRecess, origin: axioval_engine::LocalOrigin) -> String {
+    let [a, b] = recess.mouth().map(|point| origin.to_model(point));
     format!(
         "recess at ({:.3}, {:.3})-({:.3}, {:.3})",
         a[0], a[1], b[0], b[1]

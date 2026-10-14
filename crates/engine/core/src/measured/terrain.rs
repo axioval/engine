@@ -24,6 +24,7 @@ use axioval_ir::{ObjectId, QuantityDimension};
 
 use super::{Answer, Measures};
 use crate::coordinate_system::{MapPlacement, MapPlacementRefusal};
+use crate::local_origin::LocalOrigin;
 use crate::path::PathSegment;
 use crate::properties::PropertyResolutionError;
 use crate::terrain::{
@@ -76,9 +77,19 @@ pub(super) fn validate(call: &MeasuredCall) -> Result<(), String> {
     Ok(())
 }
 
-/// Where a model point lies in a terrain's coordinates.
+/// Where a measured point lies in a terrain's coordinates: the source's
+/// local frame (#372) back in its model coordinates, then on the terrain's.
 #[derive(Clone, Copy, Debug)]
-enum Placement {
+struct Placement {
+    /// The origin of the local frame the source is measured in.
+    origin: LocalOrigin,
+    /// The terrain's coordinates.
+    frame: Frame,
+}
+
+/// A terrain's coordinates.
+#[derive(Clone, Copy, Debug)]
+enum Frame {
     /// The terrain is in the model's coordinates.
     Model,
     /// The terrain is on the map the source's conversion maps onto.
@@ -86,31 +97,37 @@ enum Placement {
 }
 
 impl Placement {
-    /// A model plan point in the terrain's coordinates.
+    /// A measured plan point in the terrain's coordinates.
     fn plan(self, point: [f64; 2]) -> [f64; 2] {
-        match self {
-            Self::Model => point,
-            Self::Map(map) => map.to_map(point),
+        let point = self.origin.to_model(point);
+        match self.frame {
+            Frame::Model => point,
+            Frame::Map(map) => map.to_map(point),
         }
     }
 
     /// A model plan length in the terrain's coordinates.
     fn length(self, metres: f64) -> f64 {
-        match self {
-            Self::Model => metres,
-            Self::Map(map) => metres * map.scale(),
+        match self.frame {
+            Frame::Model => metres,
+            Frame::Map(map) => metres * map.scale(),
         }
     }
 
     /// A terrain elevation interval in the model's heights, rounded
-    /// outward, widened by the placement's rounding.
+    /// outward, widened by the placement's rounding: a point moved from
+    /// the local frame or onto a map rounds, and the ground's elevation
+    /// there with it.
     fn height(self, elevation: &TerrainElevation) -> Result<(f64, f64), PropertyResolutionError> {
         let measured = super::span(elevation.lower_metres(), elevation.upper_metres());
-        match self {
-            Self::Model => Ok((elevation.lower_metres(), elevation.upper_metres())),
-            Self::Map(map) => {
+        let slack = super::span(-MAP_ROUNDING_METRES, MAP_ROUNDING_METRES);
+        match self.frame {
+            Frame::Model if self.origin.is_zero() => {
+                Ok((elevation.lower_metres(), elevation.upper_metres()))
+            }
+            Frame::Model => super::bounds(measured.plus(slack)),
+            Frame::Map(map) => {
                 let offset = map.offset_metres()[2];
-                let slack = super::span(-MAP_ROUNDING_METRES, MAP_ROUNDING_METRES);
                 super::bounds(
                     measured
                         .minus(super::span(offset, offset))
@@ -244,8 +261,12 @@ impl Measures {
         object: &ObjectId,
         surface: &TerrainSurfaceStatement,
     ) -> Result<Placement, PropertyResolutionError> {
+        let origin = self.origins.of(&object.source);
         if surface.frame() == TerrainFrame::Model {
-            return Ok(Placement::Model);
+            return Ok(Placement {
+                origin,
+                frame: Frame::Model,
+            });
         }
         let refused = |why: &str| {
             Self::unavailable(
@@ -281,7 +302,10 @@ impl Measures {
                 },
             )
         })?;
-        Ok(Placement::Map(placement))
+        Ok(Placement {
+            origin,
+            frame: Frame::Map(placement),
+        })
     }
 
     /// The objects whose footprints make `object`'s outline.

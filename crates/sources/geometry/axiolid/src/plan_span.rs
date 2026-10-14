@@ -551,10 +551,15 @@ impl PlanSpanService for AxiolidPlanSpanService {
         let hull = Self::hull(object, &footprint)?;
         let (centre, slack, polygons) = Self::located(object, &footprint, &hull)?;
         let placement = placement(&polygons, centre, slack + footprint.deviation);
+        // Reported in model coordinates (#372).
+        let shown = self
+            .footprints
+            .local_origin(&object.source)
+            .to_model([centre.0, centre.1]);
         let locator = format!(
             "plan-centre:{object}:({:.6},{:.6}):{}",
-            centre.0,
-            centre.1,
+            shown[0],
+            shown[1],
             match placement {
                 CentrePlacement::Inside => "inside",
                 CentrePlacement::Outside => "outside",
@@ -601,10 +606,14 @@ impl PlanSpanService for AxiolidPlanSpanService {
             && turn == 0.0
             && halves.iter().all(|(low, high)| low == high)
             && orientation == RectangleOrientation::Unique;
+        let shown = self
+            .footprints
+            .local_origin(&object.source)
+            .to_model([centre[0], centre[1]]);
         let locator = format!(
             "plan-rectangle:{object}:({:.6},{:.6}):{}",
-            centre[0],
-            centre[1],
+            shown[0],
+            shown[1],
             orientation.name()
         );
         let evidence = Evidence {
@@ -637,10 +646,12 @@ impl PlanSpanService for AxiolidPlanSpanService {
             )));
         }
         let mut recesses = Vec::new();
+        let origin = self.footprints.local_origin(&object.source);
         for (a, b, width, depth) in pockets(&polygons) {
+            let (shown_a, shown_b) = (origin.to_model([a.0, a.1]), origin.to_model([b.0, b.1]));
             let locator = format!(
                 "plan-recess:{object}:({:.6},{:.6})-({:.6},{:.6})",
-                a.0, a.1, b.0, b.1
+                shown_a[0], shown_a[1], shown_b[0], shown_b[1]
             );
             recesses.push(PlanRecess::try_new(
                 [[a.0, a.1], [b.0, b.1]],
@@ -731,7 +742,8 @@ impl PlanSpanService for AxiolidPlanSpanService {
             .iter()
             .map(|subject| Ok((subject.clone(), self.footprint(subject)?)))
             .collect::<Result<Vec<_>, PlanSpanError>>()?;
-        corridor_ends(request, &space, &subjects)
+        let origin = self.footprints.local_origin(&request.space().source);
+        corridor_ends(request, &space, &subjects, origin)
     }
 
     fn measure_side_distances(

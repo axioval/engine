@@ -196,7 +196,8 @@ fn check(
         .map_err(|error| unavailable(&error))?;
     let mut outcomes = Vec::new();
     for (index, opening) in request.subjects().iter().enumerate() {
-        let judged = judge(declared, &ends, index);
+        let origin = crate::support::local_origin(context, &space.id.source);
+        let judged = judge(declared, &ends, index, origin);
         match (judged, undecided.get(opening)) {
             (Judged::In(walls), None) => {
                 let mut evidence = path_evidence.clone();
@@ -208,7 +209,7 @@ fn check(
                     described.push(format!(
                         "{} m from the wall {} and facing {} m of it",
                         shown(contact.gap().lower_metres(), contact.gap().upper_metres()),
-                        wall(start, end),
+                        wall(start, end, origin),
                         shown(
                             contact.facing().lower_metres(),
                             contact.facing().upper_metres()
@@ -261,11 +262,17 @@ enum Judged<'a> {
     Unknown(Vec<String>),
 }
 
-fn judge<'a>(declared: &Declaration<'_>, ends: &'a CorridorEnds, index: usize) -> Judged<'a> {
+fn judge<'a>(
+    declared: &Declaration<'_>,
+    ends: &'a CorridorEnds,
+    index: usize,
+    origin: axioval_engine::LocalOrigin,
+) -> Judged<'a> {
     let mut walls = Vec::new();
     let mut unknown = Vec::new();
     for corridor_end in ends.ends() {
-        let [x, y] = corridor_end.point();
+        // Worded in model coordinates (#372).
+        let [x, y] = origin.to_model(corridor_end.point());
         match corridor_end.wall() {
             EndWall::Undecided(why) => unknown.push(format!(
                 "the wall the end near ({}, {}) runs into is undecided: {why}",
@@ -279,7 +286,9 @@ fn judge<'a>(declared: &Declaration<'_>, ends: &'a CorridorEnds, index: usize) -
             } => match standing(declared, &contacts[index]) {
                 Standing::In => walls.push((*start, *end, &contacts[index])),
                 Standing::Out => {}
-                Standing::Unknown(why) => unknown.push(format!("{why} ({})", wall(*start, *end))),
+                Standing::Unknown(why) => {
+                    unknown.push(format!("{why} ({})", wall(*start, *end, origin)));
+                }
             },
         }
     }
@@ -292,7 +301,8 @@ fn judge<'a>(declared: &Declaration<'_>, ends: &'a CorridorEnds, index: usize) -
     }
 }
 
-fn wall(start: [f64; 2], end: [f64; 2]) -> String {
+fn wall(start: [f64; 2], end: [f64; 2], origin: axioval_engine::LocalOrigin) -> String {
+    let (start, end) = (origin.to_model(start), origin.to_model(end));
     format!(
         "({}, {})–({}, {})",
         shown(start[0], start[0]),

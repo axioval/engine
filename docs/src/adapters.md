@@ -1098,6 +1098,17 @@ only up to that rounding (#368); an open surface refuses with
 that reason (`ProximityError::Refused`), and so does a kernel refusal,
 with the kernel's.
 
+A host may state a source's meshes in a local frame, its model coordinates
+less a horizontal translation (`AxiolidGeometry::with_local_origins`, a
+`LocalOrigins` from the engine), so that a model placed in map coordinates
+is meshed at small coordinates and stays exact (#372). The services
+measure in that frame as given: their requests (frames, zones, points)
+reach them in it, since the session answers object frames there and
+context zones are placed into it. Only the positions they write into
+evidence and reasons (plan centres, rectangles, recesses, route witnesses,
+contacts, corridor end walls, lines of sight) are moved back into model
+coordinates.
+
 `AxiolidDerivedRelationshipService` derives the relationships of the
 [derived-relationship service](./services.md) from the same meshes. The host
 declares which objects are spaces (`with_space`), which are doors,

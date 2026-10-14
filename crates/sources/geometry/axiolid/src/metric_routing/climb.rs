@@ -947,8 +947,8 @@ impl AxiolidMetricRoutingService {
                 "axiolid:metric-route:farthest:unreachable:{reason}:region={region_id}:{text}:\
                  targets={}:step={step:.6}:height={height:.6}:witness=({:.6},{:.6})",
                 targets.len(),
-                point.x,
-                point.y,
+                self.shown(&region_id.source, point)[0],
+                self.shown(&region_id.source, point)[1],
             ))?;
             Ok(FarthestPointOutcome::Unreachable(
                 UnreachableRegionEvidence::new(request.clone(), at(point)?, completeness),
@@ -1169,8 +1169,8 @@ impl AxiolidMetricRoutingService {
                 } else {
                     format!("straight-line={:.6}", distance.lower_metres())
                 },
-                witness.x,
-                witness.y,
+                self.shown(&region_id.source, witness)[0],
+                self.shown(&region_id.source, witness)[1],
             ),
         );
         Ok(FarthestPointOutcome::Bounded(

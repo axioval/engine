@@ -488,6 +488,13 @@ pub struct GeometryRecord {
     /// saved before it existed, and when there is none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub whole_openings: Vec<WholeOpening>,
+    /// The origin, in model metres (east, north), of the local frame the
+    /// bodies were measured in because the models are placed far from
+    /// theirs (#372). Positions are reported in model coordinates all the
+    /// same. Additive: absent in results saved before it existed, and when
+    /// the models are measured in their model coordinates.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_origin: Option<[f64; 2]>,
 }
 
 /// An opening voiding a whole with no body of its own, and the parts its

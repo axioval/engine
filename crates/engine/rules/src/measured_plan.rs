@@ -627,7 +627,10 @@ impl PlanMeasures {
                         (
                             "place",
                             MemberValue::Text {
-                                text: crate::recess_width::located(recess),
+                                text: crate::recess_width::located(
+                                    recess,
+                                    crate::support::local_origin(context, &object.source),
+                                ),
                             },
                         ),
                         ("width", MemberValue::Measured(plan(width, at("width")))),

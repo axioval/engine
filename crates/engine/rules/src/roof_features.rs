@@ -359,11 +359,14 @@ fn outcomes(predicates: &Predicates) -> BTreeSet<Outcome> {
     found
 }
 
-/// A coordinate's middle, in millimetres, as words name a point.
-fn words(point: PointBox) -> String {
+/// A coordinate's middle, in millimetres, as words name a point: in model
+/// coordinates, the local frame's `origin` added back (#372).
+fn words(point: PointBox, origin: axioval_engine::LocalOrigin) -> String {
     let (lower, upper) = (point.lower(), point.upper());
-    let [x, y, z] = [0, 1, 2].map(|axis| {
-        let millimetres = (f64::midpoint(lower[axis], upper[axis]) * 1000.0).round() / 1000.0;
+    let middle =
+        origin.point_to_model([0, 1, 2].map(|axis| f64::midpoint(lower[axis], upper[axis])));
+    let [x, y, z] = middle.map(|middle| {
+        let millimetres = (middle * 1000.0).round() / 1000.0;
         // `-0` reads as `0`.
         millimetres + 0.0
     });
@@ -467,6 +470,9 @@ pub(crate) fn tolerance(call: &MeasuredCall) -> Result<Tolerance, Unavailable> {
 pub(crate) struct Line {
     pub(crate) edge: FaceEdge,
     outcomes: BTreeSet<Outcome>,
+    /// The origin of the local frame the roof is measured in, which words
+    /// add back (#372).
+    origin: axioval_engine::LocalOrigin,
 }
 
 impl Line {
@@ -500,7 +506,11 @@ impl Line {
 
     /// The line's ends, as words name it.
     pub(crate) fn place(&self) -> String {
-        format!("{} - {}", words(self.edge.start()), words(self.edge.end()))
+        format!(
+            "{} - {}",
+            words(self.edge.start(), self.origin),
+            words(self.edge.end(), self.origin)
+        )
     }
 
     /// Why the line of `roof` cannot be classified.
@@ -548,12 +558,14 @@ pub(crate) fn lines(
         let (reason, why) = extent_error(&error);
         (reason, format!("{roof}: {why}"))
     })?;
+    let origin = crate::support::local_origin(context, &roof.source);
     let lines = edges
         .edges()
         .iter()
         .map(|edge| Line {
             edge: edge.clone(),
             outcomes: outcomes(&predicates(edge, tolerance)),
+            origin,
         })
         .collect();
     Ok((lines, edges.evidence().clone()))

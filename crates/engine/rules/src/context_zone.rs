@@ -125,7 +125,13 @@ pub(crate) fn placed_id(
                     })?)
                 }
             };
-            zone.place(file, system.as_ref())
+            // In the local frame the source's geometry is measured in.
+            let origin = context
+                .services
+                .get::<axioval_engine::LocalOrigins>()
+                .map(|origins| origins.of(source))
+                .unwrap_or_default();
+            zone.place_in(file, system.as_ref(), origin)
                 .map_err(|why| (NotEvaluatedReason::IncompleteEvidence, why))
         },
     )

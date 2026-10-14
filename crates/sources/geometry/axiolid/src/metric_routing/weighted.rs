@@ -473,8 +473,8 @@ impl AxiolidMetricRoutingService {
             format!(
                 "axiolid:metric-route:forced:{text}:origin=({:.6},{:.6}):tolerance={tolerance:.6}:\
                  cells={cells}:lower={lower:.6}:upper={upper:.6}",
-                plan(request.origin()).x,
-                plan(request.origin()).y,
+                self.shown(&request.origin().subject().source, plan(request.origin()))[0],
+                self.shown(&request.origin().subject().source, plan(request.origin()))[1],
             ),
         );
         ForcedWalkEvidence::try_new(lower, upper, converged, evidence)

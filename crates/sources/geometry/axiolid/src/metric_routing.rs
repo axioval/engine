@@ -177,6 +177,14 @@ struct Targets {
 }
 
 impl AxiolidMetricRoutingService {
+    /// A plan point of `source`'s meshes in its model coordinates, as
+    /// evidence reports it (#372).
+    pub(crate) fn shown(&self, source: &SourceId, point: Point2) -> [f64; 2] {
+        self.geometry
+            .local_origin(source)
+            .to_model([point.x, point.y])
+    }
+
     /// Creates a service over the supplied geometry.
     #[must_use]
     pub fn new(geometry: AxiolidGeometry, source: SourceId) -> Self {
@@ -1215,8 +1223,8 @@ impl AxiolidMetricRoutingService {
                 self.portals.len(),
                 obstacles.len(),
                 self.connectors.len(),
-                point.x,
-                point.y,
+                self.shown(&region_id.source, point)[0],
+                self.shown(&region_id.source, point)[1],
             ))?;
             Ok(FarthestPointOutcome::Unreachable(
                 UnreachableRegionEvidence::new(request.clone(), at(point)?, completeness),
@@ -1329,8 +1337,8 @@ impl AxiolidMetricRoutingService {
                 } else {
                     format!("straight-line={lower:.6}")
                 },
-                witness.x,
-                witness.y,
+                self.shown(&region_id.source, witness)[0],
+                self.shown(&region_id.source, witness)[1],
             ),
         );
         Ok(FarthestPointOutcome::Bounded(

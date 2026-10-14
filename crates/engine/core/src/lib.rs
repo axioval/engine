@@ -1063,6 +1063,7 @@ mod guard;
 mod integrity;
 mod leaf_glazing;
 mod linear_quantity;
+mod local_origin;
 mod material_layers;
 mod measured;
 mod metric_routing;
@@ -1193,6 +1194,7 @@ pub use linear_quantity::{
     LinearInterval, LinearQuantityError, LinearQuantityEvidence, LinearQuantityKind,
     LinearQuantityRequest, LinearQuantityService, LinearQuantityServiceHandle, ShelfGeometry,
 };
+pub use local_origin::{LocalOrigin, LocalOrigins};
 pub use material_layers::{
     LayerAxis, LayerDirection, LayerSense, MaterialLayer, MaterialLayerError, MaterialLayerService,
     MaterialLayerServiceHandle, MaterialLayers,

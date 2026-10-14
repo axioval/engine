@@ -626,6 +626,8 @@ pub(crate) struct Measures {
     coordinates: Option<CoordinateSystemServiceHandle>,
     alignments: Option<crate::alignment::AlignmentServiceHandle>,
     terrain: Option<crate::terrain::TerrainServiceHandle>,
+    /// The local frames sources are measured in (#372).
+    origins: crate::LocalOrigins,
     host: Option<PropertyResolutionServiceHandle>,
     providers: Option<(provider::Providers, ServiceRegistry)>,
     kinds: Arc<BTreeMap<ObjectId, String>>,
@@ -660,6 +662,10 @@ impl Measures {
             terrain: services
                 .get::<crate::terrain::TerrainServiceHandle>()
                 .cloned(),
+            origins: services
+                .get::<crate::LocalOrigins>()
+                .cloned()
+                .unwrap_or_default(),
             host: host.cloned(),
             providers: services
                 .get::<provider::Providers>()
@@ -1041,22 +1047,7 @@ impl Measures {
                     extent.evidence().exact,
                 ))
             }
-            MEASURED_X | MEASURED_Y | MEASURED_Z => {
-                // A placement is read only when stated exactly.
-                let (coordinate, locator) = self.origin(name, object)?;
-                let axis = match name {
-                    MEASURED_X => 0,
-                    MEASURED_Y => 1,
-                    _ => 2,
-                };
-                Ok(Answer::Value(
-                    coordinate[axis],
-                    coordinate[axis],
-                    length,
-                    locator,
-                    true,
-                ))
-            }
+            MEASURED_X | MEASURED_Y | MEASURED_Z => self.coordinate(name, object),
             MEASURED_AREA => {
                 let area = self
                     .plan
@@ -1113,7 +1104,38 @@ impl Measures {
         Ok((frame.frame().clone(), frame.evidence().locator.clone()))
     }
 
-    /// The world coordinates of `object`'s placement origin, stated exactly.
+    /// `x`, `y` or `z`: a coordinate of `object`'s placement origin, read
+    /// only when stated exactly, in model coordinates.
+    fn coordinate(&self, name: &str, object: &ObjectId) -> Result<Answer, PropertyResolutionError> {
+        let length = Some(QuantityDimension::Length);
+        // A placement is read only when stated exactly.
+        let (coordinate, locator) = self.origin(name, object)?;
+        let axis = match name {
+            MEASURED_X => 0,
+            MEASURED_Y => 1,
+            _ => 2,
+        };
+        // In model coordinates, wherever it is measured (#372); a
+        // plan position moved back by the local origin keeps its
+        // exactness within that move's rounding.
+        let (plan, rounding) = self
+            .origins
+            .of(&object.source)
+            .to_model_bounded([coordinate[0], coordinate[1]]);
+        let (value, rounding) = match axis {
+            2 => (coordinate[2], 0.0),
+            axis => (plan[axis], rounding),
+        };
+        let (lower, upper) = if rounding > 0.0 {
+            ((value - rounding).next_down(), (value + rounding).next_up())
+        } else {
+            (value, value)
+        };
+        Ok(Answer::Value(lower, upper, length, locator, true))
+    }
+
+    /// The coordinates of `object`'s placement origin, stated exactly, in the
+    /// frame its source is measured in.
     fn origin(
         &self,
         name: &str,

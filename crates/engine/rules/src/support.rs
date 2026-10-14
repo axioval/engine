@@ -23,6 +23,20 @@ pub(crate) use axioval_engine::comparison::{
 /// Why an object or rule could not be evaluated.
 pub(crate) type Unavailable = (NotEvaluatedReason, String);
 
+/// The origin of the local frame `source`'s geometry and object frames are
+/// measured in (#372), zero unless the host measures it in one. A position
+/// a rule reports is moved back into model coordinates by it.
+pub(crate) fn local_origin(
+    context: &RuleContext<'_>,
+    source: &axioval_ir::SourceId,
+) -> axioval_engine::LocalOrigin {
+    context
+        .services
+        .get::<axioval_engine::LocalOrigins>()
+        .map(|origins| origins.of(source))
+        .unwrap_or_default()
+}
+
 pub(crate) fn invalid(message: impl Into<String>) -> Unavailable {
     (NotEvaluatedReason::InvalidDeclaration, message.into())
 }

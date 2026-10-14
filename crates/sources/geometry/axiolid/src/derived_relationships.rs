@@ -412,7 +412,12 @@ impl AxiolidDerivedRelationshipService {
                 }
             }
         }
-        let point_text = format!("({:.6},{:.6},{:.6})", point.x, point.y, point.z);
+        // Reported in model coordinates (#372).
+        let [x, y, z] = self
+            .geometry
+            .local_origin(&subject.source)
+            .point_to_model([point.x, point.y, point.z]);
+        let point_text = format!("({x:.6},{y:.6},{z:.6})");
         if !containing.is_empty() {
             return Ok(Derived {
                 edges: containing

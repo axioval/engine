@@ -15740,8 +15740,8 @@ fn with_geometry_flush_openings_in_a_georeferenced_wall_are_subtracted() {
     // The mesh compiler snaps the openings onto that face, so no skin that
     // thin is left to self-intersect once placed 5600 km out
     // (axiolid/kernel#276): the volume is the net volume. A snap that
-    // small is rounding; placed that far out, the wall is declared within
-    // the rounding of its coordinates (engine#368).
+    // small is rounding. Measured about the site's local origin (engine#372),
+    // the wall is meshed at small coordinates and stays exact.
     let model = georeferenced_wall_with_flush_openings(site, turn, 0.124_999_999_999_995);
     let (output, result) = rule(
         &model,
@@ -15752,9 +15752,9 @@ fn with_geometry_flush_openings_in_a_georeferenced_wall_are_subtracted() {
     assert_eq!(result["report"]["findings"], json!([]), "{result:#}");
     assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
     assert!(!unmeasured(&result), "{:#}", result["geometry"]);
-    assert_eq!(result["geometry"]["exact"], 0, "{:#}", result["geometry"]);
+    assert_eq!(result["geometry"]["exact"], 1, "{:#}", result["geometry"]);
     assert_eq!(
-        result["geometry"]["tessellated"], 1,
+        result["geometry"]["tessellated"], 0,
         "{:#}",
         result["geometry"]
     );
@@ -15783,17 +15783,19 @@ fn with_geometry_flush_openings_in_a_georeferenced_wall_are_subtracted() {
     }
 }
 
-/// engine#368: the #303 wall placed 5600 km out has its coordinates rounded
-/// to about 1e-9 m, so its mesh is not the solid however exact its
-/// construction: measured on it, the volume came out 2.2075750000614 m3,
-/// marked exact, an interval excluding the true 2.207575. Placed there it
-/// is declared within the rounding of its coordinates, and its volume
-/// interval holds the true value: neither at least nor at most it is
-/// decided. At the origin the same wall stays exact, its volume decided
-/// within 1e-9 m3 (widened only by the rounding of coordinates a few
-/// metres out).
+/// engine#372: the #303 wall placed 5600 km out. Measured in model
+/// coordinates its mesh's coordinates round to about 1e-9 m there, so it is
+/// not the solid however exact its construction (engine#368: its volume
+/// came out 2.2075750000614 m3, an interval excluding the true 2.207575),
+/// and #368 declared it within that rounding, which exact-only services
+/// refuse. It is measured instead about a local origin, the site's plan
+/// position, its placements composed at the magnitudes below the site:
+/// the mesh is built a few metres out, exact, and its volume interval holds
+/// the true value within 1e-9 m3, as at the origin. The result names the
+/// origin, and neither "at least" nor "at most" the true volume is a
+/// finding: the interval holds it.
 #[test]
-fn with_geometry_a_georeferenced_wall_is_not_measured_as_exact() {
+fn with_geometry_a_georeferenced_wall_is_measured_exactly_in_a_local_frame() {
     let case = Case::new("geometry-georeferenced-rounding");
     let net = 3.65 * 0.25 * 3.67 - 2.0 * 1.01 * 2.26 * 0.25;
     let volume = json!({"kind": "property", "propertySet": "axioval:measured",
@@ -15815,47 +15817,52 @@ fn with_geometry_a_georeferenced_wall_is_not_measured_as_exact() {
     };
     let turn = 0.039_608_610_093_419_1_f64.atan2(0.999_215_271_103_513);
 
-    let origin = georeferenced_wall_with_flush_openings([0.0, 0.0], 0.0, 0.125);
-    let (output, result) = rule(
-        &origin,
-        json!({"kind": "between", "operand": volume,
-               "low": cubic(net - 1e-9), "high": cubic(net + 1e-9)}),
-    );
-    assert_eq!(output.status.code(), Some(0), "{result:#}");
-    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
-    assert_eq!(result["geometry"]["exact"], 1, "{:#}", result["geometry"]);
-    assert_eq!(
-        result["geometry"]["tessellated"], 0,
-        "{:#}",
-        result["geometry"]
-    );
-
-    let far = georeferenced_wall_with_flush_openings([600_000.0, 5_600_000.0], turn, 0.125);
-    for operator in ["greaterThanOrEquals", "lessThanOrEquals"] {
-        let (output, result) = rule(&far, compare(operator, net));
-        assert_eq!(result["geometry"]["exact"], 0, "{:#}", result["geometry"]);
+    for (site, turn, origin) in [
+        ([0.0, 0.0], 0.0, Value::Null),
+        (
+            [600_000.0, 5_600_000.0],
+            turn,
+            json!([600_000.0, 5_600_000.0]),
+        ),
+    ] {
+        let label = format!("site {site:?}");
+        let model = georeferenced_wall_with_flush_openings(site, turn, 0.125);
+        let (output, result) = rule(
+            &model,
+            json!({"kind": "between", "operand": volume,
+                   "low": cubic(net - 1e-9), "high": cubic(net + 1e-9)}),
+        );
+        assert_eq!(output.status.code(), Some(0), "{label}: {result:#}");
         assert_eq!(
-            result["geometry"]["tessellated"], 1,
-            "{:#}",
+            result["report"]["not_evaluated"],
+            json!([]),
+            "{label}: {result:#}"
+        );
+        assert_eq!(
+            result["geometry"]["exact"], 1,
+            "{label}: {:#}",
             result["geometry"]
         );
         assert_eq!(
-            result["report"]["findings"],
-            json!([]),
-            "{operator}: {result:#}"
+            result["geometry"]["tessellated"], 0,
+            "{label}: {:#}",
+            result["geometry"]
         );
-        let not_evaluated = result["report"]["not_evaluated"].as_array().unwrap();
-        assert_eq!(not_evaluated.len(), 1, "{operator}: {result:#}");
-        assert_ne!(output.status.code(), Some(3), "{operator}: {result:#}");
+        assert_eq!(
+            result["geometry"]["local_origin"], origin,
+            "{label}: {:#}",
+            result["geometry"]
+        );
+        for operator in ["greaterThanOrEquals", "lessThanOrEquals"] {
+            let (output, result) = rule(&model, compare(operator, net));
+            assert_eq!(
+                result["report"]["findings"],
+                json!([]),
+                "{label} {operator}: {result:#}"
+            );
+            assert_ne!(output.status.code(), Some(3), "{label} {operator}");
+        }
     }
-    // Still within a micro-cubic-metre of it, wherever the site lies.
-    let (output, result) = rule(
-        &far,
-        json!({"kind": "between", "operand": volume,
-               "low": cubic(net - 1e-5), "high": cubic(net + 1e-5)}),
-    );
-    assert_eq!(output.status.code(), Some(0), "{result:#}");
-    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
 }
 
 /// engine#356: the same openings placed 0.5 mm off the wall's face leave a
@@ -15864,9 +15871,8 @@ fn with_geometry_a_georeferenced_wall_is_not_measured_as_exact() {
 /// origin and 5600 km out alike. Mesh-compile 0.3.16 and 0.3.17 snapped
 /// such skins away within the 1 mm tolerance (axiolid/kernel#276); since
 /// 0.3.18 the snap closes rounding residues only (axiolid/kernel#291).
-/// Placed 5600 km out, the volume is widened by the rounding of the
-/// coordinates there (engine#368), a few micro-cubic-metres over the
-/// skin's faces.
+/// Placed 5600 km out, the wall is measured about a local origin
+/// (engine#372), so its volume is as tight as at the origin.
 #[test]
 fn with_geometry_a_skin_a_fraction_of_a_millimetre_thin_is_kept() {
     let case = Case::new("geometry-georeferenced-thin-skin");
@@ -15886,7 +15892,7 @@ fn with_geometry_a_skin_a_fraction_of_a_millimetre_thin_is_kept() {
             entity("wall"),
             json!({"requirement": {"type": "expression", "value":
                 {"kind": "between", "operand": volume,
-                 "low": cubic(net - 1e-5), "high": cubic(net + 1e-5)}}}),
+                 "low": cubic(net - 1e-6), "high": cubic(net + 1e-6)}}}),
         );
         assert_eq!(output.status.code(), Some(0), "{label}: {result:#}");
         assert_eq!(
@@ -22098,8 +22104,19 @@ impl Case {
     /// One expression rule over every building of [`parcel_buildings`],
     /// with the zones supplied unless `zones` is false.
     fn zone_rule(&self, requirement: &Value, zones: bool) -> (Output, Value) {
-        self.write("model.ifc", &parcel_buildings());
-        let path = self.write("zones.geojson", PARCEL_ZONES);
+        self.zone_rule_in(&parcel_buildings(), PARCEL_ZONES, requirement, zones)
+    }
+
+    /// [`Self::zone_rule`] over `model` and the zones `zones` states.
+    fn zone_rule_in(
+        &self,
+        model: &str,
+        zones_text: &str,
+        requirement: &Value,
+        zones: bool,
+    ) -> (Output, Value) {
+        self.write("model.ifc", model);
+        let path = self.write("zones.geojson", zones_text);
         let path = path.to_str().unwrap().to_owned();
         let args: Vec<&str> = if zones {
             vec!["--zones", &path]
@@ -22186,6 +22203,101 @@ fn a_building_crossing_its_limit_is_found_with_the_area_outside() {
             .contains("no supplied context zone is `B9`"),
         "{result:#}"
     );
+}
+
+/// [`parcel_buildings`] and [`PARCEL_ZONES`] moved together to easting
+/// 600 000 m and northing 5 600 000 m: every building placed there, every
+/// zone stated there in the model's coordinates.
+fn georeferenced_parcel() -> (String, String) {
+    fn moved(value: &mut Value, east: f64, north: f64) {
+        match value {
+            Value::Array(items) if items.len() == 2 && items.iter().all(Value::is_number) => {
+                let [x, y] = [0, 1].map(|axis| items[axis].as_f64().unwrap());
+                *value = json!([x + east, y + north]);
+            }
+            Value::Array(items) => items.iter_mut().for_each(|item| moved(item, east, north)),
+            _ => {}
+        }
+    }
+    let (east, north) = (600_000, 5_600_000);
+    let model = parcel_buildings().replace(
+        "IFCCARTESIANPOINT((0.,0.,0.00))",
+        &format!("IFCCARTESIANPOINT(({east}.,{north}.,0.00))"),
+    );
+    let mut zones: Value = serde_json::from_str(PARCEL_ZONES).unwrap();
+    for feature in zones["features"].as_array_mut().unwrap() {
+        moved(
+            &mut feature["geometry"]["coordinates"],
+            f64::from(east),
+            f64::from(north),
+        );
+    }
+    (model, zones.to_string())
+}
+
+/// engine#372: the buildings and zones of the parcel, moved together 5600
+/// km out, are judged as at the origin: the bodies are measured about a
+/// local origin, the zones are brought into that frame, and the building
+/// crossing its limit by 0.3 m along 8 m is found with the same 2.4 m²
+/// outside, the plot ratio decided the same way, each building exact.
+#[test]
+fn zones_of_a_georeferenced_model_are_judged_as_at_its_origin() {
+    let case = Case::new("zone-georeferenced");
+    let (model, zones) = georeferenced_parcel();
+    let outside = measured_against(
+        "zone_outside_area;zone=B1",
+        "lessThanOrEquals",
+        &json!({"type": "quantity", "value": 0.0, "unit": "m2"}),
+    );
+    let ratio = |operator: &str, limit: f64| {
+        json!({"kind": "compare", "operator": operator, "label": "value",
+               "left": {"kind": "divide",
+                        "left": {"kind": "property", "propertySet": "axioval:measured",
+                                 "property": "zone_footprint_area;zone=P1;elements=IfcBuildingElementProxy"},
+                        "right": {"kind": "property", "propertySet": "axioval:measured",
+                                  "property": "zone_area;zone=P1"}},
+               "right": {"kind": "literal", "value": {"type": "number", "value": limit}}})
+    };
+    let line = measured_against(
+        "zone_distance;zone=L1",
+        "greaterThanOrEquals",
+        &json!({"type": "quantity", "value": 3.0, "unit": "m"}),
+    );
+    for requirement in [
+        outside,
+        ratio("lessThanOrEquals", 0.4),
+        ratio("lessThanOrEquals", 0.15),
+        line,
+    ] {
+        let (at_origin, expected) = case.zone_rule(&requirement, true);
+        let (output, result) = case.zone_rule_in(&model, &zones, &requirement, true);
+        assert_eq!(
+            output.status.code(),
+            at_origin.status.code(),
+            "{requirement}: {}",
+            stderr(&output)
+        );
+        assert_eq!(
+            result["report"]["findings"], expected["report"]["findings"],
+            "{requirement}"
+        );
+        assert_eq!(
+            result["report"]["not_evaluated"], expected["report"]["not_evaluated"],
+            "{requirement}"
+        );
+        assert_eq!(result["geometry"]["exact"], 3, "{:#}", result["geometry"]);
+        assert_eq!(
+            result["geometry"]["local_origin"],
+            json!([600_000.0, 5_600_000.0]),
+            "{:#}",
+            result["geometry"]
+        );
+        // The zones are found where the model lies, in its coordinates.
+        assert_eq!(
+            result["zone_files"][0]["placements"][0]["coordinates"], "overlap",
+            "{result:#}"
+        );
+    }
 }
 
 /// engine#327: the plot ratio GRZ of parcel P1 is the 110 m² its two

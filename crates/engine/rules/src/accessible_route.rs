@@ -1156,7 +1156,9 @@ impl Judge<'_> {
     /// Where and why a stretch of one route space stops the body.
     fn stretch_reason(&self, stretch: &WalkableStretch) -> String {
         let surface = stretch.surface();
-        let [x, y, z] = stretch.at();
+        // Reported in model coordinates (#372).
+        let [x, y, z] = crate::support::local_origin(self.context, &surface.source)
+            .point_to_model(stretch.at());
         let at = format!("({}, {}, {})", metres(x), metres(y), metres(z));
         let listed = || {
             stretch

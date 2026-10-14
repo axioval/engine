@@ -171,6 +171,13 @@ impl MetricFrame {
     pub fn origin(&self) -> &MetricPoint {
         &self.origin
     }
+    /// The same frame with its origin moved by `place` (#372).
+    pub(crate) fn placed_by(&self, place: impl Fn([f64; 3]) -> [f64; 3]) -> Self {
+        Self {
+            origin: self.origin.placed_by(place),
+            ..self.clone()
+        }
+    }
     pub fn right(&self) -> MetricDirection {
         self.right
     }

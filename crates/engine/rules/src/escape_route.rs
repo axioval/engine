@@ -3603,8 +3603,11 @@ impl Judge<'_, '_> {
         if let Some((start, travel)) = &worst
             && travel.lower > maximum
         {
+            // Reported in model coordinates (#372).
+            let origin = crate::support::local_origin(self.context, &space.id.source);
             let place = travel
                 .at
+                .map(|point| origin.to_model(point))
                 .map(|[x, y]| format!(", around ({x:.2}, {y:.2}),"))
                 .unwrap_or_default();
             let none = match &escape.compartment {

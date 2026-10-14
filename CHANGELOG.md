@@ -787,6 +787,29 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **Georeferenced models are measured exactly again**: since #368 every
+  body of a model placed in map coordinates (its site 5600 km out) was
+  declared within the rounding of its coordinates, so services needing
+  exact evidence refused it; on a large private model space validation fell
+  from 12,592 findings and 355 not evaluated to 967 and 2,447. The CLI now
+  measures such a model about a local origin, the plan position of its
+  outermost placement, subtracted from every placement relative to nothing
+  before anything is composed, so meshes are built at small coordinates
+  and are exact where their construction is; heights never move. Object
+  frames and door leaves are answered in the same frame
+  (`EvidenceSession::with_local_origins`, `LocalOrigins`), context zones
+  are placed into it (`ContextZone::place_in`), and the terrain, the `x`,
+  `y` and `body_position` values, positions in messages and evidence, the
+  zones' placement check and BCF cameras and snapshots read model
+  coordinates. A model deriving placements from curves, stating a rotated
+  world coordinate system or placing a body nowhere is measured as before;
+  `compare` always is. The result names the origin
+  (`geometry.local_origin`). On that model space validation reports 12,592
+  findings and 370 not evaluated: two landing slabs whose authored face
+  runs back along itself, accepted while rounding 5600 km out hid it, are
+  now refused as model data (`shape.self-intersecting-face`), as at the
+  origin ([#372](https://github.com/axioval/engine/issues/372)).
+
 - **Bodies placed in map coordinates are no longer exact**: a planar body
   (a wall less its openings) placed by its world placement far from the
   origin has its mesh's coordinates rounded there, about 1e-9 m at 5600

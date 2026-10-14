@@ -2301,11 +2301,17 @@ impl ProximityService for AxiolidProximityService {
             .and_then(Boundaries::certified_separation);
         // Where the exact boundaries are shown to meet, the evidence names
         // the point they share (axiolid/kernel#273).
-        let contact = certified
-            .and_then(|(_, contact)| contact)
-            .map_or_else(String::new, |point| {
-                format!(":contact=({:.6},{:.6},{:.6})", point.x, point.y, point.z)
-            });
+        let contact =
+            certified
+                .and_then(|(_, contact)| contact)
+                .map_or_else(String::new, |point| {
+                    // Reported in model coordinates (#372).
+                    let [x, y, z] = self
+                        .geometry
+                        .local_origin(&request.subject().source)
+                        .point_to_model([point.x, point.y, point.z]);
+                    format!(":contact=({x:.6},{y:.6},{z:.6})")
+                });
 
         let measured = ProximityEvidence::try_new(
             request.clone(),

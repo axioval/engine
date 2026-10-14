@@ -83,6 +83,12 @@ pub struct AxiolidPlanAreaService {
 }
 
 impl AxiolidPlanAreaService {
+    /// The origin of the local frame `source`'s meshes are stated in
+    /// (#372), for reporting positions in model coordinates.
+    pub(crate) fn local_origin(&self, source: &SourceId) -> axioval_engine::LocalOrigin {
+        self.geometry.local_origin(source)
+    }
+
     /// Creates a service over the supplied geometry.
     #[must_use]
     pub fn new(geometry: AxiolidGeometry, source: SourceId) -> Self {

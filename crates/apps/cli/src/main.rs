@@ -1001,6 +1001,7 @@ fn geometry_record(report: geometry::GeometryReport) -> digest::GeometryRecord {
                 subtracted_from,
             })
             .collect(),
+        local_origin: report.local_origin,
     }
 }
 

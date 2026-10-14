@@ -463,6 +463,107 @@ fn the_highest_floor_level_is_measured_above_the_mean_terrain() {
     );
 }
 
+/// [`building`] placed far out in its own model coordinates: the slab's
+/// and every storey's placement moved by `(east, north)`.
+fn building_far_out(x0: f64, (east, north): (f64, f64)) -> String {
+    let mut text = building(x0).replace(
+        "#3=IFCLOCALPLACEMENT($,#2);",
+        &format!(
+            "#10=IFCCARTESIANPOINT(({east:?},{north:?},0.));\n\
+             #9=IFCAXIS2PLACEMENT3D(#10,$,$);\n\
+             #3=IFCLOCALPLACEMENT($,#9);"
+        ),
+    );
+    for z in ["100.5", "103.5", "106.5"] {
+        text = text.replace(
+            &format!("IFCCARTESIANPOINT((0.,0.,{z}))"),
+            &format!("IFCCARTESIANPOINT(({east:?},{north:?},{z}))"),
+        );
+    }
+    text
+}
+
+/// engine#372: the building and the terrain moved together 5600 km out in
+/// the model's coordinates stand as at the origin: the bodies are measured
+/// about a local origin and the slab's outline is placed back on the
+/// terrain, so each storey stands as high above it (0, 3 and 6 m within
+/// the accuracy) and the far building's storeys are not evaluated alike.
+#[test]
+fn a_georeferenced_building_stands_above_the_terrain_as_at_its_origin() {
+    let case = Case::new("terrain-georeferenced");
+    let (east, north) = (600_000.0, 5_600_000.0);
+    let height = json!({"kind": "property", "propertySet": "axioval:measured",
+                        "property": "above_terrain;terrain=original;of=level;outline=IfcSlab",
+                        "label": "height"});
+    let terrain = [
+        "--terrain",
+        "original@0.05=ground.xml",
+        "--terrain-in",
+        "model",
+    ];
+    let run = |moved: bool| {
+        let (dx, dy) = if moved { (east, north) } else { (0.0, 0.0) };
+        // Rising 0.1 per metre eastwards, 100 m high at the building's x 0.
+        let text = sloped_landxml(
+            "Ground",
+            (dx - 50.0, dy - 50.0, 100.0),
+            5,
+            ((-0.1_f64).mul_add(dx, 100.0), 0.1),
+        );
+        case.write("ground.xml", &text);
+        let models = [
+            ("near.ifc", building_far_out(0.0, (dx, dy))),
+            ("far.ifc", building_far_out(1000.0, (dx, dy))),
+        ];
+        case.storey_rule(&models, below(&height), &terrain)
+    };
+    let (at_origin, expected) = run(false);
+    let (output, result) = run(true);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(output.status.code(), at_origin.status.code());
+    assert_eq!(
+        result["geometry"]["local_origin"],
+        json!([east, north]),
+        "{:#}",
+        result["geometry"]
+    );
+    let heights = |result: &Value| {
+        let mut found: Vec<(String, (f64, f64))> = result["report"]["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|finding| {
+                (
+                    finding["object_id"]["local_id"]
+                        .as_str()
+                        .unwrap()
+                        .to_owned(),
+                    bounds_of(finding["message"].as_str().unwrap()),
+                )
+            })
+            .collect();
+        found.sort_by(|a, b| a.0.cmp(&b.0));
+        found
+    };
+    let (found, before) = (heights(&result), heights(&expected));
+    assert_eq!(found.len(), 3, "{result:#}");
+    for (((storey, (lower, upper)), (_, (low, high))), level) in
+        found.iter().zip(&before).zip([0.0, 3.0, 6.0])
+    {
+        assert!(
+            *lower <= level - 0.05 && *upper >= level + 0.05,
+            "{storey}: {lower}..{upper} holds {level} ± 0.05"
+        );
+        assert!(
+            (lower - low).abs() < 1e-5 && (upper - high).abs() < 1e-5,
+            "{storey}: {lower}..{upper} as at the origin, {low}..{high}"
+        );
+    }
+    let open = |result: &Value| result["report"]["not_evaluated"].as_array().unwrap().len();
+    assert_eq!(open(&result), 3, "{result:#}");
+    assert_eq!(open(&result), open(&expected));
+}
+
 /// [`building`] georeferenced: its x 0, y 0, z 0 at easting 500 000 m,
 /// northing 5 600 000 m and height 50 m of EPSG:25832, axes unturned.
 fn building_on_map(x0: f64) -> String {

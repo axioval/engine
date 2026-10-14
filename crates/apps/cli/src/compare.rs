@@ -136,6 +136,7 @@ fn combined(
         unmeasured,
         openings_taken_as_applied: applied,
         whole_openings,
+        local_origin: None,
     };
     (record, bodies)
 }
@@ -194,7 +195,11 @@ pub fn compare(mut args: CompareArgs) -> Result<Outcome, Box<dyn Error>> {
     let (base, revised, meshed) = if args.geometry {
         // Only the surface distance reads exact boundaries: bounds never do.
         let keep = geometry::Options::meshes(args.output.bcf_view.snapshots)
-            .with_exact_boundaries(args.geometry_mode == "mesh" && !args.no_exact_boundaries);
+            .with_exact_boundaries(args.geometry_mode == "mesh" && !args.no_exact_boundaries)
+            // Bounds and surfaces are compared across the two sessions, so
+            // both are measured in model coordinates, never about origins
+            // each would choose for itself (#372).
+            .with_model_frame(true);
         let (base, mut before) = geometry::attach(base, &base_bytes, keep)
             .map_err(|error| format!("geometry of {}: {error}", args.base.display()))?;
         let (revised, mut after) = geometry::attach(revised, &revised_bytes, keep)

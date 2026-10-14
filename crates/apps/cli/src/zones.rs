@@ -181,7 +181,8 @@ fn unsupplied(plan: &ExecutionPlan) -> Vec<IntegrityRecord> {
 }
 
 /// The plan extent `[west, south, east, north]` of every measured body
-/// of `source`, grown by each one's chord deviation, or why there is none.
+/// of `source`, grown by each one's chord deviation, in model coordinates,
+/// or why there is none.
 fn model_extent(
     session: &EvidenceSession,
     source: &axioval::ir::SourceId,
@@ -197,7 +198,15 @@ fn model_extent(
         let Ok(bounds) = service.bounds(&object.id) else {
             continue;
         };
-        let (min, max) = (bounds.enclosing().min(), bounds.enclosing().max());
+        // In model coordinates, wherever the bodies are measured (#372).
+        let origin = session
+            .service::<axioval::engine::LocalOrigins>()
+            .map(|origins| origins.of(source))
+            .unwrap_or_default();
+        let (min, max) = (
+            origin.point_to_model(bounds.enclosing().min()),
+            origin.point_to_model(bounds.enclosing().max()),
+        );
         let [west, south, east, north] = extent.get_or_insert([
             f64::INFINITY,
             f64::INFINITY,

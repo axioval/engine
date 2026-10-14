@@ -1219,7 +1219,11 @@ impl AxiolidWalkabilityService {
         // Floor too narrow for the body between the pieces of one surface.
         for ((floor, ground), split) in floors.iter().zip(&grounds).zip(&parts) {
             for (a, b, stretch) in split.stretches(floor, ground, radius)? {
-                let [x, y, z] = stretch.at();
+                // Reported in model coordinates (#372).
+                let [x, y, z] = self
+                    .geometry
+                    .local_origin(&floor.id.source)
+                    .point_to_model(stretch.at());
                 let locator = format!(
                     "stretch:{}:{}:at={x:.4},{y:.4},{z:.4}",
                     floor.id,

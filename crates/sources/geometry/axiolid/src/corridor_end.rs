@@ -69,6 +69,7 @@ pub(crate) fn corridor_ends(
     request: &CorridorEndRequest,
     space: &Footprint,
     subjects: &[(ObjectId, Footprint)],
+    origin: axioval_engine::LocalOrigin,
 ) -> Result<CorridorEnds, PlanSpanError> {
     let named = request.space();
     if space.deviation > 0.0 {
@@ -102,7 +103,9 @@ pub(crate) fn corridor_ends(
             Ok((start, end)) => {
                 let mut contacts = Vec::with_capacity(measured_subjects.len());
                 for (subject, deviation, footprint) in &measured_subjects {
-                    contacts.push(contact(subject, *deviation, footprint, named, start, end)?);
+                    contacts.push(contact(
+                        subject, *deviation, footprint, named, start, end, origin,
+                    )?);
                 }
                 EndWall::Decided {
                     start: [start.0, start.1],
@@ -377,6 +380,7 @@ fn contact(
     space: &ObjectId,
     start: (f64, f64),
     end: (f64, f64),
+    origin: axioval_engine::LocalOrigin,
 ) -> Result<WallContact, PlanSpanError> {
     let segments: Vec<(Point, Point)> = footprint
         .iter()
@@ -405,9 +409,14 @@ fn contact(
             (low.min(along), high.max(along))
         });
     let facing = (last.min(length) - first.max(0.0)).max(0.0);
+    // Reported in model coordinates (#372).
+    let (shown_start, shown_end) = (
+        origin.to_model([start.0, start.1]),
+        origin.to_model([end.0, end.1]),
+    );
     let wall = format!(
         "({:.6},{:.6})-({:.6},{:.6})",
-        start.0, start.1, end.0, end.1
+        shown_start[0], shown_start[1], shown_end[0], shown_end[1]
     );
     let measured = |value: f64, slack: f64, cap: f64, what: &str| {
         let locator = format!("corridor-end-{what}:{space}:{subject}:wall={wall}");

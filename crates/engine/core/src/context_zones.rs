@@ -42,6 +42,7 @@ use std::sync::Arc;
 use serde_json::Value;
 
 use crate::coordinate_system::{MapPlacement, MapPlacementRefusal, SourceCoordinateSystem};
+use crate::local_origin::LocalOrigin;
 use crate::zone_area::{PlanPolygon, signed_double_area};
 
 /// The locator prefix of a zone's statement:
@@ -270,6 +271,53 @@ impl ContextZone {
     /// Why the transform into the source's model coordinates cannot be
     /// established.
     pub fn place(
+        &self,
+        file: &ContextZones,
+        system: Option<&SourceCoordinateSystem>,
+    ) -> Result<PlacedZone, String> {
+        self.place_in(file, system, LocalOrigin::default())
+    }
+
+    /// The zone placed as [`Self::place`] places it, then brought into the
+    /// local frame about `origin` the source's geometry is measured in
+    /// (#372): every point less the origin, the accuracy widened by the
+    /// rounding of that difference unless every point's is exact.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::place`].
+    pub fn place_in(
+        &self,
+        file: &ContextZones,
+        system: Option<&SourceCoordinateSystem>,
+        origin: LocalOrigin,
+    ) -> Result<PlacedZone, String> {
+        let placed = self.place_in_model(file, system)?;
+        if origin.is_zero() {
+            return Ok(placed);
+        }
+        let (mut exact, mut rounding) = (true, 0.0_f64);
+        let shape = placed.shape.map_points(|point| {
+            let (local, held) = origin.to_local_exactly(point);
+            exact &= held;
+            rounding = rounding.max(origin.rounding(point[0].abs().max(point[1].abs())));
+            local
+        })?;
+        let (accuracy_metres, exact) = if exact {
+            (placed.accuracy_metres, placed.exact)
+        } else {
+            ((placed.accuracy_metres + rounding).next_up(), false)
+        };
+        Ok(PlacedZone {
+            shape,
+            accuracy_metres,
+            exact,
+            ..placed
+        })
+    }
+
+    /// [`Self::place`]: the zone in the source's model coordinates.
+    fn place_in_model(
         &self,
         file: &ContextZones,
         system: Option<&SourceCoordinateSystem>,

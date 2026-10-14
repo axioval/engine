@@ -167,6 +167,14 @@ impl MetricPoint {
     pub fn coordinates_metres(&self) -> [f64; 3] {
         self.coordinates_metres
     }
+
+    /// The same point with its coordinates moved by `place` (#372).
+    pub(crate) fn placed_by(&self, place: impl Fn([f64; 3]) -> [f64; 3]) -> Self {
+        Self {
+            subject: self.subject.clone(),
+            coordinates_metres: place(self.coordinates_metres),
+        }
+    }
 }
 
 /// Geometry-independent mobility envelope used by route providers.

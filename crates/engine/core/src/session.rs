@@ -619,6 +619,46 @@ impl EvidenceSession {
         Ok(self)
     }
 
+    /// Measures each source `origins` names in its local frame (#372).
+    ///
+    /// The host's geometry services must already state that source's
+    /// bodies in it, its model coordinates less the origin. The session
+    /// registers `origins` ([`crate::LocalOrigins`], which context zones,
+    /// the terrain and reported positions read) and answers every object
+    /// frame and door leaf of such a source in the same local frame, so
+    /// frames and bodies stay in one frame. Without origins nothing
+    /// changes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when an origin names a source the session does not
+    /// hold, or origins are already registered.
+    pub fn with_local_origins(
+        mut self,
+        origins: crate::LocalOrigins,
+    ) -> Result<Self, EvidenceSessionError> {
+        if origins.is_empty() {
+            return Ok(self);
+        }
+        for (source, _) in origins.iter() {
+            if !self.snapshots.contains_key(source) {
+                return Err(EvidenceSessionError::ServiceSnapshotMismatch(
+                    source.clone(),
+                ));
+            }
+        }
+        if let Some(frames) = self
+            .services
+            .get::<crate::ObjectFrameServiceHandle>()
+            .cloned()
+        {
+            self.services
+                .replace(frames.in_local_frames(origins.clone()));
+        }
+        self.services.register(origins)?;
+        Ok(self)
+    }
+
     fn check_bindings(&self, bindings: &[SourceSnapshot]) -> Result<(), EvidenceSessionError> {
         if bindings.is_empty() {
             return Err(EvidenceSessionError::UnboundService);

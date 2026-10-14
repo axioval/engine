@@ -243,6 +243,14 @@ impl SwingSector {
         self.hinge
     }
 
+    /// The same sector with its hinge moved by `place` (#372).
+    pub(crate) fn placed_by(&self, place: &impl Fn([f64; 3]) -> [f64; 3]) -> Self {
+        Self {
+            hinge: place(self.hinge),
+            ..*self
+        }
+    }
+
     /// The radius, the leaf's width.
     #[must_use]
     pub fn radius_metres(&self) -> f64 {
@@ -494,6 +502,16 @@ impl DoorLeaf {
         Ok(self)
     }
 
+    /// The same leaf with its origin and sectors moved by `place` (#372).
+    pub(crate) fn placed_by(&self, place: &impl Fn([f64; 3]) -> [f64; 3]) -> Self {
+        Self {
+            origin: place(self.origin),
+            swing: self.swing.map(|sector| sector.placed_by(place)),
+            tilt: self.tilt.map(|sector| sector.placed_by(place)),
+            ..self.clone()
+        }
+    }
+
     /// Where the leaf sits in its door.
     #[must_use]
     pub fn position(&self) -> LeafPosition {
@@ -657,6 +675,18 @@ impl DoorLeaves {
     #[must_use]
     pub fn door(&self) -> &ObjectId {
         &self.door
+    }
+
+    /// The same leaves moved by `place` (#372).
+    pub(crate) fn placed_by(&self, place: &impl Fn([f64; 3]) -> [f64; 3]) -> Self {
+        Self {
+            leaves: self
+                .leaves
+                .iter()
+                .map(|leaf| leaf.placed_by(place))
+                .collect(),
+            ..self.clone()
+        }
     }
 
     /// The operation type, as the source names it (`SINGLE_SWING_LEFT`).

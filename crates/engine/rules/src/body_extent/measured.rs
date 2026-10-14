@@ -124,7 +124,20 @@ fn take(
         let extent = extents
             .measure_directional_extent(object, measured.axes[axis.index()])
             .map_err(|error| extent_error(&error))?;
-        let end = |end: ElevationInterval| (end.lower_metres(), end.upper_metres());
+        // An end's position along the axis in model coordinates (#372):
+        // the body is measured in its source's local frame, so the
+        // origin's projection onto the axis is added back, rounded outward.
+        let origin = crate::support::local_origin(context, &object.source);
+        let offset = origin.along(measured.axes[axis.index()].components());
+        let end = |end: ElevationInterval| {
+            let (lower, upper) = (end.lower_metres(), end.upper_metres());
+            if origin.is_zero() {
+                return (lower, upper);
+            }
+            let (lower, upper) = (lower + offset, upper + offset);
+            let rounding = origin.rounding(lower.abs().max(upper.abs()));
+            ((lower - rounding).next_down(), (upper + rounding).next_up())
+        };
         Ok(Extent {
             length: extent.length_metres(),
             low: end(extent.lower()),

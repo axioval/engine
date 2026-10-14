@@ -103,14 +103,12 @@ impl SightService for AxiolidSightService {
             .deviation_metres();
         let slack = DISTANCE_SLACK * (1.0 + distance) + deviation;
         let bounds = ((distance - slack).max(0.0), distance + slack);
-        let locator = |what: &str| {
-            format!(
-                "line-of-sight:({x},{y},{z}):{target}:{what}",
-                x = request.eye()[0],
-                y = request.eye()[1],
-                z = request.eye()[2]
-            )
-        };
+        // The eye in model coordinates (#372).
+        let [x, y, z] = self
+            .geometry
+            .local_origin(&target.source)
+            .point_to_model(request.eye());
+        let locator = |what: &str| format!("line-of-sight:({x},{y},{z}):{target}:{what}");
         let evidence = |what: &str| Evidence {
             source: target.source.clone(),
             locator: locator(what),
@@ -218,7 +216,10 @@ impl SightService for AxiolidSightService {
                 (greatest + ANGLE_SLACK).min(FRAC_PI_2),
             )
         };
-        let [x, y, z] = request.eye();
+        let [x, y, z] = self
+            .geometry
+            .local_origin(&request.from().source)
+            .point_to_model(request.eye());
         let [east, north] = request.toward();
         let named = highest
             .iter()

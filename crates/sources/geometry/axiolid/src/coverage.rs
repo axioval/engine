@@ -159,6 +159,7 @@ pub(crate) fn measure(
         let effect = match request.reach() {
             EffectReach::Grown => grown(service, object, range, tolerance),
             reach => centre(service, object, tolerance).and_then(|centre| {
+                let origin = service.local_origin(&object.source);
                 let one = |free: &Region, judged: Option<&Region>, inner: bool| match reach {
                     EffectReach::Travel => travel(
                         free,
@@ -167,8 +168,9 @@ pub(crate) fn measure(
                         range,
                         inner,
                         tolerance,
+                        origin,
                     ),
-                    _ => visible(free, centre, range, inner, tolerance),
+                    _ => visible(free, centre, range, inner, tolerance, origin),
                 };
                 Ok((
                     one(&free_inner, judged_inner.as_ref(), true)?,
@@ -392,15 +394,18 @@ fn segment_distance(point: Point2, a: Point2, b: Point2) -> f64 {
 
 /// Where the centre stands in the free region: `Ok(false)` outside it, so
 /// the effect is empty; an error on its boundary.
-fn inside(free: &Region, centre: Point2) -> Result<bool, String> {
+fn inside(
+    free: &Region,
+    centre: Point2,
+    origin: axioval_engine::LocalOrigin,
+) -> Result<bool, String> {
     if free.is_empty() {
         return Ok(false);
     }
     locate(free, centre).ok_or_else(|| {
-        format!(
-            "the centre ({:.6}, {:.6}) lies on the boundary of the free region",
-            centre.x, centre.y
-        )
+        // Reported in model coordinates (#372).
+        let [x, y] = origin.to_model([centre.x, centre.y]);
+        format!("the centre ({x:.6}, {y:.6}) lies on the boundary of the free region")
     })
 }
 
@@ -444,8 +449,9 @@ fn visible(
     range: f64,
     inner: bool,
     tolerance: Tolerance,
+    origin: axioval_engine::LocalOrigin,
 ) -> Result<Region, String> {
-    if range <= 0.0 || !inside(free, centre)? {
+    if range <= 0.0 || !inside(free, centre, origin)? {
         return Ok(Region::empty());
     }
     let seen = free
@@ -465,8 +471,9 @@ fn travel(
     range: f64,
     inner: bool,
     tolerance: Tolerance,
+    origin: axioval_engine::LocalOrigin,
 ) -> Result<Region, String> {
-    if !inside(free, centre)? {
+    if !inside(free, centre, origin)? {
         return Ok(Region::empty());
     }
     let map = distance_map(free.polygons(), &[], &[centre])

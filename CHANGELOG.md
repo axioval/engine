@@ -538,6 +538,10 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **IFC geometry**: moved to `ifc-geometry` 0.26.1, which lowers stations
+  on bases offset at stations (ifc#443). Their deviation stays unbounded
+  until the kernel certifies the frame law's derivatives
+  (axiolid/kernel#316), so their checks are unchanged.
 - **IFC**: moved to `openbim-ifc` 0.33. The engine uses none of the
   authoring or named-attribute APIs it changes, so checks are unchanged.
 - **Geometry**: moved to `axiolid-mesh-compile` 0.3.25, `axiolid-inspect`

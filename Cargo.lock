@@ -586,6 +586,7 @@ dependencies = [
  "axioval-bcf-api",
  "axioval-bcf-snapshot",
  "axioval-engine",
+ "axioval-host-ifc-axiolid",
  "axioval-html",
  "axioval-icdd",
  "axioval-ifc",
@@ -665,29 +666,15 @@ dependencies = [
 name = "axioval-cli"
 version = "0.4.0"
 dependencies = [
- "axiolid-construct",
- "axiolid-contracts",
- "axiolid-core",
- "axiolid-curve",
  "axiolid-evaluate",
- "axiolid-mesh",
- "axiolid-mesh-boolean-boolmesh",
- "axiolid-mesh-compile",
- "axiolid-mesh-compile-contract",
- "axiolid-model",
- "axiolid-primitive",
- "axiolid-profile",
- "axiolid-surface",
  "axioval",
  "axioval-export",
  "axioval-ids",
  "axioval-rules",
  "clap",
- "ifc-alignment",
  "ifc-geometry",
  "ifc-model",
  "ifc-schema",
- "ifc-spatial",
  "ifc-step",
  "ifc-xml",
  "openbim-bcf",
@@ -723,6 +710,34 @@ version = "0.4.0"
 dependencies = [
  "axioval-ir",
  "serde_json",
+]
+
+[[package]]
+name = "axioval-host-ifc-axiolid"
+version = "0.4.0"
+dependencies = [
+ "axiolid-construct",
+ "axiolid-contracts",
+ "axiolid-core",
+ "axiolid-curve",
+ "axiolid-evaluate",
+ "axiolid-mesh",
+ "axiolid-mesh-boolean-boolmesh",
+ "axiolid-mesh-compile",
+ "axiolid-mesh-compile-contract",
+ "axiolid-model",
+ "axiolid-primitive",
+ "axiolid-profile",
+ "axiolid-surface",
+ "axioval-axiolid",
+ "axioval-engine",
+ "axioval-ifc",
+ "axioval-ir",
+ "axioval-rules",
+ "ifc-alignment",
+ "ifc-geometry",
+ "ifc-model",
+ "ifc-spatial",
 ]
 
 [[package]]

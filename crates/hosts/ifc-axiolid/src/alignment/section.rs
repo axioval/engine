@@ -1,6 +1,6 @@
 //! Sections across IFC alignments and clearance envelopes swept along
 //! them: the section and envelope methods of the bridge's
-//! [`AlignmentService`](axioval::engine::AlignmentService).
+//! [`AlignmentService`](axioval_engine::AlignmentService).
 //!
 //! # The section frame
 //!
@@ -28,7 +28,7 @@
 //! and the curve's derivative bounds). A point at distance `radius` or
 //! more from every mesh triangle cannot change sides between the mesh and
 //! the body, and between the computed and the exact plane, so the region
-//! of [`axioval::engine::BodySection`] holds the exact section. Only a
+//! of [`axioval_engine::BodySection`] holds the exact section. Only a
 //! closed mesh (every directed edge matched by its reverse) is cut; a body
 //! measured through its parts is refused, since overlapping parts would
 //! count their overlap twice.
@@ -68,12 +68,12 @@ use std::collections::BTreeMap;
 
 use axiolid_evaluate::bound::curve_derivative_bounds3;
 use axiolid_evaluate::{elevated_derivative, elevated_point};
-use axioval::axiolid::AxiolidGeometry;
-use axioval::engine::{
+use axioval_axiolid::AxiolidGeometry;
+use axioval_engine::{
     AlignmentError, AlignmentInterval, BodySection, EnvelopeRequest, EnvelopeSweep, Intrusion,
     Section, SectionPolygon, SectionRequest,
 };
-use axioval::ir::ObjectId;
+use axioval_ir::ObjectId;
 
 use super::{Centreline, IfcAlignmentService, RESOLUTION, evidence, slack};
 
@@ -826,8 +826,8 @@ mod tests {
     use axiolid_core::Vec3;
     use axiolid_curve::CurvatureLaw;
     use axiolid_mesh::TriMesh;
-    use axioval::engine::{AlignmentService, SectionAxis};
-    use axioval::ir::SourceId;
+    use axioval_engine::{AlignmentService, SectionAxis};
+    use axioval_ir::SourceId;
 
     use super::super::tests::centreline;
 

@@ -29,8 +29,25 @@ ADAPTER_CRATES = frozenset(
         "axioval-html",
         "axioval",
         "axioval-cli",
+        # The host layer composes adapters for hosts; see `HOST_CRATES`.
+        "axioval-host-ifc-axiolid",
     }
 )
+
+# The host layer (`crates/hosts/`): libraries that compose adapters the way
+# an executable does, so every host links one proven composition instead of
+# copying it. Exactly these crates may depend on both the IFC side and the
+# Axiolid side at runtime; every other crate, adapters and the facade's
+# features included, may take one side at most (`joined_sides`). Depending
+# on a host crate is not depending on either side: the join is its own.
+HOST_CRATES = frozenset({"axioval-host-ifc-axiolid"})
+
+# The two halves an adapter boundary keeps apart, by dependency name: the IFC
+# adapter and the IFC libraries, and the Axiolid adapter and the kernel.
+ADAPTER_SIDES: dict[str, tuple[str, ...]] = {
+    "IFC": ("axioval-ifc", "ifc-", "ifc_", "openbim-ifc", "openbim_ifc"),
+    "Axiolid": ("axioval-axiolid", "axiolid-", "axiolid_"),
+}
 
 # Narrow, per-crate allowances for a core crate that must read one external
 # format without adapting any source. Each entry names the exact dependencies
@@ -335,6 +352,88 @@ def manifest_violations(manifest: str, permitted: frozenset[str] = frozenset()) 
     )
 
 
+def adapter_side(name: str) -> str | None:
+    """The side of the adapter boundary dependency `name` is on, if any."""
+    if name in HOST_CRATES:
+        return None
+    for side, prefixes in ADAPTER_SIDES.items():
+        for prefix in prefixes:
+            exact = not prefix.endswith(("-", "_"))
+            if name == prefix if exact else name.startswith(prefix):
+                return side
+    return None
+
+
+def joined_sides(manifest: str, crate: str) -> list[str]:
+    """Each way `manifest` joins the IFC and the Axiolid side at runtime.
+
+    Runtime dependencies only (normal, build and target-specific): a test
+    may read a model through either side, and nothing it links ships. The
+    always-on dependencies are one set; each feature adds the optional
+    dependencies it enables, through other features too, so a facade
+    feature combining both adapters fails like a manifest naming both. A
+    crate of `HOST_CRATES` is exempt; any other crate joining them fails.
+    """
+    if crate in HOST_CRATES:
+        return []
+    data = tomllib.loads(manifest)
+    always: set[str] = set()
+    optional: set[str] = set()
+    tables = [data] + list(data.get("target", {}).values())
+    for table in tables:
+        for section in ("dependencies", "build-dependencies"):
+            for name, declaration in table.get(section, {}).items():
+                names = {name}
+                if isinstance(declaration, dict) and "package" in declaration:
+                    names.add(declaration["package"])
+                if isinstance(declaration, dict) and declaration.get("optional", False):
+                    optional.update(names)
+                else:
+                    always.update(names)
+    features: dict[str, list[str]] = dict(data.get("features", {}))
+    explicit = {
+        entry.removeprefix("dep:")
+        for entries in features.values()
+        for entry in entries
+        if entry.startswith("dep:")
+    }
+    # An optional dependency never named as `dep:` is its own feature.
+    for name in optional - explicit:
+        features.setdefault(name, [f"dep:{name}"])
+
+    def enabled(feature: str, seen: set[str]) -> set[str]:
+        if feature in seen:
+            return set()
+        seen.add(feature)
+        found: set[str] = set()
+        for entry in features.get(feature, []):
+            if "?/" in entry:
+                continue
+            name = entry.removeprefix("dep:").split("/", 1)[0]
+            if entry.startswith("dep:") or (name in optional and name not in features):
+                found.add(name)
+            elif name in features:
+                found |= enabled(name, seen)
+        return found
+
+    failures: list[str] = []
+    for label, names in [("dependencies", always)] + [
+        (f"feature {feature!r}", always | enabled(feature, set())) for feature in sorted(features)
+    ]:
+        sides: dict[str, list[str]] = {}
+        for name in sorted(names):
+            side = adapter_side(name)
+            if side:
+                sides.setdefault(side, []).append(name)
+        if len(sides) > 1:
+            failures.append(
+                f"{label} join the IFC and Axiolid adapter sides "
+                f"({', '.join(sides['IFC'])} with {', '.join(sides['Axiolid'])}); "
+                "only a host crate may (HOST_CRATES)"
+            )
+    return failures
+
+
 def without_permitted_paths(code: str, permitted: frozenset[str]) -> str:
     """Remove imports from, and paths into, the permitted crates only.
 
@@ -458,6 +557,48 @@ def self_test() -> None:
     assert source_violations("use openbim_ids::Ids;")
     assert "axioval-ids" not in ADAPTER_CRATES
     assert not source_violations("/// IFC is an adapter, not the IR.\npub struct Project;")
+    # Only the host layer joins the IFC and the Axiolid side; an adapter
+    # depending on the other, a crate naming both and a facade feature
+    # enabling both are rejected mutations.
+    both = '[dependencies]\naxioval-ifc = "0.4"\naxioval-axiolid = "0.4"\n'
+    assert not joined_sides(both, "axioval-host-ifc-axiolid")
+    assert joined_sides(both, "axioval-cli")
+    assert joined_sides('[dependencies]\naxioval-engine = "0.4"\naxioval-axiolid = "0.4"\n'
+                        'ifc-geometry = "0.27"\n', "axioval-axiolid")
+    assert joined_sides('[dependencies]\naxioval-ifc = "0.4"\naxiolid-mesh = "0.3"\n', "axioval-ifc")
+    assert joined_sides(
+        '[dependencies]\nmesh = { package = "axiolid-mesh", version = "0.3" }\n'
+        'openbim_ifc = { package = "openbim-ifc", version = "0.34" }\n',
+        "axioval-ifc",
+    )
+    assert joined_sides(
+        '[target.\'cfg(unix)\'.dependencies]\naxiolid-core = "0.3"\n'
+        '[dependencies]\nifc-model = "0.3"\n',
+        "axioval-ifc",
+    )
+    facade = (
+        '[dependencies]\naxioval-ifc = { version = "0.4", optional = true }\n'
+        'axioval-axiolid = { version = "0.4", optional = true }\n'
+        'axioval-host-ifc-axiolid = { version = "0.4", optional = true }\n'
+        '[features]\nifc = ["dep:axioval-ifc"]\naxiolid = ["dep:axioval-axiolid"]\n'
+        'ifc-geometry = ["ifc", "dep:axioval-host-ifc-axiolid"]\n'
+    )
+    assert not joined_sides(facade, "axioval")
+    assert joined_sides(facade + 'both = ["ifc", "axiolid"]\n', "axioval") == [
+        "feature 'both' join the IFC and Axiolid adapter sides (axioval-ifc with "
+        "axioval-axiolid); only a host crate may (HOST_CRATES)"
+    ]
+    assert joined_sides(facade + 'mixed = ["dep:axioval-ifc", "axioval-axiolid"]\n', "axioval")
+    assert joined_sides(
+        '[dependencies]\naxioval-ifc = "0.4"\naxioval-axiolid = { version = "0.4", optional = true }\n',
+        "axioval",
+    )
+    # A test may read a model through either side: nothing it links ships.
+    assert not joined_sides(
+        '[dependencies]\naxioval-axiolid = "0.4"\n[dev-dependencies]\nifc-step = "0.5"\n',
+        "axioval-axiolid",
+    )
+    assert "axioval-host-ifc-axiolid" in HOST_CRATES and len(HOST_CRATES) == 1
     # Composability: each bypass of the measurement gate is a rejected mutation.
     measurement_gate.self_test()
     # A capability without catalogue texts fails.
@@ -575,6 +716,11 @@ def self_test() -> None:
     assert "axioval-engine" in derived, derived
     assert "axioval-ifc" not in derived, derived
     assert "axioval-cli" not in derived, derived
+    assert "axioval-host-ifc-axiolid" not in derived, derived
+    # The real tree joins the two sides in the host layer alone.
+    for name, path in crate_manifests(root):
+        joined = joined_sides((path / "Cargo.toml").read_text(encoding="utf-8"), "")
+        assert bool(joined) == (name in HOST_CRATES), (name, joined)
 
     # Discovery is recursive and name-keyed: crates nested in category
     # directories are still found, and a core crate cannot escape the guard by
@@ -851,6 +997,12 @@ def check(root: Path) -> list[str]:
                 failures.append(f"{source.relative_to(root)}: {detail}")
             for detail in verdict_return_violations(text):
                 failures.append(f"{source.relative_to(root)}: {detail}")
+    # Every crate, adapters and the facade included: only the host layer
+    # joins the IFC and the Axiolid side.
+    for crate, crate_root in crate_manifests(root):
+        manifest = crate_root / "Cargo.toml"
+        for detail in joined_sides(manifest.read_text(encoding="utf-8"), crate):
+            failures.append(f"{manifest.relative_to(root)}: {detail}")
     # The repository is public: a private party named in a tracked file is
     # disclosed the moment it is pushed, and deleting it later does not undo
     # the disclosure. Checked every run, not at release time.

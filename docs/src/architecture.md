@@ -18,6 +18,7 @@ crates/
   packages/ids                 one importer per rule format
   codecs/java-stream           one standalone codec per wire format
   facade/axioval               feature-gated re-exports
+  hosts/ifc-axiolid            compositions of adapters, for every host
   apps/cli                     executables
 ```
 
@@ -37,6 +38,8 @@ engine/core  <-  engine/rules
     +- sources/geometry/axiolid
     +- sources/assembly/icdd
               ^
+    hosts/ifc-axiolid  (sources/semantic/ifc + sources/geometry/axiolid)
+              ^
         facade/axioval
 
 contracts/ir  <-  sinks/{bcf, html, xlsx}  <-  sinks/{bcf-api, bcf-snapshot}
@@ -48,10 +51,10 @@ contracts/ir, engine/core, engine/rules, packages/export  <-  packages/ids
 codecs/java-stream           (depends on nothing in this tree)
 ```
 
-A host composes adapters. The CLI, for instance, meshes IFC bodies with
-`ifc-geometry` and registers them with the Axiolid services under the IFC
-session's object identities, which no adapter may do because neither may
-depend on the other.
+A host composes adapters. Meshing IFC bodies with `ifc-geometry` and
+registering them with the Axiolid services under the IFC session's object
+identities is such a composition, which no adapter may do because neither
+may depend on the other (see [host compositions](#host-compositions)).
 
 A sink reads finished reports. It depends on the IR alone (the BCF API
 client and the snapshot renderer also on the BCF sink), so any host can
@@ -75,6 +78,33 @@ records an application stores in it; the application that owns those binds
 them on top ([Java serialization streams](./java-stream.md)).
 
 `axioval-ir`, `axioval-export`, `axioval-engine`, and `axioval-rules` may not import source formats, federation containers, geometry kernels, or vendor types. Adapters depend inward; core never depends outward.
+
+## Host compositions
+
+A composition every host needs lives once, in the host layer
+(`crates/hosts/`), instead of in each executable. `axioval-host-ifc-axiolid`
+is the IFC to Axiolid geometry bridge: `attach` reads each IFC source's
+bytes again, meshes every product with `ifc-geometry`, and registers the
+Axiolid geometry services over the session under its own object identities,
+for one model or several federated ones (one geometry set, services bound to
+every snapshot, each source's coordinate system checked against the first).
+The command line's `--geometry` is its first consumer; a web service, a
+desktop application or a batch runner calls the same `attach`, so the
+geometry every host evaluates is the one the parity harness proves. Hosts
+take it through the facade's `ifc-geometry` feature, which also pins the
+Axiolid and IFC geometry versions it was proven with.
+
+It may join the two adapters because it is not one. An adapter maps one
+source or one kernel into the engine's vocabulary, and must not know the
+other: a combined adapter would make IFC reading depend on a kernel and the
+kernel on IFC, re-coupling the halves the engine keeps apart. A host
+composition maps nothing into the IR. It holds both adapters at arm's length,
+as the command line did, and consumes only their public APIs, so either
+adapter can still be replaced or used alone. The architecture gate
+(`scripts/architecture.py`) checks that exactly the crates of the host
+layer depend on both the IFC side and the Axiolid side at runtime: an
+adapter depending on the other, any other crate naming both, and a facade
+feature enabling both fail it.
 
 ## Layers of a rule
 

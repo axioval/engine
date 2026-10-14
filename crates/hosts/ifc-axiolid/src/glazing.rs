@@ -17,9 +17,9 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
-use axioval::axiolid::{GlazingItem, GlazingItems, ItemMaterial};
-use axioval::ifc::{GlazingReader, ItemGlazing};
-use axioval::ir::{ObjectId, SourceId};
+use axioval_axiolid::{GlazingItem, GlazingItems, ItemMaterial};
+use axioval_ifc::{GlazingReader, ItemGlazing};
+use axioval_ir::{ObjectId, SourceId};
 use ifc_geometry::lower::lower_representation_item;
 
 use super::{Fit, NO_TRIANGLES, Parsed, compile, entity_id, session};

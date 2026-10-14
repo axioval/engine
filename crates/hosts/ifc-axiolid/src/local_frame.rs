@@ -29,8 +29,8 @@
 
 use std::collections::BTreeMap;
 
-use axioval::engine::{LocalOrigin, LocalOrigins};
-use axioval::ir::SourceId;
+use axioval_engine::{LocalOrigin, LocalOrigins};
+use axioval_ir::SourceId;
 use ifc_model::{Entity, EntityId, Model, Value};
 
 use super::{ALIGNMENTS, EXACT_REACH, OBJECT_PLACEMENT, PLACEMENT_REL_TO, Parsed};

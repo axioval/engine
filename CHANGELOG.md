@@ -6,6 +6,25 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **The IFC geometry bridge as a library for hosts**: the bridge
+  `check --geometry` runs, which meshes IFC bodies with `ifc-geometry` and
+  registers them as the Axiolid geometry services of an IFC session, is the
+  new crate `axioval-host-ifc-axiolid` in a host layer (`crates/hosts/`),
+  instead of private code in the CLI. Its API is `attach(session, &models,
+  options)`, with `Options`, `ModelBytes`, `GeometryReport` and `ModelData`
+  as the CLI used them: one model or several federated ones (one geometry
+  set, services bound to every snapshot, each source's coordinate system
+  checked against the first's) and models placed far out measured about a
+  local origin ([#372](https://github.com/axioval/engine/issues/372)). With
+  `Options::keep_meshes`, `GeometryReport::meshes` holds each meshed
+  object's triangles in model coordinates (`KeptMesh`) for a viewer to
+  reuse. The facade's new `ifc-geometry` feature re-exports it as
+  `axioval::ifc_geometry` (with `ifc`), so a host takes one dependency and
+  inherits the pinned Axiolid and IFC geometry versions. The CLI is its
+  first consumer, with unchanged results; its unit tests moved with it. The
+  architecture gate allows exactly the host layer to depend on both the IFC
+  and the Axiolid side
+  ([#376](https://github.com/axioval/engine/issues/376)).
 - **Glazing ratio per door leaf, from geometry**: `keyed-limit`'s
   `glazing-ratio` takes `glazing_ratio_per` (`door`, the default, or
   `leaf`). Per leaf, a fraction the door states is still its one value;

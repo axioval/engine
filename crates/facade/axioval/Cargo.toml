@@ -21,6 +21,7 @@ axioval-bcf-api = { workspace = true, optional = true }
 axioval-bcf-snapshot = { workspace = true, optional = true }
 axioval-xlsx = { workspace = true, optional = true }
 axioval-html = { workspace = true, optional = true }
+axioval-host-ifc-axiolid = { workspace = true, optional = true }
 
 [dev-dependencies]
 # The implementations templates replaced, held to them in tests.
@@ -52,6 +53,13 @@ bcf-snapshot = ["bcf", "dep:axioval-bcf-snapshot"]
 xlsx = ["dep:axioval-xlsx"]
 # Self-contained HTML reports from templates.
 html = ["dep:axioval-html"]
+# Host compositions are features too, named for what they give a host. IFC
+# bodies meshed and registered as the Axiolid geometry services
+# (`axioval-host-ifc-axiolid`, the bridge `check --geometry` runs), with the
+# IFC adapter to import the sessions it attaches to. The bridge pins the
+# Axiolid and IFC geometry versions, so a host takes this one feature and no
+# kernel dependency of its own.
+ifc-geometry = ["ifc", "dep:axioval-host-ifc-axiolid"]
 
 [lints]
 workspace = true

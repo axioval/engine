@@ -48,14 +48,9 @@ use serde_json::{Value, json};
 #[global_allocator]
 static HEAP: PeakAlloc = PeakAlloc;
 
-// The IFC to Axiolid bridge of the binary, meshing exactly as `check
+// The IFC to Axiolid bridge the binary links, meshing exactly as `check
 // --geometry` does. The bench uses only `attach`.
-#[allow(dead_code, unused_imports, clippy::all, clippy::pedantic)]
-#[path = "../src"]
-mod cli {
-    pub mod geometry;
-}
-use cli::geometry;
+use axioval::ifc_geometry as geometry;
 
 /// A capability rebuilt as a template, and the implementation it replaced.
 struct Pair {

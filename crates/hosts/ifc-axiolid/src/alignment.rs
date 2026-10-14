@@ -69,11 +69,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use axiolid_curve::{ChainPiece2, CurvatureLaw, Curve2, Curve3, Elevated3, ElevationLaw};
 use axiolid_evaluate::bound::{continuity_breaks3, curve_derivative_bounds3};
 use axiolid_evaluate::{elevated_derivative, elevated_point, elevation_grade, station_length3};
-use axioval::engine::{
+use axioval_engine::{
     AlignmentError, AlignmentInterval, AlignmentParameter, AlignmentParameterRequest,
     AlignmentParameterValue, AlignmentPosition, AlignmentRequest, AlignmentService,
 };
-use axioval::ir::{Evidence, ObjectId, SourceId};
+use axioval_ir::{Evidence, ObjectId, SourceId};
 use ifc_alignment::{AlignmentError as IfcAlignmentError, AlignmentUnits, CantLayout, Stationing};
 use ifc_geometry::Transform;
 use ifc_model::{EntityId, Model};
@@ -112,7 +112,7 @@ pub(super) struct IfcAlignmentService {
     /// centreline.
     layouts: BTreeMap<ObjectId, elements::Layouts>,
     /// The bodies sections cut and envelopes are swept past.
-    geometry: axioval::axiolid::AxiolidGeometry,
+    geometry: axioval_axiolid::AxiolidGeometry,
 }
 
 /// The service over `objects`, read from `parsed`, cutting the bodies of
@@ -120,7 +120,7 @@ pub(super) struct IfcAlignmentService {
 pub(super) fn alignment_service(
     parsed: &BTreeMap<SourceId, Parsed>,
     objects: &[ObjectId],
-    geometry: axioval::axiolid::AxiolidGeometry,
+    geometry: axioval_axiolid::AxiolidGeometry,
 ) -> IfcAlignmentService {
     let mut alignments = BTreeMap::new();
     let mut layouts = BTreeMap::new();
@@ -1077,36 +1077,36 @@ impl AlignmentService for IfcAlignmentService {
 
     fn measure_alignment_profile(
         &self,
-        request: &axioval::engine::AlignmentProfileRequest,
-    ) -> Result<axioval::engine::AlignmentProfile, AlignmentError> {
+        request: &axioval_engine::AlignmentProfileRequest,
+    ) -> Result<axioval_engine::AlignmentProfile, AlignmentError> {
         self.profile(request)
     }
 
     fn measure_alignment_elements(
         &self,
-        request: &axioval::engine::AlignmentElementsRequest,
-    ) -> Result<axioval::engine::AlignmentElements, AlignmentError> {
+        request: &axioval_engine::AlignmentElementsRequest,
+    ) -> Result<axioval_engine::AlignmentElements, AlignmentError> {
         self.elements(request)
     }
 
     fn measure_section(
         &self,
-        request: &axioval::engine::SectionRequest,
-    ) -> Result<axioval::engine::Section, AlignmentError> {
+        request: &axioval_engine::SectionRequest,
+    ) -> Result<axioval_engine::Section, AlignmentError> {
         self.section(request)
     }
 
     fn measure_envelope(
         &self,
-        request: &axioval::engine::EnvelopeRequest,
-    ) -> Result<axioval::engine::EnvelopeSweep, AlignmentError> {
+        request: &axioval_engine::EnvelopeRequest,
+    ) -> Result<axioval_engine::EnvelopeSweep, AlignmentError> {
         self.envelope(request)
     }
 
     fn measure_sight_distance(
         &self,
-        request: &axioval::engine::SightDistanceRequest,
-    ) -> Result<axioval::engine::SightDistance, AlignmentError> {
+        request: &axioval_engine::SightDistanceRequest,
+    ) -> Result<axioval_engine::SightDistance, AlignmentError> {
         self.sight_distance(request)
     }
 }
@@ -1281,7 +1281,7 @@ mod tests {
         holds(foot.offset, 9.0, 1e-5);
     }
 
-    /// An IFC4X3 model: the gradient curve of the CLI's tests (#79, a 15 m
+    /// An IFC4X3 model: the gradient curve of the CLI's end-to-end tests (#79, a 15 m
     /// straight plan from the origin along `+X`, its profile a sag arc of
     /// radius 1000 m from 10 m at -2 %) as the `Axis` of alignment #175,
     /// a cube on a linear placement 5 m along it and 2 m to its left
@@ -1350,9 +1350,9 @@ mod tests {
 
     #[test]
     fn products_are_located_along_an_alignment_of_the_model() {
-        use axioval::engine::AlignmentServiceHandle;
+        use axioval_engine::AlignmentServiceHandle;
         let bytes = aligned_cubes();
-        let session = axioval::ifc::import_ifc_session("aligned.ifc", bytes.as_bytes()).unwrap();
+        let session = axioval_ifc::import_ifc_session("aligned.ifc", bytes.as_bytes()).unwrap();
         let models: super::super::ModelBytes = session
             .snapshots()
             .map(|snapshot| (snapshot.source().clone(), bytes.as_bytes().to_vec()))

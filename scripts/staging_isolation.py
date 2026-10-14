@@ -17,7 +17,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 STAGING = ROOT / "staging"
-EXPECTED_MEMBERS = 16
+EXPECTED_MEMBERS = 17
 
 
 def failures() -> list[str]:

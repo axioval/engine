@@ -125,8 +125,8 @@ fn combined(
             subtracted_from,
         })
         .collect();
-    let mut bodies = before.meshes;
-    bodies.extend(after.meshes);
+    let mut bodies = crate::snapshot_meshes(before.meshes);
+    bodies.extend(crate::snapshot_meshes(after.meshes));
     let record = GeometryRecord {
         exact: before.exact + after.exact,
         tessellated: before.tessellated + after.tessellated,
@@ -231,7 +231,7 @@ pub fn compare(mut args: CompareArgs) -> Result<Outcome, Box<dyn Error>> {
     let output = CheckOutput::new(report, records, meshed, &project).with_comparison(record);
     let bounds = args
         .geometry
-        .then(|| geometry::bounds(&[&base, &revised], &output.report));
+        .then(|| crate::bounds::bounds(&[&base, &revised], &output.report));
     // A comparison runs no ruleset, so its topics have no rule labels.
     emit(
         &output,

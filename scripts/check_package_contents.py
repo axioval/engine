@@ -20,6 +20,7 @@ EXPECTED = {
     "axioval-engine",
     "axioval-export",
     "axioval-html",
+    "axioval-host-ifc-axiolid",
     "axioval-icdd",
     "axioval-ids",
     "axioval-java-stream",

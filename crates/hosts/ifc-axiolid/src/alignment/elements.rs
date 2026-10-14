@@ -14,7 +14,7 @@
 //! end curvature, so its ends are unread. Stations are labelled through
 //! the alignment's station equations, as positions are.
 
-use axioval::engine::{
+use axioval_engine::{
     AlignmentElement, AlignmentElementKind, AlignmentElements, AlignmentElementsRequest,
     AlignmentError, AlignmentInterval, AlignmentLayout, ElementEnd,
 };
@@ -346,11 +346,11 @@ impl IfcAlignmentService {
 
 #[cfg(test)]
 mod tests {
-    use axioval::engine::{
+    use axioval_engine::{
         AlignmentParameter, AlignmentParameterRequest, AlignmentProfileRequest, AlignmentRequest,
         AlignmentServiceHandle, ProfileExtreme,
     };
-    use axioval::ir::ObjectId;
+    use axioval_ir::ObjectId;
 
     use super::*;
 
@@ -434,7 +434,7 @@ mod tests {
     /// The service over `bytes`, the alignment and the proxy.
     fn service(bytes: &str) -> (AlignmentServiceHandle, ObjectId, ObjectId) {
         use super::super::super::{ModelBytes, Options, attach};
-        let session = axioval::ifc::import_ifc_session("crest.ifc", bytes.as_bytes()).unwrap();
+        let session = axioval_ifc::import_ifc_session("crest.ifc", bytes.as_bytes()).unwrap();
         let models: ModelBytes = session
             .snapshots()
             .map(|snapshot| (snapshot.source().clone(), bytes.as_bytes().to_vec()))

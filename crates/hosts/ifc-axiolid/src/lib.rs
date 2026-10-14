@@ -1,10 +1,32 @@
 //! IFC body geometry as Axiolid meshes, registered into a check's session.
 //!
 //! This is host composition, not an adapter: `axioval-ifc` must not know
-//! Axiolid and `axioval-axiolid` must not know IFC, so the CLI reads the same
-//! model bytes a second time, meshes each product with `ifc-geometry`, and
-//! hands the meshes to the geometry services under the object identities the
-//! IFC session already uses.
+//! Axiolid and `axioval-axiolid` must not know IFC, so the host reads the
+//! same model bytes a second time, meshes each product with `ifc-geometry`,
+//! and hands the meshes to the geometry services under the object
+//! identities the IFC session already uses. This crate is that composition
+//! as a library, so every host (the `axioval` command line, a web service,
+//! a desktop application, a batch runner) attaches the same geometry the
+//! parity harness proves. It sits in the host layer, the one place allowed
+//! to depend on both adapters.
+//!
+//! A host imports each model into an [`EvidenceSession`] through the IFC
+//! adapter (federating several with `EvidenceSession::federate`), keeps
+//! each source's bytes in [`ModelBytes`], and calls [`attach`]:
+//!
+//! ```no_run
+//! # fn run(session: axioval_engine::EvidenceSession, bytes: axioval_host_ifc_axiolid::ModelBytes)
+//! # -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+//! use axioval_host_ifc_axiolid::{Options, attach};
+//!
+//! let (session, report) = attach(session, &bytes, Options::meshes(false))?;
+//! for (object, reason) in &report.unmeasured {
+//!     eprintln!("{object}: {reason}");
+//! }
+//! # let _ = session;
+//! # Ok(())
+//! # }
+//! ```
 //!
 //! With several models, every source is meshed into one geometry set under
 //! its own source-qualified identities, and every service is bound to all
@@ -52,7 +74,7 @@
 //! exact construction (a rigidly placed extrusion, revolution or swept disk,
 //! one less its extruded openings or clipped by half-spaces, or several
 //! such items; see
-//! `axioval::axiolid::exact_boundary`) also gets its exact boundary
+//! `axioval_axiolid::exact_boundary`) also gets its exact boundary
 //! registered beside the mesh, built from the same graph the mesh is compiled
 //! from, so placement and mirroring are the mesh's own. The proximity service
 //! then certifies distances between curved bodies the chord deviation would
@@ -73,7 +95,7 @@
 //! `IfcParameterValue` along an alignment is refused by name (#347). Where
 //! the derivation would ignore a frame the file states (a `PlacementRelTo`
 //! or a basis curve placed off the identity, openbimrs/ifc#357), the
-//! product is unmeasured with that reason ([`Linear`]), never misplaced.
+//! product is unmeasured with that reason (`Linear`), never misplaced.
 //!
 //! Relationships derived from geometry (`axioval:derived.*`) need to know
 //! which objects are spaces and which are doors, windows or openings. An
@@ -113,7 +135,7 @@ use axiolid_model::{GeometryGraph, GeometryNode, NodeId, SolidOperation, Surface
 use axiolid_primitive::Primitive;
 use axiolid_profile::{Profile, SectionProfile};
 use axiolid_surface::Surface;
-use axioval::axiolid::{
+use axioval_axiolid::{
     AxiolidBoundaryCoverageService, AxiolidContactService, AxiolidDerivedRelationshipService,
     AxiolidEnvelopeMembershipService, AxiolidFacadeAreaService, AxiolidFreeSpaceService,
     AxiolidGeometry, AxiolidGuardService, AxiolidLeafGlazingService, AxiolidLinearQuantityService,
@@ -122,7 +144,7 @@ use axioval::axiolid::{
     AxiolidVerticalExtentService, AxiolidWalkabilityService, AxiolidWalkingSurfaceService,
     ExactBoundary,
 };
-use axioval::engine::{
+use axioval_engine::{
     AlignmentServiceHandle, BodyContainment, BoundaryCoverageServiceHandle, ContactServiceHandle,
     CoordinateSystemServiceHandle, DerivedRelationshipServiceHandle, EnvelopeMembershipError,
     EnvelopeMembershipEvidence, EnvelopeMembershipRequest, EnvelopeMembershipService,
@@ -136,9 +158,8 @@ use axioval::engine::{
     SpaceServiceHandle, TraversalDirection, TriangleCountServiceHandle, TypeHierarchyServiceHandle,
     VerticalExtentServiceHandle, WalkabilityServiceHandle, WalkingSurfaceServiceHandle,
 };
-use axioval::ir::{ObjectId, PropertyValue, Report, SourceId};
-use axioval::rules::{CoordinateTolerance, compare_coordinate_systems};
-use axioval::{bcf, bcf_snapshot};
+use axioval_ir::{ObjectId, PropertyValue, SourceId};
+use axioval_rules::{CoordinateTolerance, compare_coordinate_systems};
 use ifc_geometry::constraint::local::PlacementResolver;
 use ifc_geometry::lower::{
     AppliedReason, LoweringSession, NetOptions, ReferenceOnlyOpenings, lower_connection_surface,
@@ -155,7 +176,7 @@ mod authored_faces;
 mod glazing;
 mod local_frame;
 mod outer_bound;
-pub mod timings;
+mod timings;
 
 /// Linear tolerance handed to the mesh compiler: with no explicit chord
 /// budget, its chord budget. Each tessellated mesh is declared with the
@@ -188,9 +209,14 @@ const NO_BODY: &[&str] = &[
 
 /// What the bridge did, for the host to report.
 #[derive(Debug, Default)]
+#[non_exhaustive]
 pub struct GeometryReport {
+    /// Objects meshed exactly: every face planar, so the mesh is the shape.
     pub exact: usize,
+    /// Objects meshed as a tessellation within the deviation the compiler
+    /// certifies.
     pub tessellated: usize,
+    /// Objects that occupy no material (storeys, zones, openings).
     pub no_body: usize,
     /// Meshed objects registered with their exact boundary as well.
     pub exact_boundaries: usize,
@@ -217,9 +243,10 @@ pub struct GeometryReport {
     /// from (none where they are already cut by it, or it misses them), in
     /// the order decided.
     pub whole_openings: Vec<(ObjectId, ObjectId, Vec<ObjectId>)>,
-    /// Every meshed object's triangles, kept only when asked for, to draw
-    /// BCF snapshots from.
-    pub meshes: BTreeMap<ObjectId, bcf_snapshot::Mesh>,
+    /// Every meshed object's triangles in model coordinates, kept only
+    /// when asked for ([`Options::keep_meshes`]), for a host to draw
+    /// without meshing a second time.
+    pub meshes: BTreeMap<ObjectId, KeptMesh>,
     /// The origin of the local frame the models are measured in, in
     /// model metres (east, north), when they are placed far out (#372).
     pub local_origin: Option<[f64; 2]>,
@@ -320,12 +347,42 @@ fn model_data_detail(code: &str) -> &str {
     }
 }
 
+/// A meshed object's triangles as [`attach`] kept them
+/// ([`Options::keep_meshes`]): positions in metres in the model's own
+/// coordinates (placed, and moved back from any local frame the bridge
+/// measured in), and triangles indexing them.
+///
+/// Every position is finite and every index names a position.
+#[derive(Clone, Debug, PartialEq)]
+pub struct KeptMesh {
+    positions: Vec<[f64; 3]>,
+    triangles: Vec<[u32; 3]>,
+}
+
+impl KeptMesh {
+    /// The vertices, in model metres.
+    pub fn positions(&self) -> &[[f64; 3]] {
+        &self.positions
+    }
+
+    /// The triangles, each three indices into [`Self::positions`].
+    pub fn triangles(&self) -> &[[u32; 3]] {
+        &self.triangles
+    }
+
+    /// The vertices and triangles, taken apart.
+    pub fn into_parts(self) -> (Vec<[f64; 3]>, Vec<[u32; 3]>) {
+        (self.positions, self.triangles)
+    }
+}
+
 /// A fact about the model data the bridge found, for the host to report as
 /// an integrity warning.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ModelData {
     /// The integrity code, such as [`NO_SHAPE_REPRESENTATION`].
     pub code: &'static str,
+    /// What is wrong, naming the object.
     pub message: String,
     /// `ifc:<fingerprint>:<detail>`, as the IFC adapter locates its own.
     pub locator: String,
@@ -395,13 +452,15 @@ impl Bodiless {
 
 /// How [`attach`] meshes the model.
 #[derive(Clone, Copy, Debug, Default)]
+#[non_exhaustive]
 pub struct Options {
     /// Keep every meshed object's triangles in [`GeometryReport::meshes`],
-    /// for BCF snapshots.
+    /// for display (BCF snapshots, a viewer).
     pub keep_meshes: bool,
     /// Build and register exact boundaries where the construction is exact.
     pub exact_boundaries: bool,
-    /// Print each phase's time on stderr (`--timings`).
+    /// Print each phase's time on stderr, one line per phase as
+    /// `timing: <seconds> s geometry: <phase>`.
     pub timings: bool,
     /// The frame the models are measured in (#372).
     pub frame: Frame,
@@ -411,7 +470,7 @@ pub struct Options {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Frame {
     /// About a local origin where the models are placed far from theirs
-    /// ([`local_frame`]), else their model coordinates.
+    /// (`local_frame`, #372), else their model coordinates.
     #[default]
     Local,
     /// Always their model coordinates: for sessions whose geometry is
@@ -826,7 +885,7 @@ fn unaligned(
 fn parse(
     snapshots: &[SourceSnapshot],
     models: &ModelBytes,
-) -> Result<BTreeMap<SourceId, Parsed>, Box<dyn Error>> {
+) -> Result<BTreeMap<SourceId, Parsed>, Box<dyn Error + Send + Sync>> {
     let mut parsed = BTreeMap::new();
     for snapshot in snapshots {
         let source = snapshot.source();
@@ -835,10 +894,10 @@ fn parse(
             .ok_or_else(|| format!("no model bytes for source `{source}`"))?;
         // An ifcXML source is read by the adapter's reader, with its
         // refusals, into the model its STEP form parses to.
-        let model = if axioval::ifc::is_ifc_xml(bytes) {
-            axioval::ifc::read_ifc_xml(bytes).map_err(|error| error.to_string())
+        let model = if axioval_ifc::is_ifc_xml(bytes) {
+            axioval_ifc::read_ifc_xml(bytes).map_err(|error| error.to_string())
         } else {
-            axioval::ifc::read_ifc_step(bytes).map_err(|error| error.to_string())
+            axioval_ifc::read_ifc_step(bytes).map_err(|error| error.to_string())
         }
         .map_err(|error| format!("{}: {error}", source.document))?;
         let units = ifc_geometry::units::resolve(&model);
@@ -878,7 +937,7 @@ pub fn attach(
     session: EvidenceSession,
     models: &ModelBytes,
     options: Options,
-) -> Result<(EvidenceSession, GeometryReport), Box<dyn Error>> {
+) -> Result<(EvidenceSession, GeometryReport), Box<dyn Error + Send + Sync>> {
     let snapshots: Vec<SourceSnapshot> = session.snapshots().cloned().collect();
     let Some(first) = snapshots.first() else {
         return Err("geometry needs a session over at least one source".into());
@@ -1083,7 +1142,7 @@ pub fn attach(
             geometry = geometry.with_whole_openings(id.clone(), openings.clone());
         }
         if options.keep_meshes
-            && let Some(kept) = snapshot_mesh(&body.mesh, origins.of(&id.source))
+            && let Some(kept) = kept_mesh(&body.mesh, origins.of(&id.source))
         {
             report.meshes.insert(id.clone(), kept);
         }
@@ -1349,7 +1408,7 @@ impl Composer<'_> {
                     self.report.exact_boundaries += 1;
                 }
                 if self.keep_meshes
-                    && let Some(kept) = snapshot_mesh(body.mesh(), self.origins.of(&whole.source))
+                    && let Some(kept) = kept_mesh(body.mesh(), self.origins.of(&whole.source))
                 {
                     self.report.meshes.insert(whole.clone(), kept);
                 }
@@ -2772,7 +2831,7 @@ fn register(
     ),
     envelope: LazyEnvelope,
     (walkability, routing): (AxiolidWalkabilityService, AxiolidMetricRoutingService),
-) -> Result<EvidenceSession, Box<dyn Error>> {
+) -> Result<EvidenceSession, Box<dyn Error + Send + Sync>> {
     let source = snapshots
         .first()
         .ok_or("geometry needs a session over at least one source")?
@@ -2920,7 +2979,7 @@ fn envelope_service(
     source: &SourceId,
     kinds: &BTreeMap<ObjectId, String>,
     timings: bool,
-) -> Result<LazyEnvelope, Box<dyn Error>> {
+) -> Result<LazyEnvelope, Box<dyn Error + Send + Sync>> {
     let properties = session
         .service::<PropertyResolutionServiceHandle>()
         .ok_or("the session has no property service to read declarations with")?
@@ -2942,7 +3001,7 @@ struct LazyEnvelope {
     geometry: AxiolidGeometry,
     source: SourceId,
     objects: Vec<ObjectId>,
-    /// Whether reading the declarations prints its time (`--timings`).
+    /// Whether reading the declarations prints its time (`Options::timings`).
     timings: bool,
     declared: OnceLock<AxiolidEnvelopeMembershipService>,
 }
@@ -3738,17 +3797,26 @@ fn applied(host: &ObjectId, body: Option<Body>) -> Meshed {
 /// One product's body, as [`mesh`] returns it.
 type Meshed = Result<Option<Body>, String>;
 
-/// A mesh as the snapshot renderer takes it: positions and triangles.
-/// A mesh's triangles for BCF snapshots, in model coordinates: a mesh
-/// measured in a local frame is moved back by its `origin` (#372).
-fn snapshot_mesh(mesh: &axiolid_mesh::TriMesh, origin: LocalOrigin) -> Option<bcf_snapshot::Mesh> {
-    bcf_snapshot::Mesh::new(
-        mesh.positions
-            .iter()
-            .map(|p| origin.point_to_model([p.x, p.y, p.z]))
-            .collect(),
-        mesh.triangles().collect(),
-    )
+/// A mesh's triangles kept for display, in model coordinates: a mesh
+/// measured in a local frame is moved back by its `origin` (#372). `None`
+/// when a position is not finite or a triangle names a vertex that does
+/// not exist.
+fn kept_mesh(mesh: &axiolid_mesh::TriMesh, origin: LocalOrigin) -> Option<KeptMesh> {
+    let positions: Vec<[f64; 3]> = mesh
+        .positions
+        .iter()
+        .map(|p| origin.point_to_model([p.x, p.y, p.z]))
+        .collect();
+    let triangles: Vec<[u32; 3]> = mesh.triangles().collect();
+    let finite = positions.iter().flatten().all(|c| c.is_finite());
+    let indexed = triangles
+        .iter()
+        .flatten()
+        .all(|&index| (index as usize) < positions.len());
+    (finite && indexed).then_some(KeptMesh {
+        positions,
+        triangles,
+    })
 }
 
 fn entity_id(id: &ObjectId) -> Option<EntityId> {
@@ -3910,7 +3978,7 @@ fn mesh_less(
     // same placement; anything without an exact construction keeps its
     // mesh alone.
     let boundary = boundary
-        .then(|| axioval::axiolid::exact_boundary(&lowered.graph, lowered.root).ok())
+        .then(|| axioval_axiolid::exact_boundary(&lowered.graph, lowered.root).ok())
         .flatten();
     Ok(Some(Body {
         mesh,
@@ -4301,64 +4369,15 @@ fn space_service(
     service
 }
 
-/// The measured extent of every object `report` names, for fitting BCF
-/// cameras: each session's proximity service answers for its own objects.
-///
-/// An object no session measured is left out, so its viewpoint gets no
-/// camera rather than a guessed one. The extent is the box that encloses the
-/// true body (the mesh box grown by its chord deviation).
-pub fn bounds(sessions: &[&EvidenceSession], report: &Report) -> BTreeMap<ObjectId, bcf::Bounds> {
-    let mut named: BTreeSet<&ObjectId> = BTreeSet::new();
-    for finding in report.findings() {
-        named.extend(finding.object_id());
-        named.extend(&finding.related);
-    }
-    for outcome in report.not_evaluated() {
-        named.extend(outcome.object_id());
-    }
-    let mut bounds = BTreeMap::new();
-    for object in named {
-        let measured = sessions
-            .iter()
-            .filter(|session| session.project().object(object).is_some())
-            .find_map(|session| {
-                let measured = session
-                    .service::<ProximityServiceHandle>()?
-                    .bounds(object)
-                    .ok()?;
-                // In model coordinates, wherever the bodies are measured.
-                let origin = session
-                    .service::<LocalOrigins>()
-                    .map(|origins| origins.of(&object.source))
-                    .unwrap_or_default();
-                let extent = measured.enclosing();
-                let grow = origin.rounding(
-                    extent
-                        .min()
-                        .into_iter()
-                        .chain(extent.max())
-                        .fold(0.0_f64, |largest, value| largest.max(value.abs())),
-                );
-                let [x0, y0, z0] = origin.point_to_model(extent.min());
-                let [x1, y1, z1] = origin.point_to_model(extent.max());
-                bcf::Bounds::new([x0 - grow, y0 - grow, z0], [x1 + grow, y1 + grow, z1])
-            });
-        if let Some(measured) = measured {
-            bounds.insert(object.clone(), measured);
-        }
-    }
-    bounds
-}
-
 #[cfg(test)]
 mod tests {
     use super::attach;
-    use axioval::engine::{
+    use axioval_engine::{
         MetricPoint, MetricRouteOutcome, MetricRouteRequest, MetricRoutingServiceHandle,
         MobilityProfile, WalkabilityRequest, WalkabilityRouteOutcome, WalkabilityServiceHandle,
     };
-    use axioval::ifc::import_ifc_session;
-    use axioval::ir::ObjectId;
+    use axioval_ifc::import_ifc_session;
+    use axioval_ir::ObjectId;
 
     /// The reason a host's openings remove its whole body is told apart
     /// from an empty compilation and from anything else (#310).
@@ -4671,7 +4690,7 @@ mod tests {
 
     /// How `top_box`'s body is meshed.
     fn top_fit(top: [f64; 4], faceted: bool) -> Result<super::Fit, String> {
-        let model = axioval::ifc::read_ifc_step(top_box(top, faceted).as_bytes()).unwrap();
+        let model = axioval_ifc::read_ifc_step(top_box(top, faceted).as_bytes()).unwrap();
         let units = ifc_geometry::units::resolve(&model);
         let backend = ifc_geometry::compile::default_backend();
         super::mesh(
@@ -4843,7 +4862,7 @@ mod tests {
         // corner inserted into it (axiolid/kernel#265), so the touching
         // pocket closes as the clear one does.
         let health = |rim: f64| {
-            let model = axioval::ifc::read_ifc_step(pocket_box(rim).as_bytes()).unwrap();
+            let model = axioval_ifc::read_ifc_step(pocket_box(rim).as_bytes()).unwrap();
             let units = ifc_geometry::units::resolve(&model);
             let backend = ifc_geometry::compile::default_backend();
             let body = super::mesh(
@@ -5001,7 +5020,7 @@ mod tests {
              #100=IFCPRODUCTDEFINITIONSHAPE($,$,(#99));\n\
              #101=IFCBUILDINGELEMENTPROXY('0000000000000000000101',$,$,$,$,#94,#100,$,$);\n\
              ENDSEC;\nEND-ISO-10303-21;\n";
-        let model = axioval::ifc::read_ifc_step(model.as_bytes()).unwrap();
+        let model = axioval_ifc::read_ifc_step(model.as_bytes()).unwrap();
         let units = ifc_geometry::units::resolve(&model);
         let linear = super::Linear::scan(&model, &units);
         assert!(linear.refused.is_empty(), "{linear:?}");
@@ -5077,7 +5096,7 @@ mod tests {
              #211=IFCPRODUCTDEFINITIONSHAPE($,$,(#206,#210));\n\
              #212=IFCOPENINGELEMENT('0000000000000000000212',$,$,$,$,#8,#211,$,.OPENING.);\n\
              ENDSEC;\nEND-ISO-10303-21;\n";
-        let model = axioval::ifc::read_ifc_step(model.as_bytes()).unwrap();
+        let model = axioval_ifc::read_ifc_step(model.as_bytes()).unwrap();
         let units = ifc_geometry::units::resolve(&model);
         let backend = ifc_geometry::compile::default_backend();
         let (mesh, fit) = super::reference_void(
@@ -5156,7 +5175,7 @@ mod tests {
         fit: super::Fit,
         opening: &axiolid_mesh::TriMesh,
     ) -> super::Cut {
-        use axioval::ir::SourceId;
+        use axioval_ir::SourceId;
         let source = SourceId::new("ifc-step", "model.ifc").unwrap();
         let body = super::Body {
             mesh: part,
@@ -5427,7 +5446,7 @@ mod tests {
         let area = super::contact_area(&door, ([0.0, -0.1, 0.0], [1.5, 0.0, 3.0]));
         assert!((area - 0.21).abs() < 1e-9, "{area}");
 
-        let source = axioval::ir::SourceId::new("ifc-step", "model.ifc").unwrap();
+        let source = axioval_ir::SourceId::new("ifc-step", "model.ifc").unwrap();
         let by_volume = |part: axiolid_mesh::TriMesh, fit| {
             let body = super::Body {
                 mesh: part,

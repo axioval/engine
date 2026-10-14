@@ -27,7 +27,7 @@ dropped, and every such token is reported as a
 `step.real-without-decimal-point` integrity warning located by its byte
 offsets. A token that is not a number (`1E`, `1EE2`) is still a parse error.
 `read_ifc_step` gives the model the session reads, for hosts (the CLI's
-geometry bridge) that read the bytes again.
+geometry bridge, `axioval-host-ifc-axiolid`) that read the bytes again.
 
 The session's objects are every `IfcObject` occurrence, every `IfcContext`
 (an IFC4 `IfcProject` or `IfcProjectLibrary`; in IFC2X3 `IfcProject` is an
@@ -310,7 +310,7 @@ from a STEP file by its first bytes, which no STEP file starts with.
 same path as a STEP file: `ifc-xml`'s codec parses it into the model the
 STEP codec would produce, and the session is bound from that model, so an
 ifcXML model answers every rule as its STEP form does. `read_ifc_xml` gives
-hosts the model itself (the CLI meshes it), with the same refusals, and
+hosts the model itself (the geometry bridge meshes it), with the same refusals, and
 `is_ifc_xml` tells an XML document from a STEP file by its first bytes. The
 source is `ifc-xml:<document>`.
 

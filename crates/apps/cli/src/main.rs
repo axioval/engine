@@ -22,16 +22,20 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+mod bounds;
 mod compare;
 mod digest;
 mod draft;
 mod export;
-mod geometry;
 mod ids;
 mod results;
 mod server;
 mod terrain;
+mod timings;
 mod zones;
+
+// The IFC to Axiolid geometry bridge (`--geometry`), from the host layer.
+use axioval::ifc_geometry as geometry;
 
 use axioval::{
     bcf, bcf_snapshot,
@@ -1006,7 +1010,7 @@ fn geometry_record(report: geometry::GeometryReport) -> digest::GeometryRecord {
 }
 
 fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
-    let mut clock = geometry::timings::Stopwatch::new(args.timings);
+    let mut clock = timings::Stopwatch::new(args.timings);
     args.output.prepare()?;
     let translated = args
         .ids
@@ -1087,7 +1091,7 @@ fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
 
     let bodies = meshed
         .as_mut()
-        .map(|report| std::mem::take(&mut report.meshes));
+        .map(|report| snapshot_meshes(std::mem::take(&mut report.meshes)));
     let geometry = meshed.map(geometry_record);
     let output = CheckOutput::new(result, integrity, geometry, session.project())
         .with_sources(source_infos(&session))
@@ -1099,7 +1103,7 @@ fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     }
     let bounds = args
         .geometry
-        .then(|| geometry::bounds(&[&session], &output.report));
+        .then(|| bounds::bounds(&[&session], &output.report));
     emit(
         &output,
         session.project(),
@@ -1172,7 +1176,7 @@ fn supply_inputs(plan: &mut ExecutionPlan, args: &CheckArgs) -> Result<Supplied,
 fn check_runtime(
     registry: axioval::engine::CapabilityRegistry,
     args: &CheckArgs,
-    clock: &geometry::timings::Stopwatch,
+    clock: &timings::Stopwatch,
     terrain: Option<axioval::engine::TerrainServiceHandle>,
 ) -> Runtime {
     let mut runtime = Runtime::new(registry);
@@ -1406,6 +1410,19 @@ fn rule_labels(rulesets: &[RuleSetPackage]) -> BTreeMap<String, Vec<String>> {
     labels
 }
 
+/// Each meshed object's triangles, to draw BCF snapshots from.
+pub(crate) type Meshes = BTreeMap<ObjectId, bcf_snapshot::Mesh>;
+
+/// The meshes the bridge kept, as the snapshot renderer takes them.
+pub(crate) fn snapshot_meshes(kept: BTreeMap<ObjectId, geometry::KeptMesh>) -> Meshes {
+    kept.into_iter()
+        .filter_map(|(object, mesh)| {
+            let (positions, triangles) = mesh.into_parts();
+            Some((object, bcf_snapshot::Mesh::new(positions, triangles)?))
+        })
+        .collect()
+}
+
 /// Writes a result as `args` asks: JSON to stdout or `--report`, a summary,
 /// a BCF archive, and diagnostics to stderr. `bounds` are the measured
 /// objects' extents with `--geometry`, which fit the BCF cameras;
@@ -1413,9 +1430,6 @@ fn rule_labels(rulesets: &[RuleSetPackage]) -> BTreeMap<String, Vec<String>> {
 ///
 /// Everything is built before anything is written, so a run that fails
 /// leaves no partial output behind.
-/// Each meshed object's triangles, to draw BCF snapshots from.
-pub(crate) type Meshes = BTreeMap<ObjectId, bcf_snapshot::Mesh>;
-
 pub(crate) fn emit(
     output: &CheckOutput,
     project: &Project,

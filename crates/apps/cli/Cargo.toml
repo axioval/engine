@@ -16,37 +16,9 @@ doc = false
 
 [dependencies]
 # The CLI is the host that composes a source adapter with a report sink.
-axioval = { path = "../../facade/axioval", version = "0.4.0", features = ["ifc", "bcf", "bcf-api", "bcf-snapshot", "axiolid", "xlsx", "html"] }
-# `--geometry`: the CLI meshes IFC bodies itself and hands the meshes to the
-# Axiolid services. Neither adapter may depend on the other, so this bridge
-# lives in the host.
-axiolid-contracts.workspace = true
-# The rings a profile flattens to and their certified deviation, which
-# bound an unmeasured extrusion of it (#358).
-axiolid-construct.workspace = true
-axiolid-core.workspace = true
-axiolid-curve.workspace = true
-axiolid-mesh.workspace = true
-# ifc-geometry's reference backend is this compiler (with the boolmesh
-# boolean); 0.3.10 reports each mesh's certified deviation, booleans included
-# (`compile_mesh_with_deviation`, axiolid/kernel#232), which the bridge
-# declares.
-axiolid-mesh-boolean-boolmesh.workspace = true
-axiolid-mesh-compile.workspace = true
-axiolid-mesh-compile-contract.workspace = true
-axiolid-model.workspace = true
-axiolid-primitive.workspace = true
-axiolid-profile.workspace = true
-axiolid-surface.workspace = true
-ifc-geometry = { workspace = true, features = ["compile-reference-backend"] }
-# Derives each `IfcLinearPlacement` from its basis curve, as
-# `LoweringSession::with_curve_evaluator` asks of the caller (engine#224).
-axiolid-evaluate.workspace = true
-# Each `IfcAlignment`'s centreline, station equations and cant, which the
-# alignment service locates products along (engine#252).
-ifc-alignment.workspace = true
-ifc-model.workspace = true
-ifc-spatial.workspace = true
+# `--geometry` meshes IFC bodies and registers them with the Axiolid services
+# through the host layer's bridge (`ifc-geometry`), as any host does.
+axioval = { path = "../../facade/axioval", version = "0.4.0", features = ["ifc", "ifc-geometry", "bcf", "bcf-api", "bcf-snapshot", "axiolid", "xlsx", "html"] }
 # `check --ids` and `ids translate`: IDS documents read and translated
 # into rule packages in memory.
 axioval-ids.workspace = true
@@ -62,6 +34,11 @@ serde_json.workspace = true
 ifc-schema.workspace = true
 # Parse test models exactly as written, without the adapter's tolerance.
 ifc-step.workspace = true
+# `tests/check.rs` derives a linear placement by hand to compare with the
+# bridge's, and writes ifcXML through `ifc-model`'s codec.
+axiolid-evaluate.workspace = true
+ifc-geometry.workspace = true
+ifc-model.workspace = true
 ifc-xml.workspace = true
 openbim-bcf.workspace = true
 sha2.workspace = true

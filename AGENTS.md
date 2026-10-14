@@ -5,7 +5,7 @@ This repository owns the source-neutral Rust rule runtime, its portable contract
 ## Boundaries
 
 - Core crates must not depend on IFC, STEP, ICDD, Axiolid, OpenCascade, CGAL, or vendor types.
-- `axioval-ifc` and `axioval-axiolid` are independent adapters. Never create an adapter combining both organizations.
+- `axioval-ifc` and `axioval-axiolid` are independent adapters. Never create an adapter combining both organizations. Only the host layer (`crates/hosts/`, `HOST_CRATES` in `scripts/architecture.py`) may compose the two: `axioval-host-ifc-axiolid` is the geometry bridge every host links.
 - Source adapters map external identities and semantics into `axioval-ir`; they do not implement checking policy.
 - Geometry adapters provide typed evidence and exactness/provenance. They do not emit policy findings.
 - Rulesets select trusted capability IDs. Never execute package-provided code.
@@ -55,7 +55,7 @@ a broken page still fails before release.
 
 ## Direct children
 
-- `crates/` — Rust crates; descend into each crate's `AGENTS.md` before editing.
+- `crates/` — Rust crates, grouped by role (contracts, engine, sources, sinks, packages, codecs, facade, hosts, apps); descend into each crate's `AGENTS.md` before editing.
 - `docs/` — mdBook sources and architecture documentation.
 - `scripts/` — repository validation and architecture checks.
 - `staging/` — crates developed against unpublished path dependencies.

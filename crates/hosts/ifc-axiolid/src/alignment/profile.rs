@@ -40,7 +40,7 @@ use std::f64::consts::PI;
 
 use axiolid_curve::{ChainPiece2, CurvatureLaw, Curve2, ElevationLaw};
 use axiolid_evaluate::elevation_grade;
-use axioval::engine::{
+use axioval_engine::{
     AlignmentError, AlignmentInterval, AlignmentParameter, AlignmentProfile,
     AlignmentProfileRequest, ProfilePiece,
 };
@@ -850,8 +850,8 @@ impl IfcAlignmentService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axioval::engine::{AlignmentServiceHandle, ProfileExtreme};
-    use axioval::ir::ObjectId;
+    use axioval_engine::{AlignmentServiceHandle, ProfileExtreme};
+    use axioval_ir::ObjectId;
 
     /// An IFC4X3 alignment by its layouts, stationed from 1000: a 300 m
     /// straight plan; a gradient of 2 % to 100 m, a parabolic sag to a
@@ -918,7 +918,7 @@ mod tests {
     fn service(transition: &str) -> (AlignmentServiceHandle, ObjectId) {
         use super::super::super::{ModelBytes, Options, attach};
         let bytes = layouts(transition);
-        let session = axioval::ifc::import_ifc_session("layouts.ifc", bytes.as_bytes()).unwrap();
+        let session = axioval_ifc::import_ifc_session("layouts.ifc", bytes.as_bytes()).unwrap();
         let models: ModelBytes = session
             .snapshots()
             .map(|snapshot| (snapshot.source().clone(), bytes.as_bytes().to_vec()))

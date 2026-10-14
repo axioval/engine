@@ -1130,8 +1130,10 @@ The CLI meshes each product's net body, with openings subtracted, using
 over every model, bound to every model's snapshot. Evidence about one object
 cites that object's model; set-level evidence (free space, guards, envelope,
 unallocated regions) cites the first model in source order. That
-bridge lives in the CLI, not in an adapter, because the IFC and Axiolid
-adapters must not depend on each other. Every object ends in one of four
+bridge is not an adapter, because the IFC and Axiolid adapters must not
+depend on each other: it is the host layer's `axioval-host-ifc-axiolid`
+([host compositions](./architecture.md#host-compositions)), which any other
+host links as well. Every object ends in one of four
 states:
 
 | State | Meaning | Effect on geometric rules |

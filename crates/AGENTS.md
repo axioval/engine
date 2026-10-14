@@ -13,6 +13,7 @@ packages/    importers and exporters between rule packages and other formats
 packages/    importers that write rule packages from other rule formats
 codecs/      standalone wire-format codecs, no engine or source types
 facade/      feature-gated re-export surface
+hosts/       compositions of several adapters that every host links
 apps/        executables
 ```
 
@@ -81,12 +82,31 @@ gate with no exemption. See `codecs/AGENTS.md`.
 - `java-stream` (`axioval-java-stream`) — Java object serialization
   streams, from the public specification.
 
+## hosts/
+
+One subdirectory per composition, named for the adapters it joins. A host
+crate composes adapters the way an executable does, so every host links one
+proven composition instead of copying it. It is the only layer allowed to
+depend on two adapters at once: `HOST_CRATES` in `scripts/architecture.py`
+names its crates, and the gate fails any other crate, adapters and facade
+features included, whose runtime dependencies join the IFC and the Axiolid
+side. A host crate maps nothing into the IR, depends on no sink and owns no
+command-line concern. Its package name says it is a host
+(`axioval-host-…`), so the gate's name-keyed exemption can never be mistaken
+for a combined adapter.
+
+- `ifc-axiolid` (`axioval-host-ifc-axiolid`) — the IFC→Axiolid geometry
+  bridge (`attach`): IFC bodies meshed and registered as the Axiolid
+  geometry services of an IFC session.
+
 ## facade/ and apps/
 
 - `axioval` — feature-gated facade. One feature per source adapter or sink,
   named for the format or library it adapts (`ifc`, `axiolid`, `icdd`, `bcf`,
-  `bcf-api`, `bcf-snapshot`, `xlsx`, `html`).
-- `cli` (`axioval-cli`) — command-line frontend.
+  `bcf-api`, `bcf-snapshot`, `xlsx`, `html`), and one per host crate, named
+  for what it gives a host (`ifc-geometry`).
+- `cli` (`axioval-cli`) — command-line frontend; takes the geometry bridge
+  through `ifc-geometry`.
 
 ## Adding a source adapter or sink
 
@@ -97,6 +117,9 @@ gate with no exemption. See `codecs/AGENTS.md`.
 3. Add the crate name to `ADAPTER_CRATES` in `scripts/architecture.py` and to
    `EXPECTED` in `scripts/check_package_contents.py`, and bump
    `EXPECTED_MEMBERS` in `scripts/staging_isolation.py`.
+
+A host crate follows the same three steps under `hosts/<adapters>/`, and is
+also added to `HOST_CRATES`.
 
 Crates not listed in `ADAPTER_CRATES` are treated as core and must stay
 source-neutral; the architecture gate enforces that by package name, so a crate

@@ -5,7 +5,10 @@
 //! under a module named for the format or library it adapts, behind a feature
 //! of the same name. Output sinks follow the same rule (`bcf`, `bcf_api`
 //! for BCF API servers, `bcf_snapshot` for viewpoint images, `xlsx` for
-//! spreadsheet workbooks, and `html` for HTML reports).
+//! spreadsheet workbooks, and `html` for HTML reports). Host compositions
+//! of several adapters come from the host layer: `ifc_geometry` (feature
+//! `ifc-geometry`) meshes IFC bodies and registers them as the Axiolid
+//! geometry services of an IFC session.
 #![forbid(unsafe_code)]
 
 pub use axioval_engine as engine;
@@ -20,6 +23,8 @@ pub use axioval_bcf as bcf;
 pub use axioval_bcf_api as bcf_api;
 #[cfg(feature = "bcf-snapshot")]
 pub use axioval_bcf_snapshot as bcf_snapshot;
+#[cfg(feature = "ifc-geometry")]
+pub use axioval_host_ifc_axiolid as ifc_geometry;
 #[cfg(feature = "html")]
 pub use axioval_html as html;
 #[cfg(feature = "icdd")]

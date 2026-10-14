@@ -1,6 +1,6 @@
 //! Available sight distances along IFC alignments: the sight-distance
 //! method of the bridge's
-//! [`AlignmentService`](axioval::engine::AlignmentService).
+//! [`AlignmentService`](axioval_engine::AlignmentService).
 //!
 //! The eye stands in the section at the request's station, the target in
 //! the section at plan distance `d` further along ([`super::section`]'s
@@ -54,11 +54,11 @@
 
 use axiolid_curve::ElevationLaw;
 use axiolid_evaluate::elevation_height;
-use axioval::axiolid::SightObstacles;
-use axioval::engine::{
+use axioval_axiolid::SightObstacles;
+use axioval_engine::{
     AlignmentError, AlignmentInterval, SightDistance, SightDistanceRequest, SightObstruction,
 };
-use axioval::ir::ObjectId;
+use axioval_ir::ObjectId;
 
 use super::{Centreline, IfcAlignmentService, evidence, gradient, slack};
 
@@ -472,9 +472,9 @@ mod tests {
     use axiolid_curve::{CurvatureLaw, Curve2, Curve3, Elevated3, Intrinsic2};
     use axiolid_evaluate::bound::continuity_breaks3;
     use axiolid_mesh::TriMesh;
-    use axioval::axiolid::AxiolidGeometry;
-    use axioval::engine::AlignmentService;
-    use axioval::ir::SourceId;
+    use axioval_axiolid::AxiolidGeometry;
+    use axioval_engine::AlignmentService;
+    use axioval_ir::SourceId;
 
     use super::*;
 

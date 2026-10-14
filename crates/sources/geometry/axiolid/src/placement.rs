@@ -62,18 +62,6 @@ fn unavailable(context: &str, error: impl std::fmt::Debug) -> FreeSpaceError {
     FreeSpaceError::Unavailable(format!("{context}: {error:?}"))
 }
 
-/// The plan footprint of a triangle set, as a validated region.
-pub(crate) fn footprint(
-    triangles: &[Triangle],
-    tolerance: Tolerance,
-) -> Result<Region, FreeSpaceError> {
-    let rings: Vec<Ring> = projected_polygons(triangles)
-        .into_iter()
-        .map(|polygon| polygon.outer)
-        .collect();
-    union(&rings, tolerance)
-}
-
 /// How far a shadow the overlay refuses is grown before it joins an outer
 /// footprint: far above its linear tolerance and the rounding of the box's
 /// corners, far below [`KNIFE_EDGE_METRES`].
@@ -90,8 +78,8 @@ const SLIVER_MARGIN_METRES: f64 = 1.0e-8;
 /// exact cleaning removes it. `inner` leaves those slivers out, which only
 /// shrinks it; `outer` takes each as a box around it, the sliver's longest
 /// edge for one side and grown by [`SLIVER_MARGIN_METRES`] all round, which
-/// only grows it. Without such shadows both are the one footprint
-/// [`footprint`] builds.
+/// only grows it. Without such shadows both are the one union of every
+/// projected triangle.
 pub(crate) fn bracketed_footprint(
     triangles: &[Triangle],
     tolerance: Tolerance,

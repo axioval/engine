@@ -183,7 +183,9 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   edge grown by `SLIVER_MARGIN_METRES`; never drop it from the room or add
   it to the scope. `containment.rs` brackets its scopes the same way
   (`Inside` against the kept shadows, `Outside` against them and the
-  boxes).
+  boxes), and so does `circulation.rs`'s `subject_footprint` for entrances
+  and components (grown from inside from the kept shadows, from outside
+  around the boxes).
   Placement evidence cites the scope's source. Clearance tests each obstacle's solid
   against the volume's prism shrunk by `CONTACT_TOLERANCE_M`: a triangle
   meeting it (band-clipped, then plan separating axes) or the centre inside

@@ -308,9 +308,9 @@ impl AxiolidFreeSpaceService {
 
         let mut contacts = Vec::new();
         for subject in request.subjects() {
-            let footprint = self.subject_footprint(&subject, t)?;
+            let (footprint, around) = self.subject_footprint(&subject, t)?;
             let near = footprint.dilate_inner(reach, t).map_err(err)?;
-            let far = footprint.dilate_outer(reach, t).map_err(err)?;
+            let far = around.dilate_outer(reach, t).map_err(err)?;
             let mut reached = Vec::new();
             for (index, region) in pieces.iter().enumerate() {
                 if meets(region, &near, t)? {
@@ -320,7 +320,7 @@ impl AxiolidFreeSpaceService {
                         .filter(|(_, node)| node.piece() == index)
                         .map(|(at, node)| {
                             let [x, y, _] = node.point();
-                            (region_distance(Point2::new(x, y), &footprint), at)
+                            (region_distance(Point2::new(x, y), &around), at)
                         })
                         .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)))
                         .map(|(_, at)| at);
@@ -386,9 +386,9 @@ impl AxiolidFreeSpaceService {
         let mut sure = Vec::new();
         let mut maybe = Vec::new();
         for entrance in reach.entrances() {
-            let footprint = self.subject_footprint(entrance, t)?;
+            let (footprint, around) = self.subject_footprint(entrance, t)?;
             let grown_in = footprint.dilate_inner(near, t).map_err(err)?;
-            let grown_out = footprint.dilate_outer(near, t).map_err(err)?;
+            let grown_out = around.dilate_outer(near, t).map_err(err)?;
             for polygon in inner.polygons() {
                 if !sure.contains(polygon) && meets(&piece(polygon, t)?, &grown_in, t)? {
                     sure.push(polygon.clone());
@@ -413,12 +413,15 @@ impl AxiolidFreeSpaceService {
         })
     }
 
-    /// The plan footprint of an entrance or component.
+    /// The plan footprint of an entrance or component, bracketed around the
+    /// shadows the overlay refuses (`placement::bracketed_footprint`,
+    /// #377): `(inside, around)`, the first grown from inside for what it
+    /// surely meets, the second from outside for what it may.
     fn subject_footprint(
         &self,
         subject: &ObjectId,
         tolerance: Tolerance,
-    ) -> Result<Region, FreeSpaceError> {
+    ) -> Result<(Region, Region), FreeSpaceError> {
         if self.geometry().has_no_body(subject) {
             return Err(FreeSpaceError::Unavailable(format!(
                 "{subject} has no body, so where a path meets it is unknown"
@@ -431,10 +434,10 @@ impl AxiolidFreeSpaceService {
         if self.geometry().is_tessellated(subject) {
             return Err(FreeSpaceError::InexactPlacementEvidence);
         }
-        let footprint = placement::footprint(&triangles(mesh), tolerance)?;
-        if footprint.is_empty() {
+        let (inside, around) = placement::bracketed_footprint(&triangles(mesh), tolerance)?;
+        if around.is_empty() {
             return Err(FreeSpaceError::MissingGeometry(Box::new(subject.clone())));
         }
-        Ok(footprint)
+        Ok((inside, around))
     }
 }

@@ -2001,9 +2001,9 @@ dependencies = [
 
 [[package]]
 name = "openbim-ifc"
-version = "0.32.0"
+version = "0.33.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6adfd94b07f23dfa259d83e5ccc63c3f8bfc02428a5abdd6c21dbdaabecbe8c4"
+checksum = "c7265339ce04085141a392bf3718fb21a3381e4b9832657bf0c22e01b116058d"
 dependencies = [
  "getrandom 0.3.4",
  "ifc-classification",

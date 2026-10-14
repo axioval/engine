@@ -538,6 +538,8 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **IFC**: moved to `openbim-ifc` 0.33. The engine uses none of the
+  authoring or named-attribute APIs it changes, so checks are unchanged.
 - **Geometry**: moved to `axiolid-mesh-compile` 0.3.25, `axiolid-inspect`
   0.3.6, `axiolid-evaluate` 0.3.15 and `axiolid-mesh-boolean-boolmesh`
   0.3.6.

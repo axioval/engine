@@ -174,7 +174,7 @@ openbim-ids = { version = "0.2.2", features = ["audit-schema"] }
 # only in the IFC facade, which joins `ifc-geometry` and `ifc-properties`; `geometry-select`
 # compiles no geometry kernel.
 # 0.24 re-exports `ifc-geometry` 0.18; its `authoring` feature stays off.
-openbim_ifc = { package = "openbim-ifc", version = "0.32.0", default-features = false, features = ["geometry-select", "properties", "ifc2x3", "ifc4", "ifc4x3"] }
+openbim_ifc = { package = "openbim-ifc", version = "0.33.0", default-features = false, features = ["geometry-select", "properties", "ifc2x3", "ifc4", "ifc4x3"] }
 ifc-classification = "0.4.0"
 # The CLI reads each `IfcAlignment`'s centreline, stationing and cant to
 # locate products along it (engine#252). 0.7 evaluates Viennese bends for

@@ -584,34 +584,40 @@ impl AxiolidFreeSpaceService {
         // A footprint at georeferenced coordinates is united in that frame
         // too (#304), and moved back; elsewhere where it lies, as before.
         let far = corner[0].abs().max(corner[1].abs()) >= 1.0e5;
-        let footprint_of = |part: &[Triangle]| -> Result<Region, FreeSpaceError> {
+        // Each footprint is bracketed around the shadows the overlay
+        // refuses (`placement::bracketed_footprint`): inside for witnesses,
+        // around for absence.
+        let footprint_of = |part: &[Triangle]| -> Result<(Region, Region), FreeSpaceError> {
             if !far {
-                return placement::footprint(part, tolerance);
+                return placement::bracketed_footprint(part, tolerance);
             }
             let moved: Vec<Triangle> = part
                 .iter()
                 .map(|face| face.map(|p| Point3::new(p.x - origin.x, p.y - origin.y, p.z)))
                 .collect();
-            world(placement::footprint(&moved, tolerance)?)
+            let (inner, outer) = placement::bracketed_footprint(&moved, tolerance)?;
+            Ok((world(inner)?, world(outer)?))
         };
 
         // The scope: one footprint when exact, else each part eroded
         // (witnesses) and grown (absence) by its own deviation.
         let (footprint, room) = if parts.iter().all(|(_, d)| *d == 0.0) {
             let all: Vec<Triangle> = parts.into_iter().flat_map(|(part, _)| part).collect();
-            let footprint = footprint_of(&all)?;
-            (footprint.clone(), footprint)
+            footprint_of(&all)?
         } else {
             let (mut inner, mut outer) = (Region::empty(), Region::empty());
             for (part, d) in &parts {
-                let own = local(footprint_of(part)?)?;
+                let (own_inner, own_outer) = footprint_of(part)?;
+                let (own_inner, own_outer) = (local(own_inner)?, local(own_outer)?);
                 let (sure, possible) = if *d > 0.0 {
                     (
-                        own.erode_inner(*d, tolerance).map_err(region_error)?,
-                        own.dilate_outer(*d, tolerance).map_err(region_error)?,
+                        own_inner.erode_inner(*d, tolerance).map_err(region_error)?,
+                        own_outer
+                            .dilate_outer(*d, tolerance)
+                            .map_err(region_error)?,
                     )
                 } else {
-                    (own.clone(), own)
+                    (own_inner, own_outer)
                 };
                 inner = inner.union(&sure, tolerance).map_err(region_error)?;
                 outer = outer.union(&possible, tolerance).map_err(region_error)?;

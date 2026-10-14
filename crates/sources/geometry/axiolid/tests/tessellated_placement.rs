@@ -6,9 +6,9 @@ use axiolid_core::Point3;
 use axiolid_mesh::TriMesh;
 use axioval_axiolid::{AxiolidFreeSpaceService, AxiolidGeometry};
 use axioval_engine::{
-    BoxClearance, FreeSpaceError, FreeSpaceService, MetricDirection, MetricFrame, MetricPoint,
-    PlacementDomain, PlacementOrientation, PlacementOutcome, PlacementRequest, PlacementShape,
-    SupportedPlacement,
+    BoxClearance, CylinderClearance, FreeSpaceError, FreeSpaceService, MetricDirection,
+    MetricFrame, MetricPoint, PlacementDomain, PlacementOrientation, PlacementOutcome,
+    PlacementRequest, PlacementShape, SupportedPlacement,
 };
 use axioval_ir::{ObjectId, SourceId};
 
@@ -525,4 +525,127 @@ fn an_unmeasured_obstacle_bounded_by_boxes_either_side_is_left_out() {
     let invalid = ([f64::NAN, 0.0, 0.0], [12.0, 1.2, 3.0]);
     refused(room().with_unmeasured_bounds(id("lost"), vec![east, invalid]));
     refused(room().with_unmeasured_bounds(id("lost"), Vec::new()));
+}
+
+/// Sides of the polygon a round room is tessellated with.
+const ROUND_SIDES: u32 = 32;
+
+/// The corners of a round room of `radius` about `centre`, tessellated as
+/// the inscribed [`ROUND_SIDES`]-gon, counter-clockwise.
+fn round_corners(centre: Xy, radius: f64) -> Vec<Xy> {
+    (0..ROUND_SIDES)
+        .map(|k| {
+            let angle = 2.0 * std::f64::consts::PI * f64::from(k) / f64::from(ROUND_SIDES);
+            let (s, c) = angle.sin_cos();
+            (centre.0 + radius * c, centre.1 + radius * s)
+        })
+        .collect()
+}
+
+/// A closed, outward-wound upright prism over a convex counter-clockwise
+/// plan polygon, its caps fanned from the first corner.
+fn convex_prism(polygon: &[Xy], z0: f64, z1: f64) -> TriMesh {
+    let n = u32::try_from(polygon.len()).unwrap();
+    let mut positions: Vec<Point3> = polygon
+        .iter()
+        .map(|(x, y)| Point3::new(*x, *y, z0))
+        .collect();
+    positions.extend(polygon.iter().map(|(x, y)| Point3::new(*x, *y, z1)));
+    let mut indices = Vec::new();
+    for i in 1..n - 1 {
+        indices.extend([0, i + 1, i, n, n + i, n + i + 1]);
+    }
+    for i in 0..n {
+        let j = (i + 1) % n;
+        indices.extend([i, j, n + j, i, n + j, n + i]);
+    }
+    TriMesh::new(positions, indices)
+}
+
+/// How far the chords of a round room of `radius` lie from its wall.
+fn round_sagitta(radius: f64) -> f64 {
+    radius * (1.0 - (std::f64::consts::PI / f64::from(ROUND_SIDES)).cos())
+}
+
+/// A round room of radius 2 m, its curved wall tessellated within its
+/// chord deviation, and a circle of `radius` metres to place in it.
+fn round_room(radius: f64) -> Result<PlacementOutcome, FreeSpaceError> {
+    round_room_on(radius, None)
+}
+
+/// [`round_room`] standing on an exact slab whose top is its floor, the
+/// slab an obstacle as every element is by default, with the room's extent
+/// certified by its host (`with_extent_bounds`) when `certified` is
+/// `Some(true)`. `None` leaves the slab out.
+fn round_room_on(radius: f64, certified: Option<bool>) -> Result<PlacementOutcome, FreeSpaceError> {
+    let mut geometry = AxiolidGeometry::new().with_tessellated_mesh(
+        id("room"),
+        convex_prism(&round_corners((5.0, 5.0), 2.0), 0.0, 3.0),
+        round_sagitta(2.0),
+    );
+    let mut obstacles = Vec::new();
+    if let Some(certified) = certified {
+        geometry = geometry.with_mesh(id("slab"), prisms(&[rect(0.0, 10.0, 0.0, 10.0)], -0.3, 0.0));
+        obstacles.push(id("slab"));
+        if certified {
+            // The construction's extent: the arc's extremes outside, its
+            // vertices (on the arc) inside; the floor and ceiling exact.
+            geometry = geometry.with_extent_bounds(
+                id("room"),
+                ([3.0, 3.0, 0.0], [7.0, 7.0, 3.0]),
+                Some(([3.0, 3.0, 0.0], [7.0, 7.0, 3.0])),
+            );
+        }
+    }
+    let request = PlacementRequest::new_in_domain(
+        id("room"),
+        PlacementShape::Cylinder(CylinderClearance::try_new(radius, 2.0).unwrap()),
+        obstacles,
+        PlacementDomain::Supported(SupportedPlacement::try_new(id("room"), 0.0).unwrap()),
+    )
+    .unwrap();
+    AxiolidFreeSpaceService::new(geometry, source()).find_placement(&request)
+}
+
+/// A curved, tessellated room (#377) decides a circle both ways: a 1.5 m
+/// circle, clear of the wall by far more than the deviation, is placed and
+/// cites the deviation; one wider than the room grown by its deviation is
+/// refuted.
+#[test]
+fn a_curved_tessellated_room_decides_a_circle_both_ways() {
+    let locator = found(round_room(0.75));
+    assert!(
+        locator.contains(":within-chord-deviation=") && locator.contains("room"),
+        "{locator}"
+    );
+    nowhere(round_room(2.0 + 2.0 * round_sagitta(2.0)));
+}
+
+/// A circle within the chord deviation of the round room's radius may fit
+/// the true wall or not: the search refuses rather than decide.
+#[test]
+fn a_circle_within_the_deviation_of_a_curved_room_is_undecided() {
+    let d = round_sagitta(2.0);
+    for radius in [2.0 - 1.5 * d, 2.0 - d / 2.0, 2.0] {
+        assert_eq!(
+            round_room(radius),
+            Err(FreeSpaceError::InexactPlacementEvidence),
+            "radius {radius}"
+        );
+    }
+}
+
+/// The round room on a slab, as every space stands, with the slab an
+/// obstacle: certified by its host, the room's floor is the slab's top and
+/// the circle is decided both ways. Uncertified, the floor may lie anywhere
+/// within the chord deviation of the mesh's, so the slab may reach into
+/// the band over it: the search refuses rather than pass.
+#[test]
+fn a_curved_room_on_a_slab_is_decided_only_over_a_certified_floor() {
+    found(round_room_on(0.75, Some(true)));
+    nowhere(round_room_on(2.0 + 2.0 * round_sagitta(2.0), Some(true)));
+    assert_eq!(
+        round_room_on(0.75, Some(false)),
+        Err(FreeSpaceError::InexactPlacementEvidence)
+    );
 }

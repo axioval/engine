@@ -902,3 +902,61 @@ fn a_raked_wall_on_edge_in_the_band_is_measured() {
         ));
     }
 }
+
+/// A closed, outward-wound prism over a convex counter-clockwise plan
+/// polygon, its caps fanned from the first corner and its top corners
+/// moved by `shift` in plan, as a host's placement rounds a wall's upper
+/// corners some ulps off its lower ones.
+fn leaning_prism(polygon: &[(f64, f64)], z0: f64, z1: f64, shift: (f64, f64)) -> TriMesh {
+    let n = u32::try_from(polygon.len()).unwrap();
+    let mut positions: Vec<Point3> = polygon
+        .iter()
+        .map(|(x, y)| Point3::new(*x, *y, z0))
+        .collect();
+    positions.extend(
+        polygon
+            .iter()
+            .map(|(x, y)| Point3::new(x + shift.0, y + shift.1, z1)),
+    );
+    let mut indices = Vec::new();
+    for i in 1..n - 1 {
+        indices.extend([0, i + 1, i, n, n + i, n + i + 1]);
+    }
+    for i in 0..n {
+        let j = (i + 1) % n;
+        indices.extend([i, j, n + j, i, n + j, n + i]);
+    }
+    TriMesh::new(positions, indices)
+}
+
+/// A 4 x 3 room whose walls stand upright up to rounding (#377): its
+/// ceiling's corners lie a few picometres off its floor's in plan, so every
+/// wall projects to a sliver the overlay refuses (`RepeatedVertex`), and a
+/// corner in the middle of its south wall fans a floor and a ceiling
+/// triangle without area. The search is bracketed around the slivers and
+/// decides both ways, a centimetre either side of the room's width.
+#[test]
+fn a_room_whose_walls_project_to_slivers_is_decided() {
+    let corners = [(0.0, 0.0), (2.0, 0.0), (4.0, 0.0), (4.0, 3.0), (0.0, 3.0)];
+    let geometry = || {
+        AxiolidGeometry::new().with_mesh(
+            id("room"),
+            leaning_prism(&corners, 0.0, 3.0, (3.0e-12, -2.0e-12)),
+        )
+    };
+    let circle =
+        |radius: f64| PlacementShape::Cylinder(CylinderClearance::try_new(radius, 2.0).unwrap());
+    let ([x, y, _], _) = found(place(geometry(), circle(0.75), &[]));
+    assert!(
+        (0.75..=3.25).contains(&x) && (0.75..=2.25).contains(&y),
+        "centre ({x}, {y})"
+    );
+    found(place(geometry(), circle(1.5 - 0.01), &[]));
+    nowhere(place(geometry(), circle(1.5 + 0.01), &[]));
+    found(place(
+        geometry(),
+        rectangle(3.9, 2.9, PlacementOrientation::Any),
+        &[],
+    ));
+    nowhere(place(geometry(), rectangle(4.1, 1.0, along(1.0, 0.0)), &[]));
+}

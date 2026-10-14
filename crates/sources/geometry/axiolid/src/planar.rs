@@ -533,7 +533,7 @@ pub(crate) fn kept_fan_triangle(ring: &Ring) -> bool {
 /// tests `axiolid-overlay` runs (`validate_ring`), in the same arithmetic;
 /// a ring this misjudges as accepted is refused by the overlay itself,
 /// never measured wrongly.
-fn refused_ring(ring: &Ring, tolerance: axiolid_core::Tolerance) -> bool {
+pub(crate) fn refused_ring(ring: &Ring, tolerance: axiolid_core::Tolerance) -> bool {
     let points = &ring.points;
     let linear = tolerance.linear();
     (0..points.len())

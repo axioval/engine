@@ -83,6 +83,94 @@
       "evidence": [
         {
           "exact": true,
+          "locator": "axiolid:containment:ifc-step:bs-ifc4x3-building-architecture.ifc/#85",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axioval:derived.contained-in-space;horizontal=0;vertical=0:derived-from:ifc-step:bs-ifc4x3-building-architecture.ifc/#116:2 space(s)",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axioval:derived.contained-in-space;horizontal=0;vertical=0:ifc-step:bs-ifc4x3-building-architecture.ifc/#116->ifc-step:bs-ifc4x3-building-architecture.ifc/#85:contains-point(7.850000,6.300000,0.450000)",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "clearance_checks;side=@side;sides=@sides;quantifier=@quantifier;front_axis=@front_axis;both_sides=@both_sides;width=@width;width_mode=@width_mode;width_minimum=@width_minimum;width_maximum=@width_maximum;depth=@depth;depth_mode=@depth_mode;depth_minimum=@depth_minimum;depth_maximum=@depth_maximum;depth_from=@depth_from;radius=@radius;height=@height;height_mode=@height_mode;height_minimum=@height_minimum;height_maximum=@height_maximum;size_mode=@size_mode;size_tolerance=@size_tolerance;offset=@offset;lateral_offset=@lateral_offset;align=@align;slide_from=@slide_from;slide_to=@slide_to;depth_slide_from=@depth_slide_from;depth_slide_to=@depth_slide_to;height_reference=@height_reference;vertical_offset=@vertical_offset;top_datum=@top_datum;top_offset=@top_offset;obstacles=@obstacles;allowed_intruders=@allowed_intruders;protrusion=@protrusion;within_space=@within_space;space_path=@space_path;wall_selector=@wall_selector;wall_reach=@wall_reach;wall_inset=@wall_inset;support_selector=@support_selector;support_tolerance=@support_tolerance;clear_width_property=@clear_width_property;clear_width_from_leaves=@clear_width_from_leaves;overall_width=@overall_width;width_deduction=@width_deduction#4",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "directional-extent:ifc-step:bs-ifc4x3-building-architecture.ifc/#116:[-0.0000000000000015394380663318816,-1,0.0000000000000005661703895142863]",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "directional-extent:ifc-step:bs-ifc4x3-building-architecture.ifc/#116:[1,-0.0000000000000015394380663318816,-0.00000000000000000000000000000007032049538395806]",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:placement:#116:#120<#87<#47<#40<#30<#23",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4x3-building-architecture.ifc/#85",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "87b540c2-1a45-53ee-a42f-d8b722c9c57e",
+      "message": "right clearance (0.7 m wide, 0.9 m deep, 2 m high) extends outside ifc-step:bs-ifc4x3-building-architecture.ifc/#85",
+      "object_id": {
+        "local_id": "#116",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#85",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cc-left-within",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
           "locator": "axiolid:free-space",
           "source": {
             "document": "bs-ifc4x3-building-architecture.ifc",
@@ -175,34 +263,6 @@
       "severity": "warning"
     },
     {
-      "evidence": [],
-      "id": "4b2e0423-2d3c-532a-841f-7498a2565cd6",
-      "message": "ifc-step:bs-ifc4x3-building-architecture.ifc/#135 has no entrance: no door or opening reaches it along axioval:derived.adjacent-space",
-      "object_id": {
-        "local_id": "#135",
-        "source": {
-          "document": "bs-ifc4x3-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "rule_id": "lc-entrances",
-      "severity": "warning"
-    },
-    {
-      "evidence": [],
-      "id": "e4197204-c76c-5541-a418-96cda0675439",
-      "message": "ifc-step:bs-ifc4x3-building-architecture.ifc/#85 has no entrance: no door or opening reaches it along axioval:derived.adjacent-space",
-      "object_id": {
-        "local_id": "#85",
-        "source": {
-          "document": "bs-ifc4x3-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "rule_id": "lc-entrances",
-      "severity": "warning"
-    },
-    {
       "evidence": [
         {
           "exact": true,
@@ -255,6 +315,232 @@
         }
       },
       "rule_id": "cc-supported",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:placement:#135",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:placement:#135:reached-from=:path-width=1.200000",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "free_floor_fit;shape=circle;diameter_metres=@diameter_metres;height_metres=@height_metres;obstacles=@obstacles;band_from_metres=@band_from_metres;band_to_metres=@band_to_metres;merge_path=@merge_path;subtract_door_swings=@subtract_door_swings;entrance_path_width=@entrance_path_width;entrance_tolerance_metres=@entrance_tolerance_metres;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector#1",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "4626b972-21fb-5ec8-9be4-e9ad07083ea7",
+      "message": "NO_FREE_FLOOR_SPACE_FOR_CIRCLE: the shape fits only where no path 1.2 m wide from an entrance reaches it",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "ff-circle-entrance",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:placement:#85",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:placement:#85:reached-from=:path-width=1.200000",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "free_floor_fit;shape=circle;diameter_metres=@diameter_metres;height_metres=@height_metres;obstacles=@obstacles;band_from_metres=@band_from_metres;band_to_metres=@band_to_metres;merge_path=@merge_path;subtract_door_swings=@subtract_door_swings;entrance_path_width=@entrance_path_width;entrance_tolerance_metres=@entrance_tolerance_metres;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector#1",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "db6448c1-72ac-5169-bf14-37b860f79d8a",
+      "message": "NO_FREE_FLOOR_SPACE_FOR_CIRCLE: the shape fits only where no path 1.2 m wide from an entrance reaches it",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "ff-circle-entrance",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:placement:#135",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "free_floor_fit;shape=circle;diameter_metres=@diameter_metres;height_metres=@height_metres;obstacles=@obstacles;band_from_metres=@band_from_metres;band_to_metres=@band_to_metres;merge_path=@merge_path;subtract_door_swings=@subtract_door_swings;entrance_path_width=@entrance_path_width;entrance_tolerance_metres=@entrance_tolerance_metres;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector#1",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "c5a416a6-234a-54dc-9fa5-e783c934932a",
+      "message": "NO_FREE_FLOOR_SPACE_FOR_CIRCLE",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "ff-circle-large",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:placement:#85",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "free_floor_fit;shape=circle;diameter_metres=@diameter_metres;height_metres=@height_metres;obstacles=@obstacles;band_from_metres=@band_from_metres;band_to_metres=@band_to_metres;merge_path=@merge_path;subtract_door_swings=@subtract_door_swings;entrance_path_width=@entrance_path_width;entrance_tolerance_metres=@entrance_tolerance_metres;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector#1",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "1c674543-2ffe-5800-a327-888aa6b97b2c",
+      "message": "NO_FREE_FLOOR_SPACE_FOR_CIRCLE",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "ff-circle-large",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:circulation:#85",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "circulation_verdicts;component_selector=@component_selector;space_path=@space_path;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector;obstacles=@obstacles;subtract_door_swings=@subtract_door_swings;width_metres=@width_metres;clear_height_metres=@clear_height_metres;tolerance_metres=@tolerance_metres;component_mode=@component_mode;end_width_metres=@end_width_metres;end_length_metres=@end_length_metres;end_reach_metres=@end_reach_metres;short_end_metres=@short_end_metres;narrow_end_metres=@narrow_end_metres;merge_path=@merge_path;band_from_metres=@band_from_metres;end_exempt_selector=@end_exempt_selector;end_exempt_reach_metres=@end_exempt_reach_metres;partner_selector=@partner_selector;require_entrances=@require_entrances;check_entrance_width=@check_entrance_width;clear_width_property=@clear_width_property;clear_width_from_leaves=@clear_width_from_leaves;overall_width=@overall_width;width_deduction=@width_deduction;passing_width_metres=@passing_width_metres;passing_length_metres=@passing_length_metres;passing_spacing_metres=@passing_spacing_metres;passing_reach_metres=@passing_reach_metres;selection=@selection#2",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "0d828b1d-227f-55cc-b3e3-5627843c9f2f",
+      "message": "no entrance of ifc-step:bs-ifc4x3-building-architecture.ifc/#85 reaches it on a path 0.9 m wide",
+      "object_id": {
+        "local_id": "#116",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#85",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "lc-entrances",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "circulation_verdicts;component_selector=@component_selector;space_path=@space_path;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector;obstacles=@obstacles;subtract_door_swings=@subtract_door_swings;width_metres=@width_metres;clear_height_metres=@clear_height_metres;tolerance_metres=@tolerance_metres;component_mode=@component_mode;end_width_metres=@end_width_metres;end_length_metres=@end_length_metres;end_reach_metres=@end_reach_metres;short_end_metres=@short_end_metres;narrow_end_metres=@narrow_end_metres;merge_path=@merge_path;band_from_metres=@band_from_metres;end_exempt_selector=@end_exempt_selector;end_exempt_reach_metres=@end_exempt_reach_metres;partner_selector=@partner_selector;require_entrances=@require_entrances;check_entrance_width=@check_entrance_width;clear_width_property=@clear_width_property;clear_width_from_leaves=@clear_width_from_leaves;overall_width=@overall_width;width_deduction=@width_deduction;passing_width_metres=@passing_width_metres;passing_length_metres=@passing_length_metres;passing_spacing_metres=@passing_spacing_metres;passing_reach_metres=@passing_reach_metres;selection=@selection#1",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "4b2e0423-2d3c-532a-841f-7498a2565cd6",
+      "message": "ifc-step:bs-ifc4x3-building-architecture.ifc/#135 has no entrance: no door or opening reaches it along axioval:derived.adjacent-space",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "lc-entrances",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "circulation_verdicts;component_selector=@component_selector;space_path=@space_path;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector;obstacles=@obstacles;subtract_door_swings=@subtract_door_swings;width_metres=@width_metres;clear_height_metres=@clear_height_metres;tolerance_metres=@tolerance_metres;component_mode=@component_mode;end_width_metres=@end_width_metres;end_length_metres=@end_length_metres;end_reach_metres=@end_reach_metres;short_end_metres=@short_end_metres;narrow_end_metres=@narrow_end_metres;merge_path=@merge_path;band_from_metres=@band_from_metres;end_exempt_selector=@end_exempt_selector;end_exempt_reach_metres=@end_exempt_reach_metres;partner_selector=@partner_selector;require_entrances=@require_entrances;check_entrance_width=@check_entrance_width;clear_width_property=@clear_width_property;clear_width_from_leaves=@clear_width_from_leaves;overall_width=@overall_width;width_deduction=@width_deduction;passing_width_metres=@passing_width_metres;passing_length_metres=@passing_length_metres;passing_spacing_metres=@passing_spacing_metres;passing_reach_metres=@passing_reach_metres;selection=@selection#1",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "e4197204-c76c-5541-a418-96cda0675439",
+      "message": "ifc-step:bs-ifc4x3-building-architecture.ifc/#85 has no entrance: no door or opening reaches it along axioval:derived.adjacent-space",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "lc-entrances",
       "severity": "warning"
     }
   ],
@@ -314,30 +600,6 @@
       "rule_id": "cc-invalid"
     },
     {
-      "message": "left clearance: free space: free-space query unavailable: overlay: RepeatedVertex",
-      "object_id": {
-        "local_id": "#116",
-        "source": {
-          "document": "bs-ifc4x3-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "backend_unavailable",
-      "rule_id": "cc-left-within"
-    },
-    {
-      "message": "right clearance: free space: free-space query unavailable: overlay: RepeatedVertex",
-      "object_id": {
-        "local_id": "#116",
-        "source": {
-          "document": "bs-ifc4x3-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "backend_unavailable",
-      "rule_id": "cc-left-within"
-    },
-    {
       "message": "right clearance: free space: free-space geometry is unavailable for `ifc-step:bs-ifc4x3-building-architecture.ifc/#220`",
       "object_id": {
         "local_id": "#116",
@@ -386,7 +648,7 @@
       "rule_id": "cc-maximum"
     },
     {
-      "message": "front clearance: free space: free-space query unavailable: footprint: RepeatedVertex",
+      "message": "front clearance: free space: free-space geometry is unavailable for `ifc-step:bs-ifc4x3-building-architecture.ifc/#220`",
       "object_id": {
         "local_id": "#116",
         "source": {
@@ -398,7 +660,7 @@
       "rule_id": "cc-slide"
     },
     {
-      "message": "free-space query unavailable: footprint: RepeatedVertex",
+      "message": "free-space geometry is unavailable for `ifc-step:bs-ifc4x3-building-architecture.ifc/#220`",
       "object_id": {
         "local_id": "#135",
         "source": {
@@ -410,7 +672,7 @@
       "rule_id": "ff-circle"
     },
     {
-      "message": "free-space query unavailable: footprint: RepeatedVertex",
+      "message": "free-space geometry is unavailable for `ifc-step:bs-ifc4x3-building-architecture.ifc/#220`",
       "object_id": {
         "local_id": "#85",
         "source": {
@@ -446,151 +708,7 @@
       "rule_id": "ff-circle-band"
     },
     {
-      "message": "free-space query unavailable: footprint: RepeatedVertex",
-      "object_id": {
-        "local_id": "#135",
-        "source": {
-          "document": "bs-ifc4x3-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "backend_unavailable",
-      "rule_id": "ff-circle-entrance"
-    },
-    {
-      "message": "free-space query unavailable: footprint: RepeatedVertex",
-      "object_id": {
-        "local_id": "#85",
-        "source": {
-          "document": "bs-ifc4x3-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "backend_unavailable",
-      "rule_id": "ff-circle-entrance"
-    },
-    {
-      "message": "free-space query unavailable: footprint: RepeatedVertex",
-      "object_id": {
-        "local_id": "#135",
-        "source": {
-          "document": "bs-ifc4x3-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "backend_unavailable",
-      "rule_id": "ff-circle-furniture"
-    },
-    {
-      "message": "free-space query unavailable: footprint: RepeatedVertex",
-      "object_id": {
-        "local_id": "#85",
-        "source": {
-          "document": "bs-ifc4x3-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "backend_unavailable",
-      "rule_id": "ff-circle-furniture"
-    },
-    {
-      "message": "free-space query unavailable: footprint: RepeatedVertex",
-      "object_id": {
-        "local_id": "#135",
-        "source": {
-          "document": "bs-ifc4x3-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "backend_unavailable",
-      "rule_id": "ff-circle-large"
-    },
-    {
-      "message": "free-space query unavailable: footprint: RepeatedVertex",
-      "object_id": {
-        "local_id": "#85",
-        "source": {
-          "document": "bs-ifc4x3-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "backend_unavailable",
-      "rule_id": "ff-circle-large"
-    },
-    {
-      "message": "free-space query unavailable: footprint: RepeatedVertex",
-      "object_id": {
-        "local_id": "#135",
-        "source": {
-          "document": "bs-ifc4x3-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "backend_unavailable",
-      "rule_id": "ff-circle-merged"
-    },
-    {
-      "message": "free-space query unavailable: footprint: RepeatedVertex",
-      "object_id": {
-        "local_id": "#85",
-        "source": {
-          "document": "bs-ifc4x3-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "backend_unavailable",
-      "rule_id": "ff-circle-merged"
-    },
-    {
-      "message": "free-space query unavailable: footprint: RepeatedVertex",
-      "object_id": {
-        "local_id": "#135",
-        "source": {
-          "document": "bs-ifc4x3-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "backend_unavailable",
-      "rule_id": "ff-circle-swings"
-    },
-    {
-      "message": "free-space query unavailable: footprint: RepeatedVertex",
-      "object_id": {
-        "local_id": "#85",
-        "source": {
-          "document": "bs-ifc4x3-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "backend_unavailable",
-      "rule_id": "ff-circle-swings"
-    },
-    {
-      "message": "free-space query unavailable: footprint: RepeatedVertex",
-      "object_id": {
-        "local_id": "#135",
-        "source": {
-          "document": "bs-ifc4x3-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "backend_unavailable",
-      "rule_id": "ff-rectangle"
-    },
-    {
-      "message": "free-space query unavailable: footprint: RepeatedVertex",
-      "object_id": {
-        "local_id": "#85",
-        "source": {
-          "document": "bs-ifc4x3-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "backend_unavailable",
-      "rule_id": "ff-rectangle"
-    },
-    {
-      "message": "free-space query unavailable: footprint: RepeatedVertex",
+      "message": "free-space geometry is unavailable for `ifc-step:bs-ifc4x3-building-architecture.ifc/#220`",
       "object_id": {
         "local_id": "#135",
         "source": {
@@ -602,7 +720,7 @@
       "rule_id": "ff-rectangle-large"
     },
     {
-      "message": "free-space query unavailable: footprint: RepeatedVertex",
+      "message": "free-space geometry is unavailable for `ifc-step:bs-ifc4x3-building-architecture.ifc/#220`",
       "object_id": {
         "local_id": "#85",
         "source": {
@@ -638,7 +756,7 @@
       "rule_id": "ff-rectangle-unoriented"
     },
     {
-      "message": "the circulation of ifc-step:bs-ifc4x3-building-architecture.ifc/#85 is not mapped: free-space query unavailable: footprint: RepeatedVertex",
+      "message": "the circulation of ifc-step:bs-ifc4x3-building-architecture.ifc/#85 is not mapped: free-space geometry is unavailable for `ifc-step:bs-ifc4x3-building-architecture.ifc/#220`",
       "object_id": {
         "local_id": "#116",
         "source": {
@@ -650,7 +768,7 @@
       "rule_id": "lc-ends"
     },
     {
-      "message": "the circulation of ifc-step:bs-ifc4x3-building-architecture.ifc/#135 is not mapped: free-space query unavailable: footprint: RepeatedVertex",
+      "message": "the circulation of ifc-step:bs-ifc4x3-building-architecture.ifc/#135 is not mapped: free-space geometry is unavailable for `ifc-step:bs-ifc4x3-building-architecture.ifc/#220`",
       "object_id": {
         "local_id": "#135",
         "source": {
@@ -662,7 +780,7 @@
       "rule_id": "lc-ends"
     },
     {
-      "message": "the circulation of ifc-step:bs-ifc4x3-building-architecture.ifc/#85 is not mapped: free-space query unavailable: footprint: RepeatedVertex",
+      "message": "the circulation of ifc-step:bs-ifc4x3-building-architecture.ifc/#85 is not mapped: free-space geometry is unavailable for `ifc-step:bs-ifc4x3-building-architecture.ifc/#220`",
       "object_id": {
         "local_id": "#85",
         "source": {
@@ -672,18 +790,6 @@
       },
       "reason": "backend_unavailable",
       "rule_id": "lc-ends"
-    },
-    {
-      "message": "the circulation of ifc-step:bs-ifc4x3-building-architecture.ifc/#85 is not mapped: free-space query unavailable: footprint: RepeatedVertex",
-      "object_id": {
-        "local_id": "#116",
-        "source": {
-          "document": "bs-ifc4x3-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "backend_unavailable",
-      "rule_id": "lc-entrances"
     },
     {
       "message": "local-circulation: `access_path` needs `door_selector`, `opening_selector` or both",
@@ -692,7 +798,7 @@
       "rule_id": "lc-invalid"
     },
     {
-      "message": "the circulation of ifc-step:bs-ifc4x3-building-architecture.ifc/#85 is not mapped: free-space query unavailable: footprint: RepeatedVertex",
+      "message": "the circulation of ifc-step:bs-ifc4x3-building-architecture.ifc/#85 is not mapped: free-space geometry is unavailable for `ifc-step:bs-ifc4x3-building-architecture.ifc/#220`",
       "object_id": {
         "local_id": "#116",
         "source": {
@@ -704,7 +810,7 @@
       "rule_id": "lc-link"
     },
     {
-      "message": "the circulation of ifc-step:bs-ifc4x3-building-architecture.ifc/#85 is not mapped: free-space query unavailable: footprint: RepeatedVertex",
+      "message": "the circulation of ifc-step:bs-ifc4x3-building-architecture.ifc/#85 is not mapped: free-space geometry is unavailable for `ifc-step:bs-ifc4x3-building-architecture.ifc/#220`",
       "object_id": {
         "local_id": "#85",
         "source": {
@@ -716,7 +822,7 @@
       "rule_id": "lc-link"
     },
     {
-      "message": "the circulation of ifc-step:bs-ifc4x3-building-architecture.ifc/#85 is not mapped: free-space query unavailable: footprint: RepeatedVertex",
+      "message": "the circulation of ifc-step:bs-ifc4x3-building-architecture.ifc/#85 is not mapped: free-space geometry is unavailable for `ifc-step:bs-ifc4x3-building-architecture.ifc/#220`",
       "object_id": {
         "local_id": "#116",
         "source": {
@@ -728,7 +834,7 @@
       "rule_id": "lc-passing"
     },
     {
-      "message": "the circulation of ifc-step:bs-ifc4x3-building-architecture.ifc/#85 is not mapped: free-space query unavailable: footprint: RepeatedVertex",
+      "message": "the circulation of ifc-step:bs-ifc4x3-building-architecture.ifc/#85 is not mapped: free-space geometry is unavailable for `ifc-step:bs-ifc4x3-building-architecture.ifc/#220`",
       "object_id": {
         "local_id": "#85",
         "source": {
@@ -740,7 +846,7 @@
       "rule_id": "lc-passing"
     },
     {
-      "message": "the circulation of ifc-step:bs-ifc4x3-building-architecture.ifc/#85 is not mapped: free-space query unavailable: footprint: RepeatedVertex",
+      "message": "the circulation of ifc-step:bs-ifc4x3-building-architecture.ifc/#85 is not mapped: free-space geometry is unavailable for `ifc-step:bs-ifc4x3-building-architecture.ifc/#220`",
       "object_id": {
         "local_id": "#116",
         "source": {
@@ -752,7 +858,7 @@
       "rule_id": "lc-touch"
     },
     {
-      "message": "the circulation of ifc-step:bs-ifc4x3-building-architecture.ifc/#85 is not mapped: free-space query unavailable: footprint: RepeatedVertex",
+      "message": "the circulation of ifc-step:bs-ifc4x3-building-architecture.ifc/#85 is not mapped: free-space geometry is unavailable for `ifc-step:bs-ifc4x3-building-architecture.ifc/#220`",
       "object_id": {
         "local_id": "#85",
         "source": {
@@ -810,7 +916,7 @@
     {
       "checked": 1,
       "failed": 1,
-      "not_evaluated": 1,
+      "not_evaluated": 0,
       "rule_id": "cc-left-within",
       "status": "failed"
     },
@@ -851,45 +957,45 @@
     },
     {
       "checked": 2,
-      "failed": 0,
-      "not_evaluated": 2,
+      "failed": 2,
+      "not_evaluated": 0,
       "rule_id": "ff-circle-entrance",
-      "status": "not_evaluated"
+      "status": "failed"
     },
     {
       "checked": 2,
       "failed": 0,
-      "not_evaluated": 2,
+      "not_evaluated": 0,
       "rule_id": "ff-circle-furniture",
-      "status": "not_evaluated"
+      "status": "passed"
     },
     {
       "checked": 2,
-      "failed": 0,
-      "not_evaluated": 2,
+      "failed": 2,
+      "not_evaluated": 0,
       "rule_id": "ff-circle-large",
-      "status": "not_evaluated"
+      "status": "failed"
     },
     {
       "checked": 2,
       "failed": 0,
-      "not_evaluated": 2,
+      "not_evaluated": 0,
       "rule_id": "ff-circle-merged",
-      "status": "not_evaluated"
+      "status": "passed"
     },
     {
       "checked": 2,
       "failed": 0,
-      "not_evaluated": 2,
+      "not_evaluated": 0,
       "rule_id": "ff-circle-swings",
-      "status": "not_evaluated"
+      "status": "passed"
     },
     {
       "checked": 2,
       "failed": 0,
-      "not_evaluated": 2,
+      "not_evaluated": 0,
       "rule_id": "ff-rectangle",
-      "status": "not_evaluated"
+      "status": "passed"
     },
     {
       "checked": 2,
@@ -914,8 +1020,8 @@
     },
     {
       "checked": 2,
-      "failed": 2,
-      "not_evaluated": 1,
+      "failed": 3,
+      "not_evaluated": 0,
       "rule_id": "lc-entrances",
       "status": "failed"
     },

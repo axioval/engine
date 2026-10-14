@@ -137,3 +137,29 @@ fn a_scope_without_a_body_or_tessellated_is_refused() {
         Err(FreeSpaceError::Unavailable(_))
     ));
 }
+
+/// A room whose walls stand upright up to rounding (#377): its top corners
+/// lie a few picometres off its bottom ones in plan, so each wall projects
+/// to a sliver the overlay refuses. Containment is decided around them.
+#[test]
+fn a_room_whose_walls_project_to_slivers_decides_containment() {
+    let mut room = cuboid([0.0, 0.0, 0.0], [2.0, 2.0, 2.5]);
+    for point in &mut room.positions {
+        if point.z > 0.0 {
+            point.x += 3.0e-12;
+            point.y -= 2.0e-12;
+        }
+    }
+    let service =
+        AxiolidFreeSpaceService::new(AxiolidGeometry::new().with_mesh(id("a"), room), source());
+    let inside = ContainmentRequest::new(frame_at(1.0, 1.0), square(1.9), vec![id("a")]);
+    assert!(matches!(
+        service.assess_containment(&inside),
+        Ok(ContainmentOutcome::Inside(_))
+    ));
+    let outside = ContainmentRequest::new(frame_at(1.5, 1.0), square(1.2), vec![id("a")]);
+    assert!(matches!(
+        service.assess_containment(&outside),
+        Ok(ContainmentOutcome::Outside(_))
+    ));
+}

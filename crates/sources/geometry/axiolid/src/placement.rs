@@ -43,7 +43,7 @@ use axiolid_overlay::{Polygon, Region, Ring, union_soup};
 use axioval_engine::FreeSpaceError;
 
 use crate::geometry::Triangle;
-use crate::planar::projected_polygons;
+use crate::planar::{projected_polygons, refused_ring};
 
 /// Fits closer than this are not told apart from misses when proving that no
 /// placement exists. Such a verdict refuses instead.
@@ -72,6 +72,90 @@ pub(crate) fn footprint(
         .map(|polygon| polygon.outer)
         .collect();
     union(&rings, tolerance)
+}
+
+/// How far a shadow the overlay refuses is grown before it joins an outer
+/// footprint: far above its linear tolerance and the rounding of the box's
+/// corners, far below [`KNIFE_EDGE_METRES`].
+const SLIVER_MARGIN_METRES: f64 = 1.0e-8;
+
+/// The plan footprint of a triangle set, bracketed around the shadows the
+/// overlay refuses (#377): `(inner, outer)`, `inner` inside the union of
+/// every projected triangle and `outer` around it.
+///
+/// A face standing upright up to rounding (a wall whose top corners lie
+/// some ulps off its bottom ones in plan) projects to a sliver whose short
+/// side is within the overlay's linear tolerance. The overlay refuses such
+/// a ring (`RepeatedVertex`), and its corners are not one point, so no
+/// exact cleaning removes it. `inner` leaves those slivers out, which only
+/// shrinks it; `outer` takes each as a box around it, the sliver's longest
+/// edge for one side and grown by [`SLIVER_MARGIN_METRES`] all round, which
+/// only grows it. Without such shadows both are the one footprint
+/// [`footprint`] builds.
+pub(crate) fn bracketed_footprint(
+    triangles: &[Triangle],
+    tolerance: Tolerance,
+) -> Result<(Region, Region), FreeSpaceError> {
+    let (kept, slivers): (Vec<Ring>, Vec<Ring>) = projected_polygons(triangles)
+        .into_iter()
+        .map(|polygon| polygon.outer)
+        .partition(|ring| !refused_ring(ring, tolerance));
+    let inner = union(&kept, tolerance)?;
+    if slivers.is_empty() {
+        return Ok((inner.clone(), inner));
+    }
+    let mut grown = kept;
+    grown.extend(slivers.iter().map(sliver_box));
+    Ok((inner, union(&grown, tolerance)?))
+}
+
+/// A counter-clockwise rectangle holding a projected triangle: along its
+/// longest edge, grown by [`SLIVER_MARGIN_METRES`] (or by the rounding of
+/// its coordinates where that is larger) on every side, so the rounding of
+/// its corners cannot leave a point of the triangle outside.
+pub(crate) fn sliver_box(ring: &Ring) -> Ring {
+    let points = &ring.points;
+    let longest = (0..points.len())
+        .max_by(|&a, &b| {
+            let length = |i: usize| (points[(i + 1) % points.len()] - points[i]).length();
+            length(a).total_cmp(&length(b))
+        })
+        .unwrap_or(0);
+    let origin = points[longest];
+    let edge = points[(longest + 1) % points.len()] - origin;
+    let length = edge.length();
+    // A sliver of no length at all is a point: an axis box holds it.
+    let along = if length > 0.0 {
+        edge / length
+    } else {
+        Point2::X
+    };
+    let across = along.perp();
+    let magnitude = points
+        .iter()
+        .flat_map(|point| [point.x.abs(), point.y.abs()])
+        .fold(0.0, f64::max);
+    let margin = SLIVER_MARGIN_METRES.max(64.0 * f64::EPSILON * magnitude);
+    let (mut s, mut t) = (
+        (f64::INFINITY, f64::NEG_INFINITY),
+        (f64::INFINITY, f64::NEG_INFINITY),
+    );
+    for point in points {
+        let offset = *point - origin;
+        let (a, b) = (offset.dot(along), offset.dot(across));
+        s = (s.0.min(a), s.1.max(a));
+        t = (t.0.min(b), t.1.max(b));
+    }
+    let (s, t) = ((s.0 - margin, s.1 + margin), (t.0 - margin, t.1 + margin));
+    let corner = |a: f64, b: f64| origin + along * a + across * b;
+    Ring {
+        points: vec![
+            corner(s.0, t.0),
+            corner(s.1, t.0),
+            corner(s.1, t.1),
+            corner(s.0, t.1),
+        ],
+    }
 }
 
 /// The union of counter-clockwise rings, as a validated region.

@@ -826,6 +826,26 @@ All notable changes are documented here. This project follows Semantic Versionin
   and a `PanelWidth` above 1 stay refused, and a refusal still never falls
   through to the overall width less the deduction
   ([#378](https://github.com/axioval/engine/issues/378)).
+- **Free floor in rooms whose walls stand upright up to rounding**: a space
+  whose upper corners a host's placement rounds some ulps off its lower
+  ones in plan projects each wall to a sliver the plan overlay refuses, so
+  every free-floor, local-circulation and component-clearance search over
+  it was not evaluated (`free-space query unavailable: footprint:
+  RepeatedVertex`, and `overlay: RepeatedVertex` for containment). Such a
+  sliver's corners are not one point, so it is not cleaned away: the
+  scope's footprint is bracketed around it instead, the sliver left out of
+  where a witness may stand and taken as a box grown by 10 nm into where an
+  absence is proven, and containment reads `Inside` against the kept
+  shadows and `Outside` against them and the boxes. On the public
+  building-architecture models (IFC2X3, IFC4, IFC4X3) the 1.5 m circle
+  among furniture, the merged and door-swing variants and the rectangle now
+  pass, the 12 m circle and the circle reached from an entrance are
+  findings, and `lc-entrances` and `cc-left-within` decide their last
+  space; `ff-circle` itself now stops at an unmeasured element instead. A
+  curved, tessellated space decides a circle both ways where its host
+  certifies its floor; without that the slab under it may reach into the
+  band and the search still refuses
+  ([#377](https://github.com/axioval/engine/issues/377)).
 - **Georeferenced models are measured exactly again**: since #368 every
   body of a model placed in map coordinates (its site 5600 km out) was
   declared within the rounding of its coordinates, so services needing

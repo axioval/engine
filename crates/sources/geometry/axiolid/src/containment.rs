@@ -4,7 +4,11 @@
 //! rectangle, a cylinder's disc lies between an inscribed and a
 //! circumscribed polygon. The part of a bound outside every scope is the
 //! overlay difference of the bound less the scopes' projected triangles:
-//! measured directly, not as a small difference of two large areas.
+//! measured directly, not as a small difference of two large areas. A
+//! shadow the overlay refuses (an upright face whose corners lie some ulps
+//! apart in plan, #377) is left out of the scopes a bound must lie inside
+//! and taken as a box around it into those it must leave
+//! ([`crate::placement::bracketed_footprint`]).
 
 use axioval_engine::{
     ClearanceRequest, ContainmentEvidence, ContainmentOutcome, ContainmentRequest, FreeSpaceError,
@@ -15,7 +19,8 @@ use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, Polygon, overlay
 
 use crate::free_space::{AREA_EPSILON_M2, shape_footprint, tolerance};
 use crate::geometry::{AxiolidGeometry, triangles};
-use crate::planar::{plan_frame, polygon_area, projected_polygons};
+use crate::placement::sliver_box;
+use crate::planar::{plan_frame, polygon_area, projected_polygons, refused_ring};
 
 /// Answers a containment request over `geometry`, citing `source`.
 ///
@@ -29,7 +34,9 @@ pub(crate) fn assess(
 ) -> Result<ContainmentOutcome, FreeSpaceError> {
     let volume = ClearanceRequest::new(request.frame().clone(), request.shape(), Vec::new());
     let footprint = shape_footprint(&volume)?;
-    let mut scopes = Vec::new();
+    let tolerance = tolerance()?;
+    // `sure` lies inside the scopes' footprint and `possible` holds it.
+    let (mut sure, mut possible) = (Vec::new(), Vec::new());
     for scope in request.scopes() {
         if geometry.is_tessellated(scope) {
             return Err(FreeSpaceError::Unavailable(format!(
@@ -39,10 +46,19 @@ pub(crate) fn assess(
         let mesh = geometry
             .mesh(scope)
             .ok_or_else(|| FreeSpaceError::MissingGeometry(Box::new(scope.clone())))?;
-        scopes.extend(projected_polygons(&triangles(mesh)));
+        for polygon in projected_polygons(&triangles(mesh)) {
+            if refused_ring(&polygon.outer, tolerance) {
+                possible.push(Polygon {
+                    outer: sliver_box(&polygon.outer),
+                    holes: Vec::new(),
+                });
+            } else {
+                sure.push(polygon.clone());
+                possible.push(polygon);
+            }
+        }
     }
-    let tolerance = tolerance()?;
-    let outside = |bound: &Polygon| -> Result<f64, FreeSpaceError> {
+    let outside = |bound: &Polygon, scopes: &[Polygon]| -> Result<f64, FreeSpaceError> {
         if scopes.is_empty() {
             return Ok(polygon_area(bound));
         }
@@ -53,7 +69,7 @@ pub(crate) fn assess(
             },
             &OverlayInput {
                 frame: plan_frame(),
-                polygons: scopes.clone(),
+                polygons: scopes.to_vec(),
             },
             OverlayOperation::Difference,
             FillRule::NonZero,
@@ -75,10 +91,10 @@ pub(crate) fn assess(
     // The outer bound holds the footprint: nothing of it outside means
     // nothing of the footprint is. The inner bound lies in the footprint:
     // some of it outside means some of the footprint is.
-    if outside(&footprint.outer)? <= AREA_EPSILON_M2 {
+    if outside(&footprint.outer, &sure)? <= AREA_EPSILON_M2 {
         return Ok(ContainmentOutcome::Inside(evidence()?));
     }
-    if outside(&footprint.inner)? > AREA_EPSILON_M2 {
+    if outside(&footprint.inner, &possible)? > AREA_EPSILON_M2 {
         return Ok(ContainmentOutcome::Outside(evidence()?));
     }
     Err(FreeSpaceError::Unavailable(

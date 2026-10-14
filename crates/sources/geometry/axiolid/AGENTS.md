@@ -169,7 +169,21 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   (`Region::translate`): at georeferenced coordinates the overlay refuses
   its own slivers (`ZeroArea`). `Search::Undecided` with anything bracketed
   is `InexactPlacementEvidence`, never a verdict; the locator names the
-  bracketed bodies (`within_deviation`).
+  bracketed bodies (`within_deviation`). A tessellated scope's floor is
+  uncertain by its deviation unless the host certifies its extent
+  (`with_extent_bounds`), so the slab whose top is that floor may reach
+  into the witness band and the search refuses; never narrow the floor
+  from the mesh alone (`tests/tessellated_placement.rs`
+  `a_curved_room_on_a_slab_is_decided_only_over_a_certified_floor`).
+  Scope footprints are `placement::bracketed_footprint` (#377): a projected
+  triangle the overlay refuses (`refused_ring`: an upright wall whose top
+  corners lie some ulps off its bottom ones in plan, `RepeatedVertex`;
+  its corners are not one point, so no exact cleaning removes it) is left
+  out of `Scene::scope` and joins `Scene::room` as a box along its longest
+  edge grown by `SLIVER_MARGIN_METRES`; never drop it from the room or add
+  it to the scope. `containment.rs` brackets its scopes the same way
+  (`Inside` against the kept shadows, `Outside` against them and the
+  boxes).
   Placement evidence cites the scope's source. Clearance tests each obstacle's solid
   against the volume's prism shrunk by `CONTACT_TOLERANCE_M`: a triangle
   meeting it (band-clipped, then plan separating axes) or the centre inside

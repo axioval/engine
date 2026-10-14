@@ -538,6 +538,13 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **Space validation runs faster on large models**: the space service
+  measures each object's plan footprint and each space and candidate's
+  shared plan area once and keeps them, where it measured them again for
+  every space beside them and in every aspect, and reads the candidates'
+  boxes once. Outcomes are unchanged. On a large georeferenced model
+  measured without the rounding of its map coordinates, the rule ran in
+  about a quarter of its time (#371).
 - **IFC**: moved to `openbim-ifc` 0.32, `ifc-geometry` 0.26, `ifc-alignment`
   0.9, `ifc-georef` 0.7, `ifc-style` 0.5, `ifc-systems` 0.5 and `ifc-spatial`
   0.5.1. An IFC2X3 model's map conversion and projected CRS are now read

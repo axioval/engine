@@ -11,6 +11,7 @@
 //! declared defaults: the rule then says what bounds or intersects a space.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
 use axioval_engine::{
     BoundaryRequest, Cap, CapCoverage, CapRequest, ClearHeightEvidence, Containment,
@@ -26,6 +27,7 @@ use crate::planar::{
     overlay_refusal, plan_frame, polygon_area, ring_segments, snapping_area,
 };
 use axiolid_core::Point2;
+use axiolid_mesh::TriMesh;
 use axiolid_overlay::{FillRule, OverlayError, OverlayInput, OverlayOperation, Polygon, overlay};
 
 /// Areas below this are numerical dust, not a measured overlap.
@@ -74,6 +76,30 @@ pub struct AxiolidSpaceService {
     /// Which storey each object belongs to, as the host declares it.
     storeys: BTreeMap<ObjectId, ObjectId>,
     buildings: BTreeSet<ObjectId>,
+    /// What the aspects measure of the same bodies again and again, kept
+    /// from the first time (#371).
+    memo: Memo,
+}
+
+/// Measurements of one service's geometry, each taken once and kept.
+///
+/// The geometry does not change after the service is built, and every
+/// entry is a pure function of the bodies it names (their triangles and
+/// the shared [`tolerance`]), so reading one back is the measurement
+/// taken again, its refusal included. A large model asks for the same
+/// footprints for every space beside them and for the same pairs in the
+/// overlaps and both caps; measured each time, the plan overlay took most
+/// of the rule's run.
+#[derive(Default)]
+struct Memo {
+    /// Each object's enclosing extent, in [`AxiolidGeometry::objects`]
+    /// order.
+    extents: OnceLock<Vec<Option<Extent>>>,
+    /// Each object's [`plan_area`].
+    footprints: Mutex<BTreeMap<ObjectId, Result<Arc<PlanArea>, SpaceError>>>,
+    /// The [`shared_area`] of a space's body (first) and a candidate's
+    /// (second), as its bounds.
+    shared: Mutex<BTreeMap<(ObjectId, ObjectId), Result<SharedArea, SpaceError>>>,
 }
 
 impl AxiolidSpaceService {
@@ -86,6 +112,7 @@ impl AxiolidSpaceService {
             roles: BTreeMap::new(),
             storeys: BTreeMap::new(),
             buildings: BTreeSet::new(),
+            memo: Memo::default(),
         }
     }
 
@@ -230,16 +257,79 @@ impl AxiolidSpaceService {
         }
     }
 
-    /// Whether `candidate` lies apart from the space in plan: its enclosing
-    /// box (its mesh's, grown by its chord deviation) and `subject`'s share
-    /// no point, so their footprints share no area and neither can contain
-    /// or cover the other. Such a candidate is never measured, so a
-    /// footprint the overlay refuses elsewhere on the storey cannot refuse
-    /// this space. Without a box either way it is measured.
-    fn apart_in_plan(&self, subject: Option<&Extent>, candidate: &ObjectId) -> bool {
-        subject
-            .zip(self.geometry.enclosing_extent(candidate))
-            .is_some_and(|(subject, candidate)| extent_gap(subject, &candidate, true) > 0.0)
+    /// The objects with a mesh, in [`AxiolidGeometry::objects`] order, less
+    /// those lying apart from the space in plan: a candidate whose
+    /// enclosing box (its mesh's, grown by its chord deviation) and
+    /// `subject`'s share no point, so their footprints share no area and
+    /// neither can contain or cover the other. Such a candidate is never
+    /// measured, so a footprint the overlay refuses elsewhere on the storey
+    /// cannot refuse this space. Without a box either way it is measured.
+    /// The boxes are taken once per service.
+    fn beside<'s>(
+        &'s self,
+        subject: Option<&'s Extent>,
+    ) -> impl Iterator<Item = (&'s ObjectId, &'s TriMesh)> + 's {
+        let extents = self.memo.extents.get_or_init(|| {
+            self.geometry
+                .objects()
+                .map(|(object, _)| self.geometry.enclosing_extent(object))
+                .collect()
+        });
+        self.geometry
+            .objects()
+            .zip(extents)
+            .filter(move |(_, candidate)| {
+                !subject
+                    .zip(candidate.as_ref())
+                    .is_some_and(|(subject, candidate)| extent_gap(subject, candidate, true) > 0.0)
+            })
+            .map(|(entry, _)| entry)
+    }
+
+    /// [`plan_area`] of `object`'s body, `body` its mesh's triangles,
+    /// measured once per service (refusal included).
+    fn footprint(
+        &self,
+        object: &ObjectId,
+        body: &[Triangle],
+        tolerance: axiolid_core::Tolerance,
+    ) -> Result<Arc<PlanArea>, SpaceError> {
+        let footprints = || {
+            self.memo
+                .footprints
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+        };
+        if let Some(kept) = footprints().get(object) {
+            return kept.clone();
+        }
+        let measured = plan_area(body, tolerance).map(Arc::new);
+        footprints().insert(object.clone(), measured.clone());
+        measured
+    }
+
+    /// [`shared_area`] of `space`'s body and `candidate`'s, `subject` and
+    /// `other` their meshes' triangles, measured once per service for the
+    /// pair in this order (refusal included).
+    fn shared(
+        &self,
+        (space, subject): (&ObjectId, &[Triangle]),
+        (candidate, other): (&ObjectId, &[Triangle]),
+        tolerance: axiolid_core::Tolerance,
+    ) -> Result<SharedArea, SpaceError> {
+        let shared = || {
+            self.memo
+                .shared
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+        };
+        let key = (space.clone(), candidate.clone());
+        if let Some(kept) = shared().get(&key) {
+            return kept.clone();
+        }
+        let measured = shared_area(subject, other, tolerance).map(|area| SharedArea::of(&area));
+        shared().insert(key, measured.clone());
+        measured
     }
 
     fn role(&self, object: &ObjectId) -> Option<Role> {
@@ -312,6 +402,32 @@ impl PlanArea {
     }
 }
 
+/// The bounds of a plan area two bodies share, as [`PlanArea`]'s: the
+/// decisions read no more of it, so a service keeps no more (#371).
+#[derive(Clone, Copy, Debug)]
+struct SharedArea {
+    lower: f64,
+    upper: f64,
+}
+
+impl SharedArea {
+    fn of(area: &PlanArea) -> Self {
+        Self {
+            lower: area.lower,
+            upper: area.upper,
+        }
+    }
+
+    /// The same area with `band` more uncertainty either way, as
+    /// [`PlanArea::widened`].
+    fn widened(self, band: f64) -> Self {
+        Self {
+            lower: (self.lower - band).max(0.0),
+            upper: self.upper + band,
+        }
+    }
+}
+
 /// Why a decision is refused when the slivers left out of the plan
 /// overlay could change it.
 const SLIVERS_COULD_DECIDE: &str = "the slivers of near-vertical faces the plan overlay refuses \
@@ -354,7 +470,7 @@ fn shared_area(
 /// Whether `shared` holds at least [`CONTAINMENT_RATIO`] of a positive
 /// `area`, for every value the slivers allow; `None` when they could tip
 /// it.
-fn contains(area: &PlanArea, shared: &PlanArea) -> Option<bool> {
+fn contains(area: &PlanArea, shared: &SharedArea) -> Option<bool> {
     if area.lower > 0.0 && shared.lower >= area.upper * CONTAINMENT_RATIO {
         Some(true)
     } else if area.upper <= 0.0 || shared.upper < area.lower * CONTAINMENT_RATIO {
@@ -500,7 +616,7 @@ fn overlapping_height(first: (f64, f64), second: (f64, f64)) -> f64 {
 /// Containment is decided on the plan footprint each body actually has: a
 /// body almost entirely inside another is contained, not merely overlapping.
 /// `None` when the slivers left out of the overlay could change the class.
-fn containment(subject: &PlanArea, other: &PlanArea, shared: &PlanArea) -> Option<Containment> {
+fn containment(subject: &PlanArea, other: &PlanArea, shared: &SharedArea) -> Option<Containment> {
     if contains(subject, shared)? {
         Some(Containment::SubjectInsideOther)
     } else if contains(other, shared)? {
@@ -526,11 +642,8 @@ impl SpaceService for AxiolidSpaceService {
         let mut subject_area: Option<PlanArea> = None;
 
         let mut duplicates = Vec::new();
-        for (candidate, mesh) in self.geometry.objects() {
-            if candidate == space
-                || !self.is_space(candidate)
-                || self.apart_in_plan(extent.as_ref(), candidate)
-            {
+        for (candidate, mesh) in self.beside(extent.as_ref()) {
+            if candidate == space || !self.is_space(candidate) {
                 continue;
             }
             let other = triangles(mesh);
@@ -552,26 +665,28 @@ impl SpaceService for AxiolidSpaceService {
             let subject_area = if let Some(area) = &subject_area {
                 area
             } else {
-                let measured = plan_area(&subject, tolerance)?;
+                let measured = self.footprint(space, &subject, tolerance)?;
                 let band = deviation_band(&measured.polygons, deviation, None);
                 subject_area.insert(measured.widened(band))
             };
-            let measured = plan_area(&other, tolerance)?;
+            let measured = self.footprint(candidate, &other, tolerance)?;
             let other_area =
                 measured.widened(deviation_band(&measured.polygons, other_deviation, None));
             // The shared area moves by what either outline may move within
             // the other's box.
-            let shared = shared_area(&subject, &other, tolerance)?.widened(
-                deviation_band(
-                    &subject_area.polygons,
-                    deviation,
-                    plan_box(&other_area.polygons, other_deviation),
-                ) + deviation_band(
-                    &other_area.polygons,
-                    other_deviation,
-                    plan_box(&subject_area.polygons, deviation),
-                ),
-            );
+            let shared = self
+                .shared((space, &subject), (candidate, &other), tolerance)?
+                .widened(
+                    deviation_band(
+                        &subject_area.polygons,
+                        deviation,
+                        plan_box(&other_area.polygons, other_deviation),
+                    ) + deviation_band(
+                        &other_area.polygons,
+                        other_deviation,
+                        plan_box(&subject_area.polygons, deviation),
+                    ),
+                );
             // A pair the slivers left out, or a chord deviation, could make
             // or unmake is refused, never passed.
             let mutual = match (
@@ -649,17 +764,17 @@ impl SpaceService for AxiolidSpaceService {
         // farther than their deviation from that outline.
         let extent = self.geometry.enclosing_extent(space);
         let mut curved = BTreeMap::new();
-        for (candidate, mesh) in self.geometry.objects() {
-            if candidate == space
-                || !self.bounds(request.elements(), candidate)
-                || self.apart_in_plan(extent.as_ref(), candidate)
-            {
+        for (candidate, mesh) in self.beside(extent.as_ref()) {
+            if candidate == space || !self.bounds(request.elements(), candidate) {
                 continue;
             }
             let deviation = self.deviation(candidate)?;
             if deviation > 0.0 {
                 let body = triangles(mesh);
-                let outline = plan_area(&body, tolerance)?.polygons;
+                let outline = self
+                    .footprint(candidate, &body, tolerance)?
+                    .polygons
+                    .clone();
                 curved.insert(candidate.clone(), (body, outline, deviation));
             }
         }
@@ -739,14 +854,11 @@ impl SpaceService for AxiolidSpaceService {
         let extent = self.geometry.enclosing_extent(space);
         let mut subject_area = None;
         // The subject's own outline, for the band of a tessellated pair.
-        let mut subject_outline: Option<Vec<Polygon>> = None;
+        let mut subject_outline: Option<Arc<PlanArea>> = None;
 
         let mut overlaps = Vec::new();
-        for (candidate, mesh) in self.geometry.objects() {
-            if candidate == space
-                || !chosen(candidate)
-                || self.apart_in_plan(extent.as_ref(), candidate)
-            {
+        for (candidate, mesh) in self.beside(extent.as_ref()) {
+            if candidate == space || !chosen(candidate) {
                 continue;
             }
             let other = triangles(mesh);
@@ -766,20 +878,20 @@ impl SpaceService for AxiolidSpaceService {
                 if possible <= 0.0 {
                     continue;
                 }
-                let shared = shared_area(&subject, &other, tolerance)?;
+                let shared = self.shared((space, &subject), (candidate, &other), tolerance)?;
                 let outline = match &subject_outline {
                     Some(outline) => outline,
-                    None => subject_outline.insert(plan_area(&subject, tolerance)?.polygons),
+                    None => subject_outline.insert(self.footprint(space, &subject, tolerance)?),
                 };
-                let other_outline = plan_area(&other, tolerance)?.polygons;
+                let other_outline = self.footprint(candidate, &other, tolerance)?;
                 let band = deviation_band(
-                    outline,
+                    &outline.polygons,
                     deviation,
-                    plan_box(&other_outline, other_deviation),
+                    plan_box(&other_outline.polygons, other_deviation),
                 ) + deviation_band(
-                    &other_outline,
+                    &other_outline.polygons,
                     other_deviation,
-                    plan_box(outline, deviation),
+                    plan_box(&outline.polygons, deviation),
                 );
                 if shared.upper + band <= AREA_EPSILON_M2 {
                     continue;
@@ -790,16 +902,20 @@ impl SpaceService for AxiolidSpaceService {
             if height <= 0.0 {
                 continue;
             }
-            let shared = shared_area(&subject, &other, tolerance)?;
+            let shared = self.shared((space, &subject), (candidate, &other), tolerance)?;
             if shared.upper <= AREA_EPSILON_M2 {
                 continue;
             }
             let subject_area = match &subject_area {
                 Some(area) => area,
-                None => subject_area.insert(plan_area(&subject, tolerance)?),
+                None => subject_area.insert(self.footprint(space, &subject, tolerance)?),
             };
-            let class = containment(subject_area, &plan_area(&other, tolerance)?, &shared)
-                .ok_or(SpaceError::Refused(SLIVERS_COULD_DECIDE))?;
+            let class = containment(
+                subject_area,
+                &*self.footprint(candidate, &other, tolerance)?,
+                &shared,
+            )
+            .ok_or(SpaceError::Refused(SLIVERS_COULD_DECIDE))?;
             let overlap = |area| {
                 SpaceOverlap::try_new(
                     candidate.clone(),
@@ -852,7 +968,7 @@ impl SpaceService for AxiolidSpaceService {
             |candidate| self.caps(request, candidate),
         )?;
         let tolerance = tolerance()?;
-        let whole = plan_area(&subject, tolerance)?;
+        let whole = self.footprint(space, &subject, tolerance)?;
         // A footprint measured empty is an incoherent quantity; one only the
         // slivers left out could give area is not measured at all.
         if whole.lower <= 0.0 && whole.uncertain() {
@@ -876,13 +992,10 @@ impl SpaceService for AxiolidSpaceService {
 
         let mut covering = Vec::new();
         let mut cover = Vec::new();
-        for (candidate, mesh) in self.geometry.objects() {
+        for (candidate, mesh) in self.beside(extent.as_ref()) {
             // Only cap elements cap a space; a wall crossing the ceiling
             // plane is not a cap. The space never caps itself.
-            if candidate == space
-                || !self.caps(request, candidate)
-                || self.apart_in_plan(extent.as_ref(), candidate)
-            {
+            if candidate == space || !self.caps(request, candidate) {
                 continue;
             }
             let other = triangles(mesh);
@@ -902,10 +1015,10 @@ impl SpaceService for AxiolidSpaceService {
                 if !may {
                     continue;
                 }
-                let shared = shared_area(&subject, &other, tolerance)?;
-                let outline = plan_area(&other, tolerance)?.polygons;
+                let shared = self.shared((space, &subject), (candidate, &other), tolerance)?;
+                let outline = self.footprint(candidate, &other, tolerance)?;
                 let band = deviation_band(
-                    &outline,
+                    &outline.polygons,
                     other_deviation,
                     plan_box(&whole.polygons, deviation),
                 );
@@ -932,7 +1045,7 @@ impl SpaceService for AxiolidSpaceService {
             if plane < low - CAP_PLANE_TOLERANCE_M || plane > high + CAP_PLANE_TOLERANCE_M {
                 continue;
             }
-            let shared = shared_area(&subject, &other, tolerance)?;
+            let shared = self.shared((space, &subject), (candidate, &other), tolerance)?;
             if shared.upper <= AREA_EPSILON_M2 {
                 continue;
             }
@@ -1215,27 +1328,31 @@ mod tests {
         }
     }
 
+    fn shared(lower: f64, upper: f64) -> SharedArea {
+        SharedArea { lower, upper }
+    }
+
     /// Containment is decided only where every area the slivers allow
     /// agrees; between, it is undecided, so a duplicate is refused rather
     /// than passed.
     #[test]
     fn slivers_that_could_tip_containment_leave_it_undecided() {
         let whole = area(16.0, 16.0);
-        assert_eq!(contains(&whole, &area(16.0, 16.0)), Some(true));
-        assert_eq!(contains(&whole, &area(8.0, 8.0)), Some(false));
+        assert_eq!(contains(&whole, &shared(16.0, 16.0)), Some(true));
+        assert_eq!(contains(&whole, &shared(8.0, 8.0)), Some(false));
         // The slivers could lift the shared area over the ratio.
-        assert_eq!(contains(&whole, &area(15.9, 16.0)), None);
+        assert_eq!(contains(&whole, &shared(15.9, 16.0)), None);
         // Or the whole beyond it.
-        assert_eq!(contains(&area(15.99, 16.1), &area(15.99, 15.99)), None);
+        assert_eq!(contains(&area(15.99, 16.1), &shared(15.99, 15.99)), None);
         // An area only the slivers give is no footprint to contain.
-        assert_eq!(contains(&area(0.0, 1e-9), &area(0.0, 1e-9)), None);
-        assert_eq!(contains(&area(0.0, 0.0), &area(0.0, 0.0)), Some(false));
+        assert_eq!(contains(&area(0.0, 1e-9), &shared(0.0, 1e-9)), None);
+        assert_eq!(contains(&area(0.0, 0.0), &shared(0.0, 0.0)), Some(false));
         assert_eq!(
-            containment(&whole, &area(32.0, 32.0), &area(15.9, 16.0)),
+            containment(&whole, &area(32.0, 32.0), &shared(15.9, 16.0)),
             None
         );
         assert_eq!(
-            containment(&whole, &area(32.0, 32.0), &area(4.0, 4.0)),
+            containment(&whole, &area(32.0, 32.0), &shared(4.0, 4.0)),
             Some(Containment::Partial)
         );
     }

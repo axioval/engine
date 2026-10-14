@@ -216,9 +216,16 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   overlay refusal to `SpaceError::Refused(overlay_refusal(..))`, never
   `Unavailable`. Spans and heights are checked before any overlay runs, so
   a pair they rule out never refuses, and so is the plan box
-  (`apart_in_plan`: enclosing extents grown by the chord deviation): a
+  (`beside`: enclosing extents grown by the chord deviation): a
   candidate apart from the space is never measured, so a footprint the
-  overlay refuses elsewhere refuses nothing here (#304). Tessellated
+  overlay refuses elsewhere refuses nothing here (#304). Each object's
+  footprint (`footprint`, its `plan_area`) and each space and
+  candidate's shared area (`shared`, in that order) are measured once per
+  service and kept with their refusal (`Memo`, #371), never per space or
+  aspect: a large model's overlay time was the same footprints again for
+  every space beside them. Keep every entry a function of the bodies it
+  names alone, and keep the order in which a loop asks for them, since
+  the first refusal is the answer. Tessellated
   spaces and candidates are bracketed by their deviation (#305): vertical
   bounds from `AxiolidGeometry::vertical_bounds` (mesh ± `d`, narrowed by
   certified extent bounds), plan areas widened by `deviation_band` (per

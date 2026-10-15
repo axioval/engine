@@ -1023,6 +1023,62 @@ fn a_door_too_narrow_after_the_deduction_is_found() {
     assert!(stated.exact);
 }
 
+/// A clear width is judged as derived, never moved onto a bound it lies
+/// near (#385): 1 m less 0.1 m is the decimal 0.9 m and meets 0.9 m, also
+/// with the deduction stated in millimetres, while a door a unit in the
+/// last place narrower than 1 m fails, and a stated width known only to
+/// within a rounding step of the bound is not evaluated.
+#[test]
+fn a_clear_width_near_its_bound_is_not_taken_for_it() {
+    let model = || {
+        doors(&[
+            ("d1", "SINGLE_SWING_LEFT", Some(1.0), None),
+            ("d2", "SINGLE_SWING_LEFT", Some(1.0_f64.next_down()), None),
+            (
+                "d3",
+                "SINGLE_SWING_LEFT",
+                Some(1.0),
+                Some(PropertyValue::Measured {
+                    lower: 0.9_f64.next_down(),
+                    upper: 0.9,
+                    dimension: Some(QuantityDimension::Length),
+                }),
+            ),
+            // A double door 1.3 m less 0.1 m meets 1.2 m.
+            ("d4", "DOUBLE_DOOR_SINGLE_SWING", Some(1.3), None),
+        ])
+    };
+    let evaluation = clear(model(), door_keys(Some(0.1)));
+    assert_eq!(
+        outcome(&evaluation),
+        (
+            vec!["d2".to_owned()],
+            vec![("d3".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+        )
+    );
+    assert!(
+        findings(&evaluation)[0]
+            .1
+            .contains("required at least 0.9 m"),
+        "{:?}",
+        findings(&evaluation)
+    );
+    // `100 mm` is the same deduction as `0.1 m`.
+    let mut parameters = door_keys(None);
+    parameters.push((
+        "overall_width",
+        property(Some("Attributes"), "OverallWidth"),
+    ));
+    parameters.push((
+        "width_deduction",
+        ParameterValue::Quantity {
+            value: 100.0,
+            unit: "mm".into(),
+        },
+    ));
+    assert_eq!(outcome(&clear(model(), parameters)), outcome(&evaluation));
+}
+
 #[test]
 fn only_an_exactly_absent_clear_width_falls_back_to_the_deduction() {
     let model = doors(&[
@@ -1219,6 +1275,41 @@ fn a_clear_width_is_derived_from_the_lining_and_leaves() {
         .unwrap();
     assert!(derived.locator.ends_with("d1:step=lining-and-leaves"));
     assert!(!derived.exact);
+}
+
+/// A clear width from the lining and leaves is the difference of the
+/// decimals the door states (#385): 1.04 m less 2 × 0.05 m lining and a
+/// 0.04 m leaf is 0.9 m, and 1.38 m less the lining and two such leaves is
+/// 1.2 m, each meeting its bound although the binary difference holds a
+/// rounding step on either side of it. A door a unit in the last place
+/// narrower is no stated decimal: its binary difference, widened at each
+/// subtraction, reaches the bound and is not evaluated, never passed.
+#[test]
+fn a_clear_width_from_the_leaves_at_its_bound_meets_it() {
+    use common::doors::{Doors, hinged};
+    let leaf = |width: f64| hinged([0.0; 3], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], width, false);
+    let model = doors(&[
+        ("d1", "SINGLE_SWING_LEFT", Some(1.04), None),
+        ("d2", "DOUBLE_DOOR_SINGLE_SWING", Some(1.38), None),
+        ("d3", "SINGLE_SWING_LEFT", Some(1.04_f64.next_down()), None),
+    ]);
+    let frames = Doors::default()
+        .door("d1", vec![leaf(0.94)], 1.04, Some(0.05))
+        .door("d2", vec![leaf(0.64), leaf(0.64)], 1.38, Some(0.05))
+        .door("d3", vec![leaf(0.94)], 1.04_f64.next_down(), Some(0.05))
+        .handle();
+    let mut parameters = door_keys(None);
+    parameters.push(("clear_width_from_leaves", string("passage")));
+    let evaluation = model.evaluate_with(&HELD, &rule(ID, kind("door"), parameters), |services| {
+        services.register(frames).unwrap();
+    });
+    assert_eq!(
+        outcome(&evaluation),
+        (
+            Vec::new(),
+            vec![("d3".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+        )
+    );
 }
 
 /// With `clear_width_from_leaves` `widest-leaf`, a door's clear width is its
@@ -1633,6 +1724,44 @@ fn a_sill_above_the_corridor_floor_is_found_from_geometry() {
             .collect::<Vec<_>>(),
         ["k", "o"]
     );
+}
+
+/// A threshold step is judged as measured, never moved onto a bound it
+/// lies near (#385): a step of exactly 2 cm meets a 2 cm maximum, one a
+/// unit in the last place higher fails, and one measured only to within a
+/// rounding step of the bound is not evaluated.
+#[test]
+fn a_step_near_its_bound_is_not_taken_for_it() {
+    let model = stepped(&[("d1", &["k"]), ("d2", &["k"]), ("d3", &["k"])], &[]);
+    let bottoms = Bottoms::default()
+        .with("k", 0.0, 0.0)
+        .with("d1", 0.02, 0.0)
+        .with("d2", 0.02_f64.next_up(), 0.0)
+        .with("d3", 0.02, 1e-12);
+    let evaluation = step(model, bottoms, Ramps::default(), step_keys(false));
+    assert_eq!(
+        outcome(&evaluation),
+        (
+            vec!["d2".to_owned()],
+            vec![("d3".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+        )
+    );
+    // A stated 2 cm threshold on the floor, and 1 cm on a bottom 1 cm up,
+    // step exactly 2 cm.
+    let model = stepped(&[("d4", &["k"]), ("d5", &["k"])], &[])
+        .value("d4", "Lining", "ThresholdThickness", length(0.02))
+        .value("d5", "Lining", "ThresholdThickness", length(0.01));
+    let bottoms = Bottoms::default()
+        .with("k", 0.0, 0.0)
+        .with("d4", 0.0, 0.0)
+        .with("d5", 0.01, 0.0);
+    let mut parameters = step_keys(false);
+    parameters.push((
+        "threshold_thickness",
+        property(Some("Lining"), "ThresholdThickness"),
+    ));
+    let evaluation = step(model, bottoms, Ramps::default(), parameters);
+    assert_eq!(outcome(&evaluation), (Vec::new(), Vec::new()));
 }
 
 /// A stated threshold adds to the door's bottom; a declared one the door
@@ -2624,33 +2753,40 @@ mod as_expressions {
         let built_in = outcome(&clear(issue(), door_keys(Some(0.1))));
         assert_eq!(built_in, (vec!["d2".to_owned()], Vec::new()));
         assert_eq!(outcome(&expression(issue(), "door_clear_width")), built_in);
-        let model = doors(&[
-            ("d1", "SINGLE_SWING_LEFT", Some(1.0), None),
-            ("d2", "SINGLE_SWING_LEFT", Some(0.9), None),
-            // A unit in the last place below 1 m: 0.1 m less is below 0.9 m.
-            ("d3", "SINGLE_SWING_LEFT", Some(1.0_f64.next_down()), None),
-            // Known only to lie between 0.89 m and 0.91 m.
-            (
-                "d4",
-                "SINGLE_SWING_LEFT",
-                Some(1.0),
-                Some(PropertyValue::Measured {
-                    lower: 0.89,
-                    upper: 0.91,
-                    dimension: Some(QuantityDimension::Length),
-                }),
-            ),
-        ]);
+        let model = || {
+            doors(&[
+                ("d1", "SINGLE_SWING_LEFT", Some(1.0), None),
+                ("d2", "SINGLE_SWING_LEFT", Some(0.9), None),
+                // A unit in the last place below 1 m: 0.1 m less is below
+                // 0.9 m.
+                ("d3", "SINGLE_SWING_LEFT", Some(1.0_f64.next_down()), None),
+                // Known only to lie between 0.89 m and 0.91 m.
+                (
+                    "d4",
+                    "SINGLE_SWING_LEFT",
+                    Some(1.0),
+                    Some(PropertyValue::Measured {
+                        lower: 0.89,
+                        upper: 0.91,
+                        dimension: Some(QuantityDimension::Length),
+                    }),
+                ),
+            ])
+        };
+        let expected = (
+            vec!["d2".to_owned(), "d3".to_owned()],
+            vec![("d4".to_owned(), NotEvaluatedReason::IncompleteEvidence)],
+        );
         assert_eq!(
             outcome(&expression(
-                model,
+                model(),
                 "door_clear_width;stated=Pset/ClearWidth"
             )),
-            (
-                vec!["d2".to_owned(), "d3".to_owned()],
-                vec![("d4".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
-            )
+            expected
         );
+        // `keyed-limit` judges the same doors alike (#385): the door a
+        // unit in the last place short of 1 m is not taken for one.
+        assert_eq!(outcome(&clear(model(), door_keys(Some(0.1)))), expected);
     }
 
     /// Clear widths from the lining and leaves, the passage and the widest

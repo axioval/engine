@@ -836,7 +836,8 @@ pub(crate) fn si_quantity(value: f64, unit: &str) -> Result<(f64, QuantityDimens
         "deg" => (std::f64::consts::PI / 180.0, PlaneAngle),
         other => return Err(invalid(format!("unit `{other}` is not supported"))),
     };
-    let si = value * scale;
+    // The double nearest the decimal stated, so `950 mm` is `0.95 m`.
+    let si = axioval_engine::decimal::coherent(value, scale);
     if si.is_finite() {
         Ok((si, dimension))
     } else {

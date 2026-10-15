@@ -390,7 +390,12 @@ attributes of a measure type go through `ifc_properties::exact_unit`
 (0.3.0). It resolves the effective unit to an exact SI scale, with an offset
 for degrees Celsius, and follows conversion-based and derived units. The
 value becomes a quantity in SI (`240` mm reads as `0.24` m); a ratio or
-count becomes a plain decimal. A measure whose unit cannot be resolved is
+count becomes a plain decimal. A decimal prefix (milli, centi, kilo)
+converts the decimal the file states exactly, to the double nearest the
+converted decimal (`axioval_engine::decimal::coherent`), so `950` mm is
+the same double as a rule's `0.95` m, not a rounding step above it; any
+other scale multiplies. A door's lining and panel thicknesses are
+converted the same way. A measure whose unit cannot be resolved is
 refused rather than read as a bare number, and so is a plain scalar
 (`IFCREAL`, `IFCINTEGER`) that carries a unit. Causes include no
 `IfcProject`, no project unit of the needed kind, or an ambiguous

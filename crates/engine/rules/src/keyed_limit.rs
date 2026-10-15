@@ -17,6 +17,7 @@ pub(crate) use measured::DoorMeasures;
 use std::collections::BTreeMap;
 use std::sync::LazyLock;
 
+use axioval_engine::decimal;
 use axioval_engine::template::Template;
 use axioval_ir::contract::ParameterValue;
 
@@ -354,7 +355,7 @@ impl<'a> ClearWidth<'a> {
         let Some(derived) = derived else {
             return Ok(None);
         };
-        let (lower, upper) = difference(derived.width, derived.deduction);
+        let (lower, upper) = stated_less(derived.width, &derived.deductions);
         if upper <= 0.0 {
             return Err((
                 NotEvaluatedReason::IncompleteEvidence,
@@ -464,9 +465,9 @@ impl<'a> DoorClearWidth<'a> {
         ))
     }
 
-    /// Judges the clear width of `door` against `minimum`, read as the
-    /// decimals it displays: the verdict, the width as a finding words it
-    /// (`clear width (…) is 0.8 m`), and the evidence.
+    /// Judges the clear width of `door` against `minimum`, the interval as
+    /// measured (a width straddling it is undecided): the verdict, the width
+    /// as a finding words it (`clear width (…) is 0.8 m`), and the evidence.
     pub(crate) fn judge(
         &self,
         context: &RuleContext<'_>,
@@ -474,7 +475,7 @@ impl<'a> DoorClearWidth<'a> {
         minimum: f64,
     ) -> Result<(Verdict, String, Vec<Evidence>), Unavailable> {
         let measured = self.0.measure(context, door)?;
-        let verdict = judge_as_displayed(measured.lower, measured.upper, Some(minimum), None);
+        let verdict = judge(measured.lower, measured.upper, Some(minimum), None);
         Ok((
             verdict,
             format!(
@@ -488,11 +489,14 @@ impl<'a> DoorClearWidth<'a> {
 }
 
 /// A clear width derived from a door's leaves: what it is taken from, the
-/// deduction, and how a finding words it.
+/// deduction, each length deducted, and how a finding words it.
 struct FromLeaves {
     from: &'static str,
     width: f64,
     deduction: f64,
+    /// The lengths the deduction sums, as the door states them, so the
+    /// clear width is derived from the stated decimals ([`stated_less`]).
+    deductions: Vec<f64>,
     step: &'static str,
     what: String,
 }
@@ -509,11 +513,15 @@ fn passage(leaves: &DoorLeaves) -> Option<FromLeaves> {
         return None;
     }
     let lining = leaves.lining_thickness_metres()?;
-    let mut depth = 0.0;
-    for leaf in leaves.hinged() {
-        depth += leaf.depth_metres()?;
-    }
-    Some(whole_passage(leaves.overall_width_metres(), lining, depth))
+    let depths = leaves
+        .hinged()
+        .map(DoorLeaf::depth_metres)
+        .collect::<Option<Vec<_>>>()?;
+    Some(whole_passage(
+        leaves.overall_width_metres(),
+        lining,
+        &depths,
+    ))
 }
 
 /// The clear width of a door whose one hinged leaf the source states
@@ -525,18 +533,22 @@ fn unplaced(leaf: &UnplacedLeaf, mode: LeafMode) -> Option<FromLeaves> {
     let lining = leaf.lining_thickness_metres()?;
     let depth = leaf.depth_metres()?;
     Some(match mode {
-        LeafMode::Passage => whole_passage(leaf.overall_width_metres(), lining, depth),
+        LeafMode::Passage => whole_passage(leaf.overall_width_metres(), lining, &[depth]),
         LeafMode::WidestLeaf => leaf_passage(leaf.width_metres(), 2, lining, depth),
     })
 }
 
-/// The `overall` width less the `lining` on both jambs and `depth` of open
-/// leaves.
-fn whole_passage(overall: f64, lining: f64, depth: f64) -> FromLeaves {
+/// The `overall` width less the `lining` on both jambs and the `depths` of
+/// open leaves.
+fn whole_passage(overall: f64, lining: f64, depths: &[f64]) -> FromLeaves {
+    let depth: f64 = depths.iter().sum();
+    let mut deductions = vec![lining, lining];
+    deductions.extend_from_slice(depths);
     FromLeaves {
         from: "overall width",
         width: overall,
         deduction: 2.0 * lining + depth,
+        deductions,
         step: "lining-and-leaves",
         what: format!(
             "clear width (overall width {} m less 2 × {} m lining and {} m of open leaf, as the \
@@ -587,9 +599,11 @@ fn widest_leaf(leaves: &DoorLeaves) -> Option<FromLeaves> {
             leaves.lining_thickness_metres()?
         };
         let candidate = leaf_passage(leaf.width_metres(), jambs, lining, leaf.depth_metres()?);
-        if best.as_ref().is_some_and(|best| {
-            best.width - best.deduction >= candidate.width - candidate.deduction
-        }) {
+        let clear = |passage: &FromLeaves| stated_less(passage.width, &passage.deductions).0;
+        if best
+            .as_ref()
+            .is_some_and(|best| clear(best) >= clear(&candidate))
+        {
             continue;
         }
         best = Some(candidate);
@@ -609,6 +623,9 @@ fn leaf_passage(width: f64, jambs: u8, lining: f64, depth: f64) -> FromLeaves {
         from: "widest leaf",
         width,
         deduction: f64::from(jambs).mul_add(lining, depth),
+        deductions: std::iter::repeat_n(lining, usize::from(jambs))
+            .chain([depth])
+            .collect(),
         step: "widest-leaf",
         what: format!(
             "clear width of the widest leaf (leaf {} m less{jamb_words} {} m of open leaf, as the \
@@ -1897,86 +1914,63 @@ pub(crate) fn difference(minuend: f64, subtrahend: f64) -> (f64, f64) {
     }
 }
 
-/// `minuend - subtrahend` for lengths a source or a rule states, read as the
-/// decimals they display: where each is the double nearest a decimal of at
-/// most fifteen places and digits, the difference of those decimals, a
-/// point at the double nearest it, as a source stating that decimal (or a
-/// literal of it) reads; so 1 m less 0.1 m is 0.9 m. Any other pair is
-/// [`difference`], the interval sure to hold the binary difference.
+/// `minuend` less every one of `subtrahends`, for lengths a source or a
+/// rule states, read as the decimals they display: where each is the
+/// double nearest a decimal of at most fifteen places and digits, the
+/// exact decimal difference, a point at the double nearest it, as a source
+/// stating that decimal (or a literal of it) reads; so 1 m less 0.1 m is
+/// 0.9 m. Otherwise each subtraction in turn is widened outward
+/// ([`difference`]), an interval sure to hold the binary difference.
 ///
 /// Distinct decimals of at most fifteen significant digits read as
 /// distinct doubles in the same order, so the point compares with a bound
 /// stated that way exactly as the decimals do: nothing near a bound is
-/// taken for it.
-pub(crate) fn stated_difference(minuend: f64, subtrahend: f64) -> (f64, f64) {
-    if let (Some((minuend, from)), Some((subtrahend, of))) =
-        (stated_decimal(minuend), stated_decimal(subtrahend))
-    {
-        let places = from.max(of);
-        let digits = i128::from(minuend) * 10_i128.pow(places - from)
-            - i128::from(subtrahend) * 10_i128.pow(places - of);
-        if digits.abs() < DECIMAL_LIMIT {
-            // Digits and scale are exact in a double, so the quotient is the
-            // double nearest the decimal.
-            #[allow(clippy::cast_precision_loss)]
-            let value = digits as f64 / 10_f64.powi(places.cast_signed());
-            return (value, value);
-        }
+/// taken for it, and a value only near a decimal is never read as one.
+pub(crate) fn stated_less(minuend: f64, subtrahends: &[f64]) -> (f64, f64) {
+    if let Some(value) = decimal_less(minuend, subtrahends) {
+        return (value, value);
     }
-    difference(minuend, subtrahend)
+    subtrahends
+        .iter()
+        .fold((minuend, minuend), |(lower, upper), subtrahend| {
+            (
+                difference(lower, *subtrahend).0,
+                difference(upper, *subtrahend).1,
+            )
+        })
+}
+
+/// [`stated_less`] of one subtrahend.
+pub(crate) fn stated_difference(minuend: f64, subtrahend: f64) -> (f64, f64) {
+    stated_less(minuend, &[subtrahend])
+}
+
+/// The double nearest the exact decimal difference, where every value is
+/// the double nearest a decimal of at most fifteen places and digits and
+/// the difference has at most fifteen digits.
+fn decimal_less(minuend: f64, subtrahends: &[f64]) -> Option<f64> {
+    let (minuend, from) = decimal::stated(minuend)?;
+    let subtrahends = subtrahends
+        .iter()
+        .map(|value| decimal::stated(*value))
+        .collect::<Option<Vec<_>>>()?;
+    let places = subtrahends
+        .iter()
+        .map(|(_, places)| *places)
+        .fold(from, u32::max);
+    let scaled = |digits: i64, of: u32| i128::from(digits).checked_mul(10_i128.pow(places - of));
+    let mut digits = scaled(minuend, from)?;
+    for (subtrahend, of) in subtrahends {
+        digits = digits.checked_sub(scaled(subtrahend, of)?)?;
+    }
+    // Digits and scale are exact in a double, so the quotient is the double
+    // nearest the decimal.
+    #[allow(clippy::cast_precision_loss)]
+    (digits.abs() < DECIMAL_LIMIT).then(|| digits as f64 / 10_f64.powi(places.cast_signed()))
 }
 
 /// One more than the largest integer of fifteen digits.
 const DECIMAL_LIMIT: i128 = 1_000_000_000_000_000;
-
-/// The decimal `value` is the double nearest to, as integer digits (at most
-/// fifteen) over `10^places` (at most fifteen), the fewest places first;
-/// `None` for any other value.
-#[allow(clippy::float_cmp, clippy::cast_possible_truncation)]
-fn stated_decimal(value: f64) -> Option<(i64, u32)> {
-    (0..=15_u32).find_map(|places| {
-        let scale = 10_f64.powi(places.cast_signed());
-        let digits = (value * scale).round();
-        // Digits and scale are exact in a double, so the quotient is the
-        // double nearest the decimal.
-        (digits.abs() < 1e15 && digits / scale == value).then_some((digits as i64, places))
-    })
-}
-
-/// Judges an interval of lengths read as the decimals they display: an end
-/// within a few units in the last place of a bound meets it, so a 1 m door
-/// less a 0.1 m deduction meets a 0.9 m minimum although the binary
-/// difference falls a rounding step short of it.
-fn judge_as_displayed(
-    lower: f64,
-    upper: f64,
-    minimum: Option<f64>,
-    maximum: Option<f64>,
-) -> Verdict {
-    let (lower, upper) = snapped(lower, upper, minimum, maximum);
-    judge(lower, upper, minimum, maximum)
-}
-
-/// `(lower, upper)` read as the decimals they display: an end within a few
-/// units in the last place of a bound is the bound.
-pub(crate) fn snapped(
-    lower: f64,
-    upper: f64,
-    minimum: Option<f64>,
-    maximum: Option<f64>,
-) -> (f64, f64) {
-    let snap = |value: f64| {
-        [minimum, maximum]
-            .into_iter()
-            .flatten()
-            .find(|bound| {
-                value.is_finite()
-                    && (value - bound).abs() <= 4.0 * f64::EPSILON * value.abs().max(bound.abs())
-            })
-            .unwrap_or(value)
-    };
-    (snap(lower), snap(upper))
-}
 
 /// The sill height of `window` above the bottom of `floor`, as an interval.
 fn sill_interval(window: &VerticalExtent, floor: &VerticalExtent) -> (f64, f64) {

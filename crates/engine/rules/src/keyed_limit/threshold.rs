@@ -128,14 +128,13 @@ impl<'a> ThresholdStep<'a> {
     }
 
     /// Every floor each side of `subject` may step onto, as the
-    /// alternatives of that side's floor ([`Alternative`]), each step read
-    /// as displayed against `(minimum, maximum)`; and the evidence the door,
-    /// its threshold and its spaces were read from.
+    /// alternatives of that side's floor ([`Alternative`]), each step the
+    /// interval measured; and the evidence the door, its threshold and its
+    /// spaces were read from.
     pub(crate) fn alternatives(
         &self,
         context: &RuleContext<'_>,
         subject: &Object,
-        (minimum, maximum): (Option<f64>, Option<f64>),
     ) -> Result<(Vec<Alternative>, Vec<Evidence>), Unavailable> {
         let service = extents(context)?;
         let door = extent(service, &subject.id)?;
@@ -165,8 +164,7 @@ impl<'a> ThresholdStep<'a> {
                 .map(|floor| (true, floor))
                 .chain(possible.into_iter().map(|floor| (false, floor)))
             {
-                let step = named_step(bottom, &threshold, &floor)
-                    .map(|((low, high), named)| (snapped((low, high), minimum, maximum), named));
+                let step = named_step(bottom, &threshold, &floor);
                 alternatives.push(Alternative {
                     side: space.to_string(),
                     sure: is_sure,
@@ -488,19 +486,13 @@ pub(crate) struct Alternative {
     pub(crate) side: String,
     /// Whether the side surely steps onto it.
     pub(crate) sure: bool,
-    /// The step as displayed and how a message names it, or why the floor
+    /// The step as measured and how a message names it, or why the floor
     /// cannot be measured.
     pub(crate) step: Result<((f64, f64), String), String>,
     pub(crate) related: ObjectId,
     pub(crate) exact: bool,
     /// What the floor was measured from.
     pub(crate) evidence: Vec<Evidence>,
-}
-
-/// `(lower, upper)` with an end within a few units in the last place of a
-/// bound read as the bound, as [`judge_as_displayed`] reads it.
-fn snapped((lower, upper): (f64, f64), minimum: Option<f64>, maximum: Option<f64>) -> (f64, f64) {
-    super::snapped(lower, upper, minimum, maximum)
 }
 
 /// The step from `floor` to the door's `bottom` and threshold, and how a

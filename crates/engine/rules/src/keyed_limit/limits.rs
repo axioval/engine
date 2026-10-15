@@ -40,7 +40,6 @@ use axioval_ir::{Evidence, ObjectId};
 use super::defaults::DoorDefaults;
 use super::{
     Limit, Measuring, PerLeaf, Quantity, Selected, declared, limits, quantity, selected, sills,
-    snapped,
 };
 use crate::measured_kinds::{interval, resolution_error};
 use crate::support::{Parameters, Unavailable, invalid};
@@ -297,8 +296,7 @@ impl LimitMeasures {
                     )?),
                     None => step,
                 };
-                let (alternatives, cited) =
-                    step.alternatives(context, subject, (minimum, maximum))?;
+                let (alternatives, cited) = step.alternatives(context, subject)?;
                 evidence.extend(cited);
                 alternatives
                     .into_iter()
@@ -341,7 +339,7 @@ impl LimitMeasures {
                     PerLeaf::Door(measured) => {
                         let exact = measured.evidence.iter().all(|evidence| evidence.exact);
                         evidence.extend(measured.evidence);
-                        let value = snapped(measured.lower, measured.upper, minimum, maximum);
+                        let value = (measured.lower, measured.upper);
                         vec![item(
                             vec![
                                 ("value", span(value, exact)),
@@ -366,13 +364,7 @@ impl LimitMeasures {
                                 match leaf.ratio() {
                                     Ok((lower, upper)) => item(
                                         vec![
-                                            (
-                                                "value",
-                                                span(
-                                                    snapped(lower, upper, minimum, maximum),
-                                                    exact,
-                                                ),
-                                            ),
+                                            ("value", span((lower, upper), exact)),
                                             ("what", what),
                                             ("unit", unit()),
                                         ],
@@ -425,19 +417,7 @@ impl LimitMeasures {
                             ),
                         }
                     } else {
-                        let displayed = matches!(
-                            quantity,
-                            Quantity::ClearWidth(_)
-                                | Quantity::ClearHeight(_)
-                                | Quantity::GlazingRatio(_)
-                                | Quantity::Measured(_)
-                        );
-                        let value = if displayed {
-                            snapped(measured.lower, measured.upper, minimum, maximum)
-                        } else {
-                            (measured.lower, measured.upper)
-                        };
-                        span(value, exact)
+                        span((measured.lower, measured.upper), exact)
                     };
                 vec![item(
                     vec![

@@ -176,23 +176,10 @@ impl Value {
 }
 
 /// A stated quantity in coherent units: the double nearest the decimal it
-/// states, as a source states its values. A decimal prefix (`mm`, `cm`)
-/// divides by an exact power of ten, which rounds correctly, so `30 mm` is
-/// the same double as `0.030 m`.
+/// states, as a source states its values ([`crate::decimal::coherent`]), so
+/// `30 mm` is the same double as `0.030 m`.
 fn coherent(value: f64, scale: f64) -> f64 {
-    decimal_inverse(scale).map_or(value * scale, |inverse| value / inverse)
-}
-
-/// The exact power of ten a decimal prefix's `scale` is the inverse of
-/// (`1000` for `mm`), if it is one.
-#[allow(clippy::float_cmp)]
-fn decimal_inverse(scale: f64) -> Option<f64> {
-    if scale >= 1.0 {
-        return None;
-    }
-    let inverse = (1.0 / scale).round();
-    let power_of_ten = (0..=15).any(|exponent| inverse == 10f64.powi(exponent));
-    (power_of_ten && (1.0 / inverse - scale).abs() <= f64::EPSILON * scale).then_some(inverse)
+    crate::decimal::coherent(value, scale)
 }
 
 impl fmt::Display for Value {
@@ -1980,8 +1967,7 @@ fn restated(value: Interval, unit: &str) -> String {
     let Ok((scale, _)) = parse_unit(unit) else {
         return format!("{}..{}", value.lower, value.upper);
     };
-    let decimal = decimal_inverse(scale);
-    let shown = |coherent: f64| decimal.map_or(coherent / scale, |inverse| coherent * inverse);
+    let shown = |coherent: f64| crate::decimal::in_unit(coherent, scale);
     let unit = unit.trim();
     if value.is_point() {
         format!("{} {unit}", shown(value.lower))

@@ -120,7 +120,7 @@ fn length(
             set.entity
         )));
     }
-    let metres = value * unit.scale;
+    let metres = axioval_engine::decimal::coherent(value, unit.scale);
     if !metres.is_finite() || metres < 0.0 {
         return Err(DoorLeavesError::Unreadable(format!(
             "{}.{attribute} is not a finite non-negative length",
@@ -243,7 +243,7 @@ fn overall_width(model: &Model, schema: &Schema, door: EntityId) -> Result<f64, 
     if unit.dimensions != [1, 0, 0, 0, 0, 0, 0] || unit.offset != 0.0 {
         return Err(unreadable("is not a length"));
     }
-    let metres = value * unit.scale;
+    let metres = axioval_engine::decimal::coherent(value, unit.scale);
     if metres.is_finite() && metres > 0.0 {
         Ok(metres)
     } else {

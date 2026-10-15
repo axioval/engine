@@ -34,7 +34,9 @@ pub(crate) fn si_value(
             )));
         }
     };
-    let si = value * resolved.scale + resolved.offset;
+    // The double nearest the decimal stated: `950` millimetres is `0.95`
+    // metres, as a rule writes it.
+    let si = axioval_engine::decimal::coherent(value, resolved.scale) + resolved.offset;
     if !si.is_finite() {
         return Err(PropertyResolutionError::InvalidValue);
     }

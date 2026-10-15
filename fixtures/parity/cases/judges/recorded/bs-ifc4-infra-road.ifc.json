@@ -5630,7 +5630,7 @@
         }
       ],
       "id": "7b12e4c6-29d4-5cec-8ce8-809f0ee8b82e",
-      "message": "axioval:parity.public.judges.slab-quantities.axioval:parity.public.judges.depth is 0.25 m where other objects with axioval:attributes.axioval:parity.public.judges.object-type `subgrade` have 0.39581400000000005 m",
+      "message": "axioval:parity.public.judges.slab-quantities.axioval:parity.public.judges.depth is 0.25 m where other objects with axioval:attributes.axioval:parity.public.judges.object-type `subgrade` have 0.395814 m",
       "object_id": {
         "local_id": "#108",
         "source": {
@@ -5788,7 +5788,7 @@
         }
       ],
       "id": "15131b2b-1f9b-53d8-bae9-5eb6d9f59bda",
-      "message": "axioval:parity.public.judges.slab-quantities.axioval:parity.public.judges.depth is 0.25 m where other objects with axioval:attributes.axioval:parity.public.judges.object-type `subgrade` have 0.39581400000000005 m",
+      "message": "axioval:parity.public.judges.slab-quantities.axioval:parity.public.judges.depth is 0.25 m where other objects with axioval:attributes.axioval:parity.public.judges.object-type `subgrade` have 0.395814 m",
       "object_id": {
         "local_id": "#276",
         "source": {
@@ -6038,7 +6038,7 @@
         }
       ],
       "id": "e725b186-99e4-541d-8ada-2e2acf3bb658",
-      "message": "axioval:parity.public.judges.slab-quantities.axioval:parity.public.judges.depth is 0.25 m where other objects with axioval:attributes.axioval:parity.public.judges.object-type `subgrade` have 0.39581400000000005 m",
+      "message": "axioval:parity.public.judges.slab-quantities.axioval:parity.public.judges.depth is 0.25 m where other objects with axioval:attributes.axioval:parity.public.judges.object-type `subgrade` have 0.395814 m",
       "object_id": {
         "local_id": "#350",
         "source": {
@@ -6196,7 +6196,7 @@
         }
       ],
       "id": "e61e51f7-0c5e-5530-86c3-da8afa2f82eb",
-      "message": "axioval:parity.public.judges.slab-quantities.axioval:parity.public.judges.depth is 0.25 m where other objects with axioval:attributes.axioval:parity.public.judges.object-type `subgrade` have 0.39581400000000005 m",
+      "message": "axioval:parity.public.judges.slab-quantities.axioval:parity.public.judges.depth is 0.25 m where other objects with axioval:attributes.axioval:parity.public.judges.object-type `subgrade` have 0.395814 m",
       "object_id": {
         "local_id": "#460",
         "source": {
@@ -6339,7 +6339,7 @@
         }
       ],
       "id": "7c1e1e9a-c180-5a3b-bde1-8a0d669f70a4",
-      "message": "axioval:parity.public.judges.slab-quantities.axioval:parity.public.judges.depth is 0.39581400000000005 m where other objects with axioval:attributes.axioval:parity.public.judges.object-type `subgrade` have 0.25 m",
+      "message": "axioval:parity.public.judges.slab-quantities.axioval:parity.public.judges.depth is 0.395814 m where other objects with axioval:attributes.axioval:parity.public.judges.object-type `subgrade` have 0.25 m",
       "object_id": {
         "local_id": "#578",
         "source": {
@@ -6589,7 +6589,7 @@
         }
       ],
       "id": "d5f43f53-6acf-51f4-91d1-d02dbbb1b441",
-      "message": "axioval:parity.public.judges.slab-quantities.axioval:parity.public.judges.depth is 0.39581400000000005 m where other objects with axioval:attributes.axioval:parity.public.judges.object-type `subgrade` have 0.25 m",
+      "message": "axioval:parity.public.judges.slab-quantities.axioval:parity.public.judges.depth is 0.395814 m where other objects with axioval:attributes.axioval:parity.public.judges.object-type `subgrade` have 0.25 m",
       "object_id": {
         "local_id": "#672",
         "source": {
@@ -6854,7 +6854,7 @@
         }
       ],
       "id": "b4575b07-4641-5ee6-addb-632cfe12b923",
-      "message": "axioval:parity.public.judges.slab-quantities.axioval:parity.public.judges.depth is 0.25 m where other objects with axioval:attributes.axioval:parity.public.judges.object-type `subgrade` have 0.39581400000000005 m",
+      "message": "axioval:parity.public.judges.slab-quantities.axioval:parity.public.judges.depth is 0.25 m where other objects with axioval:attributes.axioval:parity.public.judges.object-type `subgrade` have 0.395814 m",
       "object_id": {
         "local_id": "#823",
         "source": {
@@ -7183,7 +7183,7 @@
         }
       ],
       "id": "e10e1efe-987e-5a0e-a205-eaf0bc18aa8f",
-      "message": "axioval:parity.public.judges.slab-quantities.axioval:parity.public.judges.depth is 0.25 m where other objects with axioval:attributes.axioval:parity.public.judges.object-type `subgrade` have 0.39581400000000005 m",
+      "message": "axioval:parity.public.judges.slab-quantities.axioval:parity.public.judges.depth is 0.25 m where other objects with axioval:attributes.axioval:parity.public.judges.object-type `subgrade` have 0.395814 m",
       "object_id": {
         "local_id": "#998",
         "source": {
@@ -29132,7 +29132,7 @@
         }
       ],
       "id": "23e7e103-fea3-5909-966f-2f8f0efd283a",
-      "message": "property axioval:parity.public.judges.depth is 0.39581400000000005, with 17 digits, more than 2",
+      "message": "property axioval:parity.public.judges.depth is 0.395814, with 6 digits, more than 2",
       "object_id": {
         "local_id": "#578",
         "source": {
@@ -29178,7 +29178,7 @@
         }
       ],
       "id": "032fc6aa-0656-5859-84dd-2dd30a65b41a",
-      "message": "property axioval:parity.public.judges.depth is 0.39581400000000005, with 17 digits, more than 2",
+      "message": "property axioval:parity.public.judges.depth is 0.395814, with 6 digits, more than 2",
       "object_id": {
         "local_id": "#672",
         "source": {

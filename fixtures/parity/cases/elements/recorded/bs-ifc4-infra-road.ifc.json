@@ -81,7 +81,7 @@
         }
       ],
       "id": "08eda026-a4b0-5590-b47d-65c955a6aa21",
-      "message": "property axioval:parity.public.slab-quantities.axioval:parity.public.depth does not satisfy less_or_equal 0.25 m; actual value is 0.39581400000000005 m",
+      "message": "property axioval:parity.public.slab-quantities.axioval:parity.public.depth does not satisfy less_or_equal 0.25 m; actual value is 0.395814 m",
       "object_id": {
         "local_id": "#578",
         "source": {
@@ -127,7 +127,7 @@
         }
       ],
       "id": "43c3b629-a20a-5e6e-adee-d2ee6b599c74",
-      "message": "property axioval:parity.public.slab-quantities.axioval:parity.public.depth does not satisfy less_or_equal 0.25 m; actual value is 0.39581400000000005 m",
+      "message": "property axioval:parity.public.slab-quantities.axioval:parity.public.depth does not satisfy less_or_equal 0.25 m; actual value is 0.395814 m",
       "object_id": {
         "local_id": "#672",
         "source": {

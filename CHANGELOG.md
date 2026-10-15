@@ -866,6 +866,29 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **`keyed-limit` no longer moves a value onto a bound it lies near**:
+  `clear-width`, `clear-height`, `glazing-ratio`, `measured` and
+  `threshold-step` (and `local-circulation`'s entrance widths) read any
+  interval end within four units in the last place of a bound as the
+  bound, so a door whose overall width is a unit in the last place short
+  of 1 m, less 0.1 m, passed `≥ 0.9 m`, and a geometric step a rounding
+  step above its maximum passed. Every quantity is now judged as derived
+  or measured: below a minimum fails however close, and an interval
+  reaching across a bound is not evaluated. The cases the snap served
+  decide from the stated decimals instead: a clear width from the lining
+  and leaves is the exact decimal difference of the overall width, the
+  lining at each jamb and each open leaf, as the overall width less the
+  deduction already was (#379); and a length stated in a decimal unit
+  (`mm`, `cm`, `km`) converts as the decimal it states to the double
+  nearest it, in the IFC adapter's measures and door thicknesses, in rule
+  parameters and in expression literals alike (the new
+  `axioval_engine::decimal`, `stated`, `coherent` and `in_unit`), so a
+  source's `950 mm` is the same double as a rule's `0.95 m` rather than a
+  rounding step above it. In the public parity corpus no outcome changes;
+  the slabs of `bs-ifc4-infra-road.ifc` stating 395.814 mm now read as
+  `0.395814 m` instead of `0.39581400000000005 m` in the messages of
+  `slab-depth`, `cv-slab-type-depth` and `pv-slab-depth-digits` (6 digits,
+  not 17) ([#385](https://github.com/axioval/engine/issues/385)).
 - **Door values derived from stated lengths are the stated decimals'
   difference**: `door_clear_width` with `overall` and `deduction` read a
   door stating `OverallWidth` 1000 mm less 0.1 m as the interval

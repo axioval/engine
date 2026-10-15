@@ -19,6 +19,8 @@ mod session;
 
 pub mod comparison;
 
+pub mod decimal;
+
 /// Expressions: units, intervals, evaluation and type checking.
 pub mod expression;
 

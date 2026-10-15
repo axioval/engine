@@ -9,8 +9,8 @@ use axioval_ir::{Evidence, Finding, Object, ObjectId};
 
 use super::threshold::{self, Floor, Threshold, sides};
 use super::{
-    Declared, GlazingRatio, Keys, Limit, Measured, Measuring, PerLeaf, Quantity, Sills,
-    judge_as_displayed, parse, select, sills, snapped,
+    Declared, GlazingRatio, Keys, Limit, Measured, Measuring, PerLeaf, Quantity, Sills, parse,
+    select, sills,
 };
 use crate::counts::Population;
 use crate::level_spacing::{extent, extents};
@@ -146,17 +146,7 @@ fn check(
     let (measured, members, undecided) = measuring.measure(context, subject)?;
     only_an_excess(&measured, undecided, limit, index)?;
     let unit = &measured.unit;
-    let verdict = if matches!(
-        quantity,
-        Quantity::ClearWidth(_)
-            | Quantity::ClearHeight(_)
-            | Quantity::GlazingRatio(_)
-            | Quantity::Measured(_)
-    ) {
-        judge_as_displayed(measured.lower, measured.upper, limit.minimum, limit.maximum)
-    } else {
-        judge(measured.lower, measured.upper, limit.minimum, limit.maximum)
-    };
+    let verdict = judge(measured.lower, measured.upper, limit.minimum, limit.maximum);
     match verdict {
         Verdict::Pass => Ok(None),
         Verdict::Fail(bound) => {
@@ -312,7 +302,7 @@ fn per_leaf(
     let mut undecided = Vec::new();
     for (what, value) in values {
         let (lower, upper) = match value {
-            Ok((lower, upper)) => snapped(lower, upper, limit.minimum, limit.maximum),
+            Ok((lower, upper)) => (lower, upper),
             Err(why) => {
                 undecided.push(why);
                 continue;
@@ -511,7 +501,7 @@ fn floor_step(
         Ok(step) => step,
         Err(why) => return Judged::Undecided(why),
     };
-    match judge_as_displayed(step_low, step_high, minimum, maximum) {
+    match judge(step_low, step_high, minimum, maximum) {
         Verdict::Pass => Judged::Pass,
         Verdict::Fail(bound) => Judged::Fail(
             format!("{named}; required {bound} m"),

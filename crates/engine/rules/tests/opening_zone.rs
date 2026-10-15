@@ -1826,6 +1826,71 @@ fn openings_below_the_minimum_area_are_ignored() {
     );
 }
 
+/// A 1 m x 2.1 m door `local` through a 5 m x 3 m wall `w`, its bottom
+/// `bottom` from the wall's, checked 0.1 m clear of the wall's edges.
+fn door(local: &str, bottom: f64) -> CapabilityEvaluation {
+    let wall = extrusion(
+        Model::default(),
+        "w",
+        "wall",
+        [0.0; 3],
+        UPRIGHT,
+        3.0,
+        "rectangle",
+        &[("XDim", 5.0), ("YDim", 0.2), ("PositionX", 2.5)],
+    );
+    let model = through_wall(
+        wall,
+        local,
+        [2.5, 0.3, bottom + 1.05],
+        "rectangle",
+        &[("XDim", 1.0), ("YDim", 2.1)],
+    );
+    wall_check(model, vec![("edge_distance", metres(0.1))])
+}
+
+#[test]
+fn a_door_flush_on_the_wall_bottom_within_the_cut_tests_depth_lies_inside() {
+    // Its bottom 1 µm below the wall's, a placement's rounding: flush, and
+    // 0 m from the bottom edge.
+    let evaluation = door("flush", -0.000_001);
+    assert_eq!(
+        sorted(&evaluation),
+        [(
+            "flush".into(),
+            "opening is 0 m from an edge of its host w; 0.1 m clear required".into()
+        )]
+    );
+    assert!(unevaluated(&evaluation).is_empty());
+}
+
+#[test]
+fn a_door_5_mm_below_the_wall_bottom_still_lies_outside() {
+    let evaluation = door("below", -0.005);
+    assert_eq!(
+        sorted(&evaluation),
+        [(
+            "below".into(),
+            "opening lies partly outside its host w: along its height it spans -0.005 m \
+             to 2.095 m, the host 0 m to 3 m"
+                .into()
+        )]
+    );
+    assert!(unevaluated(&evaluation).is_empty());
+}
+
+#[test]
+fn a_door_past_the_wall_bottom_by_the_flush_depth_itself_is_not_evaluated() {
+    // 10 µm below: within the rounding of the depth it may lie flush
+    // within, so whether it reaches past the wall cannot be told.
+    let evaluation = door("edge", -0.000_01);
+    assert!(findings(&evaluation).is_empty());
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("edge".into(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+}
+
 /// The margins rewritten as one expression over the opening's placements
 /// (`opening_placements`): no placement outside its host, or inside it
 /// nearer an end or edge than allowed, or farther from an edge than

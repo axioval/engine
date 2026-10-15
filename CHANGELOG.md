@@ -861,6 +861,17 @@ All notable changes are documented here. This project follows Semantic Versionin
   systems, true norths, map conversions). The evidence locator names every
   context joined by `+`
   ([#381](https://github.com/axioval/engine/issues/381)).
+- **Openings flush on their host's face within the cut test's depth**:
+  `opening-zone` reported a door whose bottom a placement rounds 1 µm below
+  its wall's as lying partly outside its host (`along its height it spans
+  -0.000001 m to 2.100002 m, the host 0 m to 2.85 m`). An opening reaching
+  past a face of its host's box by no more than 10 µm, the depth within
+  which the geometry's cut test takes an opening as touching its host,
+  now lies flush on that face: inside, its extent taken to end on the face,
+  so its distance from that edge is 0 m. One reaching surely further still
+  lies outside (a door 5 mm below its wall's bottom), and one past the face
+  by 10 µm within the rounding of placements is not evaluated rather than
+  failed ([#384](https://github.com/axioval/engine/issues/384)).
 - **A door's clear width from a single leaf stated without its place**:
   `door_clear_width;from_leaves=passage` (and `widest-leaf`, and
   `keyed-limit`'s `clear_width_from_leaves`) left every door not evaluated

@@ -13,6 +13,13 @@ use crate::support::{Unavailable, invalid};
 /// How far composed placements may be off in binary arithmetic.
 pub(crate) const ROUNDING: f64 = 1e-9;
 
+/// How far an opening may reach past its host's face and still lie flush
+/// on it: the depth within which the geometry host's cut test takes an
+/// opening as touching its host rather than cutting it (10 µm), far above
+/// the rounding of placements at georeferenced coordinates and far below
+/// any modelling tolerance.
+pub(crate) const FLUSH: f64 = 1e-5;
+
 /// How nearly two unit vectors must agree to be taken as parallel.
 const PARALLEL: f64 = 1e-9;
 

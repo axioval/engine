@@ -153,7 +153,7 @@ impl Judge<'_, '_> {
         let mut findings = Vec::new();
         let (_, length_bounds) = host.axis(self.config.axes.length);
         let (_, height_bounds) = host.axis(self.config.axes.height);
-        let (outside_length, outside_height) = self.beyond(&host, placed);
+        let (outside_length, outside_height) = Self::beyond(placed);
         let outside: Vec<String> = [
             ("length", outside_length, placed.length, length_bounds),
             ("height", outside_height, placed.height, height_bounds),
@@ -170,11 +170,11 @@ impl Judge<'_, '_> {
             )
         })
         .collect();
-        let axes = self.config.axes;
-        let rect = placed.section_rect(&host, axes);
+        let rect = placed.section_rect(&host, self.config.axes);
         let mut crosses_outline = false;
         if outside.is_empty() {
-            crosses_outline = Self::crosses_outline(&host, placed, rect, &mut findings)
+            crosses_outline = self
+                .crosses_outline(&host, placed, rect, &mut findings)
                 .unwrap_or_else(|(reason, message)| {
                     evaluation.push_object_not_evaluated(opening.id.clone(), reason, message);
                     true
@@ -250,13 +250,18 @@ impl Judge<'_, '_> {
     }
 
     /// Within the box that holds a free outline, whether the opening
-    /// crosses the outline itself; an error when it may.
+    /// crosses the outline itself; an error when it may, or when whether it
+    /// lies flush on a face of the box or past it cannot be told.
     fn crosses_outline(
+        &self,
         host: &Host,
         placed: &Placed,
         rect: [Span; 2],
         findings: &mut Vec<Found>,
     ) -> Result<bool, Unavailable> {
+        if let Some(why) = self.flush_undecided(host, placed) {
+            return Err((NotEvaluatedReason::IncompleteEvidence, why));
+        }
         let Some(crosses) = Self::crossing(host, placed, rect) else {
             return Err((
                 NotEvaluatedReason::IncompleteEvidence,

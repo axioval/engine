@@ -14,6 +14,7 @@ use axioval_ir::contract::{ParameterValue, Selector};
 use axioval_ir::{Evidence, Object, ObjectId, QuantityDimension};
 
 use crate::counts::Population;
+use crate::level_spacing::metres;
 use crate::support::{Parameters, Traversal, Unavailable, invalid};
 
 mod dimensions;
@@ -27,7 +28,7 @@ mod supports;
 mod template;
 mod zones;
 
-use face::{Axis, FaceAxes, Host, ROUNDING, Solid, Span, gap, read_host};
+use face::{Axis, FLUSH, FaceAxes, Host, ROUNDING, Solid, Span, gap, read_host};
 use supports::{SupportConfig, Supports};
 
 pub(crate) use lists::ZoneMeasures;
@@ -112,6 +113,12 @@ static PLANS: crate::templates::Plans = crate::templates::Plans::new();
 /// its section's where it is extruded through the host, and otherwise known
 /// small only when the box its extents span is; an opening that may be
 /// either is not evaluated, and a possible neighbour.
+///
+/// An opening reaching past its host's box by no more than 10 µm, the
+/// depth within which the cut test takes an opening as touching its host,
+/// lies flush on that face: inside the host, its extent taken to end on
+/// the face. One reaching surely further lies partly outside, and one
+/// whose overhang cannot be told from that depth is not evaluated.
 ///
 /// Positions are composed from placements in binary arithmetic, so every
 /// bound is widened by a nanometre, far below any modelling tolerance.
@@ -289,7 +296,52 @@ struct Placed {
     section_exact: bool,
     /// Whether its area may be under `minimum_opening_area` or not.
     may_be_small: bool,
+    /// How it lies against its host's box along the length and the height
+    /// axis.
+    fit: [Fit; 2],
     evidence: Vec<Evidence>,
+}
+
+/// How an opening's extent along one face axis lies against its host's.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Fit {
+    /// Within the host's bounds, or past them by no more than [`FLUSH`]:
+    /// flush on the face.
+    Within,
+    /// Surely past them by more than [`FLUSH`].
+    Beyond,
+    /// Past them by [`FLUSH`] within the rounding: whether it lies flush
+    /// or reaches past cannot be told.
+    Open,
+}
+
+/// How `extent` lies against `bounds`, and the extent with each end
+/// within [`FLUSH`] past its bound taken to end on it.
+fn fit(mut extent: Span, bounds: Span) -> (Span, Fit) {
+    let fit = |past: f64| {
+        if past <= FLUSH - ROUNDING {
+            Fit::Within
+        } else if past > FLUSH + ROUNDING {
+            Fit::Beyond
+        } else {
+            Fit::Open
+        }
+    };
+    let (low, high) = (fit(bounds.0 - extent.0), fit(extent.1 - bounds.1));
+    if low == Fit::Within && extent.0 < bounds.0 {
+        extent.0 = bounds.0;
+    }
+    if high == Fit::Within && extent.1 > bounds.1 {
+        extent.1 = bounds.1;
+    }
+    let both = if low == Fit::Beyond || high == Fit::Beyond {
+        Fit::Beyond
+    } else if low == Fit::Open || high == Fit::Open {
+        Fit::Open
+    } else {
+        Fit::Within
+    };
+    (extent, both)
 }
 
 impl Placed {
@@ -436,8 +488,14 @@ impl Judge<'_, '_> {
         let (through, _) = face.axis(self.config.axes.through());
         let exact =
             solid.aligned_rectangle(length_axis, height_axis) && solid.direction_along(through);
-        let length = solid.extent(face.origin, length_axis).outer;
-        let height = solid.extent(face.origin, height_axis).outer;
+        let (length, length_fit) = fit(
+            solid.extent(face.origin, length_axis).outer,
+            face.axis(self.config.axes.length).1,
+        );
+        let (height, height_fit) = fit(
+            solid.extent(face.origin, height_axis).outer,
+            face.axis(self.config.axes.height).1,
+        );
         let across = solid.extent(face.origin, through).outer;
         // Across a host extruded in its face, an opening extruded through
         // it keeps one extent along the face's profile axis at every depth.
@@ -468,22 +526,53 @@ impl Judge<'_, '_> {
             exact,
             section_exact,
             may_be_small,
+            fit: [length_fit, height_fit],
             evidence,
         }))
     }
 
-    /// Whether the opening reaches past its host's box along its length and
-    /// along its height.
-    fn beyond(&self, host: &Host, placed: &Placed) -> (bool, bool) {
-        let (_, length_bounds) = host.axis(self.config.axes.length);
-        let (_, height_bounds) = host.axis(self.config.axes.height);
-        let beyond = |extent: Span, bounds: Span| {
-            extent.0 < bounds.0 - ROUNDING || extent.1 > bounds.1 + ROUNDING
-        };
-        (
-            beyond(placed.length, length_bounds),
-            beyond(placed.height, height_bounds),
-        )
+    /// Whether the opening surely reaches past its host's box, by more than
+    /// it may lie flush within, along its length and along its height.
+    fn beyond(placed: &Placed) -> (bool, bool) {
+        (placed.fit[0] == Fit::Beyond, placed.fit[1] == Fit::Beyond)
+    }
+
+    /// Why whether the opening lies inside its host's box is undecided:
+    /// reaching surely past it along no axis, along one it reaches past by
+    /// about [`FLUSH`], so it may lie flush or not. None where it is
+    /// decided.
+    fn flush_undecided(&self, host: &Host, placed: &Placed) -> Option<String> {
+        if placed.fit.contains(&Fit::Beyond) {
+            return None;
+        }
+        let axes = [
+            ("length", placed.length, self.config.axes.length),
+            ("height", placed.height, self.config.axes.height),
+        ];
+        let open: Vec<String> = axes
+            .into_iter()
+            .zip(placed.fit)
+            .filter(|(_, fit)| *fit == Fit::Open)
+            .map(|((name, extent, axis), _)| {
+                let bounds = host.axis(axis).1;
+                format!(
+                    "along its {name} it spans {} to {}, the host {} to {}",
+                    metres(extent.0),
+                    metres(extent.1),
+                    metres(bounds.0),
+                    metres(bounds.1)
+                )
+            })
+            .collect();
+        (!open.is_empty()).then(|| {
+            format!(
+                "whether it lies partly outside its host {} is undecided: {}, past it by \
+                 {} within the rounding, the depth it may lie flush within",
+                placed.host.local_id,
+                open.join("; "),
+                metres(FLUSH)
+            )
+        })
     }
 
     /// Within the box that holds a free outline, whether the opening

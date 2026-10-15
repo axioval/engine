@@ -143,9 +143,12 @@ impl Judge<'_, '_> {
         let locator = format!("{OPENING_PLACEMENTS}:{}", placed.host);
         let axes = self.config.axes;
         let rect = placed.section_rect(host, axes);
-        let (outside_length, outside_height) = self.beyond(host, placed);
+        let (outside_length, outside_height) = Self::beyond(placed);
+        let flush = self.flush_undecided(host, placed);
         let inside = if outside_length || outside_height {
             Some(false)
+        } else if flush.is_some() {
+            None
         } else {
             Self::crossing(host, placed, rect).map(|crosses| !crosses)
         };
@@ -156,7 +159,9 @@ impl Judge<'_, '_> {
             "inside",
             inside.map_or_else(
                 || MemberValue::Undecided {
-                    why: "it may cross the edge of its host's outline".to_owned(),
+                    why: flush.unwrap_or_else(|| {
+                        "it may cross the edge of its host's outline".to_owned()
+                    }),
                 },
                 |value| MemberValue::Truth {
                     value,

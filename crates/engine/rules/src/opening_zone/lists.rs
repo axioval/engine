@@ -339,7 +339,7 @@ impl Judge<'_, '_> {
         };
         let locator = format!("{ZONE_CHECKS}:{}:{}", opening.id, placed.host);
         let rect = placed.section_rect(&host, self.config.axes);
-        let (outside_length, outside_height) = self.beyond(&host, placed);
+        let (outside_length, outside_height) = Self::beyond(placed);
         // The openings it is surely too close to, which every finding of the
         // placement relates.
         let (spacing, cited) = self.spacing_check(opening, placed, openings, &locator);
@@ -373,7 +373,7 @@ impl Judge<'_, '_> {
         let axes = self.config.axes;
         let (_, length_bounds) = host.axis(axes.length);
         let (_, height_bounds) = host.axis(axes.height);
-        let (outside_length, outside_height) = self.beyond(host, placed);
+        let (outside_length, outside_height) = Self::beyond(placed);
         let outside: Vec<String> = [
             ("length", outside_length, placed.length, length_bounds),
             ("height", outside_height, placed.height, height_bounds),
@@ -393,13 +393,18 @@ impl Judge<'_, '_> {
         let host_name = placed.host.local_id.as_str();
         let mut fields =
             BTreeMap::from([("placed", truth(true, locator)), ("host", text(host_name))]);
-        let crossing = if outside.is_empty() {
+        let flush = self.flush_undecided(host, placed);
+        let crossing = if outside.is_empty() && flush.is_none() {
             Self::crossing(host, placed, rect)
         } else {
             Some(false)
         };
-        let crosses = outside.is_empty() && crossing != Some(false);
-        let inside = if outside.is_empty() {
+        // Nothing is measured past an outline it crosses or may cross, nor
+        // past a face it may reach beyond.
+        let crosses = outside.is_empty() && (flush.is_some() || crossing != Some(false));
+        let inside = if let Some(why) = flush {
+            undecided(why)
+        } else if outside.is_empty() {
             match crossing {
                 Some(false) => truth(true, locator),
                 Some(true) => {

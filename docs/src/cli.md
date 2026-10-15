@@ -1364,6 +1364,26 @@ carries `;applied-openings:<host>=<opening>+...`. Such an opening's void,
 which shelf, plan-area, routing and derived-relationship services read for
 bodiless openings, is its `Reference` solid.
 
+**Certified heights of tessellated bodies.** A tessellated body's mesh
+lies within its chord deviation of the true surface, so read alone its flat
+top may lie that deviation higher: a curved building's slab whose top is a
+room's floor would reach into the room. Where the body's construction
+states its height exactly, the bridge certifies it from the graph the mesh
+is compiled from (`axioval_axiolid::certified_vertical_extent`, #393),
+whatever the plan outline: an extrusion whose profile plane lies
+horizontal after its placements spans its two caps' elevations exactly,
+reached, for any direction with a vertical component; a difference or
+clip lies within its subject's (an intersection within either operand's)
+without a claim to reach them; a union or several items span the hull of
+theirs; a whole measured through its parts spans its parts' vertical
+bounds. The elevations are widened by 64 units in the last place of their
+magnitude for rounding and registered only where they agree with the mesh
+within its deviation (`with_vertical_extent_bounds`); every other body (a
+tilted profile plane, a revolution, a swept disk, an authored mesh or
+B-rep) keeps the deviation-widened extent. The exact boundary's extent
+bounds (`with_extent_bounds`), where there is one, are combined with them:
+the tightest of each reading holds. Exact bodies need none.
+
 **Wholes measured through their parts.** A physical product with no `Body`
 of its own that is decomposed into parts (`IfcRelAggregates`, read through
 the IFC session's relationship edges, at any depth) is measured as the

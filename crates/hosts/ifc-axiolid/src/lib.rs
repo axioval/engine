@@ -88,6 +88,13 @@
 //! has one: two exact meshes are never certified, so boundaries of planar
 //! bodies alone would be built for nothing.
 //!
+//! Every tessellated body also gets the height its construction states
+//! exactly, whatever its plan outline (`axioval_axiolid::certified_vertical_extent`:
+//! an extrusion with horizontal caps spans them, a difference lies within
+//! its subject's), read from the same graph and registered where it agrees
+//! with the mesh, so a curved slab whose flat top is a floor stays at it
+//! instead of rising its chord deviation into the room above (#393).
+//!
 //! A product on an IFC4X3 `IfcLinearPlacement` is placed where its linear
 //! expression puts it: every lowering derives the frame from the basis
 //! curve through `ifc-geometry`'s evaluator-taking entry points
@@ -154,7 +161,7 @@ use axioval_axiolid::{
     AxiolidMetricRoutingService, AxiolidPlanAreaService, AxiolidPlanSpanService,
     AxiolidProximityService, AxiolidSightService, AxiolidSpaceService, AxiolidTriangleCountService,
     AxiolidVerticalExtentService, AxiolidWalkabilityService, AxiolidWalkingSurfaceService,
-    ExactBoundary,
+    ExactBoundary, VerticalExtentBounds, certified_vertical_extent,
 };
 use axioval_engine::{
     AlignmentServiceHandle, BodyContainment, BoundaryCoverageServiceHandle, ContactServiceHandle,
@@ -1319,7 +1326,10 @@ pub fn attach(
                 report.exact += 1;
             }
             Fit::Within(deviation) => {
-                geometry = geometry.with_tessellated_mesh(id, body.mesh, deviation);
+                geometry = geometry.with_tessellated_mesh(id.clone(), body.mesh, deviation);
+                if let Some(height) = body.height {
+                    geometry = geometry.with_vertical_extent_bounds(id, height);
+                }
                 report.tessellated += 1;
             }
         }
@@ -3972,6 +3982,10 @@ struct Body {
     /// The exact boundary built from the same graph, when asked for and
     /// exactly constructible.
     boundary: Option<ExactBoundary>,
+    /// The elevations the same graph states exactly
+    /// (`certified_vertical_extent`), for a tessellated mesh whose
+    /// construction states them.
+    height: Option<VerticalExtentBounds>,
     /// Openings taken as already applied to the body, with the reason
     /// ([`applied`]); empty when every opening was subtracted.
     applied: Vec<(ObjectId, &'static str)>,
@@ -4189,10 +4203,17 @@ fn mesh_less(
     let boundary = boundary
         .then(|| axioval_axiolid::exact_boundary(&lowered.graph, lowered.root).ok())
         .flatten();
+    // A tessellated body's height, where its construction states it
+    // exactly whatever its plan profile (#393): a curved slab's flat top
+    // then stays at the floor instead of rising its chord deviation.
+    let height = matches!(fit, Fit::Within(_))
+        .then(|| certified_vertical_extent(&lowered.graph, lowered.root).ok())
+        .flatten();
     Ok(Some(Body {
         mesh,
         fit,
         boundary,
+        height,
         applied: Vec::new(),
         taken: net.taken_as_applied,
     }))
@@ -5390,6 +5411,7 @@ mod tests {
             mesh: part,
             fit,
             boundary: None,
+            height: None,
             applied: Vec::new(),
             taken: Vec::new(),
         };
@@ -5661,6 +5683,7 @@ mod tests {
                 mesh: part,
                 fit,
                 boundary: None,
+                height: None,
                 applied: Vec::new(),
                 taken: Vec::new(),
             };

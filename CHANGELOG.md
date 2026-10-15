@@ -90,6 +90,29 @@ All notable changes are documented here. This project follows Semantic Versionin
 - `axioval-host-ifc-axiolid`'s `Options` is no longer `Copy`: it holds the
   derived-source declarations. Clone it to attach twice.
 
+### Fixed
+
+- **Curved slabs whose top is a floor no longer leave the rooms above
+  undecided** ([#393](https://github.com/axioval/engine/issues/393)). A
+  tessellated body's flat top was read as possibly its chord deviation
+  higher unless its exact boundary was certified, so a curved building's
+  floor slab, or a round column or wall of the storey below, reached 1 mm
+  into every room's free-floor band and left the room not evaluated as
+  "placement evidence is not exact and reviewable". The geometry bridge
+  now certifies every tessellated body's height where its construction
+  states it exactly, whatever its plan outline
+  (`axioval_axiolid::certified_vertical_extent`): an extrusion whose
+  profile plane is horizontal after its placements spans its two caps,
+  a difference or clip lies within its subject's, a union spans its
+  members' and a whole its parts'. `AxiolidGeometry::with_vertical_extent_bounds`
+  registers it where it agrees with the mesh, combined with the exact
+  boundary's extent bounds (`with_extent_bounds` now combines rather than
+  replaces). A body whose certified top is at or below the floor is out of
+  the band; a duct or stair crossing up through the floor still blocks
+  within its own footprint; a body whose height nothing certifies (a
+  horizontal pipe's round top on the floor, without its exact boundary)
+  stays undecided as before.
+
 ## [0.5.0] - 2026-10-15
 
 Context and measurement. Rules can now read location-dependent context

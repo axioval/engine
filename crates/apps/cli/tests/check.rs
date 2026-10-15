@@ -17015,6 +17015,208 @@ fn with_geometry_an_overlapping_space_is_no_free_floor_obstacle() {
     assert_eq!(finding_messages(&result).len(), 2, "{result:#}");
 }
 
+/// A disk of `radius` centred at (`x`, `y`), extruded `depth` up from `z`,
+/// as instances `#first` to `#first + 9`: a tessellated body, as round
+/// columns and ducts are. `PL` and `REP` in `product` become its placement
+/// and shape.
+fn round_body(first: u32, [x, y, z]: [f64; 3], radius: f64, depth: f64, product: &str) -> String {
+    let [
+        origin,
+        frame,
+        placement,
+        p,
+        pos,
+        profile,
+        solid,
+        shape,
+        definition,
+        object,
+    ] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(|offset| first + offset);
+    format!(
+        "#{origin}=IFCCARTESIANPOINT((0.,0.,{z:?}));\n\
+         #{frame}=IFCAXIS2PLACEMENT3D(#{origin},$,$);\n\
+         #{placement}=IFCLOCALPLACEMENT($,#{frame});\n\
+         #{p}=IFCCARTESIANPOINT(({x:?},{y:?}));\n\
+         #{pos}=IFCAXIS2PLACEMENT2D(#{p},$);\n\
+         #{profile}=IFCCIRCLEPROFILEDEF(.AREA.,$,#{pos},{radius:?});\n\
+         #{solid}=IFCEXTRUDEDAREASOLID(#{profile},#2,#4,{depth:?});\n\
+         #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{solid}));\n\
+         #{definition}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n\
+         #{object}={};\n",
+        product
+            .replace("GID", &format!("{object:022}"))
+            .replace("PL", &format!("#{placement}"))
+            .replace("REP", &format!("#{definition}")),
+    )
+}
+
+/// Floor slab #219 of a curved building, 0.2 m thick with its top at
+/// z = 3.7: an outline from (-4, -4) to (4, -4), an arc through (5, 0)
+/// to (4, 4) and back by (-4, 4), extruded up from z = 3.5, as instances
+/// `#200` to `#219`. Its arc is tessellated, its caps are flat.
+fn curved_slab() -> String {
+    "#200=IFCCARTESIANPOINTLIST2D(((-4.,-4.),(4.,-4.),(5.,0.),(4.,4.),(-4.,4.)),$);\n\
+     #205=IFCINDEXEDPOLYCURVE(#200,(IFCLINEINDEX((1,2)),IFCARCINDEX((2,3,4)),IFCLINEINDEX((4,5,1))),.F.);\n\
+     #206=IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,#205);\n\
+     #207=IFCCARTESIANPOINT((0.,0.,3.5));\n\
+     #208=IFCAXIS2PLACEMENT3D(#207,$,$);\n\
+     #209=IFCLOCALPLACEMENT($,#208);\n\
+     #210=IFCEXTRUDEDAREASOLID(#206,#2,#4,0.2);\n\
+     #211=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#210));\n\
+     #212=IFCPRODUCTDEFINITIONSHAPE($,$,(#211));\n\
+     #219=IFCSLAB('0000000000000000000219',$,$,$,$,#209,#212,$,.FLOOR.);\n"
+        .to_owned()
+}
+
+/// Room #19 on the floor at z = 3.7, `side` square about the origin and
+/// 2.5 m high, over [`curved_slab`], with round column #39 of the storey
+/// below (z 0 to 3.7) under its corner and `more` besides.
+fn room_over_a_curved_slab(side: f64, more: &str) -> String {
+    let space = "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,$,$)";
+    let column = "IFCCOLUMN('GID',$,$,$,$,PL,REP,$,.COLUMN.)";
+    model_with(&format!(
+        "{}{}{}{more}",
+        placed_box(10, [0.0, 0.0, 3.7], [side, side, 2.5], space),
+        curved_slab(),
+        round_body(30, [1.0, 1.0, 0.0], 0.2, 3.7, column),
+    ))
+}
+
+/// A free-floor circle of 1.5 m over a 2 m band in `model`'s space, with
+/// `args` for `check`.
+fn turning_circle(case: &Case, model: &str, args: &[&str]) -> (Output, Value) {
+    case.write("model.ifc", model);
+    case.geometry_rule_with(
+        &["model.ifc"],
+        &[("space", "IfcSpace")],
+        (
+            "axioval:capability.free-floor-circle",
+            &registry_signature("axioval:capability.free-floor-circle"),
+        ),
+        entity("space"),
+        json!({
+            "diameter_metres": {"type": "number", "value": 1.5},
+            "height_metres": {"type": "number", "value": 2.0},
+        }),
+        &json!({}),
+        args,
+    )
+}
+
+/// #393: tessellated bodies whose flat tops lie on the floor (a curved
+/// building's slab under the whole room, a round column of the storey
+/// below) are not in the room's band. Their construction states their
+/// height exactly (an extrusion with horizontal caps, whatever the
+/// outline), so the host certifies it and the room holds the circle,
+/// with exact boundaries or without.
+#[test]
+fn with_geometry_a_curved_slab_and_a_column_ending_at_the_floor_leave_it_free() {
+    let case = Case::new("geometry-free-floor-curved-slab");
+    let model = room_over_a_curved_slab(3.0, "");
+    for args in [&[][..], &["--no-exact-boundaries"][..]] {
+        let (output, result) = turning_circle(&case, &model, args);
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "{args:?} {}",
+            stderr(&output)
+        );
+        assert_eq!(finding_messages(&result), [], "{args:?} {result:#}");
+        assert!(
+            result["report"]["not_evaluated"]
+                .as_array()
+                .is_none_or(Vec::is_empty),
+            "{args:?} {:#}",
+            result["report"]
+        );
+        assert!(
+            unmeasured_reasons(&result).is_empty(),
+            "{:?}",
+            unmeasured_reasons(&result)
+        );
+    }
+}
+
+/// #393: a round duct crossing up through the slab into the band (z 3.3
+/// to 5.94) blocks the floor within its own footprint only: a 3 m room
+/// holds the circle beside it, a 2 m one cannot, and the duct is named,
+/// with exact boundaries or the certified heights alone.
+#[test]
+fn with_geometry_a_duct_through_the_floor_blocks_only_its_footprint() {
+    let case = Case::new("geometry-free-floor-duct");
+    let duct = round_body(
+        50,
+        [0.0, 0.0, 3.3],
+        0.15,
+        2.64,
+        "IFCDUCTSEGMENT('GID',$,$,$,$,PL,REP,$,$)",
+    );
+    for args in [&[][..], &["--no-exact-boundaries"][..]] {
+        let (output, result) = turning_circle(&case, &room_over_a_curved_slab(3.0, &duct), args);
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "{args:?} {}",
+            stderr(&output)
+        );
+        assert_eq!(finding_messages(&result), [], "{args:?} {result:#}");
+        let (output, result) = turning_circle(&case, &room_over_a_curved_slab(2.0, &duct), args);
+        assert_eq!(
+            output.status.code(),
+            Some(3),
+            "{args:?} {}",
+            stderr(&output)
+        );
+        let finding = &result["report"]["findings"][0];
+        assert!(
+            finding["message"]
+                .as_str()
+                .unwrap()
+                .starts_with("NO_FREE_FLOOR_SPACE_FOR_CIRCLE"),
+            "{args:?} {finding:#}"
+        );
+        assert_eq!(
+            finding["related"],
+            json!([{"source": finding["object_id"]["source"], "local_id": "#59"}]),
+            "{args:?} {finding:#}"
+        );
+    }
+}
+
+/// A tessellated body whose height its construction does not state stays
+/// widened by its chord deviation (#393): a horizontal pipe under the
+/// floor whose round top touches it may rise into the band, and without
+/// its exact boundary nothing narrows that, so the room stays undecided.
+#[test]
+fn with_geometry_an_uncertified_round_top_touching_the_floor_stays_undecided() {
+    let case = Case::new("geometry-free-floor-uncertified");
+    // Pipe #69, radius 0.1 along x at z = 3.6: its axis placement turns
+    // the circle's plane upright.
+    let pipe = "#60=IFCCARTESIANPOINT((-2.,0.,3.6));\n\
+                #61=IFCDIRECTION((1.,0.,0.));\n\
+                #62=IFCDIRECTION((0.,1.,0.));\n\
+                #63=IFCAXIS2PLACEMENT3D(#60,#61,#62);\n\
+                #64=IFCLOCALPLACEMENT($,#63);\n\
+                #65=IFCCIRCLEPROFILEDEF(.AREA.,$,$,0.1);\n\
+                #66=IFCEXTRUDEDAREASOLID(#65,#2,#4,4.);\n\
+                #67=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#66));\n\
+                #68=IFCPRODUCTDEFINITIONSHAPE($,$,(#67));\n\
+                #69=IFCPIPESEGMENT('0000000000000000000069',$,$,$,$,#64,#68,$,$);\n";
+    let model = room_over_a_curved_slab(3.0, pipe);
+    let (output, result) = turning_circle(&case, &model, &["--no-exact-boundaries"]);
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    assert_eq!(finding_messages(&result), [], "{result:#}");
+    let message = result["report"]["not_evaluated"][0]["message"]
+        .as_str()
+        .unwrap_or_default();
+    assert!(message.contains("not exact"), "{:#}", result["report"]);
+    // Its exact boundary bounds its extent in closed form: the top stays
+    // at the floor and the room decides.
+    let (output, result) = turning_circle(&case, &model, &[]);
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert_eq!(finding_messages(&result), [], "{result:#}");
+}
+
 /// The largest free circle's bracket and centre, read from the evidence a
 /// failed free-floor finding cites (#391).
 fn largest(finding: &Value) -> (f64, f64, Vec<f64>) {

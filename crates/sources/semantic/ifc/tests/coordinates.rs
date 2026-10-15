@@ -201,14 +201,110 @@ fn ifc2x3_states_no_map_conversion() {
     assert!(system.map().is_none());
 }
 
+/// The reason `data` is refused as ambiguous.
+fn ambiguous(schema: &str, data: &str) -> String {
+    match system(schema, data) {
+        Err(CoordinateSystemError::Ambiguous(reason)) => reason,
+        other => panic!("expected an ambiguous coordinate system, got {other:?}"),
+    }
+}
+
+#[test]
+fn two_model_contexts_on_one_world_coordinate_system_state_one_frame() {
+    // As an IFC2X3 export writes it: `Body` and `BoundingBox`, both `Model`,
+    // on one placement, each with its own precision.
+    let data = format!(
+        "{CONTEXT}#7=IFCGEOMETRICREPRESENTATIONCONTEXT('BoundingBox','Model',3,1.E-03,#13,#14);\n"
+    );
+    let one = system("IFC2X3", CONTEXT).unwrap();
+    let both = system("IFC2X3", &data).unwrap();
+    assert_eq!(both.world(), one.world());
+    assert_eq!(both.true_north(), one.true_north());
+    assert!(both.map().is_none());
+    assert!(
+        both.evidence()
+            .locator
+            .contains(":coordinate-system:#5+#7:no-map-conversion"),
+        "{}",
+        both.evidence().locator
+    );
+}
+
+#[test]
+fn model_contexts_on_equal_placements_with_one_map_conversion_state_one_frame() {
+    // A second placement and true north stating the same numbers, and the
+    // same conversion stated for each context.
+    let data = format!(
+        "{CONTEXT}{MAP_IN_METRES}\
+         #30=IFCCARTESIANPOINT((1000.,2000.,0.));\n\
+         #31=IFCAXIS2PLACEMENT3D(#30,#11,#12);\n\
+         #32=IFCDIRECTION((1.,1.));\n\
+         #7=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#31,#32);\n\
+         #33=IFCMAPCONVERSION(#7,#21,500000.,5600000.,50.,0.,1.,$);\n"
+    );
+    let system = system("IFC4", &data).unwrap();
+    assert!(close(
+        &system.world().unwrap().origin_metres(),
+        &[1.0, 2.0, 0.0]
+    ));
+    assert_eq!(
+        system.map().unwrap().offset(),
+        [500_000.0, 5_600_000.0, 50.0]
+    );
+    assert!(
+        system
+            .evidence()
+            .locator
+            .contains(":coordinate-system:#5+#7:#22+#33"),
+        "{}",
+        system.evidence().locator
+    );
+}
+
+#[test]
+fn model_contexts_stating_different_frames_are_ambiguous_naming_what_differs() {
+    let origin = format!(
+        "{CONTEXT}#30=IFCCARTESIANPOINT((1000.,2001.,0.));\n\
+         #31=IFCAXIS2PLACEMENT3D(#30,#11,#12);\n\
+         #7=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#31,#14);\n"
+    );
+    let reason = ambiguous("IFC2X3", &origin);
+    assert_eq!(
+        reason,
+        "2 model contexts (#5, #7) state different world coordinate systems"
+    );
+    let turned = format!(
+        "{CONTEXT}#31=IFCAXIS2PLACEMENT3D(#10,#11,$);\n\
+         #7=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#31,#14);\n"
+    );
+    assert!(ambiguous("IFC2X3", &turned).ends_with("different world coordinate systems"));
+    let north = format!(
+        "{CONTEXT}#32=IFCDIRECTION((0.,1.));\n\
+         #7=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#13,#32);\n"
+    );
+    assert!(ambiguous("IFC2X3", &north).ends_with("different true norths"));
+    let map = format!(
+        "{CONTEXT}{MAP_IN_METRES}\
+         #7=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#13,#14);\n\
+         #33=IFCMAPCONVERSION(#7,#21,500001.,5600000.,50.,0.,1.,$);\n"
+    );
+    assert!(ambiguous("IFC4", &map).ends_with("different map conversions"));
+    // One context converted, the other not: they state different frames.
+    let unconverted = format!(
+        "{CONTEXT}{MAP_IN_METRES}\
+         #7=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#13,#14);\n"
+    );
+    assert!(ambiguous("IFC4", &unconverted).ends_with("different map conversions"));
+}
+
 #[test]
 fn ambiguous_statements_are_refused() {
     let second_context =
         format!("{CONTEXT}#7=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#13,$);\n");
-    assert!(matches!(
-        system("IFC4", &second_context),
-        Err(CoordinateSystemError::Ambiguous(_))
-    ));
+    assert_eq!(
+        ambiguous("IFC4", &second_context),
+        "2 model contexts (#5, #7) state different true norths"
+    );
     let second_map =
         format!("{CONTEXT}{MAP_IN_METRES}#23=IFCMAPCONVERSION(#5,#21,0.,0.,0.,$,$,$);\n");
     assert!(matches!(

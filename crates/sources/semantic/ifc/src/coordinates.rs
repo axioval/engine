@@ -28,9 +28,17 @@
 //!   absent; several sites, a grid placement or a placement that cannot be
 //!   resolved exactly leave it unknown, with the reason.
 //!
-//! A file without a model context states no coordinate system; several model
-//! contexts, or several conversions of the one context, are ambiguous and
-//! refused. IFC2X3 has no map conversion, so its files state none.
+//! A file without a model context states no coordinate system. Several root
+//! model contexts state one coordinate system when each, read on its own,
+//! states the same: world frames equal as resolved (the same placement, or
+//! placements stating the same numbers), the same true north and the same
+//! map conversion or none. The comparison is exact, not within the
+//! contexts' `Precision`: frames that differ at all leave open which one the
+//! geometry is stated in, and choosing one would be a guess. Contexts that
+//! differ in anything else are ambiguous and refused, naming what differs,
+//! and so are several conversions of one context. `Precision` places
+//! nothing, so contexts may differ in it. IFC2X3 has no map conversion, so
+//! its files state none.
 
 use std::sync::Arc;
 
@@ -88,9 +96,9 @@ impl IfcCoordinateSystem {
         }
     }
 
-    /// The single root model context, if the file has one.
-    fn model_context(&self) -> Result<Option<RepresentationContext<'_>>, CoordinateSystemError> {
-        let contexts: Vec<RepresentationContext<'_>> = all_contexts(&self.model)
+    /// The root model contexts, in id order.
+    fn model_contexts(&self) -> Vec<RepresentationContext<'_>> {
+        let mut contexts: Vec<RepresentationContext<'_>> = all_contexts(&self.model)
             .into_iter()
             .filter(|context| {
                 !context.is_sub_context()
@@ -99,19 +107,64 @@ impl IfcCoordinateSystem {
                         .is_some_and(|kind| kind.eq_ignore_ascii_case("Model"))
             })
             .collect();
-        match contexts.as_slice() {
-            [] => Ok(None),
-            [context] => Ok(Some(*context)),
-            several => Err(CoordinateSystemError::Ambiguous(format!(
-                "{} model contexts ({})",
-                several.len(),
-                several
-                    .iter()
-                    .map(|context| context.id().to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ))),
+        contexts.sort_by_key(RepresentationContext::id);
+        contexts
+    }
+
+    /// The one frame the root model `contexts` state (at least one): each
+    /// context's world frame, true north and coordinate operation, read on
+    /// its own. Several contexts state one frame only when every statement
+    /// is equal as resolved, exactly; any difference is ambiguous, naming
+    /// what differs, since nothing says which context applies.
+    fn statement(
+        &self,
+        contexts: &[RepresentationContext<'_>],
+    ) -> Result<Statement, CoordinateSystemError> {
+        let ids: Vec<EntityId> = contexts.iter().map(RepresentationContext::id).collect();
+        let maps = self.maps(&ids)?;
+        let mut statements = Vec::with_capacity(contexts.len());
+        for (context, map) in contexts.iter().zip(maps) {
+            statements.push(Statement {
+                contexts: vec![context.id()],
+                world: self.world(context)?,
+                true_north: self.true_north(context)?,
+                maps: map.iter().map(|(id, _)| *id).collect(),
+                map: map.map(|(_, map)| map),
+            });
         }
+        let mut statements = statements.into_iter();
+        let mut one = statements
+            .next()
+            .ok_or_else(|| CoordinateSystemError::Unreadable("no model context".into()))?;
+        let mut differing = Vec::new();
+        for other in statements {
+            if other.world != one.world {
+                differing.push("world coordinate systems");
+            }
+            #[allow(clippy::float_cmp)] // Equal as stated, not measured.
+            let same_north = other.true_north == one.true_north;
+            if !same_north {
+                differing.push("true norths");
+            }
+            if other.map != one.map {
+                differing.push("map conversions");
+            }
+            one.contexts.extend(other.contexts);
+            one.maps.extend(other.maps);
+        }
+        if !differing.is_empty() {
+            differing.sort_unstable();
+            differing.dedup();
+            return Err(CoordinateSystemError::Ambiguous(format!(
+                "{} model contexts ({}) state different {}",
+                one.contexts.len(),
+                joined(&one.contexts, ", "),
+                differing.join(", ")
+            )));
+        }
+        one.maps.sort_unstable();
+        one.maps.dedup();
+        Ok(one)
     }
 
     fn world(
@@ -227,57 +280,69 @@ impl IfcCoordinateSystem {
         }
     }
 
-    /// The coordinate operation of `context`, if the file states one,
-    /// resolved by `ifc-georef`.
-    fn map(
+    /// The coordinate operation of each of `contexts`, the root model
+    /// contexts, if the file states one, resolved by `ifc-georef`.
+    fn maps(
         &self,
-        context: EntityId,
-    ) -> Result<Option<(EntityId, MapConversion)>, CoordinateSystemError> {
+        contexts: &[EntityId],
+    ) -> Result<Vec<Option<(EntityId, MapConversion)>>, CoordinateSystemError> {
         let operations: Vec<EntityId> = OPERATIONS
             .iter()
             .flat_map(|kind| self.model.ids_of_type(kind).iter().copied())
             .collect();
         if operations.is_empty() {
-            return Ok(None);
+            return Ok(vec![None; contexts.len()]);
         }
-        let own: Vec<EntityId> = operations
-            .iter()
-            .copied()
-            .filter(|&id| {
-                self.model
-                    .get(id)
-                    .and_then(|entity| self.reference(entity, "SourceCRS"))
-                    == Some(context)
-            })
-            .collect();
+        let own = |context: EntityId| -> Vec<EntityId> {
+            operations
+                .iter()
+                .copied()
+                .filter(|&id| {
+                    self.model
+                        .get(id)
+                        .and_then(|entity| self.reference(entity, "SourceCRS"))
+                        == Some(context)
+                })
+                .collect()
+        };
         let view = GeorefView::for_model(&self.model).map_err(|error| refused(&error))?;
-        let id = match own.as_slice() {
-            [] => {
-                // An operation whose source `ifc-georef` refuses (dangling,
-                // of the wrong type, shared) makes the map unreadable; one
-                // from a valid other source is not this context's.
-                for &operation in &operations {
-                    resolve_operation_source(&view, operation).map_err(|error| refused(&error))?;
-                }
-                return Err(CoordinateSystemError::Unsupported(format!(
-                    "coordinate operations {} convert from something other than the model context {context}",
-                    operations
-                        .iter()
-                        .map(ToString::to_string)
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )));
+        if contexts.iter().all(|&context| own(context).is_empty()) {
+            // An operation whose source `ifc-georef` refuses (dangling, of
+            // the wrong type, shared) makes the map unreadable; one from a
+            // valid other source is not a model context's.
+            for &operation in &operations {
+                resolve_operation_source(&view, operation).map_err(|error| refused(&error))?;
             }
-            [id] => *id,
-            several => {
-                return Err(CoordinateSystemError::Ambiguous(format!(
+            return Err(CoordinateSystemError::Unsupported(format!(
+                "coordinate operations {} convert from something other than the model context {}",
+                joined(&operations, ", "),
+                joined(contexts, ", ")
+            )));
+        }
+        // A model context without an operation of its own, beside one with
+        // it, states no map conversion: it differs from the other's.
+        contexts
+            .iter()
+            .map(|&context| match own(context).as_slice() {
+                [] => Ok(None),
+                [id] => self.map(&view, *id).map(Some),
+                several => Err(CoordinateSystemError::Ambiguous(format!(
                     "{} map conversions of the model context {context}",
                     several.len()
-                )));
-            }
-        };
-        let resolved = resolve_project_to_map_in(&view, id, self.metres()?)
-            .map_err(|error| refused(&error))?;
+                ))),
+            })
+            .collect()
+    }
+
+    /// The coordinate operation `id` of a model context, resolved by
+    /// `ifc-georef`.
+    fn map(
+        &self,
+        view: &GeorefView<'_>,
+        id: EntityId,
+    ) -> Result<(EntityId, MapConversion), CoordinateSystemError> {
+        let resolved =
+            resolve_project_to_map_in(view, id, self.metres()?).map_err(|error| refused(&error))?;
         let scale = match resolved.kind {
             OperationKind::MapConversionScaled { factors: (x, y, z) } => {
                 #[allow(clippy::float_cmp)] // Equal as stated, not measured.
@@ -308,15 +373,34 @@ impl IfcCoordinateSystem {
             scale,
             Some(resolved.map_unit.metres_per_unit),
         )?;
-        Ok(Some((
+        Ok((
             id,
             if resolved.declared_map_unit().is_none() {
                 map.with_map_unit_by_default()
             } else {
                 map
             },
-        )))
+        ))
     }
+}
+
+/// The frame the root model contexts state as one.
+struct Statement {
+    /// The contexts stating it, in id order.
+    contexts: Vec<EntityId>,
+    world: CoordinateFrame,
+    true_north: Option<[f64; 2]>,
+    map: Option<MapConversion>,
+    /// The coordinate operations stating `map`, in id order.
+    maps: Vec<EntityId>,
+}
+
+/// `ids` as written, separated by `separator`.
+fn joined(ids: &[EntityId], separator: &str) -> String {
+    ids.iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(separator)
 }
 
 /// The coordinate operations `ifc-georef` resolves onto a map: IFC4's
@@ -370,7 +454,8 @@ impl CoordinateSystemService for IfcCoordinateSystem {
         let fingerprint = self.snapshots[0].fingerprint();
         let (site, site_id) = self.site();
         let site_locator = site_id.map_or_else(String::new, |id| format!(":site:{id}"));
-        let Some(context) = self.model_context()? else {
+        let contexts = self.model_contexts();
+        if contexts.is_empty() {
             return Ok(SourceCoordinateSystem::try_new(
                 source.clone(),
                 None,
@@ -382,21 +467,26 @@ impl CoordinateSystemService for IfcCoordinateSystem {
                 ),
             )?
             .with_site(site));
-        };
-        let world = self.world(&context)?;
-        let true_north = self.true_north(&context)?;
-        let map = self.map(context.id())?;
+        }
+        let Statement {
+            contexts,
+            world,
+            true_north,
+            map,
+            maps,
+        } = self.statement(&contexts)?;
+        // Several contexts stating one frame are all named, joined by `+`.
         let locator = format!(
             "ifc:{fingerprint}:coordinate-system:{}:{}{site_locator}",
-            context.id(),
+            joined(&contexts, "+"),
             map.as_ref().map_or_else(
                 || "no-map-conversion".to_owned(),
                 // An unstated `MapUnit` is the project length unit, and the
                 // evidence says so: never presented as stated.
-                |(id, map)| if map.map_unit_by_default() {
-                    format!("{id}:map-unit-project-default")
+                |map| if map.map_unit_by_default() {
+                    format!("{}:map-unit-project-default", joined(&maps, "+"))
                 } else {
-                    id.to_string()
+                    joined(&maps, "+")
                 }
             )
         );
@@ -404,7 +494,7 @@ impl CoordinateSystemService for IfcCoordinateSystem {
             source.clone(),
             Some(world),
             true_north,
-            map.map(|(_, map)| map),
+            map,
             Evidence::exact(source.clone(), locator),
         )?
         .with_site(site))

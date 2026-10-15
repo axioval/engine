@@ -810,6 +810,19 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **One coordinate system from several root model contexts stating the
+  same frame**: an IFC file with several root `Model` representation
+  contexts (as IFC2X3 exports write a `Body` and a `BoundingBox` context on
+  one placement) was refused as ambiguous, so in a federation every other
+  model was left unmeasured against it. Such contexts now state one
+  coordinate system when each states the same: world frames equal as
+  resolved (one placement, or placements stating the same numbers,
+  compared exactly), the same true north and the same map conversion or
+  none; their precisions may differ. Contexts stating different frames stay
+  ambiguous, and the reason names them and what differs (world coordinate
+  systems, true norths, map conversions). The evidence locator names every
+  context joined by `+`
+  ([#381](https://github.com/axioval/engine/issues/381)).
 - **A door's clear width from a single leaf stated without its place**:
   `door_clear_width;from_leaves=passage` (and `widest-leaf`, and
   `keyed-limit`'s `clear_width_from_leaves`) left every door not evaluated

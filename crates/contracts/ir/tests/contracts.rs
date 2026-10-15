@@ -392,6 +392,7 @@ mod tables {
         Report {
             resources: Vec::new(),
             stale_decisions: Vec::new(),
+            superseded: Vec::new(),
             findings: vec![Finding::new(
                 RuleId::new("r").unwrap(),
                 object("#1"),

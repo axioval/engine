@@ -1033,6 +1033,20 @@ impl Project {
     pub fn objects(&self) -> impl Iterator<Item = &Object> {
         self.objects.values()
     }
+    /// This project less every object `leave_out` names. Leaving objects
+    /// out keeps every identity and external id unambiguous, so it cannot
+    /// fail.
+    #[must_use]
+    pub fn without(&self, leave_out: &std::collections::BTreeSet<&ObjectId>) -> Self {
+        Self {
+            objects: self
+                .objects
+                .iter()
+                .filter(|(id, _)| !leave_out.contains(id))
+                .map(|(id, object)| (id.clone(), object.clone()))
+                .collect(),
+        }
+    }
 }
 
 /// A source-neutral object selector.
@@ -1618,6 +1632,61 @@ impl RuleSummary {
     }
 }
 
+/// An object a federated session evaluated only once, through the object
+/// that supersedes it (#390).
+///
+/// A host that knows one source was derived from another (a discipline
+/// model exported from the architectural one, keeping copies of its
+/// objects) declares each copy superseded by its original. A superseded
+/// object is neither a rule subject nor a counterpart, so its findings are
+/// reported once, through `by`. The report lists every superseded object
+/// so a host can show it and the user can switch the precedence off again.
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Superseded {
+    /// The object not evaluated on its own.
+    pub object: ObjectId,
+    /// The object, of another source, evaluated in its place.
+    pub by: ObjectId,
+    /// Why the host declared it, reported verbatim.
+    pub reason: SupersessionReason,
+}
+
+/// Why an object is superseded: how the host decided it, and its words.
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SupersessionReason {
+    /// How the object was matched to the one superseding it.
+    pub kind: SupersessionKind,
+    /// What the host states about the match, never blank.
+    pub text: String,
+}
+
+impl SupersessionReason {
+    /// A reason of `kind` stating `text`.
+    pub fn new(kind: SupersessionKind, text: impl Into<String>) -> Self {
+        Self {
+            kind,
+            text: text.into(),
+        }
+    }
+}
+
+/// How a host matched a superseded object to the one superseding it. A
+/// stable code: `by-id`, `by-geometry` or `declared`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SupersessionKind {
+    /// The same external id and class, the body confirmed one.
+    ById,
+    /// The same class and body, the only candidate on either side.
+    ByGeometry,
+    /// The host's own judgement, such as its viewer's matching (a reduced
+    /// copy inside its original, say); the text says what it is, and the
+    /// host answers for it.
+    Declared,
+}
+
 /// Ordered report from a plan execution.
 ///
 /// `tables` holds the measured values rules report beside their findings,
@@ -1650,6 +1719,12 @@ pub struct Report {
     /// naming no resource serializes as before resources existed.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub resources: Vec<Object>,
+    /// The objects the session declared superseded, sorted by object: not
+    /// evaluated on their own, each with the object evaluated in its place
+    /// and why (#390). Omitted when empty, so a report of a session without
+    /// a declaration serializes as before.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub superseded: Vec<Superseded>,
 }
 impl Report {
     /// Findings in deterministic order.
@@ -1667,6 +1742,10 @@ impl Report {
     /// Per-rule counts and status, by rule id; empty unless the host asked.
     pub fn rules(&self) -> &[RuleSummary] {
         &self.rules
+    }
+    /// The objects not evaluated on their own, sorted by object (#390).
+    pub fn superseded(&self) -> &[Superseded] {
+        &self.superseded
     }
     /// Decisions [`Report::apply_decisions`] found no finding for.
     pub fn stale_decisions(&self) -> &[Decision] {

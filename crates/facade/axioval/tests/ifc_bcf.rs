@@ -55,6 +55,7 @@ fn an_ifc_finding_selects_its_elements_by_global_id() {
         rules: Vec::new(),
         resources: Vec::new(),
         stale_decisions: Vec::new(),
+        superseded: Vec::new(),
     };
 
     let export = export(

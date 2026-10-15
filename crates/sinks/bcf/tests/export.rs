@@ -48,6 +48,7 @@ fn report(document: &str, first: u64) -> Report {
     Report {
         resources: Vec::new(),
         stale_decisions: Vec::new(),
+        superseded: Vec::new(),
         findings: vec![
             Finding {
                 explanation: None,
@@ -379,6 +380,7 @@ fn scoped_report(document: &str, first: u64) -> Report {
     Report {
         resources: Vec::new(),
         stale_decisions: Vec::new(),
+        superseded: Vec::new(),
         findings: vec![
             Finding::new(
                 RuleId::new("building-exists").unwrap(),
@@ -457,6 +459,7 @@ fn a_project_finding_is_written_and_its_guid_is_stable() {
     let report = Report {
         resources: Vec::new(),
         stale_decisions: Vec::new(),
+        superseded: Vec::new(),
         findings: vec![Finding::new(
             RuleId::new("fire-compartment-exists").unwrap(),
             Scope::Project,

@@ -4,7 +4,7 @@ use std::{
     sync::Arc,
 };
 
-use axioval_ir::{Discipline, Project, SourceId};
+use axioval_ir::{Discipline, ObjectId, Project, SourceId, Superseded};
 use thiserror::Error;
 
 use crate::derived_relationships::{DerivedRelationshipServiceHandle, RoutedRelationships};
@@ -228,6 +228,26 @@ pub enum EvidenceSessionError {
     /// federated session instead, bound to every snapshot it was built from.
     #[error("evidence session holds a service that cannot be federated")]
     UnfederableService,
+    /// A supersession names an object the session does not hold.
+    #[error("supersession names an object outside the session: {0}")]
+    UnknownObject(ObjectId),
+    /// An object is declared superseded by itself.
+    #[error("object cannot supersede itself: {0}")]
+    SelfSupersession(ObjectId),
+    /// An object is declared superseded by an object of its own source;
+    /// precedence is between the sources of a federation.
+    #[error("object is superseded by an object of its own source: {0}")]
+    SameSourceSupersession(ObjectId),
+    /// An object is declared superseded by two different objects.
+    #[error("object is superseded by two different objects: {0}")]
+    SupersededTwice(ObjectId),
+    /// An object supersedes another while being superseded itself; chains
+    /// and cycles are refused, never resolved.
+    #[error("superseding object is superseded itself: {0}")]
+    SupersessionChain(ObjectId),
+    /// A supersession states no reason.
+    #[error("supersession of {0} states no reason")]
+    BlankSupersessionReason(ObjectId),
     /// Typed service registration failed.
     #[error(transparent)]
     ServiceRegistry(#[from] ServiceRegistryError),
@@ -249,6 +269,8 @@ pub struct EvidenceSession {
     /// Why a discipline map left a source without a discipline.
     unmapped: BTreeMap<SourceId, UnmappedReason>,
     metadata: BTreeMap<SourceId, SourceMetadata>,
+    /// The objects evaluated only through another object, by object.
+    superseded: BTreeMap<ObjectId, Superseded>,
     services: ServiceRegistry,
 }
 
@@ -293,6 +315,7 @@ impl EvidenceSession {
             origins: BTreeMap::new(),
             unmapped: BTreeMap::new(),
             metadata: BTreeMap::new(),
+            superseded: BTreeMap::new(),
             services: ServiceRegistry::new(),
         })
     }
@@ -370,10 +393,85 @@ impl EvidenceSession {
                     .map(|(source, metadata)| (source.clone(), metadata.clone())),
             );
         }
+        let declared: Vec<Superseded> = members
+            .iter()
+            .flat_map(|member| member.superseded.values().cloned())
+            .collect();
+        federated = federated.with_superseded(declared)?;
         let registries: Vec<&ServiceRegistry> =
             members.iter().map(|member| &member.services).collect();
         crate::federation::register(&mut federated.services, &registries)?;
         Ok(federated)
+    }
+
+    /// Declares objects of this federated session superseded by objects of
+    /// other sources (#390).
+    ///
+    /// A host that knows one source was derived from another, and matched
+    /// each copy to its original, declares each copy superseded by its
+    /// original with the reason: how it was matched (`by-id`,
+    /// `by-geometry`) or, for a judgement of the host's own such as its
+    /// viewer's matching, `declared`, with the host's words, which the
+    /// report carries verbatim. A run then evaluates every superseded
+    /// object only through the object superseding it: it is no rule's
+    /// subject and no rule's counterpart, rule summaries count only
+    /// evaluated objects, and the report lists it
+    /// ([`axioval_ir::Report::superseded`]). Without a declaration a run is
+    /// unchanged.
+    ///
+    /// The declaration adds to any made before and is validated whole:
+    /// every object must be one the session holds, of another source than
+    /// the object superseding it, superseded by one object only (repeating
+    /// an identical entry is a no-op) and not superseding another object
+    /// itself. Chains and cycles are refused rather than resolved, so what
+    /// supersedes an object is always what the host declared.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error naming the first offending object; the session is
+    /// then dropped, as with every other declaration.
+    pub fn with_superseded(
+        mut self,
+        entries: impl IntoIterator<Item = Superseded>,
+    ) -> Result<Self, EvidenceSessionError> {
+        for entry in entries {
+            for object in [&entry.object, &entry.by] {
+                if self.project.object(object).is_none() {
+                    return Err(EvidenceSessionError::UnknownObject(object.clone()));
+                }
+            }
+            if entry.object == entry.by {
+                return Err(EvidenceSessionError::SelfSupersession(entry.object));
+            }
+            if entry.object.source == entry.by.source {
+                return Err(EvidenceSessionError::SameSourceSupersession(entry.object));
+            }
+            if entry.reason.text.trim().is_empty() {
+                return Err(EvidenceSessionError::BlankSupersessionReason(entry.object));
+            }
+            match self.superseded.get(&entry.object) {
+                Some(held) if held.by != entry.by => {
+                    return Err(EvidenceSessionError::SupersededTwice(entry.object));
+                }
+                Some(_) => {}
+                None => {
+                    self.superseded.insert(entry.object.clone(), entry);
+                }
+            }
+        }
+        if let Some(entry) = self
+            .superseded
+            .values()
+            .find(|entry| self.superseded.contains_key(&entry.by))
+        {
+            return Err(EvidenceSessionError::SupersessionChain(entry.by.clone()));
+        }
+        Ok(self)
+    }
+
+    /// Every superseded object, sorted by object (#390).
+    pub fn superseded(&self) -> impl ExactSizeIterator<Item = &Superseded> {
+        self.superseded.values()
     }
 
     /// Declares the discipline `source` plays in this check.

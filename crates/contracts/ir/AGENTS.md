@@ -77,6 +77,14 @@ Keep this crate serializable and deterministic. It must not depend on a source f
   `Report::resources`, sorted, omitted when empty; resolve an outcome's
   object with `Report::object`, never `Project::object` alone, wherever a
   report may name one (identities, sinks, hosts).
+- `Report::superseded` (`Superseded`: object, `by`, `SupersessionReason`
+  of a stable `SupersessionKind` (`by-id`, `by-geometry`, `declared`) and
+  the host's text, reported verbatim; never add a kind for a match that is
+  not one body, which a host declares as `declared`, #390) lists
+  the objects a federated session evaluated only through another, sorted
+  by object; omitted when empty, so a report without a declaration
+  serializes as before. `Project::without` is the only way to drop
+  objects from a project; it cannot make one ambiguous.
 - `PropertyValue::Reference` names another instance of the same source. It
   is never compared with a literal and never read as text or a number.
 - `PropertyValue::Complex` is a property grouping members, present and no

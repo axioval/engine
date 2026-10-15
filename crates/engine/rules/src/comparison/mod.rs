@@ -1420,6 +1420,7 @@ impl Projection<'_> {
         Report {
             resources: Vec::new(),
             stale_decisions: Vec::new(),
+            superseded: Vec::new(),
             findings: self.findings,
             not_evaluated: self.not_evaluated,
             tables: Vec::new(),

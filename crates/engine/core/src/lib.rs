@@ -1651,8 +1651,11 @@ impl Runtime {
             .snapshots()
             .map(|snapshot| (snapshot.source().clone(), snapshot.type_systems().to_vec()))
             .collect();
-        self.run_with_services(
-            session.project(),
+        // A superseded object is evaluated only through the object
+        // superseding it: the rules see a project without it (#390).
+        let evaluated = evaluated_project(session);
+        let (mut report, outcomes) = self.run_with_services(
+            evaluated.as_ref().unwrap_or_else(|| session.project()),
             session.services(),
             type_systems,
             (
@@ -1665,7 +1668,12 @@ impl Runtime {
                 session.metadata_index(),
             ),
             plan,
-        )
+        )?;
+        if evaluated.is_some() {
+            report.superseded = session.superseded().cloned().collect();
+            redirect_superseded(&mut report);
+        }
+        Ok((report, outcomes))
     }
 
     /// The registry's outcome refiner, refused missing when the plan or
@@ -1894,6 +1902,55 @@ impl Runtime {
     }
 }
 
+/// The session's project less its superseded objects, `None` when it
+/// declares none (#390).
+fn evaluated_project(session: &EvidenceSession) -> Option<Project> {
+    if session.superseded().len() == 0 {
+        return None;
+    }
+    let superseded: BTreeSet<&ObjectId> = session.superseded().map(|entry| &entry.object).collect();
+    Some(session.project().without(&superseded))
+}
+
+/// Names the superseding object wherever an outcome still names a
+/// superseded one (#390).
+///
+/// Rules select subjects and counterparts from the evaluated project, so
+/// none names a superseded object; a host service searching every body it
+/// holds (a guard's barriers, a space's bounding elements when a rule
+/// names none) may still find one. It is the same body as the object
+/// superseding it, which is named instead, once.
+fn redirect_superseded(report: &mut Report) {
+    let by: BTreeMap<&ObjectId, &ObjectId> = report
+        .superseded
+        .iter()
+        .map(|entry| (&entry.object, &entry.by))
+        .collect();
+    let redirect = |scope: &mut Scope| {
+        if let Scope::Object(object) = scope
+            && let Some(superseding) = by.get(object)
+        {
+            *object = (*superseding).clone();
+        }
+    };
+    for finding in &mut report.findings {
+        redirect(&mut finding.scope);
+        if finding.related.iter().any(|object| by.contains_key(object)) {
+            let mut related = Vec::with_capacity(finding.related.len());
+            for object in &finding.related {
+                let object = by.get(object).map_or(object, |superseding| *superseding);
+                if !related.contains(object) && finding.scope.object() != Some(object) {
+                    related.push(object.clone());
+                }
+            }
+            finding.related = related;
+        }
+    }
+    for outcome in &mut report.not_evaluated {
+        redirect(&mut outcome.scope);
+    }
+}
+
 /// `summary` with the time its clock measured, if one ran.
 fn timed(summary: RuleSummary, clock: Option<timing::RuleClock>) -> RuleSummary {
     match clock {
@@ -2068,6 +2125,7 @@ fn assemble(
     Ok(Report {
         resources: named_resources(&findings, &not_evaluated, &tables, services),
         stale_decisions: Vec::new(),
+        superseded: Vec::new(),
         findings,
         not_evaluated,
         tables,

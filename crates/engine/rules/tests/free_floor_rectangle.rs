@@ -191,6 +191,7 @@ fn evaluate(answer: Answer) -> axioval_engine::CapabilityEvaluation {
     services
         .register(FreeSpaceServiceHandle::new(Arc::new(FakeService(answer))))
         .unwrap();
+    services.register(common::natures(source())).unwrap();
     HELD.evaluate(
         &RuleContext {
             project: &project,
@@ -270,6 +271,7 @@ fn evaluate_rule(rule: &CompiledRule) -> axioval_engine::CapabilityEvaluation {
             Answer::NoPlacement,
         ))))
         .unwrap();
+    services.register(common::natures(source())).unwrap();
     HELD.evaluate(
         &RuleContext {
             project: &project,
@@ -348,6 +350,7 @@ fn a_fit_as_a_count_of_placements_reaches_the_verdicts() {
             services
                 .register(FreeSpaceServiceHandle::new(Arc::new(FakeService(answer))))
                 .unwrap();
+            services.register(common::natures(source())).unwrap();
         }
         let context = RuleContext {
             project: &project,

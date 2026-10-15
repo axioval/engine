@@ -188,8 +188,8 @@ const SUBTRACT_DOOR_SWINGS: ParameterText = param!(
 
 const FREE_FLOOR_OBSTACLES: ParameterText = param!(
     "obstacles",
-    "What blocks the floor; every other object by default.",
-    "Was die Bodenfläche blockiert; standardmäßig jedes andere Objekt.",
+    "What blocks the floor; by default the physical objects, never spaces, zones, openings or virtual elements.",
+    "Was die Bodenfläche blockiert; standardmäßig die physischen Objekte, nie Räume, Zonen, Öffnungen oder virtuelle Elemente.",
 );
 const FREE_FLOOR_BAND_FROM: ParameterText = param!(
     "band_from_metres",

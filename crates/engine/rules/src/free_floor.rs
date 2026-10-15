@@ -17,9 +17,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use axioval_engine::{
     BoxClearance, CylinderClearance, ElevationBand, EntranceReach, FreeSpaceError,
-    FreeSpaceServiceHandle, NotEvaluatedReason, ParameterDescriptor, ParameterType,
+    FreeSpaceServiceHandle, NotEvaluatedReason, ObjectNature, ParameterDescriptor, ParameterType,
     PlacementDomain, PlacementOrientation, PlacementOutcome, PlacementRequest, PlacementShape,
-    RuleContext, SupportedPlacement, SweptDoor,
+    RuleContext, SupportedPlacement, SweptDoor, TypeHierarchyServiceHandle,
 };
 use axioval_ir::contract::ParameterValue;
 use axioval_ir::measured::MeasuredSelection;
@@ -221,28 +221,46 @@ pub(crate) struct Search {
 }
 
 /// The obstacle candidates, split by how sure the selection is.
-pub(crate) enum Obstacles {
-    /// Every object but the searched spaces.
-    Everything(Vec<ObjectId>),
-    Selected {
-        sure: BTreeSet<ObjectId>,
-        maybe: BTreeSet<ObjectId>,
-    },
+pub(crate) struct Obstacles {
+    sure: BTreeSet<ObjectId>,
+    maybe: BTreeSet<ObjectId>,
+}
+
+/// The obstacles of a rule without a selection (#392): the project's
+/// physical objects, as the type hierarchy maps each source's kinds
+/// ([`ObjectNature`]). Spatial elements (overlapping or zone spaces among
+/// them), voids, virtual and abstract objects take no floor. An object
+/// whose nature cannot be told (no hierarchy, an unmapped or unknown kind)
+/// may be one: it is sent as an undecided obstacle, so a witness stands
+/// and a proof of absence must hold without it.
+pub(crate) fn physical(context: &RuleContext<'_>) -> (BTreeSet<ObjectId>, BTreeSet<ObjectId>) {
+    let hierarchy = context.services.get::<TypeHierarchyServiceHandle>();
+    let mut sure = BTreeSet::new();
+    let mut maybe = BTreeSet::new();
+    for object in context.project.objects() {
+        match hierarchy.map(|hierarchy| hierarchy.nature(&object.id.source, object.kind())) {
+            Some(Ok(ObjectNature::Physical)) => {
+                sure.insert(object.id.clone());
+            }
+            Some(Ok(_)) => {}
+            Some(Err(_)) | None => {
+                maybe.insert(object.id.clone());
+            }
+        }
+    }
+    (sure, maybe)
 }
 
 impl Obstacles {
-    /// The obstacles a measured value's argument bound, every object
-    /// without one.
+    /// The obstacles a measured value's argument bound, the physical
+    /// objects ([`physical`]) without one.
     pub(crate) fn of(context: &RuleContext<'_>, selection: Option<&MeasuredSelection>) -> Self {
         match selection {
-            None => Self::Everything(
-                context
-                    .project
-                    .objects()
-                    .map(|object| object.id.clone())
-                    .collect(),
-            ),
-            Some(selection) => Self::Selected {
+            None => {
+                let (sure, maybe) = physical(context);
+                Self { sure, maybe }
+            }
+            Some(selection) => Self {
                 sure: selection.matched.clone(),
                 maybe: selection.undecided.clone(),
             },
@@ -253,13 +271,10 @@ impl Obstacles {
     /// floor, never obstacles.
     fn around(&self, spaces: &BTreeSet<&ObjectId>) -> (Vec<ObjectId>, Vec<ObjectId>) {
         let keep = |id: &&ObjectId| !spaces.contains(*id);
-        match self {
-            Self::Everything(all) => (all.iter().filter(keep).cloned().collect(), Vec::new()),
-            Self::Selected { sure, maybe } => (
-                sure.iter().filter(keep).cloned().collect(),
-                maybe.iter().filter(keep).cloned().collect(),
-            ),
-        }
+        (
+            self.sure.iter().filter(keep).cloned().collect(),
+            self.maybe.iter().filter(keep).cloned().collect(),
+        )
     }
 }
 

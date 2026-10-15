@@ -4,6 +4,22 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+### Changed
+
+- **Free-floor rules without `obstacles` take only physical objects as
+  obstacles** ([#392](https://github.com/axioval/engine/issues/392)).
+  `free-floor-circle`, `free-floor-rectangle` and `free_placements` took
+  every other object, so a space over the same floor (a gross-area or zone
+  space, a duplicate) filled the band and failed nearly every room. The
+  default is now the project's physical objects, as each source's type
+  hierarchy maps its kinds: `TypeHierarchyService::nature` answers an
+  `ObjectNature` (`Physical`, `Spatial`, `Void`, `Virtual`, `Abstract`),
+  refusing by default (`TypeHierarchyError::Unmapped`); the IFC adapter maps
+  every `IfcElement` but openings, recesses and `IfcVirtualElement` as
+  physical, and spatial elements as spatial. An object whose nature cannot
+  be told is an undecided obstacle: a witness stands, a proof of absence
+  must hold without it. A rule with `obstacles` is unchanged.
+
 ### Added
 
 - **A failed free-floor shape says what blocks it and how far it misses**

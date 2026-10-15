@@ -6,7 +6,7 @@
 #![allow(missing_docs)]
 
 use axioval_engine::{
-    AbsentEndPolicy, EvidenceSession, PropertyRequest, PropertyResolution,
+    AbsentEndPolicy, EvidenceSession, ObjectNature, PropertyRequest, PropertyResolution,
     PropertyResolutionServiceHandle, RelationshipQuery, RelationshipSelectionRequest,
     RelationshipSelectionServiceHandle, SemanticRelationship, SourceIntegrityServiceHandle,
     TraversalDirection, TypeHierarchyServiceHandle,
@@ -152,6 +152,26 @@ fn the_type_hierarchy_is_answered_from_ifc2x3() {
             .is_a(&source(), "IfcDoorType", "IfcTypeObject")
             .is_err()
     );
+}
+
+/// What objects of each kind are (#392), in IFC2X3's own vocabulary: no
+/// `IfcSpatialElement` there, spaces are spatial structure elements.
+#[test]
+fn ifc2x3_kinds_map_to_their_nature() {
+    let session = session("IFC2X3", BUILDING);
+    let hierarchy = session.service::<TypeHierarchyServiceHandle>().unwrap();
+    let nature = |kind: &str| hierarchy.nature(&source(), kind).unwrap();
+    assert_eq!(nature("IfcWallStandardCase"), ObjectNature::Physical);
+    assert_eq!(nature("IfcFurnishingElement"), ObjectNature::Physical);
+    assert_eq!(nature("IfcCovering"), ObjectNature::Physical);
+    assert_eq!(nature("IfcBuildingElementProxy"), ObjectNature::Physical);
+    assert_eq!(nature("IfcSpace"), ObjectNature::Spatial);
+    assert_eq!(nature("IfcBuildingStorey"), ObjectNature::Spatial);
+    assert_eq!(nature("IfcOpeningElement"), ObjectNature::Void);
+    assert_eq!(nature("IfcVirtualElement"), ObjectNature::Virtual);
+    assert_eq!(nature("IfcZone"), ObjectNature::Abstract);
+    assert_eq!(nature("IfcGrid"), ObjectNature::Abstract);
+    assert!(hierarchy.nature(&source(), "IfcSpatialZone").is_err());
 }
 
 #[test]

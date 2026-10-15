@@ -952,3 +952,33 @@ impl PropertyResolutionService for Measuring {
         self.model.enumerate(request)
     }
 }
+
+/// A type hierarchy saying only what each kind is (#392): spaces, rooms,
+/// storeys and zones spatial, openings voids, everything else physical.
+pub struct Natures(Vec<axioval_engine::SourceSnapshot>);
+
+impl axioval_engine::TypeHierarchyService for Natures {
+    fn source_snapshots(&self) -> &[axioval_engine::SourceSnapshot] {
+        &self.0
+    }
+    fn is_a(&self, kind: &str, ancestor: &str) -> Result<bool, axioval_engine::TypeHierarchyError> {
+        Ok(kind == ancestor)
+    }
+    fn nature(
+        &self,
+        kind: &str,
+    ) -> Result<axioval_engine::ObjectNature, axioval_engine::TypeHierarchyError> {
+        Ok(match kind {
+            "space" | "room" | "storey" | "zone" => axioval_engine::ObjectNature::Spatial,
+            "opening" => axioval_engine::ObjectNature::Void,
+            _ => axioval_engine::ObjectNature::Physical,
+        })
+    }
+}
+
+/// [`Natures`] for `source`, as a handle.
+pub fn natures(source: SourceId) -> axioval_engine::TypeHierarchyServiceHandle {
+    axioval_engine::TypeHierarchyServiceHandle::new(Arc::new(Natures(vec![
+        axioval_engine::SourceSnapshot::try_new(source, "r1", "sha256:1").unwrap(),
+    ])))
+}

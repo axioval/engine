@@ -8,8 +8,8 @@
 #![allow(missing_docs)]
 
 use axioval_engine::{
-    ClassificationAssignment, ClassificationServiceHandle, EvidenceSession, PropertyRequest,
-    PropertyResolution, PropertyResolutionServiceHandle, RelationshipQuery,
+    ClassificationAssignment, ClassificationServiceHandle, EvidenceSession, ObjectNature,
+    PropertyRequest, PropertyResolution, PropertyResolutionServiceHandle, RelationshipQuery,
     RelationshipSelectionRequest, RelationshipSelectionServiceHandle, SemanticRelationship,
     SourceIntegrityServiceHandle, TraversalDirection, TypeHierarchyServiceHandle,
 };
@@ -97,6 +97,28 @@ fn an_ifc4x3_source_declares_its_own_release_and_type_system() {
             .is_a(&source(), "IfcBridge", "IfcFacility")
             .unwrap()
     );
+}
+
+/// What objects of each kind are (#392), in IFC4X3's vocabulary: spatial
+/// zones and facilities are spatial elements, a projection adds material.
+#[test]
+fn ifc4x3_kinds_map_to_their_nature() {
+    let session = session();
+    let hierarchy = session.service::<TypeHierarchyServiceHandle>().unwrap();
+    let nature = |kind: &str| hierarchy.nature(&source(), kind).unwrap();
+    assert_eq!(nature("IfcWall"), ObjectNature::Physical);
+    assert_eq!(nature("IfcDuctSegment"), ObjectNature::Physical);
+    assert_eq!(nature("IfcProjectionElement"), ObjectNature::Physical);
+    assert_eq!(nature("IfcSpace"), ObjectNature::Spatial);
+    assert_eq!(nature("IfcSpatialZone"), ObjectNature::Spatial);
+    assert_eq!(nature("IfcBridge"), ObjectNature::Spatial);
+    assert_eq!(nature("IfcExternalSpatialElement"), ObjectNature::Spatial);
+    assert_eq!(nature("IfcOpeningElement"), ObjectNature::Void);
+    assert_eq!(nature("IfcVoidingFeature"), ObjectNature::Void);
+    assert_eq!(nature("IfcVirtualElement"), ObjectNature::Virtual);
+    assert_eq!(nature("IfcDistributionPort"), ObjectNature::Abstract);
+    assert_eq!(nature("IfcProject"), ObjectNature::Abstract);
+    assert!(hierarchy.nature(&source(), "IfcNoSuchThing").is_err());
 }
 
 #[test]

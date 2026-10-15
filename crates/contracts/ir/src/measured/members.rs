@@ -2924,9 +2924,10 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
                 optional_kinds(
                     "obstacles",
                     &en_de(
-                        "The source kinds that obstruct the floor; every other object without it.",
-                        "Die Quellarten, die den Boden verstellen; ohne Angabe jedes andere \
-                         Objekt.",
+                        "The source kinds that obstruct the floor; without it, the physical \
+                         objects (never spaces, zones, openings or virtual elements).",
+                        "Die Quellarten, die den Boden verstellen; ohne Angabe die physischen \
+                         Objekte (nie Räume, Zonen, Öffnungen oder virtuelle Elemente).",
                     ),
                 ),
                 optional_length(

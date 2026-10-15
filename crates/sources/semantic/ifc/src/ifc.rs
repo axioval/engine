@@ -3,11 +3,12 @@ use std::sync::{Arc, OnceLock};
 
 use axioval_engine::{
     ClassificationServiceHandle, CompletePropertyAbsenceEvidence, CoordinateSystemServiceHandle,
-    EvidenceSession, EvidenceSessionError, ObjectFrameServiceHandle, PropertyEnumeration,
-    PropertyEnumerationRequest, PropertyRequest, PropertyResolution, PropertyResolutionError,
-    PropertyResolutionService, PropertyResolutionServiceHandle, RelationshipSelectionServiceHandle,
-    ResolvedProperty, ResourceServiceHandle, SourceIntegrityServiceHandle, SourceSnapshot,
-    TypeHierarchyError, TypeHierarchyService, TypeHierarchyServiceHandle, UnreadableValue,
+    EvidenceSession, EvidenceSessionError, ObjectFrameServiceHandle, ObjectNature,
+    PropertyEnumeration, PropertyEnumerationRequest, PropertyRequest, PropertyResolution,
+    PropertyResolutionError, PropertyResolutionService, PropertyResolutionServiceHandle,
+    RelationshipSelectionServiceHandle, ResolvedProperty, ResourceServiceHandle,
+    SourceIntegrityServiceHandle, SourceSnapshot, TypeHierarchyError, TypeHierarchyService,
+    TypeHierarchyServiceHandle, UnreadableValue,
 };
 use axioval_ir::{
     Evidence, ExternalId, IrError, Object, ObjectId, Project, Property, PropertyTableRow,
@@ -90,6 +91,37 @@ impl TypeHierarchyService for IfcTypeHierarchy {
             }
         }
         Ok(schema.is_a(kind, ancestor))
+    }
+
+    /// IFC's own division (#392): openings and recesses
+    /// (`IfcFeatureElementSubtraction`) are voids, `IfcVirtualElement`
+    /// virtual, every other `IfcElement` (additions, coverings, proxies
+    /// included) physical; `IfcSpatialElement` (IFC4) and
+    /// `IfcSpatialStructureElement` spatial; anything else (groups and
+    /// zones, grids, annotations, ports, types) abstract.
+    fn nature(&self, kind: &str) -> Result<ObjectNature, TypeHierarchyError> {
+        let schema = self.release.schema;
+        if schema.entity(kind).is_none() {
+            return Err(TypeHierarchyError::UnknownType(format!(
+                "`{kind}` is not an {} entity",
+                self.release.label
+            )));
+        }
+        // An ancestor the release does not declare (IFC2X3 has no
+        // `IfcSpatialElement`) holds nothing.
+        let is_a =
+            |ancestor: &str| schema.entity(ancestor).is_some() && schema.is_a(kind, ancestor);
+        Ok(if is_a("IfcFeatureElementSubtraction") {
+            ObjectNature::Void
+        } else if is_a("IfcVirtualElement") {
+            ObjectNature::Virtual
+        } else if is_a("IfcElement") {
+            ObjectNature::Physical
+        } else if is_a("IfcSpatialElement") || is_a("IfcSpatialStructureElement") {
+            ObjectNature::Spatial
+        } else {
+            ObjectNature::Abstract
+        })
     }
 }
 

@@ -96,9 +96,13 @@ const FREE_FLOOR: [MeasuredParameter; 17] = [
     objects(
         "obstacles",
         &en_de(
-            "What obstructs the floor; every other object without it. Objects the \
-             selection cannot decide can only keep a proof of absence open.",
-            "Was den Boden verstellt; ohne Angabe jedes andere Objekt. Von der Auswahl \
+            "What obstructs the floor; without it, the physical objects as the source's \
+             type hierarchy maps them (never spaces, zones, openings or virtual elements), \
+             an object of unknown nature undecided. Objects the selection cannot decide can \
+             only keep a proof of absence open.",
+            "Was den Boden verstellt; ohne Angabe die physischen Objekte, wie die \
+             Typhierarchie der Quelle sie zuordnet (nie Räume, Zonen, Öffnungen oder \
+             virtuelle Elemente), ein Objekt unbekannter Art unentschieden. Von der Auswahl \
              unentschiedene Objekte können nur einen Nachweis des Fehlens offenhalten.",
         ),
     ),

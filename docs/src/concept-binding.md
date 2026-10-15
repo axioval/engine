@@ -85,6 +85,23 @@ whose kind equals the bound name always matches. Any other kind needs the
 source's own hierarchy; without it, membership is unknown and reported as not
 evaluated. An unknown entity name is an error, never a proven non-member.
 
+## Object natures
+
+`TypeHierarchyService::nature` (#392) says what objects of a kind are in
+source-neutral terms, an `ObjectNature`: `Physical` (built, installed or
+placed, occupying space), `Spatial` (a site, building, storey, space or
+spatial zone, enclosing air), `Void` (an opening or recess), `Virtual` (a
+boundary drawn where nothing is built) or `Abstract` (groups, systems,
+grids, annotations, ports, types). A capability needing "the physical
+objects" by default asks it rather than naming a source's classes, as the
+free-floor capabilities do for their default obstacles. The default
+refuses (`TypeHierarchyError::Unmapped`), never guessing; a capability then
+treats the object's nature as unknown. The IFC adapter maps its schema:
+`IfcFeatureElementSubtraction` is a void, `IfcVirtualElement` virtual, every
+other `IfcElement` (additions, coverings and proxies included) physical,
+`IfcSpatialElement` (IFC4) and `IfcSpatialStructureElement` spatial, and
+anything else abstract.
+
 An `entityType` selector of a rule's applicability is bound per source before
 any rule runs, and the bound class is asked of the source's resource service
 (see [Entity types and resource objects](./capabilities.md#entity-types-and-resource-objects)).

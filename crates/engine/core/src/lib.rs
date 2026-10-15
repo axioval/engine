@@ -1129,7 +1129,7 @@ pub use classifications::{
 };
 pub use compiler::{QUALIFIED_RULE_SEPARATOR, SUPPORTED_SCHEMA_VERSION, compile, compile_rulesets};
 pub use concepts::{
-    BindingError, ConceptBindings, ConceptCatalog, ConceptKind, TypeHierarchyError,
+    BindingError, ConceptBindings, ConceptCatalog, ConceptKind, ObjectNature, TypeHierarchyError,
     TypeHierarchyService, TypeHierarchyServiceHandle, binding_reason, bound_property_request,
 };
 pub use contact::{

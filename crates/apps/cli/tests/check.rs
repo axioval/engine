@@ -16977,6 +16977,44 @@ fn with_geometry_a_failed_turning_circle_names_its_obstacle_and_the_largest_circ
     );
 }
 
+/// Two spaces over one floor, as a gross-area space over its room: neither
+/// takes the other's floor by default (#392), so both hold the circle; the
+/// wardrobe, a physical element, still does.
+#[test]
+fn with_geometry_an_overlapping_space_is_no_free_floor_obstacle() {
+    let case = Case::new("geometry-free-floor-overlapping-spaces");
+    let space = "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,$,$)";
+    let furniture = "IFCFURNITURE('GID',$,$,$,$,PL,REP,$,$)";
+    let rule = |model: &str| {
+        case.geometry_rule(
+            model,
+            &[("furniture", "IfcFurniture"), ("space", "IfcSpace")],
+            "axioval:capability.free-floor-circle",
+            &registry_signature("axioval:capability.free-floor-circle"),
+            entity("space"),
+            json!({
+                "diameter_metres": {"type": "number", "value": 1.5},
+                "height_metres": {"type": "number", "value": 2.0},
+            }),
+        )
+    };
+    let spaces = format!(
+        "{}{}",
+        placed_box(10, [1.5, 1.5, 0.0], [3.0, 3.0, 3.0], space),
+        placed_box(30, [1.5, 1.5, 0.0], [3.0, 3.0, 3.0], space),
+    );
+    let (output, result) = rule(&model_with(&spaces));
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert_eq!(finding_messages(&result), [], "{result:#}");
+    let blocked = format!(
+        "{spaces}{}",
+        placed_box(50, [1.5, 1.5, 0.0], [3.0, 2.0, 1.0], furniture)
+    );
+    let (output, result) = rule(&model_with(&blocked));
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(finding_messages(&result).len(), 2, "{result:#}");
+}
+
 /// The largest free circle's bracket and centre, read from the evidence a
 /// failed free-floor finding cites (#391).
 fn largest(finding: &Value) -> (f64, f64, Vec<f64>) {

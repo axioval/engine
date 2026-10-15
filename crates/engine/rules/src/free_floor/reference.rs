@@ -112,8 +112,6 @@ impl<'a> Options<'a> {
 
 /// The obstacle candidates, split by how sure the selection is.
 enum Obstacles {
-    /// Every object but the searched spaces.
-    Everything(Vec<ObjectId>),
     Selected {
         sure: BTreeSet<ObjectId>,
         maybe: BTreeSet<ObjectId>,
@@ -123,13 +121,9 @@ enum Obstacles {
 impl Obstacles {
     fn select(context: &RuleContext<'_>, selector: Option<&Selector>) -> Result<Self, Unavailable> {
         let Some(selector) = selector else {
-            return Ok(Self::Everything(
-                context
-                    .project
-                    .objects()
-                    .map(|object| object.id.clone())
-                    .collect(),
-            ));
+            // The default the capability took on with #392.
+            let (sure, maybe) = crate::free_floor::physical(context);
+            return Ok(Self::Selected { sure, maybe });
         };
         let (objects, outcomes) = select_objects(context, selector);
         let mut maybe = BTreeSet::new();
@@ -157,7 +151,6 @@ impl Obstacles {
     fn around(&self, spaces: &BTreeSet<&ObjectId>) -> (Vec<ObjectId>, Vec<ObjectId>) {
         let keep = |id: &&ObjectId| !spaces.contains(*id);
         match self {
-            Self::Everything(all) => (all.iter().filter(keep).cloned().collect(), Vec::new()),
             Self::Selected { sure, maybe } => (
                 sure.iter().filter(keep).cloned().collect(),
                 maybe.iter().filter(keep).cloned().collect(),

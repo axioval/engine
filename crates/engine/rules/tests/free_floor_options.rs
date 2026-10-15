@@ -128,13 +128,25 @@ fn run(
     run_with_doors(model, capability, rule, blocking, Doors::default())
 }
 
-#[allow(clippy::needless_pass_by_value)]
 fn run_with_doors(
     model: Model,
     capability: &dyn RuleCapability,
     rule: &CompiledRule,
     blocking: &[&str],
     doors: Doors,
+) -> (CapabilityEvaluation, Vec<PlacementRequest>) {
+    run_with(model, capability, rule, blocking, (doors, true))
+}
+
+/// Runs `rule`, with the type hierarchy telling each kind's nature where
+/// `hierarchy`.
+#[allow(clippy::needless_pass_by_value)]
+fn run_with(
+    model: Model,
+    capability: &dyn RuleCapability,
+    rule: &CompiledRule,
+    blocking: &[&str],
+    (doors, hierarchy): (Doors, bool),
 ) -> (CapabilityEvaluation, Vec<PlacementRequest>) {
     // The capability runs as a template, held to the implementation it
     // replaced, each with a service of its own so the requests are the
@@ -154,6 +166,9 @@ fn run_with_doors(
             services
                 .register(FreeSpaceServiceHandle::new(service.clone()))
                 .unwrap();
+            if hierarchy {
+                services.register(common::natures(source())).unwrap();
+            }
             services.register(frames.clone()).unwrap();
         };
         let evaluation = if measured {
@@ -174,17 +189,54 @@ fn ids(locals: &[&str]) -> Vec<ObjectId> {
     locals.iter().map(|local| id(local)).collect()
 }
 
-/// Without a selection every other object is an obstacle, as before.
+/// Without a selection the physical objects are the obstacles (#392): the
+/// alcove, a space over the same floor, takes none of it.
 #[test]
-fn every_other_object_is_an_obstacle_by_default() {
+fn the_physical_objects_are_the_obstacles_by_default() {
     let (evaluation, requests) = run(model(), &FreeFloorCircle, &circle(vec![]), &[]);
     assert!(evaluation.findings().is_empty());
     assert!(evaluation.not_evaluated_outcomes().is_empty());
     assert_eq!(
         requests[0].obstacles(),
-        &ids(&["alcove", "cabinet", "crate", "wall"])[..]
+        &ids(&["cabinet", "crate", "wall"])[..]
     );
     assert_eq!(requests[0].band(), None);
+    // A space overlapping the room would block it as an obstacle; it is
+    // none, so the room passes.
+    let (evaluation, _) = run(model(), &FreeFloorCircle, &circle(vec![]), &["alcove"]);
+    assert!(evaluation.findings().is_empty());
+    assert!(evaluation.not_evaluated_outcomes().is_empty());
+    // A physical object blocking it is still a finding.
+    let (evaluation, _) = run(model(), &FreeFloorCircle, &circle(vec![]), &["wall"]);
+    assert_eq!(evaluation.findings().len(), 1);
+}
+
+/// Without a type hierarchy no object's nature is known: each is an
+/// undecided obstacle, sent for a witness and left out of a proof, so a
+/// room only an object of unknown nature blocks is not evaluated, never
+/// a finding.
+#[test]
+fn objects_of_unknown_nature_are_undecided_obstacles() {
+    let (evaluation, requests) = run_with(
+        model(),
+        &FreeFloorCircle,
+        &circle(vec![]),
+        &["wall"],
+        (Doors::default(), false),
+    );
+    assert!(evaluation.findings().is_empty());
+    assert_eq!(evaluation.not_evaluated_outcomes().len(), 1);
+    assert!(
+        evaluation.not_evaluated_outcomes()[0]
+            .message()
+            .contains("what the selections cannot decide"),
+        "{evaluation:#?}"
+    );
+    assert_eq!(
+        requests[0].obstacles(),
+        &ids(&["alcove", "cabinet", "crate", "wall"])[..]
+    );
+    assert_eq!(requests[1].obstacles(), &[] as &[ObjectId]);
 }
 
 /// A selection sends only its objects: the wall is no obstacle here.
@@ -730,6 +782,7 @@ fn a_fit_as_a_count_of_placements_reaches_the_verdicts() {
                 services
                     .register(FreeSpaceServiceHandle::new(service))
                     .unwrap();
+                services.register(common::natures(source())).unwrap();
                 services.register(doors().handle()).unwrap();
             },
         );

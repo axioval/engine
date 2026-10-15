@@ -271,6 +271,29 @@ pub enum TypeHierarchyError {
     /// The type is not declared by the source's schema.
     #[error("type `{0}` is not declared by the source schema")]
     UnknownType(String),
+    /// The service does not say what objects of this type are.
+    #[error("the type hierarchy does not say what `{0}` objects are")]
+    Unmapped(String),
+}
+
+/// What objects of a kind are, in source-neutral terms (#392): whether
+/// they are bodies that occupy space, as an adapter maps its own
+/// vocabulary. A capability needing "the physical objects" by default asks
+/// this rather than naming a source's classes.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ObjectNature {
+    /// A physical element: built, installed or placed, occupying space
+    /// (a wall, a column, furniture, a duct, a proxy element).
+    Physical,
+    /// A spatial element: a site, building, storey, space or spatial zone,
+    /// which encloses air rather than occupying it.
+    Spatial,
+    /// A void another element is cut by: an opening or a recess.
+    Void,
+    /// A virtual element: a boundary drawn where nothing is built.
+    Virtual,
+    /// Anything else: groups, systems, grids, annotations, ports, types.
+    Abstract,
 }
 
 /// Source-declared subtype relation, used for `includeSubtypes` selection.
@@ -281,6 +304,12 @@ pub trait TypeHierarchyService: Send + Sync {
     /// Whether `kind` is `ancestor` or one of its subtypes.
     // gate: reads
     fn is_a(&self, kind: &str, ancestor: &str) -> Result<bool, TypeHierarchyError>;
+    /// What objects of `kind` are ([`ObjectNature`]). A service that does
+    /// not map its vocabulary refuses, never guessing a nature.
+    // gate: reads
+    fn nature(&self, kind: &str) -> Result<ObjectNature, TypeHierarchyError> {
+        Err(TypeHierarchyError::Unmapped(kind.to_owned()))
+    }
 }
 
 /// Cloneable, type-erased type-hierarchy service registered by an adapter.
@@ -335,6 +364,30 @@ impl TypeHierarchyServiceHandle {
             })
             .ok_or_else(|| TypeHierarchyError::UncoveredSource(source.clone()))?
             .is_a(kind, ancestor)
+    }
+
+    /// What objects of `kind` in `source` are, refusing sources the
+    /// service does not cover.
+    ///
+    /// # Errors
+    ///
+    /// An uncovered source, an unknown type, or a service that does not
+    /// map its vocabulary.
+    pub fn nature(
+        &self,
+        source: &SourceId,
+        kind: &str,
+    ) -> Result<ObjectNature, TypeHierarchyError> {
+        self.members
+            .iter()
+            .find(|member| {
+                member
+                    .source_snapshots()
+                    .iter()
+                    .any(|snapshot| snapshot.source() == source)
+            })
+            .ok_or_else(|| TypeHierarchyError::UncoveredSource(source.clone()))?
+            .nature(kind)
     }
 }
 

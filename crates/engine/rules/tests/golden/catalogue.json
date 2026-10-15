@@ -20195,11 +20195,11 @@
           "help": [
             {
               "language": "en",
-              "text": "What blocks the floor; every other object by default."
+              "text": "What blocks the floor; by default the physical objects, never spaces, zones, openings or virtual elements."
             },
             {
               "language": "de",
-              "text": "Was die Bodenfläche blockiert; standardmäßig jedes andere Objekt."
+              "text": "Was die Bodenfläche blockiert; standardmäßig die physischen Objekte, nie Räume, Zonen, Öffnungen oder virtuelle Elemente."
             }
           ]
         },
@@ -20786,11 +20786,11 @@
           "help": [
             {
               "language": "en",
-              "text": "What blocks the floor; every other object by default."
+              "text": "What blocks the floor; by default the physical objects, never spaces, zones, openings or virtual elements."
             },
             {
               "language": "de",
-              "text": "Was die Bodenfläche blockiert; standardmäßig jedes andere Objekt."
+              "text": "Was die Bodenfläche blockiert; standardmäßig die physischen Objekte, nie Räume, Zonen, Öffnungen oder virtuelle Elemente."
             }
           ]
         },
@@ -102895,11 +102895,11 @@
           "help": [
             {
               "language": "en",
-              "text": "What obstructs the floor; every other object without it. Objects the selection cannot decide can only keep a proof of absence open."
+              "text": "What obstructs the floor; without it, the physical objects as the source's type hierarchy maps them (never spaces, zones, openings or virtual elements), an object of unknown nature undecided. Objects the selection cannot decide can only keep a proof of absence open."
             },
             {
               "language": "de",
-              "text": "Was den Boden verstellt; ohne Angabe jedes andere Objekt. Von der Auswahl unentschiedene Objekte können nur einen Nachweis des Fehlens offenhalten."
+              "text": "Was den Boden verstellt; ohne Angabe die physischen Objekte, wie die Typhierarchie der Quelle sie zuordnet (nie Räume, Zonen, Öffnungen oder virtuelle Elemente), ein Objekt unbekannter Art unentschieden. Von der Auswahl unentschiedene Objekte können nur einen Nachweis des Fehlens offenhalten."
             }
           ],
           "references": "selector"
@@ -103552,11 +103552,11 @@
           "help": [
             {
               "language": "en",
-              "text": "The source kinds that obstruct the floor; every other object without it."
+              "text": "The source kinds that obstruct the floor; without it, the physical objects (never spaces, zones, openings or virtual elements)."
             },
             {
               "language": "de",
-              "text": "Die Quellarten, die den Boden verstellen; ohne Angabe jedes andere Objekt."
+              "text": "Die Quellarten, die den Boden verstellen; ohne Angabe die physischen Objekte (nie Räume, Zonen, Öffnungen oder virtuelle Elemente)."
             }
           ],
           "references": "string"

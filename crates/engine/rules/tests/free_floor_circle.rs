@@ -196,6 +196,7 @@ fn evaluate(answer: Answer) -> axioval_engine::CapabilityEvaluation {
     services
         .register(FreeSpaceServiceHandle::new(Arc::new(FakeService(answer))))
         .unwrap();
+    services.register(common::natures(source())).unwrap();
     HELD.evaluate(
         &RuleContext {
             project: &project,
@@ -291,6 +292,7 @@ fn only_a_placement_found_exactly_is_exact() {
         services
             .register(FreeSpaceServiceHandle::new(Arc::new(FakeService(answer))))
             .unwrap();
+        services.register(common::natures(source())).unwrap();
         registry.install_measured(&mut services, &project);
         axioval_engine::measured_members(
             &services,
@@ -326,6 +328,7 @@ fn a_fit_is_exact_only_where_its_answer_rests_on_exact_evidence() {
         services
             .register(FreeSpaceServiceHandle::new(Arc::new(FakeService(answer))))
             .unwrap();
+        services.register(common::natures(source())).unwrap();
         registry.install_measured(&mut services, &project);
         axioval_engine::measured_members(
             &services,
@@ -392,6 +395,7 @@ fn a_fit_as_a_count_of_placements_reaches_the_verdicts() {
             services
                 .register(FreeSpaceServiceHandle::new(Arc::new(FakeService(answer))))
                 .unwrap();
+            services.register(common::natures(source())).unwrap();
         }
         let context = RuleContext {
             project: &project,

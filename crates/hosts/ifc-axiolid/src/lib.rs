@@ -183,8 +183,11 @@ use ifc_spatial::relation::boundary::{ConnectionGeometryAnomaly, SpaceBoundary};
 use ifc_spatial::{SpatialAnomaly, SpatialKind, SpatialTree};
 use std::sync::{Arc, OnceLock};
 
+pub use derived::{DEFAULT_TOLERANCE_METRES, DerivedMatch, MatchedBy, Matching, Unmatched};
+
 mod alignment;
 mod authored_faces;
+mod derived;
 mod glazing;
 mod local_frame;
 mod outer_bound;
@@ -272,6 +275,13 @@ pub struct GeometryReport {
     /// frame to compare, or state it ambiguously. Their alignment was
     /// declared, not read. In session order; never the first source.
     pub declared_frame_sources: Vec<SourceId>,
+    /// Every object of a derived source superseded by its original
+    /// ([`Options::with_derived_from`], #390), with how it was matched,
+    /// sorted by the derived object.
+    pub superseded: Vec<DerivedMatch>,
+    /// How many objects of the derived sources stay evaluated, by cause.
+    /// Empty without a derived source.
+    pub derived_unmatched: BTreeMap<Unmatched, usize>,
 }
 
 /// The integrity code of a physical product with no shape representation
@@ -473,7 +483,7 @@ impl Bodiless {
 }
 
 /// How [`attach`] meshes the model.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Debug)]
 #[non_exhaustive]
 // Independent switches a host sets one at a time, not states of one choice.
 #[allow(clippy::struct_excessive_bools)]
@@ -498,6 +508,21 @@ pub struct Options {
     /// cannot be read or compared, stays unmeasured: the declaration covers
     /// missing statements, never contradicting ones. Off by default.
     pub declared_shared_frame: bool,
+    /// Sources derived from another source, as (derived, original) pairs
+    /// ([`Self::with_derived_from`], #390). Empty by default.
+    pub derived_from: Vec<(SourceId, SourceId)>,
+    /// How derived objects are matched to the originals.
+    pub derived_matching: Matching,
+    /// The tolerance, in metres, within which a derived object's body must
+    /// be its original's to be superseded by it
+    /// ([`DEFAULT_TOLERANCE_METRES`] unless stated).
+    pub derived_tolerance_metres: f64,
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Self::meshes(false)
+    }
 }
 
 /// The frame [`attach`] measures models in (#372).
@@ -521,6 +546,46 @@ impl Options {
             timings: false,
             frame: Frame::Local,
             declared_shared_frame: false,
+            derived_from: Vec::new(),
+            derived_matching: Matching::ById,
+            derived_tolerance_metres: DEFAULT_TOLERANCE_METRES,
+        }
+    }
+
+    /// The same, declaring that `derived` was derived from `original`
+    /// (#390): a model exported from another keeping copies of its
+    /// objects, or another export of one authoring model with different
+    /// exchange settings. Each object of `derived` matched to one of
+    /// `original` ([`Self::with_derived_matching`]) whose body is the
+    /// original's within [`Self::derived_tolerance_metres`] in the shared
+    /// world frame is declared superseded by it, so every rule evaluates
+    /// the original once. An object whose identity with an original cannot
+    /// be established stays evaluated: the safe side is double reporting,
+    /// never hiding. Repeat for several derived sources; a source derived
+    /// from two, from itself, or one that is itself the original of
+    /// another derived source is refused by [`attach`].
+    #[must_use]
+    pub fn with_derived_from(mut self, derived: SourceId, original: SourceId) -> Self {
+        self.derived_from.push((derived, original));
+        self
+    }
+
+    /// The same, matching derived objects as `matching` says.
+    #[must_use]
+    pub fn with_derived_matching(self, matching: Matching) -> Self {
+        Self {
+            derived_matching: matching,
+            ..self
+        }
+    }
+
+    /// The same, matching derived bodies within `metres`. A tolerance
+    /// that is negative or not finite is refused by [`attach`].
+    #[must_use]
+    pub fn with_derived_tolerance(self, metres: f64) -> Self {
+        Self {
+            derived_tolerance_metres: metres,
+            ..self
         }
     }
 
@@ -1034,6 +1099,9 @@ pub fn attach(
     let Some(first) = snapshots.first() else {
         return Err("geometry needs a session over at least one source".into());
     };
+    // Consumed here; every other option is a copy.
+    let derived_from = options.derived_from;
+    derived::validate(&session, &derived_from, options.derived_tolerance_metres)?;
     // Set-level evidence (free space, guard, envelope, storey residuals) is
     // cited under one source; evidence about one object cites its own.
     let source = first.source().clone();
@@ -1357,6 +1425,20 @@ pub fn attach(
             &snapshots,
         )?;
     clock.lap("geometry: register services");
+    // Copies a derived source keeps of its original's objects, compared
+    // through the services just registered, in the shared world frame.
+    let (session, matched) = derived::supersede(
+        session,
+        &derived_from,
+        options.derived_matching,
+        options.derived_tolerance_metres,
+        axioval_ifc::IFC_GLOBAL_ID,
+    )?;
+    report.superseded = matched.matches;
+    report.derived_unmatched = matched.unmatched;
+    if !derived_from.is_empty() {
+        clock.lap("geometry: derived sources");
+    }
     Ok((session, report))
 }
 

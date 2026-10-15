@@ -14,7 +14,9 @@ benchmark) is its first consumer.
   it a sink (BCF, HTML, spreadsheets) or any command-line concern.
 - Its public API is what a host needs and nothing more: `attach`,
   `Options` (with `Frame`), `ModelBytes`, `GeometryReport`, `KeptMesh`,
-  `ModelData` and the model-data integrity codes. Everything else is
+  `ModelData`, the model-data integrity codes, and the derived-source
+  vocabulary (`Matching`, `MatchedBy`, `DerivedMatch`, `Unmatched`,
+  `DEFAULT_TOLERANCE_METRES`). Everything else is
   private; a host must never need a second reading of the IFC model to use
   what `attach` registered. `Options` and `GeometryReport` are
   `non_exhaustive`, so fields are additive. Document every public item.
@@ -44,7 +46,30 @@ benchmark) is its first consumer.
   an unreadable or unsupported coordinate system or no coordinate-system
   service stay unmeasured as without it. `local_frame` shifts every parsed
   model by the one origin regardless, so declared sources share it. Never
-  re-align meshes by a map conversion here. Each object's model is looked up by its source, spatial
+  re-align meshes by a map conversion here. Derived sources (#390,
+  `src/derived.rs`, `Options::with_derived_from`, the CLI's
+  `--derived-from`): after every service is registered, each object of a
+  derived source is matched to the original's by `GlobalId` and class
+  (`Matching::ById`), and with `Matching::ByIdOrGeometry` one without such
+  a counterpart by its body alone, only when exactly one object of each
+  side matches (a grid over box corners, never all pairs; originals some
+  copy claims by id are never candidates). Bodies are compared through
+  the registered `ProximityServiceHandle` in the shared world frame
+  (`Fingerprint`: box corners within tolerance plus both deviations, mesh
+  area within `2π (a + b + c)` times that, certified volume intervals
+  within tolerance times area; then `measure_surface_distance` where it is
+  certified), never by representation, triangle lists or identity. Only a
+  pair proven one body is declared (`EvidenceSession::with_superseded`);
+  every other derived object stays evaluated, counted by `Unmatched`
+  cause. Never supersede on an open interval, a missing volume or a
+  refusal other than the uncertified-tessellation one, and never match a
+  reduced copy inside its original (a wall's core): it is not the same
+  body, so only a host declaring it (`SupersessionKind::Declared`) may
+  supersede it; never resolve a
+  chain of derived sources (`derived::validate` refuses it). Unit tests
+  pin the fingerprint; `tests/check.rs` `a_copy_a_derived_model…`,
+  `a_derived_model_without_its_originals_ids…` and
+  `a_copy_stated_by_another_representation…` pin it end to end. Each object's model is looked up by its source, spatial
   trees are built per source, and every service is bound to all snapshots.
   Never key anything on a bare local id: two files share `#10`.
 - Below, `tests/check.rs` is `crates/apps/cli/tests/check.rs`, which runs

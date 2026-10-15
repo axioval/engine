@@ -138,6 +138,8 @@ fn combined(
         whole_openings,
         local_origin: None,
         declared_frame_sources: Vec::new(),
+        superseded: Vec::new(),
+        derived_unmatched: BTreeMap::new(),
     };
     (record, bodies)
 }
@@ -201,7 +203,7 @@ pub fn compare(mut args: CompareArgs) -> Result<Outcome, Box<dyn Error>> {
             // both are measured in model coordinates, never about origins
             // each would choose for itself (#372).
             .with_model_frame(true);
-        let (base, mut before) = geometry::attach(base, &base_bytes, keep)
+        let (base, mut before) = geometry::attach(base, &base_bytes, keep.clone())
             .map_err(|error| format!("geometry of {}: {error}", args.base.display()))?;
         let (revised, mut after) = geometry::attach(revised, &revised_bytes, keep)
             .map_err(|error| format!("geometry of {}: {error}", args.revised.display()))?;

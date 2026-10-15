@@ -261,7 +261,7 @@ ifc-systems = "0.5.0"
 regex = "1.11.2"
 sha2 = "0.11.0"
 # ifcZIP archives; deflate is the only compression method they use.
-zip = { version = "8.6", default-features = false }
+zip = { version = "9.0", default-features = false }
 # Holds `ifc-properties`' `PropertyIndex`, which borrows the model, beside
 # the `Arc<Model>` it borrows (the IFC adapter's property service).
 yoke = { version = "0.8.3", default-features = false, features = ["alloc", "derive"] }

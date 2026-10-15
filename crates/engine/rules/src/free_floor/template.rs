@@ -58,8 +58,86 @@ pub(crate) fn rectangle_parameters() -> Vec<ParameterDescriptor> {
     parameters
 }
 
+/// What a proven absence measured of the floor, as words (#391): the
+/// largest shape of the declared proportions (`largest` the circle's or
+/// the rectangle's words, placed after the code where nothing precedes
+/// it), the free floor's area and the obstacles that may also take floor.
+fn measured_texts(largest: [&'static str; 2]) -> Vec<ItemText> {
+    // Nothing precedes: no largest shape, and the shape reached.
+    let first = || {
+        vec![
+            When::Null { field: "largest" },
+            When::Null {
+                field: "largest_width",
+            },
+            When::Field {
+                field: "unreached",
+                value: false,
+            },
+        ]
+    };
+    vec![
+        ItemText {
+            name: "largest_note",
+            when: vec![
+                When::Null { field: "largest" },
+                When::Null {
+                    field: "largest_width",
+                },
+            ],
+            text: "",
+        },
+        ItemText {
+            name: "largest_note",
+            when: vec![When::Null { field: "centre_x" }],
+            text: largest[0],
+        },
+        ItemText {
+            name: "largest_note",
+            when: Vec::new(),
+            text: largest[1],
+        },
+        ItemText {
+            name: "area_note",
+            when: vec![When::Null { field: "free_area" }],
+            text: "",
+        },
+        ItemText {
+            name: "area_note",
+            when: first(),
+            text: ": the free floor is {free_area:area} m²",
+        },
+        ItemText {
+            name: "area_note",
+            when: Vec::new(),
+            text: "; the free floor is {free_area:area} m²",
+        },
+        ItemText {
+            name: "possible_note",
+            when: vec![When::Empty {
+                field: "possible_obstacles",
+            }],
+            text: "",
+        },
+        ItemText {
+            name: "possible_note",
+            when: {
+                let mut when = first();
+                when.push(When::Null { field: "free_area" });
+                when
+            },
+            text: ": perhaps also taken by {possible_obstacles}",
+        },
+        ItemText {
+            name: "possible_note",
+            when: Vec::new(),
+            text: "; perhaps also taken by {possible_obstacles}",
+        },
+    ]
+}
+
 /// The search's answer judged: no placement a finding worded `fail`.
-fn fit(list: &'static str, fail: &'static str) -> FormCheck {
+fn fit(list: &'static str, fail: &'static str, largest: [&'static str; 2]) -> FormCheck {
     FormCheck {
         values: Vec::new(),
         derived: Vec::new(),
@@ -99,7 +177,10 @@ fn fit(list: &'static str, fail: &'static str) -> FormCheck {
                     when: Vec::new(),
                     text: "",
                 },
-            ],
+            ]
+            .into_iter()
+            .chain(measured_texts(largest))
+            .collect(),
             merged: false,
             at: None,
             once: false,
@@ -124,7 +205,7 @@ fn template(
     (id, name): (&'static str, &'static str),
     parameters: Vec<ParameterDescriptor>,
     list: &'static str,
-    fail: &'static str,
+    (fail, largest): (&'static str, [&'static str; 2]),
 ) -> Template {
     Template {
         id,
@@ -172,7 +253,7 @@ fn template(
             grading: None,
             derived: Vec::new(),
             related: None,
-            checks: vec![fit(list, fail)],
+            checks: vec![fit(list, fail, largest)],
             once: Vec::new(),
             joined: None,
             project: Vec::new(),
@@ -187,7 +268,17 @@ pub(crate) fn circle() -> Template {
         ("axioval:capability.free-floor-circle", "free-floor-circle"),
         circle_parameters(),
         CIRCLE,
-        "NO_FREE_FLOOR_SPACE_FOR_CIRCLE{unreached_note}",
+        (
+            "NO_FREE_FLOOR_SPACE_FOR_CIRCLE{unreached_note}{largest_note}{area_note}\
+             {possible_note}",
+            [
+                ": the largest free circle is {largest:length} across; required \
+                 {diameter_metres:length}",
+                ": the largest free circle is {largest:length} across, centred at \
+                 ({centre_x:length}, {centre_y:length}, {centre_z:length}); required \
+                 {diameter_metres:length}",
+            ],
+        ),
     )
 }
 
@@ -201,6 +292,18 @@ pub(crate) fn rectangle() -> Template {
         ),
         rectangle_parameters(),
         RECTANGLE,
-        "NO_FREE_FLOOR_SPACE_FOR_RECTANGLE{unreached_note}",
+        (
+            "NO_FREE_FLOOR_SPACE_FOR_RECTANGLE{unreached_note}{largest_note}{area_note}\
+             {possible_note}",
+            [
+                ": the largest free rectangle of its proportions is \
+                 {largest_width:length} by {largest_length:length}; required \
+                 {width_metres:length} by {length_metres:length}",
+                ": the largest free rectangle of its proportions is \
+                 {largest_width:length} by {largest_length:length}, centred at \
+                 ({centre_x:length}, {centre_y:length}, {centre_z:length}); required \
+                 {width_metres:length} by {length_metres:length}",
+            ],
+        ),
     )
 }

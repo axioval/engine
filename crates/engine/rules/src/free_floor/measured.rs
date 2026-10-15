@@ -14,6 +14,7 @@
 //! per declaration, then searches each space.
 
 use std::collections::BTreeMap;
+use std::fmt::Write as _;
 use std::sync::Arc;
 
 use axioval_engine::{
@@ -22,8 +23,9 @@ use axioval_engine::{
 };
 use axioval_engine::{BoxClearance, CylinderClearance};
 use axioval_ir::measured::{MeasuredArgument, MeasuredCall, MeasuredSelection};
-use axioval_ir::{Evidence, ObjectId};
+use axioval_ir::{Evidence, ObjectId, QuantityDimension};
 
+use super::measure::Measured;
 use super::{Declared, Obstacles, Placement, Search, band, entrance};
 use crate::door_swing::Swings;
 use crate::measured_kinds::{refused, resolution_error, selection};
@@ -224,38 +226,150 @@ fn fit(
     context: &RuleContext<'_>,
 ) -> Result<MeasuredMember, Unavailable> {
     let locator = format!("free_floor_fit:{object}");
-    let item =
-        |fits: MemberValue, related: Vec<ObjectId>, unreached: bool, evidence: Vec<Evidence>| {
-            MeasuredMember {
-                certain: true,
-                // An open search proves nothing exactly; an answer is as exact as
-                // what it rests on.
-                exact: !matches!(fits, MemberValue::Undecided { .. })
-                    && evidence.iter().all(|evidence| evidence.exact),
-                fields: BTreeMap::from([
-                    ("fits", fits),
-                    ("related", MemberValue::Objects { objects: related }),
-                    ("unreached", truth(unreached, &locator)),
-                ]),
-                evidence,
-            }
-        };
+    let item = |fits: MemberValue,
+                related: Vec<ObjectId>,
+                unreached: bool,
+                evidence: Vec<Evidence>,
+                measured: Option<&Measured>| {
+        // An open search proves nothing exactly; an answer is as exact as
+        // what it rests on.
+        let exact = !matches!(fits, MemberValue::Undecided { .. })
+            && evidence.iter().all(|evidence| evidence.exact);
+        let mut fields = BTreeMap::from([
+            ("fits", fits),
+            ("related", MemberValue::Objects { objects: related }),
+            ("unreached", truth(unreached, &locator)),
+        ]);
+        fields.extend(measured_fields(&locator, measured));
+        MeasuredMember {
+            certain: true,
+            exact,
+            fields,
+            evidence,
+        }
+    };
     match placed(call, &FIT, object, context)? {
-        Placement::Found => Ok(item(truth(true, &locator), Vec::new(), false, Vec::new())),
-        Placement::Absent(absent) => Ok(item(
-            truth(false, &locator),
-            absent.related,
-            absent.unreached,
-            absent.evidence,
+        Placement::Found => Ok(item(
+            truth(true, &locator),
+            Vec::new(),
+            false,
+            Vec::new(),
+            None,
         )),
+        Placement::Absent(absent) => {
+            let mut evidence = absent.evidence;
+            evidence.extend(absent.measured.evidence.iter().cloned());
+            evidence.extend(summary(object, &absent.measured));
+            Ok(item(
+                truth(false, &locator),
+                absent.related,
+                absent.unreached,
+                evidence,
+                Some(&absent.measured),
+            ))
+        }
         Placement::Open((NotEvaluatedReason::IncompleteEvidence, why)) => Ok(item(
             MemberValue::Undecided { why },
             Vec::new(),
             false,
             Vec::new(),
+            None,
         )),
         Placement::Open(refusal) => Err(refusal),
     }
+}
+
+/// A bracket measured on exact evidence, `null` where not measured.
+fn cited(
+    locator: &str,
+    name: &str,
+    value: Option<(f64, f64)>,
+    dimension: QuantityDimension,
+) -> MemberValue {
+    let locator = format!("{locator}:{name}");
+    MemberValue::Measured(match value {
+        Some((lower, upper)) => Measurement::Cited {
+            lower,
+            upper,
+            dimension: Some(dimension),
+            locator,
+            exact: true,
+        },
+        None => Measurement::Absent { locator },
+    })
+}
+
+/// The fields of what a proven absence measured (#391), `null` and empty
+/// for any other answer.
+fn measured_fields(locator: &str, measured: Option<&Measured>) -> Vec<(&'static str, MemberValue)> {
+    let largest = measured.and_then(|measured| measured.largest.as_ref());
+    let size = |index: usize, of: usize| {
+        largest
+            .filter(|largest| largest.sizes.len() == of)
+            .map(|largest| largest.sizes[index])
+    };
+    let centre = |axis: usize| {
+        largest
+            .and_then(|largest| largest.centre)
+            .map(|centre| (centre[axis], centre[axis]))
+    };
+    let objects = |pick: fn(&Measured) -> &Vec<ObjectId>| MemberValue::Objects {
+        objects: measured
+            .map(|measured| pick(measured).clone())
+            .unwrap_or_default(),
+    };
+    let length = QuantityDimension::Length;
+    vec![
+        ("obstacles", objects(|measured| &measured.obstacles)),
+        ("possible_obstacles", objects(|measured| &measured.possible)),
+        ("largest", cited(locator, "largest", size(0, 1), length)),
+        (
+            "largest_width",
+            cited(locator, "largest_width", size(0, 2), length),
+        ),
+        (
+            "largest_length",
+            cited(locator, "largest_length", size(1, 2), length),
+        ),
+        ("centre_x", cited(locator, "centre_x", centre(0), length)),
+        ("centre_y", cited(locator, "centre_y", centre(1), length)),
+        ("centre_z", cited(locator, "centre_z", centre(2), length)),
+        (
+            "free_area",
+            cited(
+                locator,
+                "free_area",
+                measured.and_then(|measured| measured.area),
+                QuantityDimension::Area,
+            ),
+        ),
+    ]
+}
+
+/// The evidence naming each measured value with its certified bounds, in
+/// metres and square metres, for hosts to read: `axioval:free-floor:
+/// <space>:largest=[lower,upper]` (a rectangle's `[w0,w1]x[l0,l1]`) with
+/// `:centre=[x,y,z]` in model coordinates where a shape was placed, and
+/// `axioval:free-floor:<space>:area=[lower,upper]`. Exact, as the
+/// searches they rest on are.
+fn summary(object: &ObjectId, measured: &Measured) -> Vec<Evidence> {
+    let bounds = |(lower, upper): (f64, f64)| format!("[{lower},{upper}]");
+    let mut evidence = Vec::new();
+    if let Some(largest) = &measured.largest {
+        let sizes: Vec<String> = largest.sizes.iter().copied().map(bounds).collect();
+        let mut locator = format!("axioval:free-floor:{object}:largest={}", sizes.join("x"));
+        if let Some([x, y, z]) = largest.centre {
+            let _ = write!(locator, ":centre=[{x},{y},{z}]");
+        }
+        evidence.push(Evidence::exact(object.source.clone(), locator));
+    }
+    if let Some(area) = measured.area {
+        evidence.push(Evidence::exact(
+            object.source.clone(),
+            format!("axioval:free-floor:{object}:area={}", bounds(area)),
+        ));
+    }
+    evidence
 }
 
 /// The placements `free_placements` lists.

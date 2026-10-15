@@ -4,11 +4,11 @@
 use std::{collections::BTreeMap, sync::Arc};
 
 use axioval_engine::{
-    ClearanceOutcome, ClearancePlacementEvidence, ClearanceRequest, CompiledRule,
+    AreaInterval, ClearanceOutcome, ClearancePlacementEvidence, ClearanceRequest, CompiledRule,
     CompletePlacementEvidence, CompleteSupportEvidence, FreeAreaEvidence, FreeAreaRequest,
-    FreeSpaceError, FreeSpaceService, FreeSpaceServiceHandle, MetricDirection, MetricFrame,
-    MetricPoint, NotEvaluatedReason, PlacementDomain, PlacementOutcome, PlacementRequest,
-    PlacementShape, RuleCapability, RuleContext, ServiceRegistry,
+    FreeFloorEvidence, FreeSpaceError, FreeSpaceService, FreeSpaceServiceHandle, MetricDirection,
+    MetricFrame, MetricPoint, NotEvaluatedReason, PlacementDomain, PlacementOutcome,
+    PlacementRequest, PlacementShape, RuleCapability, RuleContext, ServiceRegistry,
 };
 use axioval_ir::contract::{ParameterValue, Selector, Severity as RuleSeverity};
 use axioval_ir::{Evidence, Object, ObjectId, Project, RuleId, SourceId};
@@ -90,12 +90,43 @@ fn placement_frame(request: &PlacementRequest) -> MetricFrame {
     .unwrap()
 }
 
+/// A placement witnessed at the frame's origin.
+fn found(request: &PlacementRequest) -> ClearancePlacementEvidence {
+    let frame = placement_frame(request);
+    let support = CompleteSupportEvidence::try_new(
+        request.scope().clone(),
+        frame.clone(),
+        0.0,
+        exact("whole-base-support"),
+    )
+    .unwrap();
+    ClearancePlacementEvidence::try_new_supported(
+        request.clone(),
+        frame,
+        support,
+        exact("placement"),
+    )
+    .unwrap()
+}
+
 impl FreeSpaceService for FakeService {
     fn assess_clearance(&self, _: &ClearanceRequest) -> Result<ClearanceOutcome, FreeSpaceError> {
         Err(FreeSpaceError::Unavailable("unused".into()))
     }
     fn measure_free_area(&self, _: &FreeAreaRequest) -> Result<FreeAreaEvidence, FreeSpaceError> {
         Err(FreeSpaceError::Unavailable("unused".into()))
+    }
+    fn measure_free_floor(
+        &self,
+        request: &PlacementRequest,
+    ) -> Result<FreeFloorEvidence, FreeSpaceError> {
+        FreeFloorEvidence::try_new(
+            request.clone(),
+            AreaInterval::exact(6.25)?,
+            request.obstacles().to_vec(),
+            Vec::new(),
+            exact("free-floor"),
+        )
     }
     fn find_placement(
         &self,
@@ -110,7 +141,9 @@ impl FreeSpaceService for FakeService {
         let PlacementShape::Cylinder(shape) = request.shape() else {
             panic!("expected cylinder")
         };
-        assert!(shape.radius_metres().total_cmp(&0.75).is_eq());
+        // The declared circle, or a smaller one the largest free circle is
+        // bracketed with (#391).
+        assert!(shape.radius_metres() <= 0.75);
         assert!(shape.height_metres().total_cmp(&2.0).is_eq());
         let PlacementDomain::Supported(support) = request.domain() else {
             panic!("free-floor placement must be supported")
@@ -118,6 +151,11 @@ impl FreeSpaceService for FakeService {
         assert_eq!(support.support(), request.scope());
         assert!(support.maximum_gap_metres().total_cmp(&0.0).is_eq());
         match self.0 {
+            // A proven absence of the declared circle leaves a circle of
+            // 1.12 m.
+            Answer::NoPlacement if shape.radius_metres() <= 0.56 => {
+                Ok(PlacementOutcome::Found(found(request)))
+            }
             Answer::Found => {
                 let frame = placement_frame(request);
                 let support = CompleteSupportEvidence::try_new(
@@ -172,11 +210,31 @@ fn exact_complete_no_placement_emits_native_circle_issue() {
     let outcome = evaluate(Answer::NoPlacement);
     assert!(outcome.not_evaluated_outcomes().is_empty());
     assert_eq!(outcome.findings().len(), 1);
+    let finding = &outcome.findings()[0];
+    // The proof's code, then what the absence leaves of the floor (#391):
+    // a circle of 1.12 m placed, one of 1.125 m proven absent, the free
+    // floor and the chair taking it.
     assert_eq!(
-        outcome.findings()[0].message,
-        "NO_FREE_FLOOR_SPACE_FOR_CIRCLE"
+        finding.message,
+        "NO_FREE_FLOOR_SPACE_FOR_CIRCLE: the largest free circle is between 1.12 m and \
+         1.125 m across, centred at (0 m, 0 m, 0 m); required 1.5 m; the free floor is 6.25 m²"
     );
-    assert_eq!(outcome.findings()[0].evidence[0].locator, "complete-search");
+    assert_eq!(finding.related, [ObjectId::new(source(), "chair").unwrap()]);
+    let locators: Vec<&str> = finding
+        .evidence
+        .iter()
+        .map(|evidence| evidence.locator.as_str())
+        .collect();
+    for cited in [
+        "complete-search",
+        "placement",
+        "free-floor",
+        "axioval:free-floor:cad:model/room:largest=[1.12,1.125]:centre=[0,0,0]",
+        "axioval:free-floor:cad:model/room:area=[6.25,6.25]",
+    ] {
+        assert!(locators.contains(&cited), "{cited} in {locators:?}");
+    }
+    assert!(finding.evidence.iter().all(|evidence| evidence.exact));
 }
 
 #[test]

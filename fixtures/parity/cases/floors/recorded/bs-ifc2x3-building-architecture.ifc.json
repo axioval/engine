@@ -313,6 +313,14 @@
       "evidence": [
         {
           "exact": true,
+          "locator": "axiolid:free-floor:#183",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
           "locator": "axiolid:placement:#183",
           "source": {
             "document": "bs-ifc2x3-building-architecture.ifc",
@@ -329,6 +337,14 @@
         },
         {
           "exact": true,
+          "locator": "axioval:free-floor:ifc-step:bs-ifc2x3-building-architecture.ifc/#183:area=[17.535000000000082,17.53500018400027]",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
           "locator": "free_floor_fit;shape=circle;diameter_metres=@diameter_metres;height_metres=@height_metres;obstacles=@obstacles;band_from_metres=@band_from_metres;band_to_metres=@band_to_metres;merge_path=@merge_path;subtract_door_swings=@subtract_door_swings;entrance_path_width=@entrance_path_width;entrance_tolerance_metres=@entrance_tolerance_metres;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector#1",
           "source": {
             "document": "bs-ifc2x3-building-architecture.ifc",
@@ -336,8 +352,8 @@
           }
         }
       ],
-      "id": "db6448c1-72ac-5169-bf14-37b860f79d8a",
-      "message": "NO_FREE_FLOOR_SPACE_FOR_CIRCLE: the shape fits only where no path 1.2 m wide from an entrance reaches it",
+      "id": "46eb6960-9b30-51a7-815e-971b717ab406",
+      "message": "NO_FREE_FLOOR_SPACE_FOR_CIRCLE: the shape fits only where no path 1.2 m wide from an entrance reaches it; the free floor is 17.535 m²",
       "object_id": {
         "local_id": "#183",
         "source": {
@@ -345,11 +361,28 @@
           "system": "ifc-step"
         }
       },
+      "related": [
+        {
+          "local_id": "#215",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
       "rule_id": "ff-circle-entrance",
       "severity": "warning"
     },
     {
       "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:free-floor:#296",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
         {
           "exact": true,
           "locator": "axiolid:placement:#296",
@@ -368,6 +401,14 @@
         },
         {
           "exact": true,
+          "locator": "axioval:free-floor:ifc-step:bs-ifc2x3-building-architecture.ifc/#296:area=[6.08,6.080000108000087]",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
           "locator": "free_floor_fit;shape=circle;diameter_metres=@diameter_metres;height_metres=@height_metres;obstacles=@obstacles;band_from_metres=@band_from_metres;band_to_metres=@band_to_metres;merge_path=@merge_path;subtract_door_swings=@subtract_door_swings;entrance_path_width=@entrance_path_width;entrance_tolerance_metres=@entrance_tolerance_metres;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector#1",
           "source": {
             "document": "bs-ifc2x3-building-architecture.ifc",
@@ -375,8 +416,8 @@
           }
         }
       ],
-      "id": "4626b972-21fb-5ec8-9be4-e9ad07083ea7",
-      "message": "NO_FREE_FLOOR_SPACE_FOR_CIRCLE: the shape fits only where no path 1.2 m wide from an entrance reaches it",
+      "id": "64e87869-027b-54a5-bacc-6b00c222c1c8",
+      "message": "NO_FREE_FLOOR_SPACE_FOR_CIRCLE: the shape fits only where no path 1.2 m wide from an entrance reaches it; the free floor is 6.08 m²",
       "object_id": {
         "local_id": "#296",
         "source": {
@@ -391,7 +432,31 @@
       "evidence": [
         {
           "exact": true,
+          "locator": "axiolid:free-floor:#183",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
           "locator": "axiolid:placement:#183",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axioval:free-floor:ifc-step:bs-ifc2x3-building-architecture.ifc/#183:area=[17.535000000000082,17.535000115000177]",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axioval:free-floor:ifc-step:bs-ifc2x3-building-architecture.ifc/#183:largest=[3.795,3.803]:centre=[5.375000199150285,6.900000178357487,0]",
           "source": {
             "document": "bs-ifc2x3-building-architecture.ifc",
             "system": "ifc-step"
@@ -406,8 +471,8 @@
           }
         }
       ],
-      "id": "1c674543-2ffe-5800-a327-888aa6b97b2c",
-      "message": "NO_FREE_FLOOR_SPACE_FOR_CIRCLE",
+      "id": "eb930d08-15d4-5b79-90d1-dcf14ec71317",
+      "message": "NO_FREE_FLOOR_SPACE_FOR_CIRCLE: the largest free circle is between 3.795 m and 3.803 m across, centred at (5.375 m, 6.9 m, 0 m); required 12 m; the free floor is 17.535 m²",
       "object_id": {
         "local_id": "#183",
         "source": {
@@ -415,11 +480,28 @@
           "system": "ifc-step"
         }
       },
+      "related": [
+        {
+          "local_id": "#215",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
       "rule_id": "ff-circle-large",
       "severity": "warning"
     },
     {
       "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:free-floor:#296",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
         {
           "exact": true,
           "locator": "axiolid:placement:#296",
@@ -430,6 +512,22 @@
         },
         {
           "exact": true,
+          "locator": "axioval:free-floor:ifc-step:bs-ifc2x3-building-architecture.ifc/#296:area=[6.08,6.080000076000107]",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axioval:free-floor:ifc-step:bs-ifc2x3-building-architecture.ifc/#296:largest=[1.597,1.603]:centre=[5.100000199178624,4.000000178397976,0]",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
           "locator": "free_floor_fit;shape=circle;diameter_metres=@diameter_metres;height_metres=@height_metres;obstacles=@obstacles;band_from_metres=@band_from_metres;band_to_metres=@band_to_metres;merge_path=@merge_path;subtract_door_swings=@subtract_door_swings;entrance_path_width=@entrance_path_width;entrance_tolerance_metres=@entrance_tolerance_metres;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector#1",
           "source": {
             "document": "bs-ifc2x3-building-architecture.ifc",
@@ -437,8 +535,8 @@
           }
         }
       ],
-      "id": "c5a416a6-234a-54dc-9fa5-e783c934932a",
-      "message": "NO_FREE_FLOOR_SPACE_FOR_CIRCLE",
+      "id": "7a176dbb-c620-5208-a546-579d7acd9a80",
+      "message": "NO_FREE_FLOOR_SPACE_FOR_CIRCLE: the largest free circle is between 1.597 m and 1.603 m across, centred at (5.1 m, 4 m, 0 m); required 12 m; the free floor is 6.08 m²",
       "object_id": {
         "local_id": "#296",
         "source": {

@@ -16,6 +16,7 @@ use axioval_ir::contract::{ParameterValue, Selector};
 use axioval_ir::{Evidence, Finding, Object, ObjectId, Severity};
 
 use crate::door_swing::Swings;
+use crate::free_floor::measure::{Measured, Setting, measure, words};
 use crate::level_spacing::metres;
 use crate::selection::select_objects;
 use crate::space_access::{AccessDeclaration, AccessIndex, AccessType};
@@ -227,10 +228,11 @@ fn evaluate(
                 message: match absent.unreached {
                     Some(width) => format!(
                         "{message}: the shape fits only where no path {} wide from an \
-                         entrance reaches it",
-                        metres(width)
+                         entrance reaches it{}",
+                        metres(width),
+                        words(shape, &absent.measured, true)
                     ),
-                    None => message.into(),
+                    None => format!("{message}{}", words(shape, &absent.measured, false)),
                 },
                 evidence: absent.evidence,
                 location: None,
@@ -250,6 +252,7 @@ struct Absent {
     related: Vec<ObjectId>,
     evidence: Vec<Evidence>,
     unreached: Option<f64>,
+    measured: Measured,
 }
 
 /// A proven absence, or `None` for a witness.
@@ -425,26 +428,49 @@ impl Ground<'_> {
         evidence.extend(swings.evidence.iter().cloned());
         let mut related = merged.clone();
         let mut unreached = None;
+        let mut absent = entrances.is_none();
         if let (Some((_, all, cited)), Some(path)) = (&entrances, &self.options.entrance) {
             related.extend(all.iter().cloned());
             evidence.extend(cited.iter().cloned());
             // Worded apart: the shape fits, but no path reaches it.
             let plain = Ask {
-                candidates: sure,
+                candidates: sure.clone(),
                 swept: swings.sure.clone(),
                 entrances: None,
             };
-            if let Ok(PlacementOutcome::Found(found)) = self.ask(space, &merged, plain) {
-                evidence.push(found.evidence().clone());
-                unreached = Some(path.width);
+            match self.ask(space, &merged, plain) {
+                Ok(PlacementOutcome::Found(found)) => {
+                    evidence.push(found.evidence().clone());
+                    unreached = Some(path.width);
+                }
+                Ok(PlacementOutcome::NoPlacement(_)) => absent = true,
+                Err(_) => {}
             }
         }
+        let measured = measure(
+            self.context,
+            &Setting {
+                service: self.service,
+                space,
+                merged: &merged,
+                shape: self.shape,
+                band: self.options.band,
+                sure: &sure,
+                maybe: &maybe,
+                swings,
+                absent,
+                unreached: unreached.is_some(),
+            },
+        );
+        related.extend(measured.obstacles.iter().cloned());
+        evidence.extend(measured.evidence.iter().cloned());
         related.sort();
         related.dedup();
         Ok(Some(Absent {
             related,
             evidence,
             unreached,
+            measured,
         }))
     }
 }

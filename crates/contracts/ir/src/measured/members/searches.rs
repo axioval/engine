@@ -225,8 +225,10 @@ pub(super) const FREE_FLOOR_FIT: MemberDescriptor = MemberDescriptor {
             OBJECTS,
             &en_de("Related", "Bezogen"),
             &en_de(
-                "The spaces searched with the space and its entrances.",
-                "Die mit dem Raum durchsuchten Räume und seine Zugänge.",
+                "The spaces searched with the space, its entrances and, for a proven absence, \
+                 the obstacles surely taking its floor.",
+                "Die mit dem Raum durchsuchten Räume, seine Zugänge und, wo das Fehlen \
+                 nachgewiesen ist, die Hindernisse, die sicher Boden belegen.",
             ),
         ),
         field(
@@ -238,6 +240,105 @@ pub(super) const FREE_FLOOR_FIT: MemberDescriptor = MemberDescriptor {
                  path reaches it.",
                 "Ob die Form, die nachweislich von keinem Zugang erreicht wird, dort passt, \
                  wo kein Weg sie erreicht.",
+            ),
+        ),
+        field(
+            "obstacles",
+            OBJECTS,
+            &en_de("Obstacles", "Hindernisse"),
+            &en_de(
+                "For a proven absence, the surely selected obstacles and swept doors whose \
+                 footprint in the band surely shares area with the floor; empty otherwise.",
+                "Bei nachgewiesenem Fehlen die sicher ausgewählten Hindernisse und \
+                 Türaufschläge, deren Grundriss im Band sicher Fläche mit dem Boden teilt; \
+                 sonst leer.",
+            ),
+        ),
+        field(
+            "possible_obstacles",
+            OBJECTS,
+            &en_de("Possible obstacles", "Mögliche Hindernisse"),
+            &en_de(
+                "For a proven absence, the obstacles and swept doors that may take floor: \
+                 their footprint or their selection is undecided.",
+                "Bei nachgewiesenem Fehlen die Hindernisse und Türaufschläge, die Boden \
+                 belegen können: ihr Grundriss oder ihre Auswahl ist unentschieden.",
+            ),
+        ),
+        field(
+            "largest",
+            LENGTH,
+            &en_de("Largest free circle", "Größter freier Kreis"),
+            &en_de(
+                "For a circle proven absent, the diameter of the largest circle the search \
+                 places, bracketed between a placed one and one proven absent; null \
+                 otherwise, or where nothing narrowed it.",
+                "Bei nachgewiesenem Fehlen eines Kreises der Durchmesser des größten Kreises, \
+                 den die Suche platziert, eingeschlossen zwischen einem platzierten und \
+                 einem nachweislich fehlenden; sonst null, oder wo nichts ihn eingrenzte.",
+            ),
+        ),
+        field(
+            "largest_width",
+            LENGTH,
+            &en_de("Largest free width", "Größte freie Breite"),
+            &en_de(
+                "For a rectangle proven absent, the width of the largest rectangle of its \
+                 proportions the search places, bracketed as `largest`.",
+                "Bei nachgewiesenem Fehlen eines Rechtecks die Breite des größten Rechtecks \
+                 seiner Proportionen, das die Suche platziert, eingeschlossen wie `largest`.",
+            ),
+        ),
+        field(
+            "largest_length",
+            LENGTH,
+            &en_de("Largest free length", "Größte freie Länge"),
+            &en_de(
+                "For a rectangle proven absent, the length of that largest rectangle.",
+                "Bei nachgewiesenem Fehlen eines Rechtecks die Länge dieses größten \
+                 Rechtecks.",
+            ),
+        ),
+        field(
+            "centre_x",
+            LENGTH,
+            &en_de("Centre x", "Mittelpunkt x"),
+            &en_de(
+                "The placed largest shape's centre, east, in model coordinates; null where \
+                 none was placed.",
+                "Der Mittelpunkt der platzierten größten Form, Ost, in Modellkoordinaten; \
+                 null, wo keine platziert wurde.",
+            ),
+        ),
+        field(
+            "centre_y",
+            LENGTH,
+            &en_de("Centre y", "Mittelpunkt y"),
+            &en_de(
+                "The placed largest shape's centre, north, in model coordinates.",
+                "Der Mittelpunkt der platzierten größten Form, Nord, in Modellkoordinaten.",
+            ),
+        ),
+        field(
+            "centre_z",
+            LENGTH,
+            &en_de("Centre z", "Mittelpunkt z"),
+            &en_de(
+                "The placed largest shape's base, the floor's elevation.",
+                "Die Basis der platzierten größten Form, die Höhe des Bodens.",
+            ),
+        ),
+        field(
+            "free_area",
+            AREA,
+            &en_de("Free floor area", "Freie Bodenfläche"),
+            &en_de(
+                "For a proven absence, the area of floor no obstacle or swing takes within \
+                 the band, bracketed from below by everything that may take floor and from \
+                 above by what surely does.",
+                "Bei nachgewiesenem Fehlen die Bodenfläche, die kein Hindernis und kein \
+                 Aufschlag im Band belegt, von unten durch alles eingeschlossen, was Boden \
+                 belegen kann, von oben durch das, was ihn sicher belegt.",
             ),
         ),
     ],

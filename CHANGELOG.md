@@ -6,6 +6,25 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **A failed free-floor shape says what blocks it and how far it misses**
+  ([#391](https://github.com/axioval/engine/issues/391)). A
+  `free-floor-circle` or `free-floor-rectangle` finding relates the
+  obstacles and swept doors surely taking the space's floor, names those
+  that may (`; perhaps also taken by …`), and reports the largest shape of
+  the declared proportions the search can place, bracketed between a size
+  placed (with its centre in model coordinates) and one proven absent, and
+  the free floor's area: `NO_FREE_FLOOR_SPACE_FOR_CIRCLE: the largest free
+  circle is between 1.117 m and 1.12 m across, centred at (…); required
+  1.5 m; the free floor is 6.08 m²`. Each value is cited at full precision
+  as exact evidence (`axioval:free-floor:<space>:largest=…`, `…:area=…`).
+  `FreeSpaceService::measure_free_floor` (`FreeFloorEvidence`, refusing by
+  default) measures the floor; the Axiolid service answers it from the
+  placement scene. `free_floor_fit` gains the fields `obstacles`,
+  `possible_obstacles`, `largest`, `largest_width`, `largest_length`,
+  `centre_x`, `centre_y`, `centre_z` and `free_area`. Spaces that fit or
+  are left open report as before. The free-floor region itself is not
+  reported: the IR has no geometry a finding could carry it in.
+
 - **Objects a federated source copies from another are evaluated once**
   ([#390](https://github.com/axioval/engine/issues/390)). A host declares
   objects superseded with `EvidenceSession::with_superseded`

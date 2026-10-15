@@ -16896,6 +16896,109 @@ fn with_geometry_a_wall_in_a_slab_opening_short_by_rounding_does_not_clash() {
     }
 }
 
+/// Room #19 (x 0..2, y 0..`depth`, 3 m high), with wardrobe #39 (0.6 m
+/// deep, 2 m high) along its north wall where `wardrobe`.
+fn room_with_a_wardrobe(depth: f64, wardrobe: bool) -> String {
+    let space = "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,$,$)";
+    let furniture = "IFCFURNITURE('GID',$,$,$,$,PL,REP,$,$)";
+    let mut model = placed_box(10, [1.0, depth / 2.0, 0.0], [2.0, depth, 3.0], space);
+    if wardrobe {
+        model.push_str(&placed_box(
+            30,
+            [1.0, depth - 0.3, 0.0],
+            [2.0, 0.6, 2.0],
+            furniture,
+        ));
+    }
+    model_with(&model)
+}
+
+/// A failed turning circle says what blocks it and how far it misses
+/// (#391): the wardrobe that takes the floor is related, the largest free
+/// circle is bracketed between one placed (with its centre) and one proven
+/// absent, and the free floor's area is exact on exact bodies.
+#[test]
+fn with_geometry_a_failed_turning_circle_names_its_obstacle_and_the_largest_circle() {
+    let case = Case::new("geometry-free-floor-largest");
+    let check = |model: &str| {
+        case.geometry_rule(
+            model,
+            &[("furniture", "IfcFurniture"), ("space", "IfcSpace")],
+            "axioval:capability.free-floor-circle",
+            &registry_signature("axioval:capability.free-floor-circle"),
+            entity("space"),
+            json!({
+                "diameter_metres": {"type": "number", "value": 1.5},
+                "height_metres": {"type": "number", "value": 2.0},
+            }),
+        )
+    };
+    // Blocked by one piece of furniture: 1.4 m of the room's 2 m depth stay
+    // free, so the largest circle is 1.4 m across, up to the bisection's
+    // bracket, centred in that strip.
+    let (output, result) = check(&room_with_a_wardrobe(2.0, true));
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let finding = &result["report"]["findings"][0];
+    let message = finding["message"].as_str().unwrap();
+    assert!(
+        message.starts_with("NO_FREE_FLOOR_SPACE_FOR_CIRCLE: the largest free circle is between "),
+        "{message}"
+    );
+    assert!(
+        message.ends_with("; required 1.5 m; the free floor is 2.8 m²"),
+        "{message}"
+    );
+    assert_eq!(
+        finding["related"],
+        json!([{"source": finding["object_id"]["source"], "local_id": "#39"}]),
+        "{finding:#}"
+    );
+    let (lower, upper, centre) = largest(finding);
+    assert!(lower <= 1.4 && upper >= 1.4 - 1e-9, "{lower} {upper}");
+    assert!(upper - lower <= 0.015 && upper <= 1.5, "{lower} {upper}");
+    assert!((centre[1] - 0.7).abs() <= 0.006, "{centre:?}");
+    // Missing by a few centimetres: a room 1.46 m deep holds a circle just
+    // below the required 1.5 m.
+    let (output, result) = check(&room_with_a_wardrobe(1.46, false));
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let finding = &result["report"]["findings"][0];
+    assert_eq!(finding["related"], json!(null), "{finding:#}");
+    let (lower, upper, _) = largest(finding);
+    assert!(lower <= 1.46 && upper >= 1.46 - 1e-9, "{lower} {upper}");
+    assert!(lower >= 1.45 && upper < 1.5, "{lower} {upper}");
+    // Every value rests on exact searches.
+    assert!(
+        finding["evidence"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|evidence| evidence["exact"] == json!(true)),
+        "{finding:#}"
+    );
+}
+
+/// The largest free circle's bracket and centre, read from the evidence a
+/// failed free-floor finding cites (#391).
+fn largest(finding: &Value) -> (f64, f64, Vec<f64>) {
+    let locator = finding["evidence"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|evidence| evidence["locator"].as_str())
+        .find(|locator| locator.contains(":largest="))
+        .unwrap_or_else(|| panic!("no largest circle in {finding:#}"));
+    let numbers = |text: &str| -> Vec<f64> {
+        text.trim_matches(|c| c == '[' || c == ']')
+            .split(',')
+            .map(|number| number.parse().unwrap())
+            .collect()
+    };
+    let rest = locator.split(":largest=").nth(1).unwrap();
+    let (bracket, centre) = rest.split_once(":centre=").unwrap();
+    let bracket = numbers(bracket);
+    (bracket[0], bracket[1], numbers(centre))
+}
+
 /// Room #19 (x 0..2.4, y 0..1.6, 3 m high) with door #50 in its north
 /// wall: hinged at (1.2, 1.7), its 0.9 m leaf closed westward and opening
 /// south over the quarter disc south-west of its hinge.
@@ -16946,8 +17049,19 @@ fn with_geometry_a_turning_circle_needs_the_floor_a_door_swings_over() {
         finding_messages(&result),
         [(
             "#19".to_owned(),
-            "NO_FREE_FLOOR_SPACE_FOR_CIRCLE".to_owned()
+            // The circle the swing leaves room for, and the floor it leaves
+            // (#391): its sector is polygonised from both sides, so the
+            // area is a narrow bracket.
+            "NO_FREE_FLOOR_SPACE_FOR_CIRCLE: the largest free circle is between 1.225 m and \
+             1.231 m across, centred at (1.785742 m, 0.616088 m, 0 m); required 1.5 m; the free \
+             floor is between 3.2935 and 3.2939 m²"
+                .to_owned()
         )],
+        "{result:#}"
+    );
+    // The door sweeping the floor is related.
+    assert_eq!(
+        result["report"]["findings"][0]["related"][0]["local_id"], "#50",
         "{result:#}"
     );
     assert!(
@@ -17227,7 +17341,7 @@ fn with_geometry_a_turning_circle_behind_a_bed_is_not_reached_from_the_door() {
         [(
             "#19".to_owned(),
             "NO_FREE_FLOOR_SPACE_FOR_CIRCLE: the shape fits only where no path 1.2 m wide \
-             from an entrance reaches it"
+             from an entrance reaches it; the free floor is 13.6 m²"
                 .to_owned()
         )],
         "{result:#}"

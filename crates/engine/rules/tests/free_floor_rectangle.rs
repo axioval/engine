@@ -120,8 +120,10 @@ impl FreeSpaceService for FakeService {
             panic!("expected box")
         };
         assert_eq!(orientation, &PlacementOrientation::Any);
-        assert!(shape.width_metres().total_cmp(&1.8).is_eq());
-        assert!(shape.depth_metres().total_cmp(&1.5).is_eq());
+        // The declared rectangle, or a smaller one of its proportions the
+        // largest free rectangle is bracketed with (#391).
+        assert!(shape.width_metres() <= 1.8);
+        assert!((shape.depth_metres() / shape.width_metres() - 1.5 / 1.8).abs() < 1e-12);
         assert!(shape.height_metres().total_cmp(&2.0).is_eq());
         let PlacementDomain::Supported(support) = request.domain() else {
             panic!("free-floor placement must be supported")
@@ -129,6 +131,26 @@ impl FreeSpaceService for FakeService {
         assert_eq!(support.support(), request.scope());
         assert!(support.maximum_gap_metres().total_cmp(&0.0).is_eq());
         match self.0 {
+            // A rectangle 4 cm narrower than the declared one would fit.
+            Answer::NoPlacement if shape.width_metres() <= 1.76 => {
+                let frame = placement_frame(request);
+                let support = CompleteSupportEvidence::try_new(
+                    request.scope().clone(),
+                    frame.clone(),
+                    0.0,
+                    exact("whole-base-support"),
+                )
+                .unwrap();
+                Ok(PlacementOutcome::Found(
+                    ClearancePlacementEvidence::try_new_supported(
+                        request.clone(),
+                        frame,
+                        support,
+                        exact("placement"),
+                    )
+                    .unwrap(),
+                ))
+            }
             Answer::Found => {
                 let frame = placement_frame(request);
                 let support = CompleteSupportEvidence::try_new(
@@ -183,11 +205,20 @@ fn exact_complete_no_placement_emits_native_rectangle_issue() {
     let outcome = evaluate(Answer::NoPlacement);
     assert!(outcome.not_evaluated_outcomes().is_empty());
     assert_eq!(outcome.findings().len(), 1);
+    // A space missing by a few centimetres: the largest rectangle of its
+    // proportions placed lies just below the declared one (#391).
     assert_eq!(
         outcome.findings()[0].message,
-        "NO_FREE_FLOOR_SPACE_FOR_RECTANGLE"
+        "NO_FREE_FLOOR_SPACE_FOR_RECTANGLE: the largest free rectangle of its proportions is \
+         between 1.758 m and 1.761 m by between 1.465 m and 1.4675 m, centred at (0 m, 0 m, \
+         0 m); required 1.8 m by 1.5 m"
     );
-    assert_eq!(outcome.findings()[0].evidence[0].locator, "complete-search");
+    assert!(
+        outcome.findings()[0]
+            .evidence
+            .iter()
+            .any(|evidence| evidence.locator == "complete-search")
+    );
 }
 
 #[test]

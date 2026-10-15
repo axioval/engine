@@ -5,6 +5,7 @@
 //! answer through the measured list `free_floor_fit`; `free_placements`
 //! lists it for expressions.
 
+pub(crate) mod measure;
 mod measured;
 #[cfg(feature = "parity-reference")]
 pub(crate) mod reference;
@@ -273,13 +274,15 @@ pub(crate) enum Placement {
     Open(Unavailable),
 }
 
-/// A proven absence: the merged spaces and entrances it relates, its
-/// evidence, and whether the shape fits but no path from an entrance
-/// reaches it.
+/// A proven absence: the merged spaces, entrances and obstacles surely
+/// taking floor it relates, its evidence, whether the shape fits but no
+/// path from an entrance reaches it, and what it measured of the floor.
 pub(crate) struct Absent {
     pub(crate) related: Vec<ObjectId>,
     pub(crate) evidence: Vec<Evidence>,
     pub(crate) unreached: bool,
+    /// What the absence leaves of the floor (#391).
+    pub(crate) measured: measure::Measured,
 }
 
 /// One search request: its obstacles, swept doors and entrances (`None`
@@ -472,26 +475,49 @@ impl Search {
         evidence.extend(swings.evidence.iter().cloned());
         let mut related = merged.clone();
         let mut unreached = false;
+        // Without an entrance path the proof is one without a path.
+        let mut absent = entrances.is_none();
         if let Some((_, all, cited)) = &entrances {
             related.extend(all.iter().cloned());
             evidence.extend(cited.iter().cloned());
             // Worded apart: the shape fits, but no path reaches it.
             let plain = Ask {
-                candidates: sure,
+                candidates: sure.clone(),
                 swept: swings.sure.clone(),
                 entrances: None,
             };
-            if let Ok(PlacementOutcome::Found(found)) = self.ask(service, space, &merged, plain) {
-                evidence.push(found.evidence().clone());
-                unreached = true;
+            match self.ask(service, space, &merged, plain) {
+                Ok(PlacementOutcome::Found(found)) => {
+                    evidence.push(found.evidence().clone());
+                    unreached = true;
+                }
+                Ok(PlacementOutcome::NoPlacement(_)) => absent = true,
+                Err(_) => {}
             }
         }
+        let measured = measure::measure(
+            context,
+            &measure::Setting {
+                service,
+                space,
+                merged: &merged,
+                shape: &self.shape,
+                band: self.declared.band,
+                sure: &sure,
+                maybe: &maybe,
+                swings,
+                absent,
+                unreached,
+            },
+        );
+        related.extend(measured.obstacles.iter().cloned());
         related.sort();
         related.dedup();
         Ok(Some(Absent {
             related,
             evidence,
             unreached,
+            measured,
         }))
     }
 }

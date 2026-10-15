@@ -960,6 +960,18 @@
       "providedBy": [
         "band_uncovered_area"
       ]
+    },
+    "free_floor::measure::floor::measure_free_floor": {
+      "count": 2,
+      "providedBy": [
+        "free_floor_fit"
+      ]
+    },
+    "free_floor::measure::largest::find_placement": {
+      "count": 1,
+      "providedBy": [
+        "free_floor_fit"
+      ]
     }
   }
 }

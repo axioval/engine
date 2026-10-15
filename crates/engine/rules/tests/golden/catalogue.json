@@ -20429,7 +20429,7 @@
                         "value": "fits",
                         "finding": false
                       },
-                      "fail": "NO_FREE_FLOOR_SPACE_FOR_CIRCLE{unreached_note}",
+                      "fail": "NO_FREE_FLOOR_SPACE_FOR_CIRCLE{unreached_note}{largest_note}{area_note}{possible_note}",
                       "undecided": "{why}",
                       "related": "related"
                     }
@@ -20449,6 +20449,104 @@
                     {
                       "name": "unreached_note",
                       "text": ""
+                    },
+                    {
+                      "name": "largest_note",
+                      "when": [
+                        {
+                          "kind": "null",
+                          "field": "largest"
+                        },
+                        {
+                          "kind": "null",
+                          "field": "largest_width"
+                        }
+                      ],
+                      "text": ""
+                    },
+                    {
+                      "name": "largest_note",
+                      "when": [
+                        {
+                          "kind": "null",
+                          "field": "centre_x"
+                        }
+                      ],
+                      "text": ": the largest free circle is {largest:length} across; required {diameter_metres:length}"
+                    },
+                    {
+                      "name": "largest_note",
+                      "text": ": the largest free circle is {largest:length} across, centred at ({centre_x:length}, {centre_y:length}, {centre_z:length}); required {diameter_metres:length}"
+                    },
+                    {
+                      "name": "area_note",
+                      "when": [
+                        {
+                          "kind": "null",
+                          "field": "free_area"
+                        }
+                      ],
+                      "text": ""
+                    },
+                    {
+                      "name": "area_note",
+                      "when": [
+                        {
+                          "kind": "null",
+                          "field": "largest"
+                        },
+                        {
+                          "kind": "null",
+                          "field": "largest_width"
+                        },
+                        {
+                          "kind": "field",
+                          "field": "unreached",
+                          "value": false
+                        }
+                      ],
+                      "text": ": the free floor is {free_area:area} m²"
+                    },
+                    {
+                      "name": "area_note",
+                      "text": "; the free floor is {free_area:area} m²"
+                    },
+                    {
+                      "name": "possible_note",
+                      "when": [
+                        {
+                          "kind": "empty",
+                          "field": "possible_obstacles"
+                        }
+                      ],
+                      "text": ""
+                    },
+                    {
+                      "name": "possible_note",
+                      "when": [
+                        {
+                          "kind": "null",
+                          "field": "largest"
+                        },
+                        {
+                          "kind": "null",
+                          "field": "largest_width"
+                        },
+                        {
+                          "kind": "field",
+                          "field": "unreached",
+                          "value": false
+                        },
+                        {
+                          "kind": "null",
+                          "field": "free_area"
+                        }
+                      ],
+                      "text": ": perhaps also taken by {possible_obstacles}"
+                    },
+                    {
+                      "name": "possible_note",
+                      "text": "; perhaps also taken by {possible_obstacles}"
                     }
                   ]
                 },
@@ -20922,7 +21020,7 @@
                         "value": "fits",
                         "finding": false
                       },
-                      "fail": "NO_FREE_FLOOR_SPACE_FOR_RECTANGLE{unreached_note}",
+                      "fail": "NO_FREE_FLOOR_SPACE_FOR_RECTANGLE{unreached_note}{largest_note}{area_note}{possible_note}",
                       "undecided": "{why}",
                       "related": "related"
                     }
@@ -20942,6 +21040,104 @@
                     {
                       "name": "unreached_note",
                       "text": ""
+                    },
+                    {
+                      "name": "largest_note",
+                      "when": [
+                        {
+                          "kind": "null",
+                          "field": "largest"
+                        },
+                        {
+                          "kind": "null",
+                          "field": "largest_width"
+                        }
+                      ],
+                      "text": ""
+                    },
+                    {
+                      "name": "largest_note",
+                      "when": [
+                        {
+                          "kind": "null",
+                          "field": "centre_x"
+                        }
+                      ],
+                      "text": ": the largest free rectangle of its proportions is {largest_width:length} by {largest_length:length}; required {width_metres:length} by {length_metres:length}"
+                    },
+                    {
+                      "name": "largest_note",
+                      "text": ": the largest free rectangle of its proportions is {largest_width:length} by {largest_length:length}, centred at ({centre_x:length}, {centre_y:length}, {centre_z:length}); required {width_metres:length} by {length_metres:length}"
+                    },
+                    {
+                      "name": "area_note",
+                      "when": [
+                        {
+                          "kind": "null",
+                          "field": "free_area"
+                        }
+                      ],
+                      "text": ""
+                    },
+                    {
+                      "name": "area_note",
+                      "when": [
+                        {
+                          "kind": "null",
+                          "field": "largest"
+                        },
+                        {
+                          "kind": "null",
+                          "field": "largest_width"
+                        },
+                        {
+                          "kind": "field",
+                          "field": "unreached",
+                          "value": false
+                        }
+                      ],
+                      "text": ": the free floor is {free_area:area} m²"
+                    },
+                    {
+                      "name": "area_note",
+                      "text": "; the free floor is {free_area:area} m²"
+                    },
+                    {
+                      "name": "possible_note",
+                      "when": [
+                        {
+                          "kind": "empty",
+                          "field": "possible_obstacles"
+                        }
+                      ],
+                      "text": ""
+                    },
+                    {
+                      "name": "possible_note",
+                      "when": [
+                        {
+                          "kind": "null",
+                          "field": "largest"
+                        },
+                        {
+                          "kind": "null",
+                          "field": "largest_width"
+                        },
+                        {
+                          "kind": "field",
+                          "field": "unreached",
+                          "value": false
+                        },
+                        {
+                          "kind": "null",
+                          "field": "free_area"
+                        }
+                      ],
+                      "text": ": perhaps also taken by {possible_obstacles}"
+                    },
+                    {
+                      "name": "possible_note",
+                      "text": "; perhaps also taken by {possible_obstacles}"
                     }
                   ]
                 },
@@ -102968,11 +103164,11 @@
           "help": [
             {
               "language": "en",
-              "text": "The spaces searched with the space and its entrances."
+              "text": "The spaces searched with the space, its entrances and, for a proven absence, the obstacles surely taking its floor."
             },
             {
               "language": "de",
-              "text": "Die mit dem Raum durchsuchten Räume und seine Zugänge."
+              "text": "Die mit dem Raum durchsuchten Räume, seine Zugänge und, wo das Fehlen nachgewiesen ist, die Hindernisse, die sicher Boden belegen."
             }
           ]
         },
@@ -102999,6 +103195,247 @@
             {
               "language": "de",
               "text": "Ob die Form, die nachweislich von keinem Zugang erreicht wird, dort passt, wo kein Weg sie erreicht."
+            }
+          ]
+        },
+        {
+          "name": "obstacles",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Obstacles"
+            },
+            {
+              "language": "de",
+              "text": "Hindernisse"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "For a proven absence, the surely selected obstacles and swept doors whose footprint in the band surely shares area with the floor; empty otherwise."
+            },
+            {
+              "language": "de",
+              "text": "Bei nachgewiesenem Fehlen die sicher ausgewählten Hindernisse und Türaufschläge, deren Grundriss im Band sicher Fläche mit dem Boden teilt; sonst leer."
+            }
+          ]
+        },
+        {
+          "name": "possible_obstacles",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Possible obstacles"
+            },
+            {
+              "language": "de",
+              "text": "Mögliche Hindernisse"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "For a proven absence, the obstacles and swept doors that may take floor: their footprint or their selection is undecided."
+            },
+            {
+              "language": "de",
+              "text": "Bei nachgewiesenem Fehlen die Hindernisse und Türaufschläge, die Boden belegen können: ihr Grundriss oder ihre Auswahl ist unentschieden."
+            }
+          ]
+        },
+        {
+          "name": "largest",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Largest free circle"
+            },
+            {
+              "language": "de",
+              "text": "Größter freier Kreis"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "For a circle proven absent, the diameter of the largest circle the search places, bracketed between a placed one and one proven absent; null otherwise, or where nothing narrowed it."
+            },
+            {
+              "language": "de",
+              "text": "Bei nachgewiesenem Fehlen eines Kreises der Durchmesser des größten Kreises, den die Suche platziert, eingeschlossen zwischen einem platzierten und einem nachweislich fehlenden; sonst null, oder wo nichts ihn eingrenzte."
+            }
+          ]
+        },
+        {
+          "name": "largest_width",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Largest free width"
+            },
+            {
+              "language": "de",
+              "text": "Größte freie Breite"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "For a rectangle proven absent, the width of the largest rectangle of its proportions the search places, bracketed as `largest`."
+            },
+            {
+              "language": "de",
+              "text": "Bei nachgewiesenem Fehlen eines Rechtecks die Breite des größten Rechtecks seiner Proportionen, das die Suche platziert, eingeschlossen wie `largest`."
+            }
+          ]
+        },
+        {
+          "name": "largest_length",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Largest free length"
+            },
+            {
+              "language": "de",
+              "text": "Größte freie Länge"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "For a rectangle proven absent, the length of that largest rectangle."
+            },
+            {
+              "language": "de",
+              "text": "Bei nachgewiesenem Fehlen eines Rechtecks die Länge dieses größten Rechtecks."
+            }
+          ]
+        },
+        {
+          "name": "centre_x",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Centre x"
+            },
+            {
+              "language": "de",
+              "text": "Mittelpunkt x"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The placed largest shape's centre, east, in model coordinates; null where none was placed."
+            },
+            {
+              "language": "de",
+              "text": "Der Mittelpunkt der platzierten größten Form, Ost, in Modellkoordinaten; null, wo keine platziert wurde."
+            }
+          ]
+        },
+        {
+          "name": "centre_y",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Centre y"
+            },
+            {
+              "language": "de",
+              "text": "Mittelpunkt y"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The placed largest shape's centre, north, in model coordinates."
+            },
+            {
+              "language": "de",
+              "text": "Der Mittelpunkt der platzierten größten Form, Nord, in Modellkoordinaten."
+            }
+          ]
+        },
+        {
+          "name": "centre_z",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Centre z"
+            },
+            {
+              "language": "de",
+              "text": "Mittelpunkt z"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The placed largest shape's base, the floor's elevation."
+            },
+            {
+              "language": "de",
+              "text": "Die Basis der platzierten größten Form, die Höhe des Bodens."
+            }
+          ]
+        },
+        {
+          "name": "free_area",
+          "kind": {
+            "type": "number",
+            "dimension": "area"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Free floor area"
+            },
+            {
+              "language": "de",
+              "text": "Freie Bodenfläche"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "For a proven absence, the area of floor no obstacle or swing takes within the band, bracketed from below by everything that may take floor and from above by what surely does."
+            },
+            {
+              "language": "de",
+              "text": "Bei nachgewiesenem Fehlen die Bodenfläche, die kein Hindernis und kein Aufschlag im Band belegt, von unten durch alles eingeschlossen, was Boden belegen kann, von oben durch das, was ihn sicher belegt."
             }
           ]
         }

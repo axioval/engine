@@ -7,11 +7,12 @@ use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex};
 
 use axioval_engine::{
-    CapabilityEvaluation, ClearanceOutcome, ClearancePlacementEvidence, ClearanceRequest,
-    CompiledRule, CompletePlacementEvidence, CompleteSupportEvidence, ElevationBand,
-    FreeAreaEvidence, FreeAreaRequest, FreeSpaceError, FreeSpaceService, FreeSpaceServiceHandle,
-    MetricDirection, MetricFrame, MetricPoint, NotEvaluatedReason, PlacementDomain,
-    PlacementOutcome, PlacementRequest, RuleCapability, SweptDoor,
+    AreaInterval, CapabilityEvaluation, ClearanceOutcome, ClearancePlacementEvidence,
+    ClearanceRequest, CompiledRule, CompletePlacementEvidence, CompleteSupportEvidence,
+    ElevationBand, FreeAreaEvidence, FreeAreaRequest, FreeFloorEvidence, FreeSpaceError,
+    FreeSpaceService, FreeSpaceServiceHandle, MetricDirection, MetricFrame, MetricPoint,
+    NotEvaluatedReason, PlacementDomain, PlacementOutcome, PlacementRequest, RuleCapability,
+    SweptDoor,
 };
 use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector};
 use axioval_ir::{Evidence, ObjectId};
@@ -32,6 +33,26 @@ impl FreeSpaceService for Scripted {
     }
     fn measure_free_area(&self, _: &FreeAreaRequest) -> Result<FreeAreaEvidence, FreeSpaceError> {
         Err(FreeSpaceError::Unavailable("unused".into()))
+    }
+    /// A blocking obstacle or swept door takes the floor, 4 m² of it free.
+    fn measure_free_floor(
+        &self,
+        request: &PlacementRequest,
+    ) -> Result<FreeFloorEvidence, FreeSpaceError> {
+        let taking = request
+            .obstacles()
+            .iter()
+            .chain(request.swept_doors().iter().map(SweptDoor::door))
+            .filter(|obstacle| self.blocking.contains(*obstacle))
+            .cloned()
+            .collect();
+        FreeFloorEvidence::try_new(
+            request.clone(),
+            AreaInterval::exact(4.0)?,
+            taking,
+            Vec::new(),
+            Evidence::exact(source(), "floor"),
+        )
     }
     fn find_placement(
         &self,
@@ -173,10 +194,14 @@ fn an_obstacle_selection_chooses_the_obstacles() {
     let (evaluation, requests) = run(model(), &FreeFloorCircle, &rule, &["cabinet"]);
     assert_eq!(requests[0].obstacles(), &ids(&["cabinet", "crate"])[..]);
     assert_eq!(evaluation.findings().len(), 1);
+    // The cabinet takes the whole floor: no circle of 3 mm is placed, and
+    // the cabinet is related as the obstacle (#391).
     assert_eq!(
         evaluation.findings()[0].message,
-        "NO_FREE_FLOOR_SPACE_FOR_CIRCLE"
+        "NO_FREE_FLOOR_SPACE_FOR_CIRCLE: the largest free circle is between 0 m and 0.003 m \
+         across; required 1.5 m; the free floor is 4 m²"
     );
+    assert_eq!(evaluation.findings()[0].related, ids(&["cabinet"]));
     // The wall blocks, but is not selected.
     let (evaluation, _) = run(model(), &FreeFloorCircle, &rule, &["wall"]);
     assert!(evaluation.findings().is_empty());
@@ -309,7 +334,8 @@ fn merged_spaces_are_searched_together() {
     );
     assert_eq!(requests[0].domain(), &PlacementDomain::Unconstrained);
     let finding = &evaluation.findings()[0];
-    assert_eq!(finding.related, ids(&["alcove"]));
+    // The wall takes the floor of the spaces searched together (#391).
+    assert_eq!(finding.related, ids(&["alcove", "wall"]));
     assert!(
         finding
             .evidence
@@ -370,7 +396,9 @@ fn the_rectangle_takes_the_same_options() {
     );
     assert_eq!(
         evaluation.findings()[0].message,
-        "NO_FREE_FLOOR_SPACE_FOR_RECTANGLE"
+        "NO_FREE_FLOOR_SPACE_FOR_RECTANGLE: the largest free rectangle of its proportions is \
+         between 0 m and 0.004 m by between 0 m and 0.003333 m; required 1.8 m by 1.5 m; the \
+         free floor is 4 m²"
     );
 }
 
@@ -475,7 +503,7 @@ fn the_shape_must_be_reached_from_the_entrances() {
     assert_eq!(
         evaluation.findings()[0].message,
         "NO_FREE_FLOOR_SPACE_FOR_CIRCLE: the shape fits only where no path 1.2 m wide from an \
-         entrance reaches it"
+         entrance reaches it; the free floor is 4 m²"
     );
     assert_eq!(evaluation.findings()[0].related, ids(&["door"]));
     // The last search asked without the path.

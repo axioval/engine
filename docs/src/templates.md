@@ -1932,6 +1932,19 @@ reaches it`, relating the merged spaces and the entrances (`related`) and
 citing the proof. `free_placements`, the count of placements an expression
 reads, lists the same answer.
 
+A proven absence also measures the floor (#391, `free_floor/measure.rs`):
+the obstacles surely taking it join `related` (`obstacles`), those that may
+are `possible_obstacles`, the free floor's bracketed area is `free_area`,
+and two bisections bracket the largest shape of the declared proportions
+(`largest` for a circle, `largest_width` and `largest_length` for a
+rectangle, `null` where nothing narrowed or the shape fits unreached) with
+the placed one's centre (`centre_x`, `centre_y`, `centre_z`, model
+coordinates). The template words them in named texts after the code
+(`largest_note`, `area_note`, `possible_note`), each empty where its field
+is `null` or empty, the first separated by `: ` and the others by `; `.
+The parity reference words them alike (`measure::words`), and every
+fixture holds the template to it.
+
 ### `space-distance`
 
 One form, judged by one check over the measured list

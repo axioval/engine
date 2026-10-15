@@ -776,7 +776,12 @@ impl DerivedRelationshipServiceHandle {
     ) -> Result<CompleteRelationshipSelection, RelationshipSelectionError> {
         let derivation = Derivation::parse(request.query().relationship())?
             .ok_or(RelationshipSelectionError::InvalidRequest)?;
-        let selection = validate_selection(request, self.0.derive(&derivation, request)?)?;
+        let selection = validate_selection(
+            request,
+            crate::timing::host("derived-relationships", || {
+                self.0.derive(&derivation, request)
+            })?,
+        )?;
         let name = derivation.name();
         if selection
             .evidence()

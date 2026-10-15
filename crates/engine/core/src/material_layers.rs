@@ -219,7 +219,7 @@ impl MaterialLayerServiceHandle {
         {
             return Err(MaterialLayerError::UncoveredSource(object.source.clone()));
         }
-        let layers = self.0.material_layers(object)?;
+        let layers = crate::timing::host("material-layers", || self.0.material_layers(object))?;
         if layers.object() != object {
             return Err(MaterialLayerError::ResponseRequestMismatch);
         }

@@ -1409,7 +1409,7 @@ impl MetricRoutingServiceHandle {
                 "this backend does not walk up to objects".into(),
             ));
         }
-        let outcome = self.0.route(request)?;
+        let outcome = crate::timing::host("metric-routing", || self.0.route(request))?;
         if let MetricRouteOutcome::Reachable(route) = &outcome {
             let (Some(first), Some(last)) = (route.waypoints.first(), route.waypoints.last())
             else {
@@ -1443,7 +1443,7 @@ impl MetricRoutingServiceHandle {
         }
         self.weighing(request.costs())?;
         self.climbing(request.connectors())?;
-        let outcome = self.0.nearest_target(request)?;
+        let outcome = crate::timing::host("metric-routing", || self.0.nearest_target(request))?;
         match &outcome {
             NearestTargetOutcome::Reached(reached) => {
                 let target = request
@@ -1478,7 +1478,7 @@ impl MetricRoutingServiceHandle {
     ) -> Result<FarthestPointOutcome, MetricRoutingError> {
         self.weighing(request.costs())?;
         self.climbing(request.connectors())?;
-        let outcome = self.0.farthest_point(request)?;
+        let outcome = crate::timing::host("metric-routing", || self.0.farthest_point(request))?;
         match &outcome {
             FarthestPointOutcome::Bounded(bounded) => {
                 if bounded.witness().subject() != request.region() {
@@ -1528,7 +1528,7 @@ impl MetricRoutingServiceHandle {
             ));
         }
         self.climbing(request.connectors())?;
-        let outcome = self.0.forced_walk(request)?;
+        let outcome = crate::timing::host("metric-routing", || self.0.forced_walk(request))?;
         match &outcome {
             ForcedWalkOutcome::Bounded(bounded) => {
                 if bounded.converged()
@@ -1561,7 +1561,7 @@ impl MetricRoutingServiceHandle {
     /// one length per requested object, none surely longer than the
     /// polyline itself.
     pub fn trace_path(&self, request: &PathTraceRequest) -> Result<PathTrace, MetricRoutingError> {
-        let trace = self.0.trace_path(request)?;
+        let trace = crate::timing::host("metric-routing", || self.0.trace_path(request))?;
         if trace.lengths().len() != request.objects().len() {
             return Err(MetricRoutingError::InconsistentResponse);
         }

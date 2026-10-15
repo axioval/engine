@@ -160,7 +160,11 @@ them: the decided selection size (`checked`), the objects with findings
 `not_evaluated`, `nothing_selected`, or `skipped` for a rule whose gate on another
 rule's outcome was closed). An auxiliary rule (see
 [Auxiliary rules](./gates.md#auxiliary-rules)) has none. See [Rule status](./refinement.md#rule-status).
-The field is omitted when empty.
+The field is omitted when empty. A summary may carry a `timing`
+(`RuleTiming`: wall time, time in host services and a `ServiceTiming` per
+service) when the host asked for rule timings; it is absent otherwise and
+ignored by equality and ordering, since timings are diagnostics, never
+results. See [Rule timings](./refinement.md#rule-timings).
 
 ### Tables
 

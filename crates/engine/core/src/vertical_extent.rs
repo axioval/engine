@@ -992,7 +992,8 @@ impl VerticalExtentServiceHandle {
         &self,
         object: &ObjectId,
     ) -> Result<VerticalExtent, VerticalExtentError> {
-        let extent = self.0.measure_vertical_extent(object)?;
+        let extent =
+            crate::timing::host("vertical-extent", || self.0.measure_vertical_extent(object))?;
         if extent.object() != object {
             return Err(VerticalExtentError::InvalidMeasurement);
         }
@@ -1007,7 +1008,9 @@ impl VerticalExtentServiceHandle {
         object: &ObjectId,
         direction: MetricDirection,
     ) -> Result<DirectionalExtent, VerticalExtentError> {
-        let extent = self.0.measure_directional_extent(object, direction)?;
+        let extent = crate::timing::host("vertical-extent", || {
+            self.0.measure_directional_extent(object, direction)
+        })?;
         if extent.object() != object || extent.direction() != direction {
             return Err(VerticalExtentError::InvalidMeasurement);
         }
@@ -1021,7 +1024,9 @@ impl VerticalExtentServiceHandle {
         object: &ObjectId,
         direction: MetricDirection,
     ) -> Result<Thickness, VerticalExtentError> {
-        let thickness = self.0.measure_thickness(object, direction)?;
+        let thickness = crate::timing::host("vertical-extent", || {
+            self.0.measure_thickness(object, direction)
+        })?;
         if thickness.object() != object || thickness.direction() != direction {
             return Err(VerticalExtentError::InvalidMeasurement);
         }
@@ -1035,7 +1040,9 @@ impl VerticalExtentServiceHandle {
         object: &ObjectId,
         face: SurfaceFace,
     ) -> Result<FaceNormals, VerticalExtentError> {
-        let normals = self.0.measure_face_normals(object, face)?;
+        let normals = crate::timing::host("vertical-extent", || {
+            self.0.measure_face_normals(object, face)
+        })?;
         if normals.object() != object || normals.face() != face {
             return Err(VerticalExtentError::InvalidMeasurement);
         }
@@ -1049,7 +1056,9 @@ impl VerticalExtentServiceHandle {
         object: &ObjectId,
         set: FacePieceSet,
     ) -> Result<FacePieces, VerticalExtentError> {
-        let pieces = self.0.measure_face_pieces(object, set)?;
+        let pieces = crate::timing::host("vertical-extent", || {
+            self.0.measure_face_pieces(object, set)
+        })?;
         if pieces.object() != object || pieces.set() != set {
             return Err(VerticalExtentError::InvalidMeasurement);
         }
@@ -1059,7 +1068,7 @@ impl VerticalExtentServiceHandle {
     /// The edges of `object`'s boundary. Edges naming another object
     /// answer a different question and are refused.
     pub fn measure_face_edges(&self, object: &ObjectId) -> Result<FaceEdges, VerticalExtentError> {
-        let edges = self.0.measure_face_edges(object)?;
+        let edges = crate::timing::host("vertical-extent", || self.0.measure_face_edges(object))?;
         if edges.object() != object {
             return Err(VerticalExtentError::InvalidMeasurement);
         }

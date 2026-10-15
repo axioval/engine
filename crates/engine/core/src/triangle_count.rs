@@ -108,7 +108,7 @@ impl TriangleCountServiceHandle {
     /// The triangle count of `object`. A count naming another object is
     /// refused.
     pub fn count_triangles(&self, object: &ObjectId) -> Result<TriangleCount, TriangleCountError> {
-        let count = self.0.count_triangles(object)?;
+        let count = crate::timing::host("triangle-count", || self.0.count_triangles(object))?;
         if count.object() != object {
             return Err(TriangleCountError::InvalidMeasurement);
         }

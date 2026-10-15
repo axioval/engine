@@ -877,7 +877,7 @@ impl WalkabilityServiceHandle {
         &self,
         request: &WalkabilityRequest,
     ) -> Result<WalkabilitySnapshot, WalkabilityError> {
-        let snapshot = self.0.snapshot(request)?;
+        let snapshot = crate::timing::host("walkability", || self.0.snapshot(request))?;
         if snapshot.request() != request {
             return Err(WalkabilityError::ResponseRequestMismatch);
         }

@@ -194,7 +194,7 @@ impl LeafGlazingServiceHandle {
         {
             return Err(LeafGlazingError::UncoveredSource(door.source.clone()));
         }
-        let glazing = self.0.measure_leaf_glazing(leaves)?;
+        let glazing = crate::timing::host("leaf-glazing", || self.0.measure_leaf_glazing(leaves))?;
         if glazing.door() != door {
             return Err(LeafGlazingError::ResponseRequestMismatch);
         }

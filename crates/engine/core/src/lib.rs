@@ -1093,6 +1093,7 @@ mod station_profile;
 mod table_files;
 pub mod template;
 mod terrain;
+mod timing;
 mod topology;
 mod triangle_count;
 mod values;
@@ -1450,6 +1451,7 @@ pub struct Runtime {
     services: ServiceRegistry,
     locations: Option<LocationPolicy>,
     summaries: bool,
+    timings: bool,
     evaluation_budget: u64,
     observer: Option<RuleObserver>,
     terrain: Option<TerrainServiceHandle>,
@@ -1462,6 +1464,7 @@ impl Runtime {
             services: ServiceRegistry::new(),
             locations: None,
             summaries: false,
+            timings: false,
             evaluation_budget: expression::DEFAULT_EVALUATION_BUDGET,
             observer: None,
             terrain: None,
@@ -1498,6 +1501,23 @@ impl Runtime {
     #[must_use]
     pub fn with_rule_summaries(mut self) -> Self {
         self.summaries = true;
+        self
+    }
+    /// Reports how long each rule took: every rule summary that ran carries
+    /// a [`RuleTiming`](axioval_ir::RuleTiming), the wall time spent
+    /// evaluating the rule and the part of it spent in the host services it
+    /// called (geometry measurement, proximity, routes and the like), per
+    /// service. The object count is the summary's `checked`. Implies
+    /// [`Self::with_rule_summaries`]; a rule its gate skipped is timed too,
+    /// one the plan deferred is not.
+    ///
+    /// Timings are diagnostics: they vary between machines and runs, never
+    /// change a finding, and summaries compare equal with or without them.
+    /// Off by default, and then the engine reads no clock.
+    #[must_use]
+    pub fn with_rule_timings(mut self) -> Self {
+        self.summaries = true;
+        self.timings = true;
         self
     }
     /// Locates every finding and not-evaluated outcome by storey and space
@@ -1809,6 +1829,7 @@ impl Runtime {
             let reported = !plan.auxiliary.contains(&rule_id);
             // A rule reads the outcomes of the rules the plan ran before it.
             services.replace(outcomes.clone());
+            let clock = self.timings.then(timing::RuleClock::start);
             let context = RuleContext {
                 project,
                 services: &services,
@@ -1818,7 +1839,7 @@ impl Runtime {
                 rule_outcomes::Gate::Closed => {
                     outcomes.insert(rule_id.clone(), RuleRecord::skipped());
                     if self.summaries && reported {
-                        summaries.push(RuleSummary::skipped(rule_id));
+                        summaries.push(timed(RuleSummary::skipped(rule_id), clock));
                     }
                     continue;
                 }
@@ -1840,17 +1861,20 @@ impl Runtime {
                     evaluation
                 }
             };
+            // The time is the rule's own: counting its selection for the
+            // summary below is the host's diagnostic, not the rule's work.
+            let timing = clock.map(timing::RuleClock::finish);
             if !reported {
                 continue;
             }
             if let Some(refiner) = refiner
                 && self.summaries
             {
-                summaries.push(summarize(
-                    &rule_id,
-                    refiner.selected(&context, &rule),
-                    &evaluation,
-                ));
+                let summary = summarize(&rule_id, refiner.selected(&context, &rule), &evaluation);
+                summaries.push(match timing {
+                    Some(timing) => summary.with_timing(timing),
+                    None => summary,
+                });
             }
             findings.extend(std::mem::take(&mut evaluation.findings));
             // The compiled rule is the table's identity, whatever the capability named.
@@ -1865,6 +1889,14 @@ impl Runtime {
             assemble(findings, not_evaluated, tables, summaries, &services)?,
             outcomes,
         ))
+    }
+}
+
+/// `summary` with the time its clock measured, if one ran.
+fn timed(summary: RuleSummary, clock: Option<timing::RuleClock>) -> RuleSummary {
+    match clock {
+        Some(clock) => summary.with_timing(clock.finish()),
+        None => summary,
     }
 }
 

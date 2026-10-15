@@ -302,7 +302,9 @@ impl LinearQuantityServiceHandle {
         &self,
         request: &LinearQuantityRequest,
     ) -> Result<LinearQuantityEvidence, LinearQuantityError> {
-        self.0.measure_linear_quantity(request)
+        crate::timing::host("linear-quantity", || {
+            self.0.measure_linear_quantity(request)
+        })
     }
 }
 

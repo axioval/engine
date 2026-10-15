@@ -373,7 +373,7 @@ impl FacadeAreaServiceHandle {
     /// The facade area of `object`. An area naming another object answers a
     /// different question and is refused.
     pub fn measure_facade_area(&self, object: &ObjectId) -> Result<FacadeArea, FacadeAreaError> {
-        let area = self.0.measure_facade_area(object)?;
+        let area = crate::timing::host("facade-area", || self.0.measure_facade_area(object))?;
         if area.object() != object {
             return Err(FacadeAreaError::InvalidMeasurement);
         }
@@ -383,7 +383,7 @@ impl FacadeAreaServiceHandle {
     /// The area of `object`'s largest plane face. An area naming another
     /// object answers a different question and is refused.
     pub fn measure_face_area(&self, object: &ObjectId) -> Result<FacadeArea, FacadeAreaError> {
-        let area = self.0.measure_face_area(object)?;
+        let area = crate::timing::host("facade-area", || self.0.measure_face_area(object))?;
         if area.object() != object {
             return Err(FacadeAreaError::InvalidMeasurement);
         }
@@ -393,7 +393,7 @@ impl FacadeAreaServiceHandle {
     /// Every face of `object` that looks outside. Faces naming another
     /// object answer a different question and are refused.
     pub fn measure_facade_faces(&self, object: &ObjectId) -> Result<FacadeFaces, FacadeAreaError> {
-        let faces = self.0.measure_facade_faces(object)?;
+        let faces = crate::timing::host("facade-area", || self.0.measure_facade_faces(object))?;
         if faces.object() != object {
             return Err(FacadeAreaError::InvalidMeasurement);
         }
@@ -406,7 +406,8 @@ impl FacadeAreaServiceHandle {
         &self,
         objects: &[ObjectId],
     ) -> Result<EnclosedVolume, FacadeAreaError> {
-        let volume = self.0.measure_enclosed_volume(objects)?;
+        let volume =
+            crate::timing::host("facade-area", || self.0.measure_enclosed_volume(objects))?;
         let mut asked = objects.to_vec();
         asked.sort();
         asked.dedup();

@@ -383,7 +383,7 @@ impl GuardServiceHandle {
         Self(service)
     }
     pub fn measure_guard_edges(&self, search: GuardSearch) -> Result<GuardEvidence, GuardError> {
-        self.0.measure_guard_edges(search)
+        crate::timing::host("guard", || self.0.measure_guard_edges(search))
     }
 }
 

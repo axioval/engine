@@ -1221,7 +1221,7 @@ impl FreeSpaceServiceHandle {
         &self,
         request: &ClearanceRequest,
     ) -> Result<ClearanceOutcome, FreeSpaceError> {
-        let outcome = self.0.assess_clearance(request)?;
+        let outcome = crate::timing::host("free-space", || self.0.assess_clearance(request))?;
         let actual = match &outcome {
             ClearanceOutcome::Clear(value) => value.request(),
             ClearanceOutcome::Obstructed(value) => value.request(),
@@ -1235,7 +1235,7 @@ impl FreeSpaceServiceHandle {
         &self,
         request: &PlacementRequest,
     ) -> Result<PlacementOutcome, FreeSpaceError> {
-        let outcome = self.0.find_placement(request)?;
+        let outcome = crate::timing::host("free-space", || self.0.find_placement(request))?;
         let actual = match &outcome {
             PlacementOutcome::Found(value) => value.request(),
             PlacementOutcome::NoPlacement(value) => value.request(),
@@ -1249,7 +1249,7 @@ impl FreeSpaceServiceHandle {
         &self,
         request: &FreeAreaRequest,
     ) -> Result<FreeAreaEvidence, FreeSpaceError> {
-        let evidence = self.0.measure_free_area(request)?;
+        let evidence = crate::timing::host("free-space", || self.0.measure_free_area(request))?;
         if evidence.request() != request {
             return Err(FreeSpaceError::ResponseRequestMismatch);
         }
@@ -1259,7 +1259,7 @@ impl FreeSpaceServiceHandle {
         &self,
         request: &ContainmentRequest,
     ) -> Result<ContainmentOutcome, FreeSpaceError> {
-        let outcome = self.0.assess_containment(request)?;
+        let outcome = crate::timing::host("free-space", || self.0.assess_containment(request))?;
         let actual = match &outcome {
             ContainmentOutcome::Inside(value) | ContainmentOutcome::Outside(value) => {
                 value.request()
@@ -1283,7 +1283,8 @@ impl FreeSpaceServiceHandle {
         &self,
         request: &SupportCoverageRequest,
     ) -> Result<SupportCoverageOutcome, FreeSpaceError> {
-        let outcome = self.0.assess_support_coverage(request)?;
+        let outcome =
+            crate::timing::host("free-space", || self.0.assess_support_coverage(request))?;
         let actual = match &outcome {
             SupportCoverageOutcome::Supported(value)
             | SupportCoverageOutcome::Unsupported(value) => value.request(),
@@ -1304,7 +1305,7 @@ impl FreeSpaceServiceHandle {
         &self,
         request: &CirculationRequest,
     ) -> Result<CirculationMap, FreeSpaceError> {
-        let map = self.0.map_circulation(request)?;
+        let map = crate::timing::host("free-space", || self.0.map_circulation(request))?;
         if map.request() != request {
             return Err(FreeSpaceError::ResponseRequestMismatch);
         }

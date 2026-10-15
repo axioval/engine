@@ -647,7 +647,8 @@ impl PlanAreaServiceHandle {
         &self,
         object: &ObjectId,
     ) -> Result<FootprintPerimeter, PlanAreaError> {
-        let perimeter = self.0.measure_footprint_perimeter(object)?;
+        let perimeter =
+            crate::timing::host("plan-area", || self.0.measure_footprint_perimeter(object))?;
         if perimeter.object() != object {
             return Err(PlanAreaError::InvalidMeasurement);
         }
@@ -669,7 +670,8 @@ impl PlanAreaServiceHandle {
                 "an outline needs at least one object".into(),
             ));
         }
-        let outline = self.0.measure_footprint_outline(&objects)?;
+        let outline =
+            crate::timing::host("plan-area", || self.0.measure_footprint_outline(&objects))?;
         if outline.objects() != objects.as_slice() {
             return Err(PlanAreaError::InvalidMeasurement);
         }
@@ -678,7 +680,7 @@ impl PlanAreaServiceHandle {
 
     /// The footprint area of `object`.
     pub fn measure_footprint(&self, object: &ObjectId) -> Result<PlanArea, PlanAreaError> {
-        self.0.measure_footprint(object)
+        crate::timing::host("plan-area", || self.0.measure_footprint(object))
     }
 
     /// The overlap of two footprints, never larger than either footprint's
@@ -688,7 +690,7 @@ impl PlanAreaServiceHandle {
         first: &ObjectId,
         second: &ObjectId,
     ) -> Result<PlanArea, PlanAreaError> {
-        self.0.measure_plan_overlap(first, second)
+        crate::timing::host("plan-area", || self.0.measure_plan_overlap(first, second))
     }
 
     /// The area of `object`'s footprint that the footprints of `cover`, grown
@@ -716,7 +718,9 @@ impl PlanAreaServiceHandle {
         let mut cover = cover.to_vec();
         cover.sort();
         cover.dedup();
-        self.0.measure_uncovered_area(object, &cover, growth_metres)
+        crate::timing::host("plan-area", || {
+            self.0.measure_uncovered_area(object, &cover, growth_metres)
+        })
     }
 
     /// The area of `object`'s footprint outside the union of `bands`.
@@ -747,7 +751,7 @@ impl PlanAreaServiceHandle {
                 ))
         });
         bands.dedup();
-        self.0.measure_outside_bands(object, &bands)
+        crate::timing::host("plan-area", || self.0.measure_outside_bands(object, &bands))
     }
 
     /// How much of the request's subject footprint its sources cover.
@@ -758,7 +762,7 @@ impl PlanAreaServiceHandle {
         &self,
         request: &CoverageRequest,
     ) -> Result<CoverageEvidence, PlanAreaError> {
-        let answer = self.0.measure_coverage(request)?;
+        let answer = crate::timing::host("plan-area", || self.0.measure_coverage(request))?;
         check_answer(request, &answer)?;
         Ok(answer)
     }
@@ -770,7 +774,7 @@ impl PlanAreaServiceHandle {
         &self,
         request: &ElevationRequest,
     ) -> Result<ElevationCover, PlanAreaError> {
-        let answer = self.0.measure_elevation_cover(request)?;
+        let answer = crate::timing::host("plan-area", || self.0.measure_elevation_cover(request))?;
         if answer.object() != request.object() {
             return Err(PlanAreaError::InvalidMeasurement);
         }
@@ -781,7 +785,7 @@ impl PlanAreaServiceHandle {
     ///
     /// An answer about other objects is refused.
     pub fn measure_zone_area(&self, request: &ZoneAreaRequest) -> Result<ZoneArea, PlanAreaError> {
-        let answer = self.0.measure_zone_area(request)?;
+        let answer = crate::timing::host("plan-area", || self.0.measure_zone_area(request))?;
         if answer.objects() != request.objects() {
             return Err(PlanAreaError::InvalidMeasurement);
         }
@@ -793,7 +797,7 @@ impl PlanAreaServiceHandle {
     /// An answer about another wall, without a part asked for, with a
     /// part not asked for, or naming a wall not compared, is refused.
     pub fn measure_setback(&self, request: &SetbackRequest) -> Result<SetbackArea, PlanAreaError> {
-        let answer = self.0.measure_setback(request)?;
+        let answer = crate::timing::host("plan-area", || self.0.measure_setback(request))?;
         if !crate::setback::answers(request, &answer) {
             return Err(PlanAreaError::InvalidMeasurement);
         }

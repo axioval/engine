@@ -761,6 +761,7 @@ mod rule_summaries {
             failed,
             not_evaluated: open,
             status,
+            timing: None,
         }
     }
 
@@ -791,5 +792,109 @@ mod rule_summaries {
         assert!(report.rules().is_empty());
         let json = serde_json::to_string(&report).unwrap();
         assert!(!json.contains("\"rules\""), "{json}");
+    }
+}
+
+mod rule_timings {
+    use super::*;
+    use axioval_engine::Runtime;
+
+    const CLASH: &str = "axioval:capability.clash";
+
+    /// Two ducts, each through a wall, measured by the host's proximity
+    /// service.
+    fn ducts() -> EvidenceSession {
+        let model = Model::default()
+            .object("d1", "duct")
+            .object("d2", "duct")
+            .object("w1", "wall")
+            .object("w2", "wall");
+        let boxes = Boxes(BTreeMap::from([
+            (id("d1"), 0.0),
+            (id("w1"), 0.5),
+            (id("d2"), 5.0),
+            (id("w2"), 5.5),
+        ]));
+        session(model)
+            .with_host_service(ProximityServiceHandle::new(Arc::new(boxes)), &[snapshot()])
+            .unwrap()
+    }
+
+    fn check(configure: impl FnOnce(Runtime) -> Runtime) -> Report {
+        let registry = registry();
+        let definitions = definitions(&registry, &[CLASH], &["duct", "wall"], &[], &[]);
+        let rule = rule(
+            "ducts-through-walls",
+            CLASH,
+            "warning",
+            entity("duct"),
+            json!({ "counterparts": { "type": "selector", "value": entity("wall") },
+                "penetration_tolerance_metres": { "type": "number", "value": 0.01 } }),
+            json!({}),
+        );
+        let plan = plan(&registry, &definitions, vec![rule]).unwrap();
+        let session = ducts();
+        let mut report = run(registry, plan, &session, configure).unwrap();
+        report
+            .identify_findings(session.project(), "axioval:test")
+            .unwrap();
+        report
+    }
+
+    #[test]
+    fn without_timings_no_summary_carries_one() {
+        let report = check(Runtime::with_rule_summaries);
+        assert!(!report.rules().is_empty());
+        assert!(report.rules().iter().all(|rule| rule.timing.is_none()));
+        let json = serde_json::to_string(&report).unwrap();
+        assert!(!json.contains("timing"), "{json}");
+    }
+
+    #[test]
+    fn each_rule_carries_its_wall_time_and_the_host_services_it_called() {
+        let report = check(Runtime::with_rule_timings);
+        let [summary] = report.rules() else {
+            panic!("{:?}", report.rules());
+        };
+        assert_eq!(summary.checked, 2);
+        let timing = summary.timing.as_ref().expect("a timed rule");
+        assert!(timing.host_seconds <= timing.wall_seconds, "{timing:?}");
+        let [proximity] = timing.services.as_slice() else {
+            panic!("{timing:?}");
+        };
+        assert_eq!(proximity.service, "proximity");
+        assert!(proximity.calls > 0, "{timing:?}");
+        let json = serde_json::to_value(&report).unwrap();
+        assert!(
+            json["rules"][0]["timing"]["wall_seconds"].is_f64(),
+            "{json:#}"
+        );
+    }
+
+    #[test]
+    fn timings_never_change_the_report_or_its_identities() {
+        let plain = check(Runtime::with_rule_summaries);
+        let timed = check(Runtime::with_rule_timings);
+        assert_eq!(timed, plain);
+        let ids = |report: &Report| -> Vec<_> {
+            report.findings().iter().map(|finding| finding.id).collect()
+        };
+        assert!(!plain.findings().is_empty());
+        assert!(ids(&plain).iter().all(Option::is_some));
+        assert_eq!(ids(&timed), ids(&plain));
+        // Without its timings, the report serializes byte for byte as one
+        // run without them.
+        let mut stripped = timed.clone();
+        for rule in &mut stripped.rules {
+            rule.timing = None;
+        }
+        assert_eq!(
+            serde_json::to_string(&stripped).unwrap(),
+            serde_json::to_string(&plain).unwrap()
+        );
+        // A saved report with timings reads back with them.
+        let read: Report = serde_json::from_str(&serde_json::to_string(&timed).unwrap()).unwrap();
+        assert_eq!(read, timed);
+        assert_eq!(read.rules()[0].timing, timed.rules()[0].timing);
     }
 }

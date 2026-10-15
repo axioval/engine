@@ -179,7 +179,7 @@ impl ObjectFrameServiceHandle {
         {
             return Err(ObjectFrameError::UncoveredSource(object.source.clone()));
         }
-        let frame = self.0.object_frame(object)?;
+        let frame = crate::timing::host("object-frame", || self.0.object_frame(object))?;
         if frame.object() != object {
             return Err(ObjectFrameError::ResponseRequestMismatch);
         }
@@ -197,7 +197,7 @@ impl ObjectFrameServiceHandle {
         {
             return Err(DoorLeavesError::UncoveredSource(door.source.clone()));
         }
-        let leaves = match self.0.leaves(door) {
+        let leaves = match crate::timing::host("object-frame", || self.0.leaves(door)) {
             Err(DoorLeavesError::Unplaced(leaf)) if leaf.door() != door => {
                 return Err(DoorLeavesError::ResponseRequestMismatch);
             }

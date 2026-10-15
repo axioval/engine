@@ -199,3 +199,42 @@ Counting a selection evaluates the selector, so it needs the outcome refiner
 (`OutcomeRefiner::selected`); without one the run fails. Without the option
 `rules` is empty and omitted, so reports serialize as before. Rule status
 never changes a finding or the CLI's exit status.
+
+### Rule timings
+
+A host tuning a ruleset, or asking why a check takes a minute, can ask how
+long each rule took (`Runtime::with_rule_timings()`, which implies
+`with_rule_summaries()`). Every summary of a rule that ran then carries a
+`timing` (`axioval_ir::RuleTiming`), a separate optional field:
+
+```json
+{"rule_id": "element-clash", "checked": 812, "failed": 3, "not_evaluated": 0,
+ "status": "failed",
+ "timing": {"wall_seconds": 41.31, "host_seconds": 39.87,
+            "services": [{"service": "proximity", "calls": 5120, "seconds": 39.87}]}}
+```
+
+- `wall_seconds` is the wall time spent evaluating the rule: its gate, its
+  capability and the refinement of its outcomes. Counting its selection for
+  the summary is not included.
+- `host_seconds` is the part of it spent inside host services the rule
+  called, and `services` breaks it down per service, by name, with the
+  number of calls (omitted when the rule called none). The engine times
+  every call into a geometry host service at its handle: `alignment`,
+  `boundary-coverage`, `contact`, `derived-relationships`,
+  `envelope-membership`, `facade-area`, `free-space`, `guard`,
+  `leaf-glazing`, `linear-quantity`, `material-layers`, `metric-routing`,
+  `object-frame`, `plan-area`, `plan-span`, `proximity`, `sight`, `space`,
+  `terrain`, `triangle-count`, `vertical-extent`, `walkability` and
+  `walking-surface`. A call one service makes through another's handle
+  counts with the outer call only. A measured value the run's memo already
+  holds costs the rule that first measured it.
+- The object count is the summary's `checked`.
+- A rule its gate skipped is timed (reading the gate); a rule the plan
+  deferred never ran and carries none.
+
+Timings are diagnostics, not results: they vary between machines and runs.
+They never change a finding, a finding's identity, a status or a count;
+`RuleSummary` equality and ordering ignore `timing`, so a report with
+timings compares equal to one without, and without the option the field is
+absent and the engine reads no clock.

@@ -250,7 +250,7 @@ impl ContactServiceHandle {
         &self,
         request: &ContactRequest,
     ) -> Result<ContactEvidence, ContactError> {
-        self.0.measure_contact(request)
+        crate::timing::host("contact", || self.0.measure_contact(request))
     }
 }
 

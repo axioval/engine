@@ -467,7 +467,8 @@ impl AlignmentServiceHandle {
         &self,
         request: &AlignmentRequest,
     ) -> Result<AlignmentPosition, AlignmentError> {
-        let position = self.0.measure_alignment_position(request)?;
+        let position =
+            crate::timing::host("alignment", || self.0.measure_alignment_position(request))?;
         if position.request() != request {
             return Err(AlignmentError::InvalidMeasurement);
         }
@@ -480,7 +481,8 @@ impl AlignmentServiceHandle {
         &self,
         request: &AlignmentParameterRequest,
     ) -> Result<AlignmentParameterValue, AlignmentError> {
-        let value = self.0.measure_alignment_parameter(request)?;
+        let value =
+            crate::timing::host("alignment", || self.0.measure_alignment_parameter(request))?;
         if value.request() != request {
             return Err(AlignmentError::InvalidMeasurement);
         }
@@ -493,7 +495,8 @@ impl AlignmentServiceHandle {
         &self,
         request: &AlignmentProfileRequest,
     ) -> Result<AlignmentProfile, AlignmentError> {
-        let profile = self.0.measure_alignment_profile(request)?;
+        let profile =
+            crate::timing::host("alignment", || self.0.measure_alignment_profile(request))?;
         if profile.request() != request {
             return Err(AlignmentError::InvalidMeasurement);
         }
@@ -506,7 +509,8 @@ impl AlignmentServiceHandle {
         &self,
         request: &AlignmentElementsRequest,
     ) -> Result<AlignmentElements, AlignmentError> {
-        let elements = self.0.measure_alignment_elements(request)?;
+        let elements =
+            crate::timing::host("alignment", || self.0.measure_alignment_elements(request))?;
         if elements.request() != request {
             return Err(AlignmentError::InvalidMeasurement);
         }
@@ -516,7 +520,7 @@ impl AlignmentServiceHandle {
     /// The sections of bodies at a station. An answer about another
     /// request is refused.
     pub fn measure_section(&self, request: &SectionRequest) -> Result<Section, AlignmentError> {
-        let section = self.0.measure_section(request)?;
+        let section = crate::timing::host("alignment", || self.0.measure_section(request))?;
         if section.request() != request {
             return Err(AlignmentError::InvalidMeasurement);
         }
@@ -529,7 +533,7 @@ impl AlignmentServiceHandle {
         &self,
         request: &EnvelopeRequest,
     ) -> Result<EnvelopeSweep, AlignmentError> {
-        let sweep = self.0.measure_envelope(request)?;
+        let sweep = crate::timing::host("alignment", || self.0.measure_envelope(request))?;
         if sweep.request() != request {
             return Err(AlignmentError::InvalidMeasurement);
         }
@@ -543,7 +547,7 @@ impl AlignmentServiceHandle {
         &self,
         request: &SightDistanceRequest,
     ) -> Result<SightDistance, AlignmentError> {
-        let sight = self.0.measure_sight_distance(request)?;
+        let sight = crate::timing::host("alignment", || self.0.measure_sight_distance(request))?;
         if sight.request() != request {
             return Err(AlignmentError::InvalidMeasurement);
         }

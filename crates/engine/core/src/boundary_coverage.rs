@@ -519,7 +519,9 @@ impl BoundaryCoverageServiceHandle {
         &self,
         request: &BoundaryCoverageRequest,
     ) -> Result<BoundaryCoverage, BoundaryCoverageError> {
-        let answer = self.0.measure_boundary_coverage(request)?;
+        let answer = crate::timing::host("boundary-coverage", || {
+            self.0.measure_boundary_coverage(request)
+        })?;
         if answer.request() != request {
             return Err(BoundaryCoverageError::InvalidMeasurement);
         }

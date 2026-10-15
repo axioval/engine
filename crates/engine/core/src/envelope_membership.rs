@@ -234,7 +234,9 @@ impl EnvelopeMembershipServiceHandle {
         &self,
         request: &EnvelopeMembershipRequest,
     ) -> Result<EnvelopeMembershipEvidence, EnvelopeMembershipError> {
-        self.0.measure_envelope_membership(request)
+        crate::timing::host("envelope-membership", || {
+            self.0.measure_envelope_membership(request)
+        })
     }
 }
 

@@ -2356,7 +2356,7 @@ impl ProximityServiceHandle {
         self.voids.as_deref().unwrap_or(self)
     }
     pub fn bounds(&self, object: &ObjectId) -> Result<ObjectBounds, ProximityError> {
-        self.service.bounds(object)
+        crate::timing::host("proximity", || self.service.bounds(object))
     }
     /// Whether one body is built from the other's
     /// ([`ProximityService::shares_body`]), so the two never form a pair.
@@ -2368,7 +2368,7 @@ impl ProximityServiceHandle {
         &self,
         request: &ProximityRequest,
     ) -> Result<ProximityEvidence, ProximityError> {
-        self.service.measure_proximity(request)
+        crate::timing::host("proximity", || self.service.measure_proximity(request))
     }
     /// The distance in the request's projection. Evidence answering another
     /// request, projection included, is refused.
@@ -2376,7 +2376,7 @@ impl ProximityServiceHandle {
         &self,
         request: &ProximityRequest,
     ) -> Result<ProjectedDistanceEvidence, ProximityError> {
-        let measured = self.service.measure_distance(request)?;
+        let measured = crate::timing::host("proximity", || self.service.measure_distance(request))?;
         if measured.request() != request {
             return Err(ProximityError::InvalidMeasurement);
         }
@@ -2388,7 +2388,8 @@ impl ProximityServiceHandle {
         &self,
         request: &FaceDistanceRequest,
     ) -> Result<FaceDistanceEvidence, FaceDistanceError> {
-        let measured = self.service.measure_face_distance(request)?;
+        let measured =
+            crate::timing::host("proximity", || self.service.measure_face_distance(request))?;
         if measured.request() != request {
             return Err(FaceDistanceError::InvalidMeasurement);
         }
@@ -2400,7 +2401,8 @@ impl ProximityServiceHandle {
         &self,
         request: &OverlapAlongRequest,
     ) -> Result<OverlapAlongEvidence, ProximityError> {
-        let measured = self.service.measure_overlap_along(request)?;
+        let measured =
+            crate::timing::host("proximity", || self.service.measure_overlap_along(request))?;
         if measured.request() != request {
             return Err(ProximityError::InvalidMeasurement);
         }
@@ -2412,7 +2414,8 @@ impl ProximityServiceHandle {
         &self,
         request: &HeightAboveRequest,
     ) -> Result<HeightAboveEvidence, ProximityError> {
-        let measured = self.service.measure_height_above(request)?;
+        let measured =
+            crate::timing::host("proximity", || self.service.measure_height_above(request))?;
         if measured.request() != request {
             return Err(ProximityError::InvalidMeasurement);
         }
@@ -2424,7 +2427,7 @@ impl ProximityServiceHandle {
         &self,
         request: &DrainageRequest,
     ) -> Result<DrainageEvidence, ProximityError> {
-        let measured = self.service.measure_drainage(request)?;
+        let measured = crate::timing::host("proximity", || self.service.measure_drainage(request))?;
         if measured.request() != request {
             return Err(ProximityError::InvalidMeasurement);
         }
@@ -2433,7 +2436,8 @@ impl ProximityServiceHandle {
     /// The volume `object` encloses. A volume naming another object answers
     /// a different question and is refused.
     pub fn measure_body_volume(&self, object: &ObjectId) -> Result<BodyVolume, ProximityError> {
-        let measured = self.service.measure_body_volume(object)?;
+        let measured =
+            crate::timing::host("proximity", || self.service.measure_body_volume(object))?;
         if measured.object() != object {
             return Err(ProximityError::InvalidMeasurement);
         }
@@ -2441,7 +2445,7 @@ impl ProximityServiceHandle {
     }
     /// The surface of `object`. A surface of another object is refused.
     pub fn body_surface(&self, object: &ObjectId) -> Result<BodySurface, ProximityError> {
-        let surface = self.service.body_surface(object)?;
+        let surface = crate::timing::host("proximity", || self.service.body_surface(object))?;
         if surface.object() != object {
             return Err(ProximityError::InvalidMeasurement);
         }
@@ -2453,7 +2457,9 @@ impl ProximityServiceHandle {
         &self,
         request: &SurfaceDistanceRequest,
     ) -> Result<SurfaceDistanceEvidence, ProximityError> {
-        let measured = self.service.measure_surface_distance(request)?;
+        let measured = crate::timing::host("proximity", || {
+            self.service.measure_surface_distance(request)
+        })?;
         if measured.request() != request {
             return Err(ProximityError::InvalidMeasurement);
         }
@@ -2465,7 +2471,9 @@ impl ProximityServiceHandle {
         &self,
         request: &RegionDistanceRequest,
     ) -> Result<RegionDistanceEvidence, ProximityError> {
-        let measured = self.service.measure_region_distance(request)?;
+        let measured = crate::timing::host("proximity", || {
+            self.service.measure_region_distance(request)
+        })?;
         if measured.request() != request {
             return Err(ProximityError::InvalidMeasurement);
         }
@@ -2477,7 +2485,8 @@ impl ProximityServiceHandle {
         &self,
         request: &LineDistanceRequest,
     ) -> Result<LineDistanceEvidence, ProximityError> {
-        let measured = self.service.measure_line_distance(request)?;
+        let measured =
+            crate::timing::host("proximity", || self.service.measure_line_distance(request))?;
         if measured.request() != request {
             return Err(ProximityError::InvalidMeasurement);
         }

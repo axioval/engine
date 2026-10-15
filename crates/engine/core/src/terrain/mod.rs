@@ -544,7 +544,7 @@ impl TerrainServiceHandle {
         request: &TerrainPointRequest,
     ) -> Result<TerrainElevation, TerrainError> {
         let surface = self.surface(request.kind())?;
-        let answer = self.0.measure_elevation(request)?;
+        let answer = crate::timing::host("terrain", || self.0.measure_elevation(request))?;
         Self::check(&surface, &answer)?;
         Ok(answer)
     }
@@ -557,7 +557,7 @@ impl TerrainServiceHandle {
         request: &TerrainOutlineRequest,
     ) -> Result<TerrainElevation, TerrainError> {
         let surface = self.surface(request.kind())?;
-        let answer = self.0.measure_mean_elevation(request)?;
+        let answer = crate::timing::host("terrain", || self.0.measure_mean_elevation(request))?;
         Self::check(&surface, &answer)?;
         if answer.is_exact() && request.deviation_metres() > 0.0 {
             return Err(TerrainError::InvalidMeasurement);

@@ -702,10 +702,54 @@ pub struct SpaceServiceHandle(Arc<dyn SpaceService>);
 
 impl SpaceServiceHandle {
     pub fn new(service: Arc<dyn SpaceService>) -> Self {
-        Self(service)
+        Self(Arc::new(Timed(service)))
     }
     pub fn get(&self) -> &dyn SpaceService {
         self.0.as_ref()
+    }
+}
+
+/// The host's service with every measurement counted against the rule
+/// being timed ([`crate::timing::host`]). The handle hands out the service
+/// itself, so its calls are timed here rather than in the handle.
+struct Timed(Arc<dyn SpaceService>);
+
+impl SpaceService for Timed {
+    fn measure_duplicates(&self, space: &ObjectId) -> Result<Vec<ObjectId>, SpaceError> {
+        crate::timing::host("space", || self.0.measure_duplicates(space))
+    }
+    fn measure_clear_height(&self, space: &ObjectId) -> Result<ClearHeightEvidence, SpaceError> {
+        crate::timing::host("space", || self.0.measure_clear_height(space))
+    }
+    fn measure_boundary_gaps(
+        &self,
+        space: &ObjectId,
+        request: &BoundaryRequest,
+    ) -> Result<Vec<BoundaryGap>, SpaceError> {
+        crate::timing::host("space", || self.0.measure_boundary_gaps(space, request))
+    }
+    fn measure_overlaps(
+        &self,
+        space: &ObjectId,
+        request: &OverlapRequest,
+    ) -> Result<Vec<SpaceOverlap>, SpaceError> {
+        crate::timing::host("space", || self.0.measure_overlaps(space, request))
+    }
+    fn measure_cap_coverage(
+        &self,
+        space: &ObjectId,
+        request: &CapRequest,
+    ) -> Result<CapCoverage, SpaceError> {
+        crate::timing::host("space", || self.0.measure_cap_coverage(space, request))
+    }
+    fn measure_unallocated_regions(&self) -> Result<Vec<UnallocatedRegion>, SpaceError> {
+        crate::timing::host("space", || self.0.measure_unallocated_regions())
+    }
+    fn measure_support_counts(&self) -> Result<SupportCounts, SpaceError> {
+        crate::timing::host("space", || self.0.measure_support_counts())
+    }
+    fn evidence(&self) -> Evidence {
+        self.0.evidence()
     }
 }
 

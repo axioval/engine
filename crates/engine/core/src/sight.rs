@@ -433,7 +433,7 @@ impl SightServiceHandle {
     /// not send, or skipping a target that may lie within the range, is
     /// refused.
     pub fn assess_sight(&self, request: &SightRequest) -> Result<SightEvidence, SightError> {
-        let answer = self.0.assess_sight(request)?;
+        let answer = crate::timing::host("sight", || self.0.assess_sight(request))?;
         if answer.target() != request.target() {
             return Err(SightError::InvalidEvidence(format!(
                 "an answer about {} was returned for {}",
@@ -470,7 +470,7 @@ impl SightServiceHandle {
         &self,
         request: &SkyObstructionRequest,
     ) -> Result<SkyObstruction, SightError> {
-        let answer = self.0.measure_sky_obstruction(request)?;
+        let answer = crate::timing::host("sight", || self.0.measure_sky_obstruction(request))?;
         if let Some(stranger) = answer
             .highest()
             .iter()

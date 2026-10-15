@@ -1494,7 +1494,11 @@ pub enum RuleStatus {
 /// count the distinct objects its findings and not-evaluated outcomes are
 /// about; an outcome about a source or the project counts no object, but
 /// still decides the status.
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+///
+/// `timing` is a diagnostic, not a result: it is `None` (and absent on the
+/// wire) unless the host asked for rule timings, and equality and ordering
+/// ignore it, so a summary with timings compares equal to one without.
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RuleSummary {
     pub rule_id: RuleId,
@@ -1502,6 +1506,74 @@ pub struct RuleSummary {
     pub failed: usize,
     pub not_evaluated: usize,
     pub status: RuleStatus,
+    /// How long the rule took, when the host asked for rule timings.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timing: Option<RuleTiming>,
+}
+
+impl RuleSummary {
+    /// Everything a summary compares by: all but its timing.
+    fn key(&self) -> (&RuleId, usize, usize, usize, RuleStatus) {
+        (
+            &self.rule_id,
+            self.checked,
+            self.failed,
+            self.not_evaluated,
+            self.status,
+        )
+    }
+    /// The summary carrying `timing`.
+    #[must_use]
+    pub fn with_timing(mut self, timing: RuleTiming) -> Self {
+        self.timing = Some(timing);
+        self
+    }
+}
+
+impl PartialEq for RuleSummary {
+    fn eq(&self, other: &Self) -> bool {
+        self.key() == other.key()
+    }
+}
+impl Eq for RuleSummary {}
+impl PartialOrd for RuleSummary {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for RuleSummary {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.key().cmp(&other.key())
+    }
+}
+
+/// How long one rule took in a run: a diagnostic that varies between
+/// machines and runs, never part of a result.
+///
+/// `wall_seconds` is the wall time spent evaluating the rule (its gate, its
+/// capability, the refinement of its outcomes). `host_seconds` is the part
+/// of it spent inside host services the rule called that the engine can
+/// tell apart (geometry measurement, proximity, routes, free space), and
+/// `services` breaks that down per service, by name. A call made from
+/// inside another host call is counted with the outer one.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RuleTiming {
+    pub wall_seconds: f64,
+    pub host_seconds: f64,
+    /// Per host service, by name; omitted when the rule called none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub services: Vec<ServiceTiming>,
+}
+
+/// The calls one rule made to one host service, and their wall time.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ServiceTiming {
+    /// The service's name, such as `proximity` or `metric-routing`.
+    pub service: String,
+    pub calls: u64,
+    pub seconds: f64,
 }
 
 impl RuleSummary {
@@ -1514,6 +1586,7 @@ impl RuleSummary {
             failed: 0,
             not_evaluated: 0,
             status: RuleStatus::Skipped,
+            timing: None,
         }
     }
     /// The summary of a rule with these counts, and whether it found
@@ -1540,6 +1613,7 @@ impl RuleSummary {
             failed,
             not_evaluated,
             status,
+            timing: None,
         }
     }
 }

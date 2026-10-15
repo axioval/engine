@@ -2420,7 +2420,8 @@ impl WalkingSurfaceServiceHandle {
         &self,
         request: &TreadFlightRequest,
     ) -> Result<TreadFlight, WalkingSurfaceError> {
-        let flight = self.0.measure_tread_flight(request)?;
+        let flight =
+            crate::timing::host("walking-surface", || self.0.measure_tread_flight(request))?;
         if flight.request() != request {
             return Err(WalkingSurfaceError::InvalidMeasurement);
         }
@@ -2432,7 +2433,7 @@ impl WalkingSurfaceServiceHandle {
         &self,
         object: &ObjectId,
     ) -> Result<SlopedSurface, WalkingSurfaceError> {
-        let ramp = self.0.measure_sloped_runs(object)?;
+        let ramp = crate::timing::host("walking-surface", || self.0.measure_sloped_runs(object))?;
         if ramp.object() != object {
             return Err(WalkingSurfaceError::InvalidMeasurement);
         }
@@ -2445,7 +2446,7 @@ impl WalkingSurfaceServiceHandle {
         &self,
         request: &HeadroomRequest,
     ) -> Result<Headroom, WalkingSurfaceError> {
-        let headroom = self.0.measure_headroom(request)?;
+        let headroom = crate::timing::host("walking-surface", || self.0.measure_headroom(request))?;
         if headroom.request() != request {
             return Err(WalkingSurfaceError::InvalidMeasurement);
         }
@@ -2458,7 +2459,7 @@ impl WalkingSurfaceServiceHandle {
         &self,
         request: &LandingRequest,
     ) -> Result<LandingEvidence, WalkingSurfaceError> {
-        let landing = self.0.measure_landing(request)?;
+        let landing = crate::timing::host("walking-surface", || self.0.measure_landing(request))?;
         if landing.request() != request {
             return Err(WalkingSurfaceError::InvalidMeasurement);
         }
@@ -2471,7 +2472,9 @@ impl WalkingSurfaceServiceHandle {
         &self,
         request: &ClearanceBelowRequest,
     ) -> Result<ClearanceBelow, WalkingSurfaceError> {
-        let below = self.0.measure_clearance_below(request)?;
+        let below = crate::timing::host("walking-surface", || {
+            self.0.measure_clearance_below(request)
+        })?;
         if below.request() != request {
             return Err(WalkingSurfaceError::InvalidMeasurement);
         }
@@ -2484,7 +2487,7 @@ impl WalkingSurfaceServiceHandle {
         &self,
         request: &HandrailRequest,
     ) -> Result<HandrailEvidence, WalkingSurfaceError> {
-        let rails = self.0.measure_handrails(request)?;
+        let rails = crate::timing::host("walking-surface", || self.0.measure_handrails(request))?;
         if rails.request() != request {
             return Err(WalkingSurfaceError::InvalidMeasurement);
         }
@@ -2497,7 +2500,7 @@ impl WalkingSurfaceServiceHandle {
         &self,
         request: &ClearWidthRequest,
     ) -> Result<ClearWidthEvidence, WalkingSurfaceError> {
-        let width = self.0.measure_clear_width(request)?;
+        let width = crate::timing::host("walking-surface", || self.0.measure_clear_width(request))?;
         if width.request() != request {
             return Err(WalkingSurfaceError::InvalidMeasurement);
         }
@@ -2510,7 +2513,9 @@ impl WalkingSurfaceServiceHandle {
         &self,
         request: &LandingClearWidthRequest,
     ) -> Result<LandingClearWidthEvidence, WalkingSurfaceError> {
-        let width = self.0.measure_landing_clear_width(request)?;
+        let width = crate::timing::host("walking-surface", || {
+            self.0.measure_landing_clear_width(request)
+        })?;
         if width.request() != request {
             return Err(WalkingSurfaceError::InvalidMeasurement);
         }

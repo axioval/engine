@@ -733,7 +733,7 @@ impl PlanSpanServiceHandle {
 
     /// The longest plan diagonal of `object`'s footprint.
     pub fn measure_diameter(&self, object: &ObjectId) -> Result<PlanLength, PlanSpanError> {
-        self.0.measure_diameter(object)
+        crate::timing::host("plan-span", || self.0.measure_diameter(object))
     }
 
     /// The span between two footprints; one object twice is refused rather
@@ -749,13 +749,13 @@ impl PlanSpanServiceHandle {
                 "a span needs two objects, not {first} twice"
             )));
         }
-        self.0.measure_span(first, second, between)
+        crate::timing::host("plan-span", || self.0.measure_span(first, second, between))
     }
 
     /// The centre of `object`'s footprint; a centre naming another object
     /// is refused.
     pub fn measure_centre(&self, object: &ObjectId) -> Result<PlanCentre, PlanSpanError> {
-        let centre = self.0.measure_centre(object)?;
+        let centre = crate::timing::host("plan-span", || self.0.measure_centre(object))?;
         if centre.object() != object {
             return Err(PlanSpanError::Unavailable(format!(
                 "a centre of {} was returned for {object}",
@@ -768,7 +768,7 @@ impl PlanSpanServiceHandle {
     /// The least-area rectangle enclosing `object`'s footprint; a rectangle
     /// naming another object is refused.
     pub fn measure_rectangle(&self, object: &ObjectId) -> Result<PlanRectangle, PlanSpanError> {
-        let rectangle = self.0.measure_rectangle(object)?;
+        let rectangle = crate::timing::host("plan-span", || self.0.measure_rectangle(object))?;
         if rectangle.object() != object {
             return Err(PlanSpanError::Unavailable(format!(
                 "a rectangle of {} was returned for {object}",
@@ -781,7 +781,7 @@ impl PlanSpanServiceHandle {
     /// The recesses of `object`'s footprint; recesses naming another object
     /// are refused.
     pub fn measure_recesses(&self, object: &ObjectId) -> Result<PlanRecesses, PlanSpanError> {
-        let recesses = self.0.measure_recesses(object)?;
+        let recesses = crate::timing::host("plan-span", || self.0.measure_recesses(object))?;
         if recesses.object() != object {
             return Err(PlanSpanError::Unavailable(format!(
                 "the recesses of {} were returned for {object}",
@@ -802,7 +802,7 @@ impl PlanSpanServiceHandle {
                 "a section needs at least one object".into(),
             ));
         }
-        let section = self.0.measure_section(&asked)?;
+        let section = crate::timing::host("plan-span", || self.0.measure_section(&asked))?;
         let mut answered = section.objects().to_vec();
         answered.sort();
         answered.dedup();
@@ -821,7 +821,7 @@ impl PlanSpanServiceHandle {
         &self,
         request: &CorridorEndRequest,
     ) -> Result<CorridorEnds, PlanSpanError> {
-        corridor_end::measure(&self.0, request)
+        crate::timing::host("plan-span", || corridor_end::measure(&self.0, request))
     }
 
     /// The candidates beside each side of the request's object; an answer
@@ -830,7 +830,7 @@ impl PlanSpanServiceHandle {
         &self,
         request: &SideDistanceRequest,
     ) -> Result<SideDistances, PlanSpanError> {
-        side_distance::measure(&self.0, request)
+        crate::timing::host("plan-span", || side_distance::measure(&self.0, request))
     }
 }
 

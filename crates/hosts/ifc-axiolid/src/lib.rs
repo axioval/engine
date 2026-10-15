@@ -40,7 +40,12 @@
 //! none on either side). A source that does not, or whose coordinate system
 //! cannot be read, contributes its physical objects as unmeasured with the
 //! reason, so every geometric check touching them is not evaluated rather
-//! than measured in the wrong place.
+//! than measured in the wrong place. A host that knows the models overlay
+//! as delivered can declare it ([`Options::with_declared_shared_frame`]):
+//! a source whose frame is left open only by statements its file does not
+//! make, or makes ambiguously, is then measured in the first source's
+//! frame and named in [`GeometryReport::declared_frame_sources`]; one
+//! whose stated frame differs stays unmeasured.
 //!
 //! Every object ends up in exactly one of three states, because the geometry
 //! services treat them differently:
@@ -146,10 +151,10 @@ use axioval_axiolid::{
 };
 use axioval_engine::{
     AlignmentServiceHandle, BodyContainment, BoundaryCoverageServiceHandle, ContactServiceHandle,
-    CoordinateSystemServiceHandle, DerivedRelationshipServiceHandle, EnvelopeMembershipError,
-    EnvelopeMembershipEvidence, EnvelopeMembershipRequest, EnvelopeMembershipService,
-    EnvelopeMembershipServiceHandle, EvidenceSession, FacadeAreaServiceHandle,
-    FreeSpaceServiceHandle, GuardServiceHandle, LeafGlazingServiceHandle,
+    CoordinateSystemError, CoordinateSystemServiceHandle, DerivedRelationshipServiceHandle,
+    EnvelopeMembershipError, EnvelopeMembershipEvidence, EnvelopeMembershipRequest,
+    EnvelopeMembershipService, EnvelopeMembershipServiceHandle, EvidenceSession,
+    FacadeAreaServiceHandle, FreeSpaceServiceHandle, GuardServiceHandle, LeafGlazingServiceHandle,
     LinearQuantityServiceHandle, LocalOrigin, LocalOrigins, MetricRoutingServiceHandle,
     PlanAreaServiceHandle, PlanSpanServiceHandle, PropertyRequest, PropertyResolution,
     PropertyResolutionServiceHandle, ProximityRequest, ProximityService, ProximityServiceHandle,
@@ -159,7 +164,7 @@ use axioval_engine::{
     VerticalExtentServiceHandle, WalkabilityServiceHandle, WalkingSurfaceServiceHandle,
 };
 use axioval_ir::{ObjectId, PropertyValue, SourceId};
-use axioval_rules::{CoordinateTolerance, compare_coordinate_systems};
+use axioval_rules::{CoordinateAspect, CoordinateTolerance, compare_coordinate_systems};
 use ifc_geometry::constraint::local::PlacementResolver;
 use ifc_geometry::lower::{
     AppliedReason, LoweringSession, NetOptions, ReferenceOnlyOpenings, lower_connection_surface,
@@ -250,6 +255,12 @@ pub struct GeometryReport {
     /// The origin of the local frame the models are measured in, in
     /// model metres (east, north), when they are placed far out (#372).
     pub local_origin: Option<[f64; 2]>,
+    /// Sources measured in the first source's frame only because the host
+    /// declared that every source shares one frame as delivered
+    /// ([`Options::declared_shared_frame`], #382): their files state no
+    /// frame to compare, or state it ambiguously. Their alignment was
+    /// declared, not read. In session order; never the first source.
+    pub declared_frame_sources: Vec<SourceId>,
 }
 
 /// The integrity code of a physical product with no shape representation
@@ -453,6 +464,8 @@ impl Bodiless {
 /// How [`attach`] meshes the model.
 #[derive(Clone, Copy, Debug, Default)]
 #[non_exhaustive]
+// Independent switches a host sets one at a time, not states of one choice.
+#[allow(clippy::struct_excessive_bools)]
 pub struct Options {
     /// Keep every meshed object's triangles in [`GeometryReport::meshes`],
     /// for display (BCF snapshots, a viewer).
@@ -464,6 +477,16 @@ pub struct Options {
     pub timings: bool,
     /// The frame the models are measured in (#372).
     pub frame: Frame,
+    /// The host declares that every source shares the first source's frame
+    /// as delivered (#382). A source whose file states no frame the bridge
+    /// can compare (no `Model` context, so no world frame; a map conversion
+    /// on one side only) or states it ambiguously is then measured in the
+    /// first source's frame and named in
+    /// [`GeometryReport::declared_frame_sources`]. A source whose stated
+    /// frame is known to differ beyond the tolerance, or whose statement
+    /// cannot be read or compared, stays unmeasured: the declaration covers
+    /// missing statements, never contradicting ones. Off by default.
+    pub declared_shared_frame: bool,
 }
 
 /// The frame [`attach`] measures models in (#372).
@@ -486,6 +509,18 @@ impl Options {
             exact_boundaries: false,
             timings: false,
             frame: Frame::Local,
+            declared_shared_frame: false,
+        }
+    }
+
+    /// The same, declaring that every source shares the first source's
+    /// frame as delivered when `declared` is set
+    /// ([`Self::declared_shared_frame`]).
+    #[must_use]
+    pub fn with_declared_shared_frame(self, declared: bool) -> Self {
+        Self {
+            declared_shared_frame: declared,
+            ..self
         }
     }
 
@@ -830,55 +865,101 @@ fn applied_reason(reason: AppliedReason) -> Option<&'static str> {
     }
 }
 
+/// How the sources' frames relate to the first source's.
+#[derive(Default)]
+struct Alignment {
+    /// The sources whose geometry is not in the first source's frame, with
+    /// the reason.
+    unaligned: BTreeMap<SourceId, String>,
+    /// The sources measured in it only on the host's declaration, in
+    /// session order.
+    declared: Vec<SourceId>,
+}
+
+/// Whether two sources' coordinate systems leave their frames unknown only
+/// for statements one of them does not make, so a declaration that they
+/// share one frame contradicts nothing: no world frame or map conversion
+/// differs, and the only unknown is a world frame stated by one or neither
+/// (a map conversion on one side only is in `georeferenced`).
+fn only_unstated(consistency: &axioval_rules::CoordinateConsistency) -> bool {
+    let places = |aspect: &CoordinateAspect| {
+        matches!(
+            aspect,
+            CoordinateAspect::WorldFrame | CoordinateAspect::MapConversion
+        )
+    };
+    !consistency
+        .differences
+        .iter()
+        .any(|(aspect, _)| places(aspect))
+        && consistency
+            .unknown
+            .iter()
+            .filter(|(aspect, _)| places(aspect))
+            .all(|(aspect, _)| *aspect == CoordinateAspect::WorldFrame)
+}
+
 /// The sources whose geometry is not in the first source's frame, with
-/// the reason. Empty for a single source.
-fn unaligned(
-    session: &EvidenceSession,
-    snapshots: &[SourceSnapshot],
-) -> BTreeMap<SourceId, String> {
+/// the reason, and, with `declared` (#382), those measured in it on that
+/// declaration alone. Empty for a single source.
+fn alignment(session: &EvidenceSession, snapshots: &[SourceSnapshot], declared: bool) -> Alignment {
     let Some((first, others)) = snapshots.split_first() else {
-        return BTreeMap::new();
+        return Alignment::default();
     };
     let reference = first.source();
     let others = others.iter().map(SourceSnapshot::source);
     let Some(service) = session.service::<CoordinateSystemServiceHandle>() else {
-        return others
-            .map(|source| {
-                (
-                    source.clone(),
-                    "no coordinate-system service states whether its geometry shares the frame of the other models".to_owned(),
-                )
-            })
-            .collect();
+        return Alignment {
+            unaligned: others
+                .map(|source| {
+                    (
+                        source.clone(),
+                        "no coordinate-system service states whether its geometry shares the frame of the other models".to_owned(),
+                    )
+                })
+                .collect(),
+            declared: Vec::new(),
+        };
     };
     let base = service.coordinate_system(reference);
-    others
-        .filter_map(|source| {
-            let base = match &base {
-                Ok(base) => base,
-                Err(error) => {
-                    return Some((
-                        source.clone(),
-                        format!(
-                            "the coordinate system of `{reference}` cannot be read, so its frame and this model's are not known to be one: {error}"
-                        ),
-                    ));
-                }
-            };
-            let reason = match service.coordinate_system(source) {
-                Ok(system) => {
-                    compare_coordinate_systems(base, &system, CoordinateTolerance::default())
-                        .shares_frame()
-                        .err()?
-                }
-                Err(error) => format!("its coordinate system cannot be read: {error}"),
-            };
-            Some((
-                source.clone(),
-                format!("not in the coordinate system of `{reference}`: {reason}"),
-            ))
-        })
-        .collect()
+    let mut alignment = Alignment::default();
+    for source in others {
+        // `Some(reason)` when the frames are not known to be one; the flag
+        // says whether only missing or ambiguous statements leave it open.
+        let open: Option<(String, bool)> = match (&base, service.coordinate_system(source)) {
+            (Err(error), other) => Some((
+                format!(
+                    "the coordinate system of `{reference}` cannot be read, so its frame and this model's are not known to be one: {error}"
+                ),
+                matches!(error, CoordinateSystemError::Ambiguous(_))
+                    && matches!(other, Ok(_) | Err(CoordinateSystemError::Ambiguous(_))),
+            )),
+            (Ok(_), Err(error)) => Some((
+                format!(
+                    "not in the coordinate system of `{reference}`: its coordinate system cannot be read: {error}"
+                ),
+                matches!(error, CoordinateSystemError::Ambiguous(_)),
+            )),
+            (Ok(base), Ok(system)) => {
+                let consistency =
+                    compare_coordinate_systems(base, &system, CoordinateTolerance::default());
+                consistency.shares_frame().err().map(|reason| {
+                    (
+                        format!("not in the coordinate system of `{reference}`: {reason}"),
+                        only_unstated(&consistency),
+                    )
+                })
+            }
+        };
+        match open {
+            None => {}
+            Some((_, true)) if declared => alignment.declared.push(source.clone()),
+            Some((reason, _)) => {
+                alignment.unaligned.insert(source.clone(), reason);
+            }
+        }
+    }
+    alignment
 }
 
 /// Parses the model of every snapshot's source.
@@ -972,11 +1053,15 @@ pub fn attach(
         .collect();
     let is_a = |id: &ObjectId, ancestor: &str| is_a(id, ancestor, &kinds);
 
-    let unaligned = unaligned(&session, &snapshots);
+    let Alignment {
+        unaligned,
+        declared: declared_frame_sources,
+    } = alignment(&session, &snapshots, options.declared_shared_frame);
     let backend = ifc_geometry::compile::default_backend();
     let mut geometry = AxiolidGeometry::new().with_local_origins(origins.clone());
     let mut report = GeometryReport {
         local_origin: (!origin.is_zero()).then(|| origin.metres()),
+        declared_frame_sources,
         ..GeometryReport::default()
     };
     let mut voids: Vec<(ObjectId, Void)> = Vec::new();

@@ -33,8 +33,18 @@ benchmark) is its first consumer.
   `axioval_rules::compare_coordinate_systems(..).shares_frame()` with the
   default tolerances); every physical object of another source is
   unmeasured with the reason, and a source whose coordinate system cannot
-  be read is never assumed aligned. Never re-align meshes by a map
-  conversion here. Each object's model is looked up by its source, spatial
+  be read is never assumed aligned. With `Options::declared_shared_frame`
+  (#382, the CLI's `--declare-shared-frame`) a source is measured in the
+  first source's frame where only missing or ambiguous statements leave it
+  open (`alignment`, `only_unstated`: no world-frame or map-conversion
+  difference, the only unknown a world frame stated by one or neither,
+  a map conversion on one side only, or `CoordinateSystemError::Ambiguous`
+  on either side) and named in `GeometryReport::declared_frame_sources`;
+  a difference beyond the tolerance, a map offset that cannot be compared,
+  an unreadable or unsupported coordinate system or no coordinate-system
+  service stay unmeasured as without it. `local_frame` shifts every parsed
+  model by the one origin regardless, so declared sources share it. Never
+  re-align meshes by a map conversion here. Each object's model is looked up by its source, spatial
   trees are built per source, and every service is bound to all snapshots.
   Never key anything on a bare local id: two files share `#10`.
 - Below, `tests/check.rs` is `crates/apps/cli/tests/check.rs`, which runs

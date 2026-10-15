@@ -8429,6 +8429,178 @@ fn a_clash_with_a_model_in_another_coordinate_system_is_not_evaluated() {
     );
 }
 
+/// `model` (a [`walls_file`]) whose only representation context is of type
+/// `Design`, so it states no world frame to compare.
+fn design_context(model: &str) -> String {
+    model.replace(
+        "#5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',",
+        "#5=IFCGEOMETRICREPRESENTATIONCONTEXT('Plan','Design',",
+    )
+}
+
+/// `model` (a [`walls_file`]) with its walls placed at `[x, y]` metres.
+fn placed_at(model: &str, [x, y]: [f64; 2]) -> String {
+    model.replace(
+        "#3=IFCLOCALPLACEMENT($,#2);\n",
+        &format!(
+            "#40=IFCCARTESIANPOINT(({x:?},{y:?},0.));\n\
+             #41=IFCAXIS2PLACEMENT3D(#40,$,$);\n\
+             #3=IFCLOCALPLACEMENT($,#41);\n"
+        ),
+    )
+}
+
+/// #382: a model whose only context is `Design` states no frame, so
+/// without a declaration its walls are unmeasured against the
+/// architecture's; with `--declare-shared-frame` both are measured, the
+/// clash is found, and the result names the model aligned on the
+/// declaration rather than read.
+#[test]
+fn a_declared_shared_frame_measures_a_model_that_states_none() {
+    let case = Case::new("discipline-clash-declared-frame");
+    let (arch, structure) = discipline_walls();
+    case.write("arch.ifc", &arch);
+    case.write("struct.ifc", &design_context(&structure));
+    let models = ["arch.ifc:architecture", "struct.ifc:structure"];
+
+    let output = case.clash_across(&models, &["--geometry"]);
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    let result = json(&output);
+    assert_eq!(result["report"]["findings"], json!([]), "{result:#}");
+    let unmeasured = result["geometry"]["unmeasured"].as_array().unwrap();
+    assert_eq!(unmeasured.len(), 1, "{result:#}");
+    assert!(
+        unmeasured[0]["reason"]
+            .as_str()
+            .unwrap()
+            .contains("the world frame is stated only by the reference"),
+        "{result:#}"
+    );
+    assert!(
+        result["geometry"].get("declared_frame_sources").is_none(),
+        "{result:#}"
+    );
+
+    let output = case.clash_across(&models, &["--geometry", "--declare-shared-frame"]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result = json(&output);
+    assert_eq!(
+        result["report"]["findings"].as_array().unwrap().len(),
+        1,
+        "{result:#}"
+    );
+    assert_eq!(result["geometry"]["exact"], 3, "{result:#}");
+    assert_eq!(result["geometry"]["unmeasured"], json!([]), "{result:#}");
+    let declared = result["geometry"]["declared_frame_sources"]
+        .as_array()
+        .unwrap();
+    assert_eq!(declared.len(), 1, "{result:#}");
+    assert_eq!(declared[0]["document"], "struct.ifc", "{result:#}");
+    assert!(
+        stderr(&output)
+            .contains("as declared (--declare-shared-frame), not as its coordinate system states"),
+        "{}",
+        stderr(&output)
+    );
+}
+
+/// #382: a model stating its frame ambiguously (two `Model` contexts on
+/// different placements) is unmeasured, and measured on the declaration.
+#[test]
+fn a_declared_shared_frame_measures_a_model_that_states_it_ambiguously() {
+    let case = Case::new("discipline-clash-declared-frame-ambiguous");
+    let (arch, structure) = discipline_walls();
+    case.write("arch.ifc", &arch);
+    case.write(
+        "struct.ifc",
+        &structure.replace(
+            "#6=IFCSIUNIT",
+            "#40=IFCCARTESIANPOINT((0.,0.,1.));\n\
+             #41=IFCAXIS2PLACEMENT3D(#40,$,$);\n\
+             #42=IFCGEOMETRICREPRESENTATIONCONTEXT('Box','Model',3,1.E-05,#41,$);\n\
+             #6=IFCSIUNIT",
+        ),
+    );
+    let models = ["arch.ifc:architecture", "struct.ifc:structure"];
+    let output = case.clash_across(&models, &["--geometry"]);
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    let result = json(&output);
+    assert!(
+        result["geometry"]["unmeasured"][0]["reason"]
+            .as_str()
+            .unwrap()
+            .contains("2 model contexts (#5, #42) state different world coordinate systems"),
+        "{result:#}"
+    );
+    let output = case.clash_across(&models, &["--geometry", "--declare-shared-frame"]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result = json(&output);
+    assert_eq!(result["geometry"]["unmeasured"], json!([]), "{result:#}");
+    assert_eq!(
+        result["geometry"]["declared_frame_sources"][0]["document"], "struct.ifc",
+        "{result:#}"
+    );
+}
+
+/// #382: the declaration covers frames a file does not state, never ones
+/// it states differently: a model georeferenced 1 m off stays unmeasured.
+#[test]
+fn a_declared_shared_frame_leaves_a_model_stated_elsewhere_unmeasured() {
+    let case = Case::new("discipline-clash-declared-frame-shifted");
+    let (arch, structure) = discipline_walls();
+    case.write("arch.ifc", &georeferenced(&arch, 500_000.0));
+    case.write("struct.ifc", &georeferenced(&structure, 500_001.0));
+    let models = ["arch.ifc:architecture", "struct.ifc:structure"];
+    let output = case.clash_across(&models, &["--geometry", "--declare-shared-frame"]);
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    let result = json(&output);
+    assert_eq!(result["report"]["findings"], json!([]), "{result:#}");
+    let unmeasured = result["geometry"]["unmeasured"].as_array().unwrap();
+    assert_eq!(unmeasured.len(), 1, "{result:#}");
+    assert!(
+        unmeasured[0]["reason"]
+            .as_str()
+            .unwrap()
+            .contains("map offset moved by 1.0000 m"),
+        "{result:#}"
+    );
+    assert!(
+        result["geometry"].get("declared_frame_sources").is_none(),
+        "{result:#}"
+    );
+}
+
+/// #382 with #372: models placed far out are measured about one local
+/// origin, the declared one shifted by it as the first is, so the clash
+/// between them is found where it is.
+#[test]
+fn a_declared_shared_frame_shares_the_local_origin() {
+    let case = Case::new("discipline-clash-declared-frame-far");
+    let (arch, structure) = discipline_walls();
+    let site = [600_000.0, 5_600_000.0];
+    case.write("arch.ifc", &placed_at(&arch, site));
+    case.write("struct.ifc", &design_context(&placed_at(&structure, site)));
+    let models = ["arch.ifc:architecture", "struct.ifc:structure"];
+    let output = case.clash_across(&models, &["--geometry", "--declare-shared-frame"]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result = json(&output);
+    assert_eq!(
+        result["report"]["findings"].as_array().unwrap().len(),
+        1,
+        "{result:#}"
+    );
+    assert_eq!(result["geometry"]["exact"], 3, "{result:#}");
+    assert_eq!(
+        result["geometry"]["local_origin"],
+        json!(site),
+        "{result:#}"
+    );
+    assert_eq!(
+        result["geometry"]["declared_frame_sources"][0]["document"], "struct.ifc",
+        "{result:#}"
+    );
+}
+
 /// `model`, a STEP file, written as ifcXML in the codec's own layout with
 /// IFC4's attribute names.
 fn as_ifc_xml(model: &str) -> Vec<u8> {

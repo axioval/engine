@@ -386,6 +386,23 @@ model alone, or fix its georeference; a `coordinate-consistency` rule
 reports the difference as a finding (see [Coordinate
 consistency](./capabilities.md#coordinate-consistency)).
 
+Many delivered models state no frame that can be compared: their only
+representation context is a `Plan` or `Design` one rather than `Model`, or
+only one of two states a map conversion, or a file states its frame
+ambiguously (several `Model` contexts on different placements). When the
+models are known to overlay as delivered, `--declare-shared-frame` (with
+`--geometry`) says so: every such model is measured in the first model's
+frame. The declaration covers missing statements only, never contradicting
+ones: a model whose stated world frame or map conversion differs beyond the
+tolerance, or whose coordinate system cannot be read or compared, stays
+unmeasured as without it. The result's additive
+`geometry.declared_frame_sources` names every model measured on the
+declaration, stderr notes each (`note: … is measured in the first model's
+frame as declared (--declare-shared-frame), not as its coordinate system
+states`) and the summary counts them, so a reader can tell an alignment
+declared from one read. Models placed far out are still measured about one
+local origin, the declared ones shifted by it as the first is.
+
 With `--geometry`, a body whose construction is exact also gets its exact
 boundary, built from the graph its mesh is compiled from: an extrusion or
 revolution of a rectangle, circle, section or line-and-arc profile (an

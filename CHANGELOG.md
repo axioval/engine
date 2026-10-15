@@ -6,6 +6,21 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **A declared shared frame for federated models**: a host can declare
+  that every model shares the first model's frame as delivered
+  (`axioval-host-ifc-axiolid`'s `Options::with_declared_shared_frame`, the
+  CLI's `check --geometry --declare-shared-frame`). A model whose file
+  states no frame to compare (only a `Plan` or `Design` context, or a map
+  conversion on one side only) or states it ambiguously is then measured in
+  the first model's frame instead of left unmeasured. Models whose stated
+  frames differ beyond the tolerance, or whose coordinate systems cannot be
+  read or compared, stay unmeasured: the declaration covers missing
+  statements, never contradicting ones. `GeometryReport` and the result's
+  `geometry` record name every model measured on the declaration
+  (`declared_frame_sources`, additive), stderr notes each and the summary
+  counts them, so the alignment reads as declared, not read. Off by
+  default, with results unchanged
+  ([#382](https://github.com/axioval/engine/issues/382)).
 - **The IFC geometry bridge as a library for hosts**: the bridge
   `check --geometry` runs, which meshes IFC bodies with `ifc-geometry` and
   registers them as the Axiolid geometry services of an IFC session, is the

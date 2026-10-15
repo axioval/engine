@@ -269,6 +269,15 @@ struct CheckArgs {
     /// instead of widened by the chord deviation.
     #[arg(long, requires = "geometry")]
     no_exact_boundaries: bool,
+    /// With `--geometry` and several `--model`s, declare that every model
+    /// shares the first one's frame as delivered. A model whose file states
+    /// no frame to compare (no `Model` representation context, or a map
+    /// conversion on one side only) or states it ambiguously is then
+    /// measured in the first model's frame, and the result names it. A
+    /// model whose stated frame differs beyond the tolerance stays
+    /// unmeasured. Off by default.
+    #[arg(long, requires = "geometry")]
+    declare_shared_frame: bool,
     /// Locate every finding and not-evaluated outcome by storey and space:
     /// `storeys` climbs the spatial containment to storeys, `containers` to
     /// storeys and spaces, `geometry` takes spaces from the bodies that
@@ -1006,7 +1015,16 @@ fn geometry_record(report: geometry::GeometryReport) -> digest::GeometryRecord {
             })
             .collect(),
         local_origin: report.local_origin,
+        declared_frame_sources: report.declared_frame_sources,
     }
+}
+
+/// How `check --geometry` meshes the models.
+fn geometry_options(args: &CheckArgs) -> geometry::Options {
+    geometry::Options::meshes(args.output.bcf_view.snapshots)
+        .with_exact_boundaries(!args.no_exact_boundaries)
+        .with_declared_shared_frame(args.declare_shared_frame)
+        .with_timings(args.timings)
 }
 
 fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
@@ -1048,10 +1066,7 @@ fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
             .fold(DisciplineMap::new(), DisciplineMap::with),
     );
     let (session, mut meshed) = if args.geometry {
-        let options = geometry::Options::meshes(args.output.bcf_view.snapshots)
-            .with_exact_boundaries(!args.no_exact_boundaries)
-            .with_timings(args.timings);
-        let (session, report) = geometry::attach(session, &bytes, options)
+        let (session, report) = geometry::attach(session, &bytes, geometry_options(&args))
             .map_err(|error| format!("geometry: {error}"))?;
         // Each geometry phase is timed by `attach`.
         clock.skip();
@@ -1712,6 +1727,12 @@ fn warn(output: &CheckOutput, summarized: bool, unanchored: &[&ObjectId], unfram
                     count => format!(", {count} opening(s) of wholes subtracted from their parts"),
                 }
             );
+            for source in &geometry.declared_frame_sources {
+                eprintln!(
+                    "note: {source} is measured in the first model's frame as declared \
+                     (--declare-shared-frame), not as its coordinate system states"
+                );
+            }
             for unmeasured in &geometry.unmeasured {
                 eprintln!(
                     "warning: {} was not meshed: {}",

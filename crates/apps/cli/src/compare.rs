@@ -137,6 +137,7 @@ fn combined(
         openings_taken_as_applied: applied,
         whole_openings,
         local_origin: None,
+        declared_frame_sources: Vec::new(),
     };
     (record, bodies)
 }

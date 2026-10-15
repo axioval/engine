@@ -495,6 +495,13 @@ pub struct GeometryRecord {
     /// the models are measured in their model coordinates.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub local_origin: Option<[f64; 2]>,
+    /// Sources measured in the first source's frame only because the
+    /// check declared that every model shares it (`--declare-shared-frame`,
+    /// #382): their files state no frame to compare, or state it
+    /// ambiguously. Their alignment was declared, not read. Additive:
+    /// absent in results saved before it existed, and when there is none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub declared_frame_sources: Vec<SourceId>,
 }
 
 /// An opening voiding a whole with no body of its own, and the parts its
@@ -973,6 +980,11 @@ pub struct GeometryCounts {
     pub unmeasured: usize,
     #[serde(skip_serializing_if = "is_zero")]
     pub exact_boundaries: usize,
+    /// Models measured in the first model's frame because the check
+    /// declared it (`--declare-shared-frame`), not because their
+    /// coordinate systems state it.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub declared_frame: usize,
 }
 
 /// A bounded digest of a result.
@@ -1491,6 +1503,7 @@ pub fn summarize(output: &CheckOutput, top: usize, saved: Option<&str>) -> Summa
             no_body: g.no_body,
             unmeasured: g.unmeasured.len(),
             exact_boundaries: g.exact_boundaries,
+            declared_frame: g.declared_frame_sources.len(),
         }),
         comparison: output.comparison.as_ref().map(|c| ComparisonDigest {
             base: c.base.clone(),
@@ -1599,6 +1612,26 @@ pub fn shell_quote(text: &str) -> String {
     }
 }
 
+/// The summary's geometry line.
+fn render_geometry(out: &mut String, geometry: &GeometryCounts) {
+    let _ = write!(
+        out,
+        "geometry: {} exact · {} tessellated · {} without body · {} unmeasured",
+        geometry.exact, geometry.tessellated, geometry.no_body, geometry.unmeasured
+    );
+    if geometry.exact_boundaries > 0 {
+        let _ = write!(out, " · {} exact boundaries", geometry.exact_boundaries);
+    }
+    if geometry.declared_frame > 0 {
+        let _ = write!(
+            out,
+            " · {} model(s) in the first model's frame as declared, not as read",
+            geometry.declared_frame
+        );
+    }
+    let _ = writeln!(out);
+}
+
 pub fn render_summary(summary: &Summary) -> String {
     let mut out = String::new();
     // A comparison says first what was compared with what.
@@ -1629,15 +1662,7 @@ pub fn render_summary(summary: &Summary) -> String {
         summary.status, summary.findings, summary.not_evaluated, summary.integrity
     );
     if let Some(geometry) = &summary.geometry {
-        let _ = write!(
-            out,
-            "geometry: {} exact · {} tessellated · {} without body · {} unmeasured",
-            geometry.exact, geometry.tessellated, geometry.no_body, geometry.unmeasured
-        );
-        if geometry.exact_boundaries > 0 {
-            let _ = write!(out, " · {} exact boundaries", geometry.exact_boundaries);
-        }
-        let _ = writeln!(out);
+        render_geometry(&mut out, geometry);
     }
     if let Some(rules) = &summary.rules {
         let counts: Vec<String> = ["failed", "not evaluated", "nothing selected", "passed"]

@@ -235,8 +235,10 @@ ifc-alignment = "0.9.0"
 # stations on bases offset at stations (#443). 0.27 compiles curved
 # advanced B-rep faces bounded by edge curves alone (#454, through kernel#310)
 # and meshes a body mixing curves with solids, its curves left to the curve
-# call (#458).
-ifc-geometry = { version = "0.27.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
+# call (#458). 0.27.1 refuses a polygonal bounded half space whose prism is
+# oblique to its plane instead of meshing the body uncut, and no longer
+# mirrors the footprint of one bounded normal against Z (#515).
+ifc-geometry = { version = "0.27.1", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
 # Map conversions only: without the default `transform` feature it links no
 # geometry crate (never Axiolid). 0.7 resolves IFC2X3's
 # ePSet_MapConversion and ePSet_ProjectedCRS (openbimrs/ifc#451), where

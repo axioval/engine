@@ -595,6 +595,10 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **`ifc-geometry` 0.27.1**: a polygonal bounded half space whose prism is
+  oblique to its plane is refused, so the body it clips is left unmeasured
+  instead of measured uncut; a bounded half space whose normal is against
+  its prism's direction no longer mirrors its footprint.
 - **IFC**: moved to `openbim-ifc` 0.34 and `ifc-geometry` 0.27, which
   compile curved advanced B-rep faces bounded by edge curves alone (ifc#454)
   and mesh a body that mixes curves with solids (ifc#458). The public

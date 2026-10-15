@@ -4,7 +4,7 @@
 
 use axiolid_core::Point3;
 use axiolid_mesh::TriMesh;
-use axioval_axiolid::{AxiolidFreeSpaceService, AxiolidGeometry};
+use axioval_axiolid::{AxiolidFreeSpaceService, AxiolidGeometry, VerticalExtentBounds};
 use axioval_engine::{
     BoxClearance, CylinderClearance, FreeSpaceError, FreeSpaceService, MetricDirection,
     MetricFrame, MetricPoint, PlacementDomain, PlacementOrientation, PlacementOutcome,
@@ -297,6 +297,44 @@ fn a_slab_that_may_rise_into_the_band_refuses_a_fit() {
         holed_room(false),
         "a",
         rectangle(6.0, 6.0, Some((1.0, 0.0))),
+        &ELEMENTS,
+    ));
+}
+
+/// A certified height alone (#393, `with_vertical_extent_bounds`, as a host
+/// reads it from an extrusion with flat caps whatever its outline) keeps
+/// the slab out of the band as its exact boundary's extent does. One that
+/// contradicts the slab's mesh by more than its deviation is ignored, so
+/// the slab may rise into the band again and the fit is refused.
+#[test]
+fn a_slab_whose_certified_height_ends_at_the_floor_is_decided() {
+    let height = |outer, inner| VerticalExtentBounds { outer, inner };
+    let certified =
+        holed_room(false).with_vertical_extent_bounds(id("slab"), height((-0.25, 0.0), None));
+    found(place(
+        certified,
+        "a",
+        rectangle(0.9, 0.9, Some((1.0, 0.0))),
+        &ELEMENTS,
+    ));
+    let contradicted = holed_room(false)
+        .with_vertical_extent_bounds(id("slab"), height((-0.25, -0.1), Some((-0.25, -0.1))));
+    assert_eq!(
+        place(
+            contradicted,
+            "a",
+            rectangle(0.9, 0.9, Some((1.0, 0.0))),
+            &ELEMENTS
+        ),
+        Err(FreeSpaceError::InexactPlacementEvidence)
+    );
+    // A later, looser certificate keeps the tighter one.
+    let combined =
+        holed_room(true).with_vertical_extent_bounds(id("slab"), height((-1.0, 0.5), None));
+    found(place(
+        combined,
+        "a",
+        rectangle(0.9, 0.9, Some((1.0, 0.0))),
         &ELEMENTS,
     ));
 }

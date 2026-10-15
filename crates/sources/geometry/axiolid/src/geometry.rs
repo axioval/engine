@@ -36,9 +36,10 @@ pub struct AxiolidGeometry {
     /// The boxes an unmeasured object's body lies within the union of
     /// ([`Self::with_unmeasured_bounds`]); never empty.
     unmeasured_bounds: BTreeMap<ObjectId, Vec<Extent>>,
-    /// Host-certified bounds on a tessellated body's true extent
-    /// ([`Self::with_extent_bounds`]): `(outer, inner)`.
-    extent_bounds: BTreeMap<ObjectId, (Extent, Option<Extent>)>,
+    /// Host-certified bounds on a tessellated body's true vertical extent
+    /// ([`Self::with_extent_bounds`], [`Self::with_vertical_extent_bounds`]),
+    /// every certificate given for it combined.
+    extent_bounds: BTreeMap<ObjectId, VerticalExtentBounds>,
     groups: BTreeMap<ObjectId, Result<Vec<ObjectId>, String>>,
     boundaries: BTreeMap<ObjectId, Arc<ExactBody>>,
     /// Wholes measured through their parts ([`Self::with_composed_body`]).
@@ -86,6 +87,9 @@ pub struct ComposedBody {
     /// part is exact.
     deviation: Option<f64>,
     exact: Option<ExactBody>,
+    /// The union's elevations, from its parts' vertical bounds; `None`
+    /// when some part's are unbounded.
+    height: Option<VerticalExtentBounds>,
 }
 
 impl ComposedBody {
@@ -315,12 +319,13 @@ impl AxiolidGeometry {
     /// it, so a slab whose top meets a floor could rise into the room
     /// above. These bounds pin the extent closer where they are tighter:
     /// services read them through the body's vertical bounds only, and only
-    /// for a tessellated body (an exact mesh is its own extent). Bounds
-    /// that are not finite, are reversed or whose `inner` leaves `outer`
-    /// are ignored.
+    /// for a tessellated body (an exact mesh is its own extent), combined
+    /// with any certified before ([`Self::with_vertical_extent_bounds`]).
+    /// Bounds that are not finite, are reversed or whose `inner` leaves
+    /// `outer` are ignored.
     #[must_use]
     pub fn with_extent_bounds(
-        mut self,
+        self,
         object: ObjectId,
         outer: ([f64; 3], [f64; 3]),
         inner: Option<([f64; 3], [f64; 3])>,
@@ -339,10 +344,82 @@ impl AxiolidGeometry {
             })
         };
         if finite(&outer) && inner.as_ref().is_none_or(within) {
-            self.extent_bounds.insert(object, (outer, inner));
+            self.extent_bounds_tightened(
+                object,
+                VerticalExtentBounds {
+                    outer: (outer.0[2], outer.1[2]),
+                    inner: inner.map(|(min, max)| (min[2], max[2])),
+                },
+            )
         } else {
-            self.extent_bounds.remove(&object);
+            self
         }
+    }
+
+    /// Certifies bounds on the elevations of a tessellated object's true
+    /// body, in world metres, beside its chord deviation: it lies between
+    /// `bounds.outer`, and, where `bounds.inner` is given, its lowest point
+    /// lies at or below `inner`'s low end and its highest at or above its
+    /// high end. [`fn@crate::certified_vertical_extent`] reads them from the
+    /// graph the mesh is compiled from, where the construction states the
+    /// height exactly (an extrusion of any profile whose caps are
+    /// horizontal).
+    ///
+    /// They narrow the body's vertical bounds as
+    /// [`Self::with_extent_bounds`]' do, and every certificate given for
+    /// the body is kept: the tightest of each reading holds. Bounds that
+    /// are not finite or are reversed, whose `inner` leaves `outer`, or
+    /// that contradict the object's registered mesh by more than its chord
+    /// deviation are ignored, so the body keeps the extent its deviation
+    /// alone gives. Register the mesh first.
+    #[must_use]
+    pub fn with_vertical_extent_bounds(
+        self,
+        object: ObjectId,
+        bounds: VerticalExtentBounds,
+    ) -> Self {
+        let (low, high) = bounds.outer;
+        let valid = low.is_finite()
+            && high.is_finite()
+            && low <= high
+            && bounds.inner.is_none_or(|(bottom, top)| {
+                bottom.is_finite()
+                    && top.is_finite()
+                    && low <= bottom
+                    && bottom <= high
+                    && low <= top
+                    && top <= high
+            });
+        if !valid || !self.meshes.contains_key(&object) {
+            return self;
+        }
+        let kept = self.extent_bounds.get(&object).copied();
+        let mut tightened = self.extent_bounds_tightened(object.clone(), bounds);
+        if tightened.vertical_bounds(&object).is_none() {
+            match kept {
+                Some(kept) => tightened.extent_bounds.insert(object, kept),
+                None => tightened.extent_bounds.remove(&object),
+            };
+        }
+        tightened
+    }
+
+    /// `bounds` combined with those already certified for `object`.
+    fn extent_bounds_tightened(mut self, object: ObjectId, bounds: VerticalExtentBounds) -> Self {
+        let combined = match self.extent_bounds.get(&object) {
+            None => bounds,
+            Some(kept) => VerticalExtentBounds {
+                outer: (
+                    kept.outer.0.max(bounds.outer.0),
+                    kept.outer.1.min(bounds.outer.1),
+                ),
+                inner: match (kept.inner, bounds.inner) {
+                    (Some(a), Some(b)) => Some((a.0.min(b.0), a.1.max(b.1))),
+                    (one, None) | (None, one) => one,
+                },
+            },
+        };
+        self.extent_bounds.insert(object, combined);
         self
     }
 
@@ -369,13 +446,13 @@ impl AxiolidGeometry {
             top: (max[2] - deviation, max[2] + deviation),
         };
         if deviation > 0.0
-            && let Some((outer, inner)) = self.extent_bounds.get(object)
+            && let Some(certified) = self.extent_bounds.get(object)
         {
-            bounds.bottom.0 = bounds.bottom.0.max(outer.0[2]);
-            bounds.top.1 = bounds.top.1.min(outer.1[2]);
-            if let Some(inner) = inner {
-                bounds.bottom.1 = bounds.bottom.1.min(inner.0[2]);
-                bounds.top.0 = bounds.top.0.max(inner.1[2]);
+            bounds.bottom.0 = bounds.bottom.0.max(certified.outer.0);
+            bounds.top.1 = bounds.top.1.min(certified.outer.1);
+            if let Some((bottom, top)) = certified.inner {
+                bounds.bottom.1 = bounds.bottom.1.min(bottom);
+                bounds.top.0 = bounds.top.0.max(top);
             }
             if bounds.bottom.0 > bounds.bottom.1 || bounds.top.0 > bounds.top.1 {
                 return None;
@@ -679,12 +756,31 @@ impl AxiolidGeometry {
             .map(|part| self.boundaries.get(*part).map(Arc::as_ref))
             .collect::<Option<Vec<&ExactBody>>>()
             .and_then(|bodies| ExactBody::union(bodies).ok());
+        // The union's lowest point is its lowest part's, and its highest its
+        // highest part's, each within that part's vertical bounds.
+        let height = meshed
+            .iter()
+            .map(|part| self.vertical_bounds(part))
+            .collect::<Option<Vec<VerticalBounds>>>()
+            .map(|bounds| {
+                let least = |pick: fn(&VerticalBounds) -> f64| {
+                    bounds.iter().map(pick).fold(f64::INFINITY, f64::min)
+                };
+                let most = |pick: fn(&VerticalBounds) -> f64| {
+                    bounds.iter().map(pick).fold(f64::NEG_INFINITY, f64::max)
+                };
+                VerticalExtentBounds {
+                    outer: (least(|b| b.bottom.0), most(|b| b.top.1)),
+                    inner: Some((least(|b| b.bottom.1), most(|b| b.top.0))),
+                }
+            });
         Ok(ComposedBody {
             parts,
             pieces,
             mesh: TriMesh::new(positions, indices),
             deviation,
             exact,
+            height,
         })
     }
 
@@ -722,8 +818,8 @@ impl AxiolidGeometry {
     }
 
     /// Registers a whole with no body of its own, measured as the union of
-    /// its parts ([`Self::compose`]): its mesh, exactness and exact body are
-    /// the union's, and its identity stays its own.
+    /// its parts ([`Self::compose`]): its mesh, exactness, exact body and
+    /// vertical bounds are the union's, and its identity stays its own.
     ///
     /// The whole and each of its parts (at any depth) then share material,
     /// so they never form a pair ([`Self::shares_body`]).
@@ -733,7 +829,15 @@ impl AxiolidGeometry {
         self.bodiless.remove(&whole);
         self = match body.deviation {
             None => self.with_mesh(whole.clone(), body.mesh),
-            Some(deviation) => self.with_tessellated_mesh(whole.clone(), body.mesh, deviation),
+            Some(deviation) => {
+                let tessellated = self.with_tessellated_mesh(whole.clone(), body.mesh, deviation);
+                // Parts certified closer than the largest deviation keep
+                // the union's extent as close.
+                match body.height {
+                    Some(height) => tessellated.with_vertical_extent_bounds(whole.clone(), height),
+                    None => tessellated,
+                }
+            }
         };
         if let Some(exact) = body.exact {
             self = self.with_exact_body(whole.clone(), exact);
@@ -895,6 +999,18 @@ fn hull(boxes: &[Extent]) -> Extent {
                 std::array::from_fn(|axis| max[axis].max(high[axis])),
             )
         })
+}
+
+/// Certified bounds on the elevations of a tessellated body's true solid,
+/// in world metres, for [`AxiolidGeometry::with_vertical_extent_bounds`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct VerticalExtentBounds {
+    /// `(low, high)`: the solid lies at or above `low` and at or below
+    /// `high`.
+    pub outer: (f64, f64),
+    /// `(bottom, top)`, where known: the solid's lowest point lies at or
+    /// below `bottom` and its highest at or above `top`.
+    pub inner: Option<(f64, f64)>,
 }
 
 /// Where a body's true lowest (`bottom`) and highest (`top`) points lie,

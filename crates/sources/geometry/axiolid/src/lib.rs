@@ -8,6 +8,7 @@
 
 pub(crate) mod adjacent_across;
 pub mod boundary_coverage;
+pub mod certified_extent;
 mod circulation;
 pub(crate) mod connector;
 pub mod contact;
@@ -51,13 +52,14 @@ pub mod walking_surface;
 pub(crate) mod zone_area;
 
 pub use boundary_coverage::AxiolidBoundaryCoverageService;
+pub use certified_extent::certified_vertical_extent;
 pub use contact::AxiolidContactService;
 pub use derived_relationships::AxiolidDerivedRelationshipService;
 pub use envelope_membership::AxiolidEnvelopeMembershipService;
 pub use exact_boundary::{ExactBody, ExactBoundary, exact_boundary};
 pub use facade_area::AxiolidFacadeAreaService;
 pub use free_space::AxiolidFreeSpaceService;
-pub use geometry::{AxiolidGeometry, ComposedBody};
+pub use geometry::{AxiolidGeometry, ComposedBody, VerticalExtentBounds};
 pub use guard::AxiolidGuardService;
 pub use leaf_glazing::{
     AxiolidLeafGlazingService, GlazingItem, GlazingItems, ItemMaterial, RegisteredGlazingItems,

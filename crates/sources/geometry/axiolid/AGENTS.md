@@ -6,7 +6,12 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   by every service here. `with_extent_bounds` takes host-certified bounds
   on a tessellated body's extent (the CLI passes
   `ExactBoundary::extent_bounds`: each item's subject in closed form
-  outside, the built vertices less the body's widening inside);
+  outside, the built vertices less the body's widening inside), and
+  `with_vertical_extent_bounds` takes `VerticalExtentBounds` (#393; the
+  CLI passes `certified_vertical_extent`, and `with_composed_body` a
+  whole's from its parts' vertical bounds), ignored unless it agrees with
+  the registered mesh within its deviation. Both are kept as elevations
+  only and combined (outer intersected, inner hulled), never replaced;
   `vertical_bounds` reads them, never for an exact mesh. It also builds a whole's body from its registered
   parts (`compose`, `ComposedBody`, `with_composed_body`): the parts' meshes
   side by side (unwelded, so each stays a closed solid), exact only when every
@@ -42,6 +47,17 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   still refuse a void as bodiless). `body_note` adds `;void:<object>`.
   `tests/voids.rs` pins both views, containment, the unmeasured void and a
   tessellated one.
+- `src/certified_extent.rs` (#393) reads a body's elevations from the
+  geometry graph a host meshes (`certified_vertical_extent`), whatever its
+  plan profile: an extrusion whose local x and y axes have no vertical
+  component after the composed placements (exactly zero, never within a
+  tolerance) spans its caps, reached; a difference (walked along its
+  subjects, never nested) lies within its subject's and an intersection
+  within its operands', neither reached; a union or collection spans its
+  members' hull. Each elevation is widened by `ROUNDING_ULPS` of its
+  magnitude. Everything else refuses with the reason, and the body keeps
+  its deviation-widened extent. Add a family only where its elevations
+  are stated exactly by the construction; never read them from the mesh.
 - `src/exact_boundary.rs` builds a body's exact solid from the Axiolid
   geometry graph a host meshes (`exact_boundary`), and
   `AxiolidGeometry::check_exact_boundary` compares its extent with the

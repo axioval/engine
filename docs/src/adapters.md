@@ -704,8 +704,10 @@ the bare `Unavailable` of a body that could not be read.
 A tessellated space or candidate is bracketed by its chord deviation `d`
 (#305), never refused for being near. Its vertical bounds are its mesh's
 lowest and highest points widened by `d`, narrowed by extent bounds the
-host certifies (`with_extent_bounds`): a slab whose certified top is the
-floor stays out of the space. A plan area widens by the band its outline
+host certifies (`with_extent_bounds` from an exact boundary,
+`with_vertical_extent_bounds` from the construction's stated height,
+`certified_vertical_extent`; combined where both are given): a slab
+whose certified top is the floor stays out of the space. A plan area widens by the band its outline
 may move, `2·d·ℓ + π·d²` per outline edge of length `ℓ` (for a shared
 area only the edges within the other footprint's box). Clear height of a
 tessellated space is the interval of its vertical bounds

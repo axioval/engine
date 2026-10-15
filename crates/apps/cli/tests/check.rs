@@ -8812,6 +8812,325 @@ fn a_declared_shared_frame_shares_the_local_origin() {
     );
 }
 
+impl Case {
+    /// The wall/wall clash rule over `models`, with each rule's status.
+    fn clash_all(&self, models: &[&str], extra: &[&str]) -> Output {
+        let (definitions, ruleset) = self.clash_packages();
+        let mut command = Command::new(env!("CARGO_BIN_EXE_axioval"));
+        command.current_dir(&self.dir).arg("check");
+        for model in models {
+            command.arg("--model").arg(model);
+        }
+        command
+            .arg("--definitions")
+            .arg(definitions)
+            .arg("--ruleset")
+            .arg(ruleset)
+            .args(["--geometry", "--rule-status"])
+            .args(extra)
+            .env("SOURCE_DATE_EPOCH", "1790416800")
+            .output()
+            .unwrap()
+    }
+}
+
+/// #390: an architectural model, a structural model derived from it and an
+/// MEP model. The structural model keeps an exact copy of the wall `A1`,
+/// a copy of `A2` moved 0.5 m along it, a copy of `A3` made thicker, and a
+/// wall `S4` of its own; the MEP model's `M1` crosses `A1`.
+fn derived_models() -> [String; 3] {
+    [
+        walls_file(&[
+            (10, 2.0, 0.0, 4.0, 0.2, "00000000000000000000A1"),
+            (20, 8.0, 0.0, 4.0, 0.2, "00000000000000000000A2"),
+            (30, 14.0, 0.0, 4.0, 0.2, "00000000000000000000A3"),
+        ]),
+        walls_file(&[
+            (10, 2.0, 0.0, 4.0, 0.2, "00000000000000000000A1"),
+            (20, 8.5, 0.0, 4.0, 0.2, "00000000000000000000A2"),
+            (30, 14.0, 0.0, 4.0, 0.3, "00000000000000000000A3"),
+            (40, 20.0, 0.0, 4.0, 0.2, "00000000000000000000S4"),
+        ]),
+        walls_file(&[(10, 2.0, 0.0, 0.2, 4.0, "00000000000000000000M1")]),
+    ]
+}
+
+/// How many topics a written BCF archive holds.
+fn bcf_topic_count(path: &Path) -> usize {
+    let archive = zip::ZipArchive::new(std::fs::File::open(path).unwrap()).unwrap();
+    archive
+        .file_names()
+        .filter(|name| name.ends_with("markup.bcf"))
+        .count()
+}
+
+/// The subject and related objects of every finding, as `document/local`.
+fn clash_pairs(result: &Value) -> Vec<String> {
+    let name = |id: &Value| {
+        format!(
+            "{}/{}",
+            id["source"]["document"].as_str().unwrap(),
+            id["local_id"].as_str().unwrap()
+        )
+    };
+    let mut pairs: Vec<String> = result["report"]["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|finding| {
+            let related: Vec<String> = finding["related"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(name)
+                .collect();
+            format!("{} x {}", name(&finding["object_id"]), related.join(","))
+        })
+        .collect();
+    pairs.sort();
+    pairs
+}
+
+#[test]
+fn a_copy_a_derived_model_keeps_is_evaluated_once_through_its_original() {
+    let case = Case::new("derived-from");
+    let [arch, structure, mep] = derived_models();
+    case.write("arch.ifc", &arch);
+    case.write("struct.ifc", &structure);
+    case.write("mep.ifc", &mep);
+    let models = ["arch.ifc", "struct.ifc", "mep.ifc"];
+
+    // Without the declaration the copy clashes with its original, and the
+    // duct with both: nothing is superseded, and nothing says so.
+    let plain_bcf = case.path("plain.bcfzip");
+    let output = case.clash_all(&models, &["--bcf", plain_bcf.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let plain = json(&output);
+    assert_eq!(
+        clash_pairs(&plain),
+        [
+            "arch.ifc/#16 x mep.ifc/#16",
+            "arch.ifc/#16 x struct.ifc/#16",
+            "arch.ifc/#26 x struct.ifc/#26",
+            "arch.ifc/#36 x struct.ifc/#36",
+            "mep.ifc/#16 x struct.ifc/#16",
+        ],
+        "{plain:#}"
+    );
+    assert_eq!(plain["report"]["rules"][0]["checked"], 8, "{plain:#}");
+    assert!(plain["report"].get("superseded").is_none(), "{plain:#}");
+    assert!(plain["geometry"].get("superseded").is_none(), "{plain:#}");
+    assert!(
+        plain["geometry"].get("derived_unmatched").is_none(),
+        "{plain:#}"
+    );
+    assert_eq!(bcf_topic_count(&plain_bcf), 5);
+
+    let bcf = case.path("derived.bcfzip");
+    let saved = case.path("result.json");
+    let output = case.clash_all(
+        &models,
+        &[
+            "--derived-from",
+            "struct.ifc=arch.ifc",
+            "--bcf",
+            bcf.to_str().unwrap(),
+            "--report",
+            saved.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result: Value = serde_json::from_str(&std::fs::read_to_string(&saved).unwrap()).unwrap();
+    // The exact copy is superseded: no clash with its original, the duct's
+    // clash with the original reported once. The moved and the thickened
+    // copies stay evaluated, and still clash with their originals.
+    assert_eq!(
+        clash_pairs(&result),
+        [
+            "arch.ifc/#16 x mep.ifc/#16",
+            "arch.ifc/#26 x struct.ifc/#26",
+            "arch.ifc/#36 x struct.ifc/#36",
+        ],
+        "{result:#}"
+    );
+    let superseded = &result["report"]["superseded"];
+    assert_eq!(superseded.as_array().unwrap().len(), 1, "{result:#}");
+    assert_eq!(superseded[0]["object"]["source"]["document"], "struct.ifc");
+    assert_eq!(superseded[0]["object"]["local_id"], "#16");
+    assert_eq!(superseded[0]["by"]["source"]["document"], "arch.ifc");
+    assert_eq!(superseded[0]["by"]["local_id"], "#16");
+    assert_eq!(superseded[0]["reason"]["kind"], "by-id", "{result:#}");
+    assert!(
+        superseded[0]["reason"]["text"]
+            .as_str()
+            .unwrap()
+            .starts_with("a copy of ifc-step:arch.ifc/#16"),
+        "{result:#}"
+    );
+    // Summaries and the BCF archive count only evaluated objects.
+    assert_eq!(result["report"]["rules"][0]["checked"], 7, "{result:#}");
+    assert_eq!(result["report"]["rules"][0]["failed"], 3, "{result:#}");
+    assert_eq!(bcf_topic_count(&bcf), 3);
+    // The bridge names the pair and why every other object stays.
+    let geometry = &result["geometry"];
+    assert_eq!(geometry["superseded"][0]["matched"], "by-id", "{result:#}");
+    assert_eq!(
+        geometry["derived_unmatched"],
+        json!({"different-body": 2, "no-body": 1, "no-counterpart": 1}),
+        "{result:#}"
+    );
+    assert!(
+        result["objects"].get("ifc-step:struct.ifc/#16").is_some(),
+        "{result:#}"
+    );
+    let summary = stdout(&report(&[saved.to_str().unwrap()]));
+    assert!(
+        summary.contains(
+            "derived: 1 superseded by their originals · 4 still evaluated \
+             (2 different-body, 1 no-body, 1 no-counterpart)"
+        ),
+        "{summary}"
+    );
+}
+
+/// #390: another export of one authoring model that keeps no `GlobalId`
+/// is matched only by geometry, and only where exactly one object of each
+/// side has the body.
+#[test]
+fn a_derived_model_without_its_originals_ids_is_matched_by_geometry_only_unambiguously() {
+    let case = Case::new("derived-from-geometry");
+    let [arch, _, mep] = derived_models();
+    case.write("arch.ifc", &arch);
+    case.write(
+        "export.ifc",
+        &walls_file(&[
+            (10, 2.0, 0.0, 4.0, 0.2, "00000000000000000000X1"),
+            (20, 8.5, 0.0, 4.0, 0.2, "00000000000000000000X2"),
+        ]),
+    );
+    case.write("mep.ifc", &mep);
+    let models = ["arch.ifc", "export.ifc", "mep.ifc"];
+
+    // By id, no wall matches: every object stays evaluated (the project,
+    // whose id both files share, has no body to confirm).
+    let output = case.clash_all(&models, &["--derived-from", "export.ifc=arch.ifc"]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result = json(&output);
+    assert!(result["report"].get("superseded").is_none(), "{result:#}");
+    assert_eq!(
+        result["geometry"]["derived_unmatched"],
+        json!({"no-body": 1, "no-counterpart": 2}),
+        "{result:#}"
+    );
+
+    let output = case.clash_all(
+        &models,
+        &[
+            "--derived-from",
+            "export.ifc=arch.ifc",
+            "--derived-match",
+            "id-or-geometry",
+        ],
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result = json(&output);
+    assert_eq!(
+        clash_pairs(&result),
+        [
+            "arch.ifc/#16 x mep.ifc/#16",
+            "arch.ifc/#26 x export.ifc/#26"
+        ],
+        "{result:#}"
+    );
+    assert_eq!(
+        result["geometry"]["superseded"][0]["matched"], "by-geometry",
+        "{result:#}"
+    );
+    assert_eq!(
+        result["report"]["superseded"][0]["object"]["source"]["document"], "export.ifc",
+        "{result:#}"
+    );
+    assert_eq!(
+        result["report"]["superseded"][0]["reason"]["kind"], "by-geometry",
+        "{result:#}"
+    );
+
+    // Two originals with the copy's body: ambiguous, so it stays.
+    case.write(
+        "arch.ifc",
+        &walls_file(&[
+            (10, 2.0, 0.0, 4.0, 0.2, "00000000000000000000A1"),
+            (20, 2.0, 0.0, 4.0, 0.2, "00000000000000000000D1"),
+        ]),
+    );
+    let output = case.clash_all(
+        &models,
+        &[
+            "--derived-from",
+            "export.ifc=arch.ifc",
+            "--derived-match",
+            "id-or-geometry",
+        ],
+    );
+    let result = json(&output);
+    assert!(result["report"].get("superseded").is_none(), "{result:#}");
+    assert_eq!(
+        result["geometry"]["derived_unmatched"]["ambiguous"], 1,
+        "{result:#}"
+    );
+}
+
+/// #390: another export of the model states the wall `A1` as triangles
+/// rather than an extruded profile. The body, not its representation, is
+/// compared, so the copy is still superseded by its original.
+#[test]
+fn a_copy_stated_by_another_representation_is_matched_by_its_body() {
+    let case = Case::new("derived-from-representation");
+    let [arch, _, mep] = derived_models();
+    case.write("arch.ifc", &arch);
+    let triangles = face_set_box(40, [0.0, -0.1, 0.0], [4.0, 0.1, 3.0], Faces::CornersPerFace)
+        .replace("'0000000000000000000049'", "'00000000000000000000A1'");
+    case.write(
+        "export.ifc",
+        &walls_file(&[]).replace("ENDSEC;\nEND-ISO", &format!("{triangles}ENDSEC;\nEND-ISO")),
+    );
+    case.write("mep.ifc", &mep);
+    let output = case.clash_all(
+        &["arch.ifc", "export.ifc", "mep.ifc"],
+        &["--derived-from", "export.ifc=arch.ifc"],
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result = json(&output);
+    assert_eq!(
+        result["geometry"]["superseded"][0]["derived"]["local_id"], "#49",
+        "{result:#}"
+    );
+    assert_eq!(
+        clash_pairs(&result),
+        ["arch.ifc/#16 x mep.ifc/#16"],
+        "{result:#}"
+    );
+}
+
+#[test]
+fn a_derived_model_declaration_naming_no_model_or_itself_fails_before_running() {
+    let case = Case::new("derived-from-refused");
+    let [arch, structure, _] = derived_models();
+    case.write("arch.ifc", &arch);
+    case.write("struct.ifc", &structure);
+    let models = ["arch.ifc", "struct.ifc"];
+    for (declaration, expected) in [
+        ("other.ifc=arch.ifc", "name two models as DERIVED=ORIGINAL"),
+        ("struct.ifc", "name two models as DERIVED=ORIGINAL"),
+        ("arch.ifc=arch.ifc", "derived from itself"),
+    ] {
+        let output = case.clash_all(&models, &["--derived-from", declaration]);
+        assert_eq!(output.status.code(), Some(1), "{}", stderr(&output));
+        assert!(stderr(&output).contains(expected), "{}", stderr(&output));
+        assert!(output.stdout.is_empty());
+    }
+}
+
 /// `model`, a STEP file, written as ifcXML in the codec's own layout with
 /// IFC4's attribute names.
 fn as_ifc_xml(model: &str) -> Vec<u8> {

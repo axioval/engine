@@ -502,6 +502,26 @@ pub struct GeometryRecord {
     /// absent in results saved before it existed, and when there is none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub declared_frame_sources: Vec<SourceId>,
+    /// Every object of a `--derived-from` model superseded by its original
+    /// (#390), with how it was matched (`by-id`, `by-geometry`); the
+    /// report's `superseded` gives the reason. Additive: absent in results
+    /// saved before it existed, and when there is none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub superseded: Vec<SupersededRecord>,
+    /// How many objects of the `--derived-from` models stay evaluated, by
+    /// cause (`no-counterpart`, `different-body`, ...). Additive: absent
+    /// in results saved before it existed, and without a derived model.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub derived_unmatched: BTreeMap<String, usize>,
+}
+
+/// An object of a derived model superseded by its original.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SupersededRecord {
+    pub derived: ObjectId,
+    pub original: ObjectId,
+    /// `by-id` or `by-geometry`.
+    pub matched: String,
 }
 
 /// An opening voiding a whole with no body of its own, and the parts its
@@ -575,6 +595,9 @@ impl CheckOutput {
                 .filter_map(NotEvaluated::object_id),
         );
         named.extend(table_objects(&report));
+        for superseded in report.superseded() {
+            named.extend([&superseded.object, &superseded.by]);
+        }
         let objects = named
             .into_iter()
             .filter_map(|id| {
@@ -985,6 +1008,13 @@ pub struct GeometryCounts {
     /// coordinate systems state it.
     #[serde(skip_serializing_if = "is_zero")]
     pub declared_frame: usize,
+    /// Objects of derived models superseded by their originals, evaluated
+    /// once through them.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub superseded: usize,
+    /// Objects of derived models that stay evaluated, by cause.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub derived_unmatched: BTreeMap<String, usize>,
 }
 
 /// A bounded digest of a result.
@@ -1550,6 +1580,8 @@ pub fn summarize(output: &CheckOutput, top: usize, saved: Option<&str>) -> Summa
             unmeasured: g.unmeasured.len(),
             exact_boundaries: g.exact_boundaries,
             declared_frame: g.declared_frame_sources.len(),
+            superseded: g.superseded.len(),
+            derived_unmatched: g.derived_unmatched.clone(),
         }),
         comparison: output.comparison.as_ref().map(|c| ComparisonDigest {
             base: c.base.clone(),
@@ -1715,6 +1747,23 @@ fn render_geometry(out: &mut String, geometry: &GeometryCounts) {
         );
     }
     let _ = writeln!(out);
+    if geometry.superseded > 0 || !geometry.derived_unmatched.is_empty() {
+        let unmatched: usize = geometry.derived_unmatched.values().sum();
+        let _ = write!(
+            out,
+            "derived: {} superseded by their originals · {unmatched} still evaluated",
+            geometry.superseded
+        );
+        if unmatched > 0 {
+            let causes: Vec<String> = geometry
+                .derived_unmatched
+                .iter()
+                .map(|(cause, count)| format!("{count} {cause}"))
+                .collect();
+            let _ = write!(out, " ({})", causes.join(", "));
+        }
+        let _ = writeln!(out);
+    }
 }
 
 pub fn render_summary(summary: &Summary) -> String {

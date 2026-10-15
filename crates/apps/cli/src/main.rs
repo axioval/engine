@@ -97,7 +97,7 @@ enum Command {
     /// Exit status: 0 every rule was evaluated and nothing was found; 3 at
     /// least one finding; 4 no finding, but something was not evaluated, so
     /// the model has not passed; 1 the check could not run; 2 invalid usage.
-    Check(CheckArgs),
+    Check(Box<CheckArgs>),
     /// Compare two revisions of a model, object by object.
     ///
     /// Objects are matched by `GlobalId`. Kind, classifications, named
@@ -278,6 +278,31 @@ struct CheckArgs {
     /// unmeasured. Off by default.
     #[arg(long, requires = "geometry")]
     declare_shared_frame: bool,
+    /// With `--geometry`, declare that one model was derived from another,
+    /// naming both by file name: `DERIVED=ORIGINAL` (a model exported from
+    /// another keeping copies of its objects, or another export of one
+    /// authoring model with different exchange settings). Each object of
+    /// DERIVED matched to one of ORIGINAL whose body is the original's
+    /// within `--derived-tolerance` is superseded by it: evaluated once,
+    /// through the original, and listed in the result's `superseded`.
+    /// Moved, reshaped or unmatched objects stay evaluated. Repeat for
+    /// several derived models.
+    #[arg(
+        long = "derived-from",
+        value_name = "DERIVED=ORIGINAL",
+        requires = "geometry"
+    )]
+    derived_from: Vec<String>,
+    /// How `--derived-from` matches objects: `id` by `GlobalId` and class,
+    /// the body confirmed; `id-or-geometry` also pairs an object with no
+    /// such counterpart by its body alone when exactly one object of each
+    /// side matches.
+    #[arg(long, value_enum, default_value_t = DerivedMatch::Id, requires = "derived_from")]
+    derived_match: DerivedMatch,
+    /// The tolerance, in metres, within which `--derived-from` matches
+    /// bodies in the shared world frame.
+    #[arg(long, value_name = "METRES", default_value_t = geometry::DEFAULT_TOLERANCE_METRES, requires = "derived_from")]
+    derived_tolerance: f64,
     /// Locate every finding and not-evaluated outcome by storey and space:
     /// `storeys` climbs the spatial containment to storeys, `containers` to
     /// storeys and spaces, `geometry` takes spaces from the bodies that
@@ -375,6 +400,13 @@ impl From<StatusArg> for DecisionStatus {
             StatusArg::Open => Self::Open,
         }
     }
+}
+
+/// How `check --derived-from` matches objects.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+enum DerivedMatch {
+    Id,
+    IdOrGeometry,
 }
 
 /// How `check --locate` locates outcomes.
@@ -874,7 +906,7 @@ fn run() -> Result<Outcome, Box<dyn Error>> {
             }
             Ok(Outcome::Passed)
         }
-        Command::Check(args) => check(args),
+        Command::Check(args) => check(*args),
         Command::Compare(args) => compare::compare(args),
         Command::Ids {
             command: ids::IdsCommand::Translate(args),
@@ -1024,15 +1056,70 @@ fn geometry_record(report: geometry::GeometryReport) -> digest::GeometryRecord {
             .collect(),
         local_origin: report.local_origin,
         declared_frame_sources: report.declared_frame_sources,
+        superseded: report
+            .superseded
+            .into_iter()
+            .map(|matched| digest::SupersededRecord {
+                derived: matched.derived,
+                original: matched.original,
+                matched: matched.matched.as_str().to_owned(),
+            })
+            .collect(),
+        derived_unmatched: report
+            .derived_unmatched
+            .into_iter()
+            .map(|(cause, count)| (cause.as_str().to_owned(), count))
+            .collect(),
     }
 }
 
-/// How `check --geometry` meshes the models.
-fn geometry_options(args: &CheckArgs) -> geometry::Options {
-    geometry::Options::meshes(args.output.bcf_view.snapshots)
+/// How `check --geometry` meshes the models of `session`.
+///
+/// # Errors
+///
+/// A `--derived-from` that is not `DERIVED=ORIGINAL` or names a model the
+/// check does not read.
+fn geometry_options(
+    args: &CheckArgs,
+    session: &EvidenceSession,
+) -> Result<geometry::Options, Box<dyn Error>> {
+    let mut options = geometry::Options::meshes(args.output.bcf_view.snapshots)
         .with_exact_boundaries(!args.no_exact_boundaries)
         .with_declared_shared_frame(args.declare_shared_frame)
         .with_timings(args.timings)
+        .with_derived_matching(match args.derived_match {
+            DerivedMatch::Id => geometry::Matching::ById,
+            DerivedMatch::IdOrGeometry => geometry::Matching::ByIdOrGeometry,
+        })
+        .with_derived_tolerance(args.derived_tolerance);
+    let documents: Vec<&SourceId> = session
+        .snapshots()
+        .map(axioval::engine::SourceSnapshot::source)
+        .collect();
+    for argument in &args.derived_from {
+        let source = |name: &str| {
+            documents
+                .iter()
+                .find(|source| source.document == name)
+                .map(|source| (*source).clone())
+        };
+        let named = argument
+            .split_once('=')
+            .and_then(|(derived, original)| Some((source(derived)?, source(original)?)));
+        let Some((derived, original)) = named else {
+            return Err(format!(
+                "--derived-from {argument}: name two models as DERIVED=ORIGINAL by file name, one of {}",
+                documents
+                    .iter()
+                    .map(|source| source.document.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+            .into());
+        };
+        options = options.with_derived_from(derived, original);
+    }
+    Ok(options)
 }
 
 fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
@@ -1074,7 +1161,8 @@ fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
             .fold(DisciplineMap::new(), DisciplineMap::with),
     );
     let (session, mut meshed) = if args.geometry {
-        let (session, report) = geometry::attach(session, &bytes, geometry_options(&args))
+        let options = geometry_options(&args, &session)?;
+        let (session, report) = geometry::attach(session, &bytes, options)
             .map_err(|error| format!("geometry: {error}"))?;
         // Each geometry phase is timed by `attach`.
         clock.skip();

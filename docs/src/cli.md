@@ -403,6 +403,63 @@ states`) and the summary counts them, so a reader can tell an alignment
 declared from one read. Models placed far out are still measured about one
 local origin, the declared ones shifted by it as the first is.
 
+### Derived models
+
+Models are often derived from one another: a structural model exported
+from the architectural one keeps copies of its walls, slabs and columns,
+and one authoring model exported several times with different exchange
+settings gives several files of the same objects. Checked together, every
+rule would see each such object twice: a per-object rule reports the wall
+once per file, and a clash rule reports the copy against its original and
+a duct crossing the wall twice. `--derived-from DERIVED=ORIGINAL` (with
+`--geometry`, models named by file name, repeatable) declares that DERIVED
+was derived from ORIGINAL. Each object of DERIVED matched to an object of
+ORIGINAL is then superseded by it: no rule's subject or counterpart, its
+findings reported once through the original, rule summaries (`checked`)
+and the BCF, spreadsheet and HTML outputs counting only evaluated objects.
+The result's report lists every superseded object in `superseded` with the
+object superseding it and the reason (`kind` and `text`), `geometry.superseded` each pair with
+how it was matched (`by-id`, `by-geometry`), `geometry.derived_unmatched`
+how many objects of the derived models stay evaluated by cause, and the
+summary says both (`derived: 1 superseded by their originals · 4 still
+evaluated (2 different-body, 1 no-body, 1 no-counterpart)`). All of it is
+additive and absent without the flag, when the result is unchanged.
+
+Matching (`--derived-match`, default `id`):
+
+- `id`: an object with the original's `GlobalId` and class is its copy,
+  if its body is confirmed to be the original's.
+- `id-or-geometry`: as `id`, and an object with no such counterpart (an
+  export that does not keep ids) is paired by geometry alone: the same
+  class, the same body, and exactly one candidate on each side, found
+  through a grid over the bodies' boxes, never by comparing all pairs.
+
+Bodies are compared in the shared world frame by what the geometry
+service measures, never by representation or triangles, since another
+export may state one body as an extruded profile, a B-rep or triangles.
+Within `--derived-tolerance` metres (default 0.001), widened by each
+mesh's certified chord deviation `d`: every corner of the two bounding
+boxes within `t + d1 + d2`; the mesh areas within `2π (a + b + c)` times
+that, what offsetting a convex body by it adds to its area at most (`a`,
+`b`, `c` the larger box's extents); and the certified volume intervals
+within `t` times the larger area. Where the geometry service certifies
+the two surfaces' Hausdorff distance (two exact meshes, or two exact
+boundaries), it must be within `t` too; between tessellations it is not
+certified, and the fingerprint decides.
+
+The safe side is double reporting, never hiding: an object whose identity
+with an original cannot be established stays fully evaluated, counted by
+cause: `no-counterpart` (no object with its id, nor, by geometry, its
+body), `different-class`, `different-body` (moved or reshaped beyond the
+tolerance), `no-body` (it or its counterpart occupies no material, such
+as a storey), `unmeasured` (either body unmeasured, including a model not
+in the first model's frame), `undecided` (a volume that cannot be
+bounded, a distance interval left open) and `ambiguous` (several
+candidates by geometry). A model declared derived from itself or from two
+models, or derived and also the original of another, fails with status 1
+before anything is written; declare every derived model from the original
+directly.
+
 With `--geometry`, a body whose construction is exact also gets its exact
 boundary, built from the graph its mesh is compiled from: an extrusion or
 revolution of a rectangle, circle, section or line-and-arc profile (an

@@ -4,6 +4,42 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+### Added
+
+- **Objects a federated source copies from another are evaluated once**
+  ([#390](https://github.com/axioval/engine/issues/390)). A host declares
+  objects superseded with `EvidenceSession::with_superseded`
+  (`axioval_ir::Superseded`: object, superseding object of another source,
+  and a `SupersessionReason`: a stable kind, `by-id`, `by-geometry` or
+  `declared` for the host's own judgement, and its text, reported
+  verbatim). A run evaluates a superseded object only through the object
+  superseding it: it is no rule's subject or counterpart, rule summaries
+  and the BCF, spreadsheet and HTML outputs count only evaluated objects,
+  and `Report::superseded` lists each with its superseding object and the
+  reason. The declaration fails closed (unknown objects, an object
+  superseding itself or one of its own source, an object superseded twice,
+  chains and cycles are refused). Without one a report is byte-identical.
+  `axioval-host-ifc-axiolid` matches derived sources for it:
+  `Options::with_derived_from(derived, original)` with
+  `with_derived_matching` (`Matching::ById`, by `GlobalId` and class with
+  the body confirmed, or `Matching::ByIdOrGeometry`, which also pairs an
+  object by its body alone when exactly one object of each side matches)
+  and `with_derived_tolerance` (1 mm by default). Bodies are compared in
+  the shared world frame by bounds, area and certified volume within the
+  tolerance and each mesh's deviation, and by the certified Hausdorff
+  distance where the geometry service measures one; never by
+  representation or triangles. An object whose identity cannot be
+  established stays evaluated. `GeometryReport::superseded` names each pair
+  and how it was matched (`by-id`, `by-geometry`), and
+  `GeometryReport::derived_unmatched` counts the rest by cause. The CLI
+  takes `check --derived-from DERIVED=ORIGINAL`, `--derived-match` and
+  `--derived-tolerance`, and shows both in the result and the summary.
+
+### Changed
+
+- `axioval-host-ifc-axiolid`'s `Options` is no longer `Copy`: it holds the
+  derived-source declarations. Clone it to attach twice.
+
 ## [0.5.0] - 2026-10-15
 
 Context and measurement. Rules can now read location-dependent context

@@ -607,6 +607,18 @@ reported as `identity.invalid-global-id`. A GlobalId claimed by more than one
 as `identity.duplicate-global-id` and attached to none of its claimants. Both
 are warnings: the object stays checkable and only loses its alias.
 
+The alias is also how a host matches the copies a derived model keeps of
+another model's objects (#390): the IFC to Axiolid host
+(`axioval-host-ifc-axiolid`, `Options::with_derived_from`) pairs an object
+of the derived source with the original's object of the same GlobalId and
+class, and supersedes it only once their bodies are confirmed one in the
+shared world frame. An object without a trusted alias is never matched by
+id; the host may pair it by its body alone (`Matching::ByIdOrGeometry`),
+only where exactly one object of each side has it. Neither adapter
+matches anything: the IFC adapter states the alias, the Axiolid adapter
+measures the bodies, and the host composes the two (see
+[CLI](./cli.md#derived-models)).
+
 ## Axiolid
 
 `axioval-axiolid` supplies geometry evidence for any source capable of exposing Axiolid-compatible geometry handles. A proprietary CAD adapter can use it directly without importing OpenBIM or IFC.

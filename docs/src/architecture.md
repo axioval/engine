@@ -94,6 +94,15 @@ geometry every host evaluates is the one the parity harness proves. Hosts
 take it through the facade's `ifc-geometry` feature, which also pins the
 Axiolid and IFC geometry versions it was proven with.
 
+A host may also declare that one source was derived from another
+(`Options::with_derived_from`, #390): a discipline model exported from
+another and keeping copies of its objects, or another export of one
+authoring model with different exchange settings. The bridge matches each
+derived object to its original and declares the matched pairs superseded
+on the session (`EvidenceSession::with_superseded`), so the engine
+evaluates each original once. Matching is the host's, never the core's;
+see [CLI](./cli.md#derived-models) for how it is decided.
+
 It may join the two adapters because it is not one. An adapter maps one
 source or one kernel into the engine's vocabulary, and must not know the
 other: a combined adapter would make IFC reading depend on a kernel and the

@@ -1173,10 +1173,10 @@ pub use free_space::{
     AreaInterval, BoxClearance, ClearanceOutcome, ClearancePlacementEvidence, ClearanceRequest,
     ClearanceShape, CompleteClearanceEvidence, CompletePlacementEvidence, CompleteSupportEvidence,
     ContainmentEvidence, ContainmentOutcome, ContainmentRequest, CylinderClearance, ElevationBand,
-    EntranceReach, FrameOffsetPlacement, FreeAreaEvidence, FreeAreaRequest, FreeSpaceError,
-    FreeSpaceService, FreeSpaceServiceHandle, MetricDirection, MetricFrame, ObstructionEvidence,
-    PlacementDomain, PlacementOrientation, PlacementOutcome, PlacementRequest, PlacementShape,
-    SignedDistanceInterval, SupportCoverageEvidence, SupportCoverageOutcome,
+    EntranceReach, FrameOffsetPlacement, FreeAreaEvidence, FreeAreaRequest, FreeFloorEvidence,
+    FreeSpaceError, FreeSpaceService, FreeSpaceServiceHandle, MetricDirection, MetricFrame,
+    ObstructionEvidence, PlacementDomain, PlacementOrientation, PlacementOutcome, PlacementRequest,
+    PlacementShape, SignedDistanceInterval, SupportCoverageEvidence, SupportCoverageOutcome,
     SupportCoverageRequest, SupportedPlacement,
 };
 pub use groupings::{

@@ -120,6 +120,15 @@ A free corridor width (a region eroded by half the width that still connects two
 
 Connected corridor requirements use [metric routing](./metric-routing.md) with an appropriate mobility profile rather than inventing a second path contract.
 
+## Free floor
+
+`FreeSpaceService::measure_free_floor` answers a `PlacementRequest` with `FreeFloorEvidence`: what the request's obstacles and swept doors leave of its scope's floor (with merged scopes, theirs too) within the request's band, the shape's height where none is stated. The shape, domain and entrance reach do not change the floor. It is a measurement, never a verdict:
+
+- `area`, an `AreaInterval`: from below the scope as a witness sees it less everything that may take floor (obstacles grown by their chord deviation, swept sectors' circumscribed polygons), from above the scope as an absence is proven in less what surely does. With exact bodies and no swing the two ends agree up to rounding.
+- `obstacles`: the request's obstacles and swept doors whose footprint in the band surely shares area with the floor; `possible`: those that may. Both are sorted and disjoint, and name only the request's obstacles and swept doors (`FreeFloorEvidence::try_new` refuses others). A body flush with the floor's edge takes none.
+
+The default refuses. The Axiolid service builds the placement scene once, keeping each obstacle's footprints apart as it does (`Taken`): an obstacle surely takes floor where what it surely occupies shares area with the witnesses' scope, possibly where what it may occupy shares more than 1 mm² with the room (a wall flush with a scope bracketed around its slivers shares some 1e-8 m², no floor anyone stands on). Its evidence is exact, `axiolid:free-floor:<scope>` with the merged scopes and the bracketed bodies named as a placement's are. The free-floor capabilities read it for a proven absence ([Built-ins](./capabilities.md#built-ins)).
+
 ## Circulation maps
 
 `FreeSpaceService::map_circulation` answers a `CirculationRequest`: a space, its entrances, its components, the obstacles, a path width, the height the path must be free to and a tolerance. Entrances are never obstacles and the space is none of the three; the constructor removes them. A service that does not map circulation refuses by default. The `CirculationMap` is a measurement:

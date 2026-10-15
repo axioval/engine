@@ -190,6 +190,7 @@ impl AxiolidFreeSpaceService {
             request.swept_doors(),
             request.band(),
             t,
+            None,
         )?;
         // The free area bracketed: the sure scope less every possible
         // obstacle (`free`), and the possible scope less the sure ones only

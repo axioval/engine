@@ -1155,6 +1155,91 @@ impl FreeAreaEvidence {
     }
 }
 
+/// What a placement request's obstacles and swept doors leave of its
+/// scope's floor within the request's band: a measurement, never a verdict.
+///
+/// `area` brackets the free floor: its lower end is the area surely free
+/// (the scope's footprint as a witness sees it, less everything that may
+/// take floor), its upper end the area possibly free (the scope as an
+/// absence is proven in, less what surely takes floor). Both ends are
+/// equal, up to binary rounding, where every body is exact and no door
+/// swings. `obstacles` are the request's obstacles and swept doors whose
+/// footprint in the band surely shares area with the floor, `possible`
+/// those that may (a backend may leave out one that could take no more than
+/// a negligible sliver); both sorted by source-qualified identity and
+/// disjoint.
+/// The request's shape, domain and entrance reach do not change the floor;
+/// its shape's height bounds the band where the request states none.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FreeFloorEvidence {
+    request: PlacementRequest,
+    area: AreaInterval,
+    obstacles: Vec<ObjectId>,
+    possible: Vec<ObjectId>,
+    evidence: Evidence,
+}
+impl FreeFloorEvidence {
+    /// Evidence for `request`.
+    ///
+    /// # Errors
+    ///
+    /// [`FreeSpaceError::InexactAreaEvidence`] for evidence that is not
+    /// exact and reviewable, [`FreeSpaceError::UnexpectedObstacleEvidence`]
+    /// for an object neither an obstacle nor a swept door of the request,
+    /// or named both sure and possible.
+    pub fn try_new(
+        request: PlacementRequest,
+        area: AreaInterval,
+        mut obstacles: Vec<ObjectId>,
+        mut possible: Vec<ObjectId>,
+        evidence: Evidence,
+    ) -> Result<Self, FreeSpaceError> {
+        if !reviewable_exact_evidence(&evidence) {
+            return Err(FreeSpaceError::InexactAreaEvidence);
+        }
+        for list in [&mut obstacles, &mut possible] {
+            list.sort();
+            list.dedup();
+        }
+        let known = |id: &ObjectId| {
+            request.obstacles().contains(id)
+                || request.swept_doors().iter().any(|door| door.door() == id)
+        };
+        if !obstacles.iter().chain(&possible).all(known)
+            || obstacles
+                .iter()
+                .any(|id| possible.binary_search(id).is_ok())
+        {
+            return Err(FreeSpaceError::UnexpectedObstacleEvidence);
+        }
+        Ok(Self {
+            request,
+            area,
+            obstacles,
+            possible,
+            evidence,
+        })
+    }
+    pub fn request(&self) -> &PlacementRequest {
+        &self.request
+    }
+    /// The free floor's area, bracketed.
+    pub fn area(&self) -> &AreaInterval {
+        &self.area
+    }
+    /// The obstacles and swept doors surely taking floor.
+    pub fn obstacles(&self) -> &[ObjectId] {
+        &self.obstacles
+    }
+    /// The obstacles and swept doors that may take floor, and may not.
+    pub fn possible(&self) -> &[ObjectId] {
+        &self.possible
+    }
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+}
+
 pub trait FreeSpaceService: Send + Sync + 'static {
     // gate: measures truth, length
     fn assess_clearance(
@@ -1194,6 +1279,19 @@ pub trait FreeSpaceService: Send + Sync + 'static {
         let _ = request;
         Err(FreeSpaceError::Unavailable(
             "this free-space service does not compare clearance footprints with supports".into(),
+        ))
+    }
+    /// What the request's obstacles and swept doors leave of its scope's
+    /// floor (see [`FreeFloorEvidence`]). A service that does not measure
+    /// the floor refuses, never answering an empty or a whole floor.
+    // gate: measures area
+    fn measure_free_floor(
+        &self,
+        request: &PlacementRequest,
+    ) -> Result<FreeFloorEvidence, FreeSpaceError> {
+        let _ = request;
+        Err(FreeSpaceError::Unavailable(
+            "this free-space service does not measure the free floor".into(),
         ))
     }
     /// Where a path of the request's width can run in its space, and which
@@ -1293,6 +1391,24 @@ impl FreeSpaceServiceHandle {
             return Err(FreeSpaceError::ResponseRequestMismatch);
         }
         Ok(outcome)
+    }
+
+    /// Measures the free floor and checks that the evidence answers
+    /// `request`.
+    ///
+    /// # Errors
+    ///
+    /// The backend's refusal, or [`FreeSpaceError::ResponseRequestMismatch`]
+    /// for evidence about another request.
+    pub fn measure_free_floor(
+        &self,
+        request: &PlacementRequest,
+    ) -> Result<FreeFloorEvidence, FreeSpaceError> {
+        let evidence = crate::timing::host("free-space", || self.0.measure_free_floor(request))?;
+        if evidence.request() != request {
+            return Err(FreeSpaceError::ResponseRequestMismatch);
+        }
+        Ok(evidence)
     }
 
     /// Maps circulation and checks that the map answers `request`.

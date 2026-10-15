@@ -20,10 +20,10 @@ use axioval_engine::{
     AreaInterval, CirculationMap, CirculationRequest, ClearanceOutcome, ClearancePlacementEvidence,
     ClearanceRequest, ClearanceShape, CompleteClearanceEvidence, CompletePlacementEvidence,
     CompleteSupportEvidence, ContainmentOutcome, ContainmentRequest, ElevationBand,
-    FrameOffsetPlacement, FreeAreaEvidence, FreeAreaRequest, FreeSpaceError, FreeSpaceService,
-    MetricDirection, MetricFrame, MetricPoint, ObstructionEvidence, PlacementDomain,
-    PlacementOrientation, PlacementOutcome, PlacementRequest, PlacementShape, SupportedPlacement,
-    SweptDoor,
+    FrameOffsetPlacement, FreeAreaEvidence, FreeAreaRequest, FreeFloorEvidence, FreeSpaceError,
+    FreeSpaceService, MetricDirection, MetricFrame, MetricPoint, ObstructionEvidence,
+    PlacementDomain, PlacementOrientation, PlacementOutcome, PlacementRequest, PlacementShape,
+    SupportedPlacement, SweptDoor,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
@@ -481,6 +481,7 @@ impl AxiolidFreeSpaceService {
             request.swept_doors(),
             request.effective_band(),
             tolerance,
+            None,
         )
     }
 
@@ -500,6 +501,10 @@ impl AxiolidFreeSpaceService {
     /// keep it out of the band (a slab under the floor whose certified
     /// extent ends there) occupies nothing either way. A deviation that
     /// bounds nothing refuses.
+    ///
+    /// With `taken`, each obstacle that may occupy anything near the scope
+    /// is also kept apart there, with what it may and what it surely
+    /// occupies ([`Taken`]), for [`FreeSpaceService::measure_free_floor`].
     #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
     pub(crate) fn floor_scene(
         &self,
@@ -509,6 +514,7 @@ impl AxiolidFreeSpaceService {
         swept: &[SweptDoor],
         band: ElevationBand,
         tolerance: axiolid_core::Tolerance,
+        mut taken: Option<&mut Vec<Taken>>,
     ) -> Result<(Scene, f64), FreeSpaceError> {
         let missing = |id: &ObjectId| FreeSpaceError::MissingGeometry(Box::new(id.clone()));
         let deviation = |id: &ObjectId| {
@@ -690,15 +696,32 @@ impl AxiolidFreeSpaceService {
                 let witness = self
                     .band_footprint(obstacle, mesh, low - u, high + u)
                     .map_err(FreeSpaceError::Unavailable)?;
-                exact_rings.extend(trapezoids(&witness).into_iter().map(|piece| piece.outer));
-                if u == 0.0 {
-                    sure_rings.extend(trapezoids(&witness).into_iter().map(|piece| piece.outer));
+                let may: Vec<Ring> = trapezoids(&witness)
+                    .into_iter()
+                    .map(|piece| piece.outer)
+                    .collect();
+                let surely: Vec<Ring> = if u == 0.0 {
+                    may.clone()
                 } else if high - u > low + u {
                     let sure = self
                         .band_footprint(obstacle, mesh, low + u, high - u)
                         .map_err(FreeSpaceError::Unavailable)?;
-                    sure_rings.extend(trapezoids(&sure).into_iter().map(|piece| piece.outer));
+                    trapezoids(&sure)
+                        .into_iter()
+                        .map(|piece| piece.outer)
+                        .collect()
+                } else {
+                    Vec::new()
+                };
+                if let Some(taken) = taken.as_mut() {
+                    taken.push(Taken {
+                        object: obstacle.clone(),
+                        possible: placement::union(&may, tolerance)?,
+                        sure: placement::union(&surely, tolerance)?,
+                    });
                 }
+                exact_rings.extend(may);
+                sure_rings.extend(surely);
                 continue;
             }
             let bounds = self
@@ -723,6 +746,7 @@ impl AxiolidFreeSpaceService {
             // bottom, so a body standing on the floor is entered from its
             // side only; its centre lies in the band however the floor lies.
             let level = low + u + 2.0 * d;
+            let mut surely = Region::empty();
             if level < high - u {
                 let (section, shadow) = self
                     .solid_column(obstacle, mesh, level, d)
@@ -731,9 +755,26 @@ impl AxiolidFreeSpaceService {
                     .difference(&to_local(&shadow)?, tolerance)
                     .map_err(region_error)?;
                 if !core.is_empty() {
-                    let shrunk = core.erode_inner(d, tolerance).map_err(region_error)?;
-                    certain = certain.union(&shrunk, tolerance).map_err(region_error)?;
+                    surely = core.erode_inner(d, tolerance).map_err(region_error)?;
+                    certain = certain.union(&surely, tolerance).map_err(region_error)?;
                 }
+            }
+            if let Some(taken) = taken.as_mut() {
+                taken.push(Taken {
+                    object: obstacle.clone(),
+                    possible: world(grown)?,
+                    sure: world(surely)?,
+                });
+            }
+        }
+        if let Some(taken) = taken {
+            for door in swept {
+                let (inner, outer) = swept_rings(std::slice::from_ref(door), floor, high);
+                taken.push(Taken {
+                    object: door.door().clone(),
+                    possible: placement::union(&outer, tolerance)?,
+                    sure: placement::union(&inner, tolerance)?,
+                });
             }
         }
         let (inner, outer) = swept_rings(swept, floor, high);
@@ -761,6 +802,22 @@ impl AxiolidFreeSpaceService {
         };
         Ok((scene, floor))
     }
+}
+
+/// The least floor an obstacle must possibly take to be named as possibly
+/// taking it: a wall flush with a scope bracketed around its slivers
+/// (`SLIVER_MARGIN_METRES`) shares some 1e-8 m² with the room, which is
+/// no floor anyone could stand on. A body bracketed by a chord deviation
+/// shares far more and stays possible.
+const POSSIBLE_FLOOR_M2: f64 = 1.0e-6;
+
+/// What one obstacle or swept door may and surely occupies in a scene's
+/// band, in plan: `possible` contains its footprint (as witnesses avoid
+/// it), `sure` lies inside it (as absence is proven against it).
+pub(crate) struct Taken {
+    pub(crate) object: ObjectId,
+    pub(crate) possible: Region,
+    pub(crate) sure: Region,
 }
 
 /// Chords (and tangents) per quarter turn of a swept sector: its polygons
@@ -1073,6 +1130,80 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
             )?,
         };
         Ok(PlacementOutcome::Found(found))
+    }
+
+    /// The placement scene's free floor: the witnesses' scope less every
+    /// possible obstacle from below, the absence's room less the sure ones
+    /// from above, as `circulation.rs` brackets the free area. An obstacle
+    /// or swept door surely takes floor where what it surely occupies
+    /// shares area with the witnesses' scope (inside the true floor), and
+    /// possibly where what it may occupy shares more than
+    /// `POSSIBLE_FLOOR_M2` (1 mm²) with the room.
+    fn measure_free_floor(
+        &self,
+        request: &PlacementRequest,
+    ) -> Result<FreeFloorEvidence, FreeSpaceError> {
+        let tolerance = tolerance()?;
+        let mut taken = Vec::new();
+        let (scene, _) = self.floor_scene(
+            request.scope(),
+            request.merged_scopes(),
+            request.obstacles(),
+            request.swept_doors(),
+            request.effective_band(),
+            tolerance,
+            Some(&mut taken),
+        )?;
+        let fail = |e| FreeSpaceError::Unavailable(format!("free floor: {e:?}"));
+        let less = |scope: &Region, obstacles: &Region| {
+            if obstacles.is_empty() {
+                Ok(scope.clone())
+            } else {
+                scope.difference(obstacles, tolerance).map_err(fail)
+            }
+        };
+        let free = less(&scene.scope, &scene.obstacles)?.area();
+        let roomy = less(&scene.room, &scene.sure)?.area();
+        // The two ends are one area where nothing is bracketed, up to the
+        // overlay's rounding of either difference.
+        let area = AreaInterval::try_new(free.min(roomy).max(0.0), roomy.max(free).max(0.0))?;
+        let shares = |region: &Region, with: &Region, least: f64| -> Result<bool, FreeSpaceError> {
+            if region.is_empty() || with.is_empty() {
+                return Ok(false);
+            }
+            Ok(region.intersection(with, tolerance).map_err(fail)?.area() > least)
+        };
+        let mut sure = Vec::new();
+        let mut possible = Vec::new();
+        for Taken {
+            object,
+            possible: may,
+            sure: surely,
+        } in &taken
+        {
+            if shares(surely, &scene.scope, AREA_EPSILON_M2)? {
+                sure.push(object.clone());
+            } else if shares(may, &scene.room, POSSIBLE_FLOOR_M2)? {
+                possible.push(object.clone());
+            }
+        }
+        // A door both swept and an obstacle is taken by either footprint.
+        sure.sort();
+        sure.dedup();
+        possible.retain(|object| sure.binary_search(object).is_err());
+        let mut locator = format!("axiolid:free-floor:{}", request.scope().local_id);
+        for merged in request.merged_scopes() {
+            locator.push('+');
+            locator.push_str(&merged.to_string());
+        }
+        locator.push_str(&within_deviation(&scene.bracketed));
+        FreeFloorEvidence::try_new(
+            request.clone(),
+            area,
+            sure,
+            possible,
+            Evidence::exact(request.scope().source.clone(), locator),
+        )
     }
 
     fn measure_free_area(

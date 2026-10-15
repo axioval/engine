@@ -210,6 +210,16 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   plan outline separately: an L-shaped body satisfies both from different
   parts. Obstacles whose box reaches the prism must be closed, consistently
   and outward wound, or the request refuses.
+- `measure_free_floor` (#391, `src/free_space.rs`) builds the placement
+  scene with `floor_scene(.., Some(&mut taken))`, which keeps each
+  obstacle's and swept door's possible and sure footprint apart
+  (`Taken`, world coordinates). The area is `scope − obstacles` from below
+  and `room − sure` from above; an object surely takes floor where its
+  sure footprint shares more than `AREA_EPSILON_M2` with `scope`, possibly
+  where its possible one shares more than `POSSIBLE_FLOOR_M2` (1 mm²) with
+  `room`. Never compare the sure footprint with `room` or the possible one
+  with `scope`. `tests/free_floor.rs` pins a furnished room and a
+  tessellated column.
 - `src/circulation.rs` answers `map_circulation` for the free-space
   service: the placement scene's free area, pieces from `erode_inner` less
   `dilate_outer` (proof of connection), possible pieces from `erode_outer`

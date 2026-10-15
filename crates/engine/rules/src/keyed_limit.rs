@@ -283,7 +283,7 @@ impl<'a> ClearWidth<'a> {
                 ));
             }
         };
-        let (lower, upper) = difference(width, deduction);
+        let (lower, upper) = stated_difference(width, deduction);
         if upper <= 0.0 {
             return Err((
                 NotEvaluatedReason::IncompleteEvidence,
@@ -689,8 +689,15 @@ impl ClearHeight<'_> {
                 },
             };
             if let Some(value) = typed {
-                lower = difference(lower, value).0;
-                upper = difference(upper, value).1;
+                // A height known as a point is the difference of the stated
+                // decimals; an interval goes outward at each end.
+                #[allow(clippy::float_cmp)]
+                let point = lower == upper;
+                (lower, upper) = if point {
+                    stated_difference(lower, value)
+                } else {
+                    (difference(lower, value).0, difference(upper, value).1)
+                };
             } else {
                 unknown = true;
                 words.push(format!("less a {noun} {property} does not state"));
@@ -1890,6 +1897,52 @@ pub(crate) fn difference(minuend: f64, subtrahend: f64) -> (f64, f64) {
     }
 }
 
+/// `minuend - subtrahend` for lengths a source or a rule states, read as the
+/// decimals they display: where each is the double nearest a decimal of at
+/// most fifteen places and digits, the difference of those decimals, a
+/// point at the double nearest it, as a source stating that decimal (or a
+/// literal of it) reads; so 1 m less 0.1 m is 0.9 m. Any other pair is
+/// [`difference`], the interval sure to hold the binary difference.
+///
+/// Distinct decimals of at most fifteen significant digits read as
+/// distinct doubles in the same order, so the point compares with a bound
+/// stated that way exactly as the decimals do: nothing near a bound is
+/// taken for it.
+pub(crate) fn stated_difference(minuend: f64, subtrahend: f64) -> (f64, f64) {
+    if let (Some((minuend, from)), Some((subtrahend, of))) =
+        (stated_decimal(minuend), stated_decimal(subtrahend))
+    {
+        let places = from.max(of);
+        let digits = i128::from(minuend) * 10_i128.pow(places - from)
+            - i128::from(subtrahend) * 10_i128.pow(places - of);
+        if digits.abs() < DECIMAL_LIMIT {
+            // Digits and scale are exact in a double, so the quotient is the
+            // double nearest the decimal.
+            #[allow(clippy::cast_precision_loss)]
+            let value = digits as f64 / 10_f64.powi(places.cast_signed());
+            return (value, value);
+        }
+    }
+    difference(minuend, subtrahend)
+}
+
+/// One more than the largest integer of fifteen digits.
+const DECIMAL_LIMIT: i128 = 1_000_000_000_000_000;
+
+/// The decimal `value` is the double nearest to, as integer digits (at most
+/// fifteen) over `10^places` (at most fifteen), the fewest places first;
+/// `None` for any other value.
+#[allow(clippy::float_cmp, clippy::cast_possible_truncation)]
+fn stated_decimal(value: f64) -> Option<(i64, u32)> {
+    (0..=15_u32).find_map(|places| {
+        let scale = 10_f64.powi(places.cast_signed());
+        let digits = (value * scale).round();
+        // Digits and scale are exact in a double, so the quotient is the
+        // double nearest the decimal.
+        (digits.abs() < 1e15 && digits / scale == value).then_some((digits as i64, places))
+    })
+}
+
 /// Judges an interval of lengths read as the decimals they display: an end
 /// within a few units in the last place of a bound meets it, so a 1 m door
 /// less a 0.1 m deduction meets a 0.9 m minimum although the binary
@@ -2002,5 +2055,26 @@ mod tests {
         assert!(lower < upper);
         assert_eq!(upper, 1.0 - 0.1);
         assert_eq!(difference(1.5, 0.5), (1.0, 1.0));
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn stated_decimals_differ_as_the_decimals_do() {
+        use super::stated_difference;
+        // 1 m less 0.1 m is the decimal 0.9 m, the double its literal is.
+        assert_eq!(stated_difference(1.0, 0.1), (0.9, 0.9));
+        assert_eq!(stated_difference(1.25, 0.1), (1.15, 1.15));
+        assert_eq!(stated_difference(2.1, 0.02), (2.08, 2.08));
+        assert_eq!(stated_difference(0.9, 0.95), (-0.05, -0.05));
+        // A value that is no short decimal is held by the binary interval.
+        let third = 1.0 / 3.0;
+        assert_eq!(stated_difference(1.0, third), difference(1.0, third));
+        assert_eq!(
+            stated_difference(0.1 + 0.2, 0.1),
+            difference(0.1 + 0.2, 0.1)
+        );
+        // A difference of more than fifteen digits too.
+        assert_eq!(stated_difference(1e14, 1e-3), difference(1e14, 1e-3));
+        assert!(stated_difference(f64::NAN, 0.1).0.is_nan());
     }
 }

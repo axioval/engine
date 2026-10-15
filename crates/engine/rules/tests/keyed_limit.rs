@@ -2587,6 +2587,72 @@ mod as_expressions {
         assert_eq!(totals, (5, 6));
     }
 
+    /// The overall width less the deduction compared with its bound as it
+    /// is, without rounding: a 1 m door less 0.1 m is 0.9 m and meets a
+    /// 0.9 m minimum as `keyed-limit` judges it (#379), while a width
+    /// truly below the bound, even by a unit in the last place, fails, and
+    /// one stated only to straddle the bound stays open.
+    #[test]
+    fn a_deducted_width_at_its_bound_meets_it_unrounded() {
+        let at_least = |name: &str| {
+            compare(
+                "greaterThanOrEquals",
+                measured(&format!(
+                    "{name};overall=Attributes/OverallWidth;deduction=0.1"
+                )),
+                m(0.9),
+            )
+        };
+        let expression = |model: Model, name: &str| {
+            model.evaluate_measured(
+                &ExpressionRequirement,
+                &rule(
+                    "axioval:capability.expression",
+                    kind("door"),
+                    vec![("requirement", common::expression(at_least(name)))],
+                ),
+                |_| {},
+            )
+        };
+        let issue = || {
+            doors(&[
+                ("d1", "SINGLE_SWING_LEFT", Some(1.0), None),
+                ("d2", "SINGLE_SWING_LEFT", Some(0.9), None),
+            ])
+        };
+        // The issue's rule judges as `keyed-limit` does.
+        let built_in = outcome(&clear(issue(), door_keys(Some(0.1))));
+        assert_eq!(built_in, (vec!["d2".to_owned()], Vec::new()));
+        assert_eq!(outcome(&expression(issue(), "door_clear_width")), built_in);
+        let model = doors(&[
+            ("d1", "SINGLE_SWING_LEFT", Some(1.0), None),
+            ("d2", "SINGLE_SWING_LEFT", Some(0.9), None),
+            // A unit in the last place below 1 m: 0.1 m less is below 0.9 m.
+            ("d3", "SINGLE_SWING_LEFT", Some(1.0_f64.next_down()), None),
+            // Known only to lie between 0.89 m and 0.91 m.
+            (
+                "d4",
+                "SINGLE_SWING_LEFT",
+                Some(1.0),
+                Some(PropertyValue::Measured {
+                    lower: 0.89,
+                    upper: 0.91,
+                    dimension: Some(QuantityDimension::Length),
+                }),
+            ),
+        ]);
+        assert_eq!(
+            outcome(&expression(
+                model,
+                "door_clear_width;stated=Pset/ClearWidth"
+            )),
+            (
+                vec!["d2".to_owned(), "d3".to_owned()],
+                vec![("d4".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+            )
+        );
+    }
+
     /// Clear widths from the lining and leaves, the passage and the widest
     /// leaf, every door of the leaf fixtures.
     #[test]

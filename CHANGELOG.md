@@ -848,6 +848,21 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **Door values derived from stated lengths are the stated decimals'
+  difference**: `door_clear_width` with `overall` and `deduction` read a
+  door stating `OverallWidth` 1000 mm less 0.1 m as the interval
+  `0.8999999999999999..0.9 m`, so an `expression` comparing it with
+  `≥ 0.9 m` left the door not evaluated where `keyed-limit`'s `clear-width`
+  passed it. The overall width less the deduction, and the overall height
+  less its lining and threshold (`door_clear_height`, `clear-height`), is
+  now the difference of the decimals stated, where each length is the
+  double nearest a decimal of at most fifteen places and digits: a point at
+  the double nearest it, the double its literal is, so 1 m less 0.1 m is
+  0.9 m and meets the bound without rounding. Any other value keeps the
+  outward interval of the binary difference. No tolerance is added to a
+  comparison: a width a unit in the last place below its bound fails, and
+  one straddling it stays open
+  ([#379](https://github.com/axioval/engine/issues/379)).
 - **One coordinate system from several root model contexts stating the
   same frame**: an IFC file with several root `Model` representation
   contexts (as IFC2X3 exports write a `Body` and a `BoundingBox` context on

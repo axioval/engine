@@ -1075,10 +1075,16 @@ The door values take `keyed-limit`'s steps:
 - `door_clear_width` is the clear width the door states (`stated`, a
   property written `set/name`), else the clear width from its leaves
   (`from_leaves`), else the overall width less `deduction`. Each step is
-  taken only after an exact absence.
+  taken only after an exact absence. The overall width less the deduction
+  is the difference of the decimals stated, a point at the double nearest
+  it, so a door stating 1000 mm less `deduction=0.1` is 0.9 m and meets
+  `≥ 0.9 m` without rounding; a length that is no decimal of at most
+  fifteen places and digits keeps the outward interval of the binary
+  difference.
 - `door_clear_height` is the stated clear height, else the overall height
-  less its head lining and threshold. A thickness the door does not state
-  leaves only an upper bound.
+  less its head lining and threshold, the stated decimals' difference as
+  for the width. A thickness the door does not state leaves only an upper
+  bound.
 - `sill_height` and `threshold_step` are measured above each floor the
   path reaches: the greatest by default, the least with `measure=least`.
   The threshold step adds a stated threshold. With `ramps` and

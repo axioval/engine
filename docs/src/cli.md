@@ -66,7 +66,7 @@ axioval check --model building.ifc[:DISCIPLINE] [--model other.ifc[:DISCIPLINE] 
   [--zones [ACCURACY=]FILE ...] \
   [--terrain KIND@ACCURACY=FILE[#SURFACE] ... --terrain-in model|map] \
   [--geometry [--no-exact-boundaries]] [--locate storeys|containers|geometry] \
-  [--rule-status] [--timings] [--report result.json] \
+  [--rule-status] [--rule-timings] [--timings] [--report result.json] \
   [--decisions decisions.json | --decisions-from reviewed.bcfzip] \
   [--summary [--top N]] [--bcf issues.bcfzip] [--xlsx report.xlsx] \
   [--html report.html [--html-template template.html] [--html-title TEXT]] \
@@ -649,6 +649,24 @@ timing:      2.077 s read models
 timing:      1.872 s geometry: mesh
 timing:     41.310 s rule element-clash
 ```
+
+`--rule-timings` keeps each rule's time in the result instead, beside its
+status (it implies `--rule-status`): every rule summary carries a `timing`
+with the wall time spent evaluating the rule, the part spent in the host
+services it called (geometry measurement, proximity, routes) and the calls
+and time per service (see [Rule timings](./refinement.md#rule-timings)).
+The summary then lists the slowest rules, at most `--top`, with the service
+each spent most in:
+
+```text
+slowest rules:
+      41.310 s  (host 39.870 s, most in proximity) · 812 checked  element-clash
+       0.012 s  (host 0.000 s) · 10 checked  wall-reference-required
+```
+
+Timings are diagnostics: without the `timing` fields the result is the one
+`--rule-status` writes, and findings, their identities and the exit status
+never depend on them.
 
 Every finding has an `id`, its stable identity over GlobalIds (see
 [Review decisions](./decisions.md#finding-identity)), equal to its BCF topic

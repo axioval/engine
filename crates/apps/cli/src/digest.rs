@@ -1164,6 +1164,22 @@ pub struct RulesDigest {
     pub rules: Vec<RuleLine>,
     /// Rules left out by the `top` limit.
     pub omitted: usize,
+    /// The slowest timed rules, slowest first, at most `top`; empty and
+    /// omitted unless the check timed its rules (`--rule-timings`).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub slowest: Vec<RuleTimingLine>,
+}
+
+/// One timed rule: its wall time and the part spent in host services.
+#[derive(Debug, Serialize)]
+pub struct RuleTimingLine {
+    pub rule: String,
+    pub checked: usize,
+    pub wall_seconds: f64,
+    pub host_seconds: f64,
+    /// The host service that took longest, if the rule called any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub top_service: Option<String>,
 }
 
 /// One rule's counts.
@@ -1219,8 +1235,38 @@ fn rules_digest(report: &Report, top: usize) -> Option<RulesDigest> {
             not_evaluated: summary.not_evaluated,
         })
         .collect();
+    let mut timed: Vec<_> = report
+        .rules()
+        .iter()
+        .filter_map(|summary| summary.timing.as_ref().map(|timing| (summary, timing)))
+        .collect();
+    timed.sort_by(|(a, at), (b, bt)| {
+        bt.wall_seconds
+            .total_cmp(&at.wall_seconds)
+            .then_with(|| a.rule_id.cmp(&b.rule_id))
+    });
+    let slowest = timed
+        .into_iter()
+        .take(top)
+        .map(|(summary, timing)| RuleTimingLine {
+            rule: summary.rule_id.to_string(),
+            checked: summary.checked,
+            wall_seconds: timing.wall_seconds,
+            host_seconds: timing.host_seconds,
+            top_service: timing
+                .services
+                .iter()
+                .max_by(|a, b| {
+                    a.seconds
+                        .total_cmp(&b.seconds)
+                        .then_with(|| b.service.cmp(&a.service))
+                })
+                .map(|service| service.service.clone()),
+        })
+        .collect();
     Some(RulesDigest {
         counts,
+        slowest,
         omitted: ordered.len() - rules.len(),
         rules,
     })
@@ -1613,6 +1659,45 @@ pub fn shell_quote(text: &str) -> String {
 }
 
 /// The summary's geometry line.
+/// The rules section of a summary, and its slowest rules when timed.
+fn render_rules(out: &mut String, rules: &RulesDigest) {
+    let counts: Vec<String> = ["failed", "not evaluated", "nothing selected", "passed"]
+        .iter()
+        .filter_map(|status| {
+            rules
+                .counts
+                .get(status)
+                .map(|count| format!("{count} {status}"))
+        })
+        .collect();
+    let _ = writeln!(out, "\nrules: {}", counts.join(" · "));
+    for rule in &rules.rules {
+        let _ = writeln!(
+            out,
+            "  {:<16}  {:>6} checked · {} failed · {} not evaluated  {}",
+            rule.status, rule.checked, rule.failed, rule.not_evaluated, rule.rule
+        );
+    }
+    if rules.omitted > 0 {
+        let _ = writeln!(out, "  … {} more rule(s)", rules.omitted);
+    }
+    if !rules.slowest.is_empty() {
+        let _ = writeln!(out, "\nslowest rules:");
+        for rule in &rules.slowest {
+            let service = rule
+                .top_service
+                .as_deref()
+                .map(|service| format!(", most in {service}"))
+                .unwrap_or_default();
+            let _ = writeln!(
+                out,
+                "  {:>10.3} s  (host {:.3} s{service}) · {} checked  {}",
+                rule.wall_seconds, rule.host_seconds, rule.checked, rule.rule
+            );
+        }
+    }
+}
+
 fn render_geometry(out: &mut String, geometry: &GeometryCounts) {
     let _ = write!(
         out,
@@ -1665,26 +1750,7 @@ pub fn render_summary(summary: &Summary) -> String {
         render_geometry(&mut out, geometry);
     }
     if let Some(rules) = &summary.rules {
-        let counts: Vec<String> = ["failed", "not evaluated", "nothing selected", "passed"]
-            .iter()
-            .filter_map(|status| {
-                rules
-                    .counts
-                    .get(status)
-                    .map(|count| format!("{count} {status}"))
-            })
-            .collect();
-        let _ = writeln!(out, "\nrules: {}", counts.join(" · "));
-        for rule in &rules.rules {
-            let _ = writeln!(
-                out,
-                "  {:<16}  {:>6} checked · {} failed · {} not evaluated  {}",
-                rule.status, rule.checked, rule.failed, rule.not_evaluated, rule.rule
-            );
-        }
-        if rules.omitted > 0 {
-            let _ = writeln!(out, "  … {} more rule(s)", rules.omitted);
-        }
+        render_rules(&mut out, rules);
     }
     if let Some(decisions) = &summary.decisions {
         out.push_str(&decisions.line());

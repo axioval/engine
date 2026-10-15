@@ -291,6 +291,14 @@ struct CheckArgs {
     /// then lists them. Off by default, and then the result is unchanged.
     #[arg(long)]
     rule_status: bool,
+    /// Report how long each rule took: each rule's status (as with
+    /// `--rule-status`) then carries its wall time and the time spent in
+    /// the host services it called (geometry, proximity, routes), per
+    /// service, and the summary lists the slowest rules. Timings are
+    /// diagnostics: they never change a finding, its identity or the exit
+    /// status.
+    #[arg(long)]
+    rule_timings: bool,
     /// Print how long each phase took on stderr, each as it ends: compiling,
     /// reading the models, each geometry phase, each rule, and writing the
     /// outputs. Never changes the result or the exit status.
@@ -1203,6 +1211,9 @@ fn check_runtime(
     }
     if args.rule_status {
         runtime = runtime.with_rule_summaries();
+    }
+    if args.rule_timings {
+        runtime = runtime.with_rule_timings();
     }
     if let Some(observer) = clock.rules() {
         runtime = runtime.with_rule_observer(observer);

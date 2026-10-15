@@ -6,6 +6,20 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **How long each rule took**: with `Runtime::with_rule_timings()`
+  (implying `with_rule_summaries()`), every rule summary of a rule that
+  ran carries a `timing` (`axioval_ir::RuleTiming`): the wall time spent
+  evaluating the rule and the part of it spent in the host services it
+  called, per service with its calls (`ServiceTiming`: proximity, metric
+  routing, free space, plan area and every other geometry service, timed
+  at the service handle). The object count is the summary's `checked`.
+  Timings are diagnostics: the field is absent without the option, and
+  `RuleSummary` equality and ordering ignore it, so findings, identities
+  and reports compare equal with or without them. The CLI's
+  `check --rule-timings` writes them into the result and lists the slowest
+  rules in the summary; `--timings` stays on stderr
+  ([#389](https://github.com/axioval/engine/issues/389)).
+
 - **A declared shared frame for federated models**: a host can declare
   that every model shares the first model's frame as delivered
   (`axioval-host-ifc-axiolid`'s `Options::with_declared_shared_frame`, the

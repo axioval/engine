@@ -1098,6 +1098,45 @@ fn rule_status_counts_the_checked_and_failed_objects_of_each_rule() {
 }
 
 #[test]
+fn rule_timings_time_each_rule_and_change_nothing_else() {
+    let case = Case::new("rule-timings");
+    let saved = case.path("result.json");
+    let saved = saved.to_str().unwrap();
+    let model = ten_walls_two_without_reference();
+    let output = case.check(&model, true, &["--rule-status", "--report", saved]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let status_only = std::fs::read_to_string(saved).unwrap();
+    assert!(!status_only.contains("timing"), "{status_only}");
+    let plain: Value = serde_json::from_str(&status_only).unwrap();
+
+    let output = case.check(
+        &model,
+        true,
+        &["--rule-timings", "--summary", "--report", saved],
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let mut timed: Value = serde_json::from_str(&std::fs::read_to_string(saved).unwrap()).unwrap();
+    let rule = &mut timed["report"]["rules"][0];
+    assert!(
+        rule["timing"]["wall_seconds"].as_f64().unwrap() >= 0.0,
+        "{rule:#}"
+    );
+    assert!(rule["timing"]["host_seconds"].is_f64(), "{rule:#}");
+    // Without its timing the result is the one `--rule-status` saved:
+    // findings, their identities and the counts.
+    rule.as_object_mut().unwrap().remove("timing");
+    assert_eq!(timed, plain);
+
+    let summary = stdout(&output);
+    assert!(summary.contains("rules: 1 failed"), "{summary}");
+    assert!(summary.contains("slowest rules:"), "{summary}");
+    assert!(
+        summary.contains("· 10 checked  wall-reference-required"),
+        "{summary}"
+    );
+}
+
+#[test]
 fn a_gated_rule_checks_only_the_walls_its_parent_failed_or_is_skipped() {
     let case = Case::new("rule-gates");
     let text = std::fs::read_to_string(format!("{FIXTURES}/ruleset.json")).unwrap();

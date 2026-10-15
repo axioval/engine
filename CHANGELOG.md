@@ -4,6 +4,21 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-15
+
+Context and measurement. Rules can now read location-dependent context
+(terrain, zoning plans, cadastral parcels, design data, results of
+external calculations) as traceable stated values, and new measured
+values, measured members and expressions cover roofs, networks, drainage,
+material layers, setbacks and walks up to an object. The IFC geometry
+bridge is published as a host library (`axioval-host-ifc-axiolid`, through
+the facade's `ifc-geometry` feature), with a declared shared frame for
+federated models; openings are measured as the solids of their voids; a
+run can report how long each rule took; and `keyed-limit` judges at a
+bound without moving nearby values onto it, converting stated units as
+the decimals they state. The release is breaking for the engine,
+adapter and report APIs.
+
 ### Added
 
 - **How long each rule took**: with `Runtime::with_rule_timings()`
@@ -6548,7 +6563,8 @@ meshes with `axiolid-mesh` 0.1.
 
 - Placement offset bounds no longer admit tolerance-expanded witnesses; supported found placements now require exact frame-bound whole-base support evidence.
 
-[Unreleased]: https://github.com/axioval/engine/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/axioval/engine/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/axioval/engine/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/axioval/engine/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/axioval/engine/compare/v0.1.2...v0.3.0
 [0.1.2]: https://github.com/axioval/engine/compare/v0.1.1...v0.1.2

@@ -26,8 +26,10 @@ All notable changes are documented here. This project follows Semantic Versionin
   object by its body alone when exactly one object of each side matches)
   and `with_derived_tolerance` (1 mm by default). Bodies are compared in
   the shared world frame by bounds, area and certified volume within the
-  tolerance and each mesh's deviation, and by the certified Hausdorff
-  distance where the geometry service measures one; never by
+  tolerance and each mesh's deviation as a pre-filter, and confirmed only
+  by the surfaces' certified Hausdorff distance within the tolerance: the
+  geometry service's between exact bodies, otherwise the kernel's
+  certified mesh distance widened by both chord deviations; never by
   representation or triangles. An object whose identity cannot be
   established stays evaluated. `GeometryReport::superseded` names each pair
   and how it was matched (`by-id`, `by-geometry`), and

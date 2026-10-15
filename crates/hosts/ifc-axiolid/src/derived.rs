@@ -19,7 +19,10 @@
 //! either side. Bodies are compared in the shared world frame through the
 //! registered proximity service, never by representation or triangles,
 //! since another exchange setting may state one body as a swept solid, a
-//! B-rep or triangles ([`Fingerprint`]).
+//! B-rep or triangles. Box, area and volume ([`Fingerprint`]) only filter
+//! candidates; a match is confirmed by the surfaces' certified Hausdorff
+//! distance within the tolerance ([`confirm`]), since two bodies of one
+//! size with one opening each in different places share all three.
 //!
 //! The safe side is double reporting, never hiding: any object whose
 //! identity with an original cannot be established (a different or moved
@@ -295,10 +298,11 @@ fn triangle_area([first, second, third]: [[f64; 3]; 3]) -> f64 {
 }
 
 /// Confirms a fingerprint match by the two surfaces' certified Hausdorff
-/// distance where the service measures one: within the tolerance confirms
-/// it, beyond proves the bodies apart, an open interval or a refusal leaves
-/// it open. A pair whose distance is not certified (a tessellated mesh
-/// without an exact boundary) rests on the fingerprint.
+/// distance: within the tolerance confirms it, beyond proves the bodies
+/// apart, an open interval or a refusal leaves it open. Where the service
+/// certifies none (a tessellated mesh without an exact boundary), the
+/// meshes' certified distance widened by both deviations decides
+/// ([`tessellated`]); the fingerprint alone never confirms a match.
 fn confirm(
     proximity: &ProximityServiceHandle,
     copy: &ObjectId,
@@ -316,19 +320,70 @@ fn confirm(
     match proximity.measure_surface_distance(&request) {
         Ok(measured) => {
             let distance = measured.distance();
-            if distance.upper_metres() <= tolerance + ROUNDING {
-                Verdict::Same
-            } else if distance.lower_metres() > tolerance + ROUNDING {
-                Verdict::Different
-            } else {
-                Verdict::Undecided
-            }
+            judge(distance.lower_metres(), distance.upper_metres(), tolerance)
         }
-        // Distances between tessellations are not certified: the
-        // fingerprint, deviations included, decides.
-        Err(ProximityError::EvidenceFidelityMismatch) => Verdict::Same,
+        // The service certifies no distance between tessellations; the
+        // meshes' own distance, widened by both deviations, bounds the true
+        // surfaces'.
+        Err(ProximityError::EvidenceFidelityMismatch) => {
+            tessellated(proximity, (copy, request.counterpart()), tolerance)
+        }
         Err(_) => Verdict::Undecided,
     }
+}
+
+/// Within `tolerance` when the interval's upper end is, apart when its
+/// lower end is beyond it, undecided otherwise.
+fn judge(lower: f64, upper: f64, tolerance: f64) -> Verdict {
+    if upper <= tolerance + ROUNDING {
+        Verdict::Same
+    } else if lower > tolerance + ROUNDING {
+        Verdict::Different
+    } else {
+        Verdict::Undecided
+    }
+}
+
+/// The two-sided distance between two tessellated bodies' true surfaces,
+/// judged against `tolerance`.
+///
+/// The kernel's certified mesh Hausdorff distance
+/// (`axiolid_measure::hausdorff_distance`: branch and bound over each
+/// mesh's triangles, subdivided until the interval is within the accuracy
+/// or its budget runs out, every bound rounded outwards) bounds the
+/// meshes' distance; each true surface lies within its deviation of its
+/// mesh, so the surfaces' distance lies within the mesh interval widened
+/// by both deviations. Moved openings, which leave box, area and volume
+/// alone, show here. An interval the budget leaves open is undecided.
+fn tessellated(
+    proximity: &ProximityServiceHandle,
+    (copy, original): (&ObjectId, &axioval_engine::BodySurface),
+    tolerance: f64,
+) -> Verdict {
+    let Ok(mine) = proximity.body_surface(copy) else {
+        return Verdict::Undecided;
+    };
+    let mesh = |surface: &axioval_engine::BodySurface| {
+        axiolid_mesh::TriMesh::new(
+            surface
+                .positions()
+                .iter()
+                .map(|&[x, y, z]| axiolid_core::Point3::new(x, y, z))
+                .collect(),
+            surface.triangles().iter().flatten().copied().collect(),
+        )
+    };
+    let Ok(measured) =
+        axiolid_measure::hausdorff_distance(&mesh(&mine), &mesh(original), tolerance / 4.0)
+    else {
+        return Verdict::Undecided;
+    };
+    let deviation = mine.fidelity().deviation_metres() + original.fidelity().deviation_metres();
+    let (lower, upper) = (measured.distance.lower, measured.distance.upper);
+    if !lower.is_finite() || !upper.is_finite() || !deviation.is_finite() {
+        return Verdict::Undecided;
+    }
+    judge((lower - deviation).max(0.0), upper + deviation, tolerance)
 }
 
 /// The matches and the unmatched causes of one session's declarations.

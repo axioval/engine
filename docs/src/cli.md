@@ -442,10 +442,19 @@ mesh's certified chord deviation `d`: every corner of the two bounding
 boxes within `t + d1 + d2`; the mesh areas within `2π (a + b + c)` times
 that, what offsetting a convex body by it adds to its area at most (`a`,
 `b`, `c` the larger box's extents); and the certified volume intervals
-within `t` times the larger area. Where the geometry service certifies
-the two surfaces' Hausdorff distance (two exact meshes, or two exact
-boundaries), it must be within `t` too; between tessellations it is not
-certified, and the fingerprint decides.
+within `t` times the larger area. The fingerprint only filters: two walls
+of one size, each with one opening of one size in different places, share
+box, area and volume. A match is confirmed only by the two surfaces'
+certified Hausdorff distance being within `t`: measured by the geometry
+service between two exact meshes or two exact boundaries, and otherwise
+between the two meshes by the kernel's certified mesh distance (each
+mesh's triangles subdivided until the interval is within `t / 4` or a
+budget runs out, every bound rounded outwards), widened by `d1 + d2` to
+bound the true surfaces. Certainly beyond `t` is `different-body`; an
+interval left open is `undecided`. A tessellated copy is therefore
+superseded only where `t` exceeds the meshes' chord deviations together
+(a few millimetres for the default 1 mm chord budget); below that it
+stays evaluated.
 
 The safe side is double reporting, never hiding: an object whose identity
 with an original cannot be established stays fully evaluated, counted by

@@ -9112,6 +9112,209 @@ fn a_copy_stated_by_another_representation_is_matched_by_its_body() {
     );
 }
 
+/// A wall `#{first + 4}` from x = 0 to 4, 0.2 thick and 3 high, authored as
+/// one triangulated face set with a 1 m square opening through it from
+/// x = `opening` and z = 1, every corner shared so the faces close up.
+fn face_set_wall_with_opening(first: u32, opening: f64, global: &str) -> String {
+    let [points, set, shape, definition, wall] = [0, 1, 2, 3, 4].map(|offset| first + offset);
+    let xs = [0.0, opening, opening + 1.0, 4.0];
+    let ys = [-0.1, 0.1];
+    let zs = [0.0, 1.0, 2.0, 3.0];
+    // 1-based index of the grid corner (x, y, z).
+    let at = |x: usize, y: usize, z: usize| 1 + x * 8 + y * 4 + z;
+    let mut coordinates = Vec::new();
+    for x in xs {
+        for y in ys {
+            for z in zs {
+                coordinates.push(format!("({x:?},{y:?},{z:?})"));
+            }
+        }
+    }
+    let mut quads: Vec<[usize; 4]> = Vec::new();
+    for a in 0..3 {
+        for b in 0..3 {
+            if (a, b) == (1, 1) {
+                continue;
+            }
+            // Front (-y) and back (+y), by cell of the x and z grid.
+            quads.push([
+                at(a, 0, b),
+                at(a + 1, 0, b),
+                at(a + 1, 0, b + 1),
+                at(a, 0, b + 1),
+            ]);
+            quads.push([
+                at(a, 1, b),
+                at(a, 1, b + 1),
+                at(a + 1, 1, b + 1),
+                at(a + 1, 1, b),
+            ]);
+        }
+        // Bottom (-z) and top (+z), by x cell.
+        quads.push([at(a, 0, 0), at(a, 1, 0), at(a + 1, 1, 0), at(a + 1, 0, 0)]);
+        quads.push([at(a, 0, 3), at(a + 1, 0, 3), at(a + 1, 1, 3), at(a, 1, 3)]);
+    }
+    for b in 0..3 {
+        // Ends at x = 0 (-x) and x = 4 (+x), by z cell.
+        quads.push([at(0, 0, b), at(0, 0, b + 1), at(0, 1, b + 1), at(0, 1, b)]);
+        quads.push([at(3, 0, b), at(3, 1, b), at(3, 1, b + 1), at(3, 0, b + 1)]);
+    }
+    // The opening's faces, facing into it.
+    quads.push([at(1, 0, 1), at(1, 1, 1), at(1, 1, 2), at(1, 0, 2)]);
+    quads.push([at(2, 0, 1), at(2, 0, 2), at(2, 1, 2), at(2, 1, 1)]);
+    quads.push([at(1, 0, 1), at(2, 0, 1), at(2, 1, 1), at(1, 1, 1)]);
+    quads.push([at(1, 0, 2), at(1, 1, 2), at(2, 1, 2), at(2, 0, 2)]);
+    let triangles: Vec<String> = quads
+        .iter()
+        .flat_map(|[p, q, r, s]| [format!("({p},{q},{r})"), format!("({p},{r},{s})")])
+        .collect();
+    format!(
+        "#{points}=IFCCARTESIANPOINTLIST3D(({}),$);\n\
+         #{set}=IFCTRIANGULATEDFACESET(#{points},$,$,({}),$);\n\
+         #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','Tessellation',(#{set}));\n\
+         #{definition}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n\
+         #{wall}=IFCWALL('{global}',$,$,$,$,#3,#{definition},$,$);\n",
+        coordinates.join(","),
+        triangles.join(","),
+    )
+}
+
+/// #390: a derived model's copy of a wall whose opening was moved has the
+/// original's box, area and volume, yet is another body: it stays
+/// evaluated. The same face set unmoved is superseded.
+#[test]
+fn a_copy_whose_opening_moved_stays_evaluated() {
+    let case = Case::new("derived-from-moved-opening");
+    let model = |opening: f64| {
+        walls_file(&[]).replace(
+            "ENDSEC;\nEND-ISO",
+            &format!(
+                "{}ENDSEC;\nEND-ISO",
+                face_set_wall_with_opening(40, opening, "00000000000000000000A1")
+            ),
+        )
+    };
+    case.write("arch.ifc", &model(0.5));
+    let models = ["arch.ifc", "struct.ifc"];
+    let declared = ["--derived-from", "struct.ifc=arch.ifc"];
+
+    case.write("struct.ifc", &model(0.5));
+    let result = json(&case.clash_all(&models, &declared));
+    assert_eq!(result["geometry"]["unmeasured"], json!([]), "{result:#}");
+    assert_eq!(
+        result["geometry"]["superseded"][0]["matched"], "by-id",
+        "{result:#}"
+    );
+
+    case.write("struct.ifc", &model(2.5));
+    let output = case.clash_all(&models, &declared);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result = json(&output);
+    assert!(result["report"].get("superseded").is_none(), "{result:#}");
+    assert_eq!(
+        result["geometry"]["derived_unmatched"]["different-body"], 1,
+        "{result:#}"
+    );
+    assert_eq!(
+        clash_pairs(&result),
+        ["arch.ifc/#44 x struct.ifc/#44"],
+        "{result:#}"
+    );
+}
+
+/// A wall `#{first + 12}` 4 m long, 0.2 m thick and 3 m high with a round
+/// duct hole 0.1 m across running up through it at x = `hole`, extruded
+/// from one profile: its curved hole makes the mesh a tessellation.
+fn wall_with_round_hole(first: u32, hole: f64, global: &str) -> String {
+    let id = |offset: u32| first + offset;
+    format!(
+        "#{p0}=IFCCARTESIANPOINT((0.,-0.1));\n\
+         #{p1}=IFCCARTESIANPOINT((4.,-0.1));\n\
+         #{p2}=IFCCARTESIANPOINT((4.,0.1));\n\
+         #{p3}=IFCCARTESIANPOINT((0.,0.1));\n\
+         #{outer}=IFCPOLYLINE((#{p0},#{p1},#{p2},#{p3},#{p0}));\n\
+         #{centre}=IFCCARTESIANPOINTLIST2D((({east:?},0.),({hole:?},0.05),({west:?},0.),({hole:?},-0.05)),$);\n\
+         #{position}=IFCCARTESIANPOINT((0.,0.));\n\
+         #{circle}=IFCINDEXEDPOLYCURVE(#{centre},(IFCARCINDEX((1,2,3)),IFCARCINDEX((3,4,1))),.F.);\n\
+         #{profile}=IFCARBITRARYPROFILEDEFWITHVOIDS(.AREA.,$,#{outer},(#{circle}));\n\
+         #{solid}=IFCEXTRUDEDAREASOLID(#{profile},#2,#4,3.);\n\
+         #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{solid}));\n\
+         #{definition}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n\
+         #{wall}=IFCWALL('{global}',$,$,$,$,#3,#{definition},$,$);\n",
+        east = hole + 0.05,
+        west = hole - 0.05,
+        p0 = id(0),
+        p1 = id(1),
+        p2 = id(2),
+        p3 = id(3),
+        outer = id(4),
+        centre = id(5),
+        position = id(6),
+        circle = id(7),
+        profile = id(8),
+        solid = id(9),
+        shape = id(10),
+        definition = id(11),
+        wall = id(12),
+    )
+}
+
+/// #390: between tessellations the fingerprint never confirms a copy on its
+/// own. A copy whose round hole moved has the original's box, area and
+/// volume; the meshes' certified distance shows it is another body, and it
+/// stays evaluated. The unmoved copy is superseded once the tolerance
+/// covers both meshes' chord deviations, and stays evaluated, undecided,
+/// below them.
+#[test]
+fn a_tessellated_copy_is_confirmed_by_its_certified_surface_distance() {
+    let case = Case::new("derived-from-round-hole");
+    let model = |hole: f64| {
+        walls_file(&[]).replace(
+            "ENDSEC;\nEND-ISO",
+            &format!(
+                "{}ENDSEC;\nEND-ISO",
+                wall_with_round_hole(40, hole, "00000000000000000000A1")
+            ),
+        )
+    };
+    case.write("arch.ifc", &model(1.0));
+    let models = ["arch.ifc", "struct.ifc"];
+    // Without exact boundaries no certified distance between the true
+    // surfaces is available, only between the tessellations.
+    let declared = |tolerance: &'static str| {
+        [
+            "--no-exact-boundaries",
+            "--derived-from",
+            "struct.ifc=arch.ifc",
+            "--derived-tolerance",
+            tolerance,
+        ]
+    };
+
+    case.write("struct.ifc", &model(1.0));
+    let result = json(&case.clash_all(&models, &declared("0.005")));
+    assert_eq!(result["geometry"]["tessellated"], 2, "{result:#}");
+    assert_eq!(
+        result["geometry"]["superseded"][0]["matched"], "by-id",
+        "{result:#}"
+    );
+    let result = json(&case.clash_all(&models, &declared("0.0001")));
+    assert!(result["report"].get("superseded").is_none(), "{result:#}");
+    assert_eq!(
+        result["geometry"]["derived_unmatched"]["undecided"], 1,
+        "{result:#}"
+    );
+
+    case.write("struct.ifc", &model(3.0));
+    let result = json(&case.clash_all(&models, &declared("0.005")));
+    assert_eq!(result["geometry"]["tessellated"], 2, "{result:#}");
+    assert!(result["report"].get("superseded").is_none(), "{result:#}");
+    assert_eq!(
+        result["geometry"]["derived_unmatched"]["different-body"], 1,
+        "{result:#}"
+    );
+}
+
 #[test]
 fn a_derived_model_declaration_naming_no_model_or_itself_fails_before_running() {
     let case = Case::new("derived-from-refused");

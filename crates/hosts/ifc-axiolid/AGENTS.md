@@ -57,19 +57,25 @@ benchmark) is its first consumer.
   the registered `ProximityServiceHandle` in the shared world frame
   (`Fingerprint`: box corners within tolerance plus both deviations, mesh
   area within `2π (a + b + c)` times that, certified volume intervals
-  within tolerance times area; then `measure_surface_distance` where it is
-  certified), never by representation, triangle lists or identity. Only a
+  within tolerance times area) as a pre-filter only, then confirmed by the
+  surfaces' certified Hausdorff distance within tolerance:
+  `measure_surface_distance` where the service certifies it, else
+  `axiolid_measure::hausdorff_distance` between the two meshes widened by
+  both deviations (`tessellated`); never by representation, triangle lists
+  or identity, and never by the fingerprint alone (a moved opening keeps
+  box, area and volume). Only a
   pair proven one body is declared (`EvidenceSession::with_superseded`);
   every other derived object stays evaluated, counted by `Unmatched`
   cause. Never supersede on an open interval, a missing volume or a
-  refusal other than the uncertified-tessellation one, and never match a
+  refusal, and never match a
   reduced copy inside its original (a wall's core): it is not the same
   body, so only a host declaring it (`SupersessionKind::Declared`) may
   supersede it; never resolve a
   chain of derived sources (`derived::validate` refuses it). Unit tests
   pin the fingerprint; `tests/check.rs` `a_copy_a_derived_model…`,
   `a_derived_model_without_its_originals_ids…` and
-  `a_copy_stated_by_another_representation…` pin it end to end. Each object's model is looked up by its source, spatial
+  `a_copy_stated_by_another_representation…`, `a_copy_whose_opening_moved…`
+  and `a_tessellated_copy_is_confirmed…` pin it end to end. Each object's model is looked up by its source, spatial
   trees are built per source, and every service is bound to all snapshots.
   Never key anything on a bare local id: two files share `#10`.
 - Below, `tests/check.rs` is `crates/apps/cli/tests/check.rs`, which runs

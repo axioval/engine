@@ -53,6 +53,90 @@ pub struct AxiolidFreeSpaceService {
     /// Each tessellated obstacle's [`solid_column`], by the column's centre
     /// and half height.
     columns: Mutex<BTreeMap<FootprintKey, Column>>,
+    /// The last placement scenes built ([`KEPT_SCENES`]): a space is
+    /// searched several times over one scene (with undecided obstacles and
+    /// without, with a path from the entrances and without, a shape and
+    /// the smaller ones bracketing the largest that fits, #391), and its
+    /// unions of obstacle footprints are most of a search.
+    scenes: Mutex<Vec<KeptScene>>,
+}
+
+/// How many placement scenes a service keeps.
+const KEPT_SCENES: usize = 2;
+
+/// What a placement scene is built from: everything of the request but
+/// the shape's footprint, its domain and its entrance reach.
+#[derive(PartialEq)]
+struct SceneKey {
+    scope: ObjectId,
+    merged: Vec<ObjectId>,
+    obstacles: Vec<ObjectId>,
+    swept: Vec<SweptDoor>,
+    band: (u64, u64),
+}
+
+impl SceneKey {
+    fn of(request: &PlacementRequest) -> Self {
+        let band = request.effective_band();
+        Self {
+            scope: request.scope().clone(),
+            merged: request.merged_scopes().to_vec(),
+            obstacles: request.obstacles().to_vec(),
+            swept: request.swept_doors().to_vec(),
+            band: (band.from_metres().to_bits(), band.to_metres().to_bits()),
+        }
+    }
+}
+
+/// A placement scene as built, before a window or a reach is set, with
+/// the differences its searches took ([`Scene::clear`]) and its floor.
+struct KeptScene {
+    key: SceneKey,
+    scope: Region,
+    room: Region,
+    obstacles: Region,
+    sure: Region,
+    tolerance: axiolid_core::Tolerance,
+    bracketed: Vec<(ObjectId, f64)>,
+    clear: [Option<Region>; 2],
+    floor: f64,
+}
+
+impl KeptScene {
+    fn of(key: SceneKey, scene: &Scene, floor: f64) -> Self {
+        Self {
+            key,
+            scope: scene.scope.clone(),
+            room: scene.room.clone(),
+            obstacles: scene.obstacles.clone(),
+            sure: scene.sure.clone(),
+            tolerance: scene.tolerance,
+            bracketed: scene.bracketed.clone(),
+            clear: [scene.clear[0].get().cloned(), scene.clear[1].get().cloned()],
+            floor,
+        }
+    }
+
+    /// The scene again, as built.
+    fn scene(&self) -> Scene {
+        let clear: [std::cell::OnceCell<Region>; 2] = Default::default();
+        for (cell, kept) in clear.iter().zip(&self.clear) {
+            if let Some(kept) = kept {
+                let _ = cell.set(kept.clone());
+            }
+        }
+        Scene {
+            scope: self.scope.clone(),
+            room: self.room.clone(),
+            obstacles: self.obstacles.clone(),
+            sure: self.sure.clone(),
+            tolerance: self.tolerance,
+            window: None,
+            reach: None,
+            bracketed: self.bracketed.clone(),
+            clear,
+        }
+    }
 }
 
 /// A [`solid_column`]'s section and boundary shadow, or why it failed.
@@ -70,6 +154,7 @@ impl AxiolidFreeSpaceService {
             source,
             footprints: Mutex::new(BTreeMap::new()),
             columns: Mutex::new(BTreeMap::new()),
+            scenes: Mutex::new(Vec::new()),
         }
     }
 
@@ -469,12 +554,22 @@ impl AxiolidFreeSpaceService {
     /// its section just above the band's bottom, so an L-shaped body
     /// contributes only its foot to a low band. Clipping a planar triangle to
     /// horizontal planes is exact.
+    ///
+    /// The last [`KEPT_SCENES`] scenes are kept and given again for a
+    /// request building the same one.
     fn placement_scene(
         &self,
         request: &PlacementRequest,
         tolerance: axiolid_core::Tolerance,
     ) -> Result<(Scene, f64), FreeSpaceError> {
-        self.floor_scene(
+        let key = SceneKey::of(request);
+        {
+            let kept = self.scenes.lock().unwrap_or_else(PoisonError::into_inner);
+            if let Some(kept) = kept.iter().find(|kept| kept.key == key) {
+                return Ok((kept.scene(), kept.floor));
+            }
+        }
+        let (scene, floor) = self.floor_scene(
             request.scope(),
             request.merged_scopes(),
             request.obstacles(),
@@ -482,7 +577,28 @@ impl AxiolidFreeSpaceService {
             request.effective_band(),
             tolerance,
             None,
-        )
+        )?;
+        let mut kept = self.scenes.lock().unwrap_or_else(PoisonError::into_inner);
+        kept.retain(|kept| kept.key != key);
+        kept.push(KeptScene::of(key, &scene, floor));
+        if kept.len() > KEPT_SCENES {
+            kept.remove(0);
+        }
+        Ok((scene, floor))
+    }
+
+    /// Keeps the differences a search of `request`'s scene took, for the
+    /// next search over it.
+    fn keep_clear(&self, request: &PlacementRequest, scene: &Scene) {
+        let key = SceneKey::of(request);
+        let mut kept = self.scenes.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(kept) = kept.iter_mut().find(|kept| kept.key == key) {
+            for (held, cell) in kept.clear.iter_mut().zip(&scene.clear) {
+                if held.is_none() {
+                    *held = cell.get().cloned();
+                }
+            }
+        }
     }
 
     /// The footprint of `scope` and `merged` (which must share its floor),
@@ -1081,6 +1197,7 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
             );
         }
         locator.push_str(&within_deviation(&scene.bracketed));
+        self.keep_clear(request, &scene);
         let evidence = Evidence::exact(request.scope().source.clone(), locator);
         let (centre, right) = match search {
             Search::Nowhere => {

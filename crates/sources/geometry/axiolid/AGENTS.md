@@ -140,7 +140,19 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   eroded path also admits centres where the shape only touches an
   obstacle, so it only widens what an absence must rule out, and its
   witnesses rely on the overlap check below; the difference is taken once
-  per scene, `Scene::clear`). `any_rectangle` takes its first interval
+  per scene, `Scene::clear`). A circle takes the same eroded path past
+  `OBSTACLE_SUM_POINTS` (#393: dilating the obstacles by exact arcs was
+  most of a large model's search), `erode_inner` for witnesses and
+  `erode_outer` of the room less the sure obstacles for an absence; keep
+  the threshold so smaller scenes stay bit-identical
+  (`tests/placement.rs`
+  `a_circle_among_many_obstacle_corners_is_decided_both_ways`). The last
+  `KEPT_SCENES` scenes are kept by everything they are built from
+  (`SceneKey`: scope, merged scopes, obstacles, swept doors, band bits;
+  never the shape's footprint, domain or reach, which are set on a copy),
+  with the differences their searches took (`keep_clear`): a space is
+  searched over one scene several times (undecided obstacles first, a
+  path and none, the bracket of the largest shape, #391). `any_rectangle` takes its first interval
   witness first, as it always did, then may end the search over every
   angle at once (#371): `Scene::fits_nowhere` (the clear part eroded by an
   octagon inside every first interval's shrunk rectangle, less
@@ -192,6 +204,12 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   into the witness band and the search refuses; never narrow the floor
   from the mesh alone (`tests/tessellated_placement.rs`
   `a_curved_room_on_a_slab_is_decided_only_over_a_certified_floor`).
+  This bracketing is the clearance rule of #393: a witness stands when
+  its clearance to every tessellated body exceeds that body's deviation
+  (a box of the deviation, which holds its ball), so curved furniture
+  with room to spare decides (`a_large_room_with_curved_furniture_holds_a_shape_with_room_to_spare`);
+  a body touching the band (a tessellated slab whose certified extent is
+  unknown, under the floor) has no clearance and still refuses.
   Scope footprints are `placement::bracketed_footprint` (#377): a projected
   triangle the overlay refuses (`refused_ring`: an upright wall whose top
   corners lie some ulps off its bottom ones in plan, `RepeatedVertex`;

@@ -902,17 +902,30 @@ pub(crate) fn any_rectangle(
 }
 
 /// A vertical cylinder of `radius`.
+///
+/// Past [`OBSTACLE_SUM_POINTS`] corners of obstacles the disc erodes the
+/// scope less the obstacles ([`Scene::clear`], taken once per scene)
+/// rather than the obstacles being dilated (#393): dilating a floor's
+/// wall network by exact arcs is most of a large model's search, and the
+/// clear part is no larger than the scope. The erosion also admits
+/// centres where the disc only touches an obstacle, so it only widens
+/// what an absence must rule out, and witnesses are verified by overlap
+/// either way. Smaller scenes are searched as before, bit for bit.
 pub(crate) fn circle(scene: &Scene, radius: f64) -> Result<Search, FreeSpaceError> {
     let t = scene.tolerance;
     let err = |e| unavailable("disc morphology", e);
     // Contained in the exact free region: any point in it is a true centre.
-    let inner = scene.scope.erode_inner(radius, t).map_err(err)?;
-    let inner = if scene.obstacles.is_empty() || inner.is_empty() {
-        inner
+    let inner = if region_points(&scene.obstacles) > OBSTACLE_SUM_POINTS {
+        scene.clear(false)?.erode_inner(radius, t).map_err(err)?
     } else {
-        inner
-            .difference(&scene.obstacles.dilate_outer(radius, t).map_err(err)?, t)
-            .map_err(err)?
+        let inner = scene.scope.erode_inner(radius, t).map_err(err)?;
+        if scene.obstacles.is_empty() || inner.is_empty() {
+            inner
+        } else {
+            inner
+                .difference(&scene.obstacles.dilate_outer(radius, t).map_err(err)?, t)
+                .map_err(err)?
+        }
     };
     let inner = scene.for_witness(scene.reaching_disc(inner, radius, false)?)?;
     if (!inner.is_empty() || scene.window.is_some())
@@ -936,13 +949,17 @@ pub(crate) fn circle(scene: &Scene, radius: f64) -> Result<Search, FreeSpaceErro
             "the circle is too small to prove absent".into(),
         ));
     }
-    let outer = scene.room.erode_outer(shrunk, t).map_err(err)?;
-    let outer = if scene.sure.is_empty() || outer.is_empty() {
-        outer
+    let outer = if region_points(&scene.sure) > OBSTACLE_SUM_POINTS {
+        scene.clear(true)?.erode_outer(shrunk, t).map_err(err)?
     } else {
-        outer
-            .difference(&scene.sure.dilate_inner(shrunk, t).map_err(err)?, t)
-            .map_err(err)?
+        let outer = scene.room.erode_outer(shrunk, t).map_err(err)?;
+        if scene.sure.is_empty() || outer.is_empty() {
+            outer
+        } else {
+            outer
+                .difference(&scene.sure.dilate_inner(shrunk, t).map_err(err)?, t)
+                .map_err(err)?
+        }
     };
     if scene.nowhere_in_domain(&scene.reaching_disc(outer, radius, true)?)? {
         return Ok(Search::Nowhere);

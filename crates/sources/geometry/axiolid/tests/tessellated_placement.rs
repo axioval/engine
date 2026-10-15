@@ -649,3 +649,42 @@ fn a_curved_room_on_a_slab_is_decided_only_over_a_certified_floor() {
         Err(FreeSpaceError::InexactPlacementEvidence)
     );
 }
+
+/// A large room with curved furniture (#393): a round table and a round
+/// pillar, tessellated and without certified extents, take only what
+/// their chord deviation may add to their footprints, so a circle and a
+/// rectangle with room to spare are found, the evidence naming the
+/// bodies they were bracketed by, and a circle larger than the room
+/// refuted.
+#[test]
+fn a_large_room_with_curved_furniture_holds_a_shape_with_room_to_spare() {
+    let geometry = || {
+        AxiolidGeometry::new()
+            .with_mesh(id("room"), prisms(&[rect(0.0, 6.0, 0.0, 5.0)], 0.0, 2.8))
+            .with_mesh(
+                id("slab"),
+                prisms(&[rect(-0.2, 6.2, -0.2, 5.2)], -0.25, 0.0),
+            )
+            .with_tessellated_mesh(
+                id("table"),
+                prisms(&round_column((3.0, 2.5), 0.5), 0.0, 0.75),
+                sagitta(0.5),
+            )
+            .with_tessellated_mesh(
+                id("pillar"),
+                prisms(&round_column((0.5, 0.5), 0.3), 0.0, 2.8),
+                sagitta(0.3),
+            )
+    };
+    let obstacles = ["slab", "table", "pillar"];
+    let circle =
+        |radius: f64| PlacementShape::Cylinder(CylinderClearance::try_new(radius, 2.0).unwrap());
+    for shape in [circle(0.75), rectangle(1.2, 1.5, None)] {
+        let locator = found(place(geometry(), "room", shape, &obstacles));
+        assert!(
+            locator.contains(":within-chord-deviation=") && locator.contains("table"),
+            "{locator}"
+        );
+    }
+    nowhere(place(geometry(), "room", circle(2.6), &obstacles));
+}

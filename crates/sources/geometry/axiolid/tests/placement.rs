@@ -960,3 +960,27 @@ fn a_room_whose_walls_project_to_slivers_is_decided() {
     ));
     nowhere(place(geometry(), rectangle(4.1, 1.0, along(1.0, 0.0)), &[]));
 }
+
+/// A circle among more obstacle corners than are dilated by arcs (#393):
+/// the disc erodes the room less the obstacles instead, and still finds
+/// the free strip and refutes a circle wider than it. 160 posts (640
+/// corners) stand in x 0.2..6.3, leaving x 6.3..10 free.
+#[test]
+fn a_circle_among_many_obstacle_corners_is_decided_both_ways() {
+    let posts: Vec<[(f64, f64); 4]> = (0..16)
+        .flat_map(|i| {
+            (0..10).map(move |j| {
+                let (x, y) = (0.2 + 0.4 * f64::from(i), 0.2 + 1.0 * f64::from(j));
+                rect(x, x + 0.1, y, y + 0.1)
+            })
+        })
+        .collect();
+    let geometry =
+        || room_at(&rect(0.0, 10.0, 0.0, 10.0)).with_mesh(id("posts"), prisms(&posts, 0.0, 2.0));
+    let circle = |diameter: f64| {
+        PlacementShape::Cylinder(CylinderClearance::try_new(diameter / 2.0, 2.0).unwrap())
+    };
+    let ([x, _, _], _) = found(place(geometry(), circle(2.9), &["posts"]));
+    assert!(x >= 6.3 + 1.45 - 1e-9, "{x}");
+    nowhere(place(geometry(), circle(3.8), &["posts"]));
+}

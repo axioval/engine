@@ -6,6 +6,19 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **Faster free-floor searches over large scenes**
+  ([#393](https://github.com/axioval/engine/issues/393)). A circle among
+  more than 500 obstacle corners erodes the scope less the obstacles by the
+  disc instead of dilating the obstacles by exact arcs, as rectangles do
+  since #359, and the Axiolid free-space service keeps the last two
+  placement scenes, so a space's repeated searches (undecided obstacles,
+  entrance paths, the largest-shape bracket of #391) build them once. A
+  157-space architecture model's `free-floor-circle` rule took 531 s with #391's
+  bracket and takes 128 s (79 s before #391), outcomes unchanged. Tests pin
+  that a large room with curved, tessellated furniture holds a shape with
+  room to spare: a witness stands when its clearance to every tessellated
+  body exceeds the body's chord deviation.
+
 - **Free-floor rules without `obstacles` take only physical objects as
   obstacles** ([#392](https://github.com/axioval/engine/issues/392)).
   `free-floor-circle`, `free-floor-rectangle` and `free_placements` took

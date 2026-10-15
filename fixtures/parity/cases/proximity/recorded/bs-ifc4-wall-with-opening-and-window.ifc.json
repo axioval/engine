@@ -4,6 +4,29 @@
       "evidence": [
         {
           "exact": true,
+          "locator": "containment_counts;counterparts=@counterparts;minimum_volume_ratio=@minimum_volume_ratio;combine_adjacent=@combine_adjacent;cover=@cover;minimum_count=@minimum_count;maximum_count=@maximum_count;report_orphans=@report_orphans;selection=@selection#1",
+          "source": {
+            "document": "project",
+            "system": "axioval"
+          }
+        }
+      ],
+      "id": "0a864c83-8f91-5276-9141-e02b387c6313",
+      "message": "holds 0 inner elements, fewer than the minimum 1",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "containment-cover",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
           "locator": "axiolid:proximity:ifc-step:bs-ifc4-wall-with-opening-and-window.ifc/#102:ifc-step:bs-ifc4-wall-with-opening-and-window.ifc/#45",
           "source": {
             "document": "bs-ifc4-wall-with-opening-and-window.ifc",
@@ -70,39 +93,14 @@
       "severity": "warning"
     }
   ],
-  "not_evaluated": [
-    {
-      "message": "holds between 0 and 1 inner elements, so its count cannot be judged",
-      "object_id": {
-        "local_id": "#45",
-        "source": {
-          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "containment-cover"
-    },
-    {
-      "message": "the requested object occupies no material; pairs involving this object were not checked",
-      "object_id": {
-        "local_id": "#80",
-        "source": {
-          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "incomplete_evidence",
-      "rule_id": "containment-cover"
-    }
-  ],
+  "not_evaluated": [],
   "rules": [
     {
       "checked": 2,
-      "failed": 0,
-      "not_evaluated": 2,
+      "failed": 1,
+      "not_evaluated": 0,
       "rule_id": "containment-cover",
-      "status": "not_evaluated"
+      "status": "failed"
     },
     {
       "checked": 1,

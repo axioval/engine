@@ -155,7 +155,15 @@ impl RuleCapability for Containment {
             Ok(declared) => declared,
             Err((_, message)) => return refuse_declaration(context, rule, &message),
         };
-        let prepared = match prepare(context, rule, Some(0.0), ProximityProjection::Minimum3d) {
+        let prepared = match prepare(
+            context,
+            rule,
+            Some(0.0),
+            (
+                ProximityProjection::Minimum3d,
+                crate::pairs::Voids::Measured,
+            ),
+        ) {
             Ok(prepared) => prepared,
             Err(refused) => return refused,
         };

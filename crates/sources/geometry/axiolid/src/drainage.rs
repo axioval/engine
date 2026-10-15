@@ -37,7 +37,6 @@ use std::collections::HashMap;
 use axioval_engine::{DrainageEvidence, DrainagePath, DrainageRequest, ProximityError};
 use axioval_ir::Evidence;
 
-use crate::geometry::AxiolidGeometry;
 use crate::proximity::AxiolidProximityService;
 
 /// A face looks up when its unit normal rises more than this.
@@ -67,11 +66,10 @@ type P3 = [f64; 3];
 /// Measures the request.
 pub(crate) fn measure(
     service: &AxiolidProximityService,
-    geometry: &AxiolidGeometry,
     request: &DrainageRequest,
 ) -> Result<DrainageEvidence, ProximityError> {
     let body = service.body(request.surface())?;
-    let fidelity = geometry.fidelity(request.surface())?;
+    let fidelity = service.fidelity(request.surface())?;
     let soup: Vec<[P3; 3]> = body
         .soup
         .items
@@ -93,7 +91,7 @@ pub(crate) fn measure(
     let mut hulls = Vec::new();
     for outlet in request.outlets() {
         let outlet_body = service.body(outlet)?;
-        let outlet_fidelity = geometry.fidelity(outlet)?;
+        let outlet_fidelity = service.fidelity(outlet)?;
         exact &= outlet_fidelity.is_exact();
         let points: Vec<P2> = outlet_body
             .soup

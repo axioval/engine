@@ -2247,9 +2247,18 @@ fn element_clashes(
     case: &Case,
     model: &str,
 ) -> (Output, std::collections::BTreeSet<(String, String)>, Value) {
+    element_clashes_of(case, model, &[("element", "IfcElement")])
+}
+
+/// As [`element_clashes`], with `types` bound (`element` among them).
+fn element_clashes_of(
+    case: &Case,
+    model: &str,
+    types: &[(&str, &str)],
+) -> (Output, std::collections::BTreeSet<(String, String)>, Value) {
     let (output, result) = case.geometry_rule(
         model,
-        &[("element", "IfcElement")],
+        types,
         "axioval:capability.clash",
         &registry_signature("axioval:capability.clash"),
         entity("element"),
@@ -2524,6 +2533,169 @@ fn with_geometry_a_wholes_rebated_opening_flush_with_its_parts_changes_nothing()
     assert_eq!(
         found,
         pairs(&[("#100", "#59"), ("#19", "#59"), ("#29", "#59")]),
+        "{result:#}"
+    );
+}
+
+/// A wall #19 (x 0..4, y -0.1..0.1, 3 m high) voided by an unfilled
+/// opening #29 (x 1.5..2.5, y -0.2..0.2, z 0..2.1), a duct #39 (x 1.9..2.1,
+/// y -0.5..0.5, z 1..1.2) passing through the opening, 0.4 of it inside the
+/// void, and a duct #49 (x 3.4..3.6, y -0.5..0.5, z 1..1.2) through the
+/// wall 0.9 m beside it.
+fn provision_for_a_void() -> String {
+    let duct = "IFCDUCTSEGMENT('GID',$,$,$,$,PL,REP,$,$)";
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         {}{}{}{}\
+         #100=IFCRELVOIDSELEMENT('0000000000000000000100',$,$,$,#19,#29);\n\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        placed_box(
+            10,
+            [2.0, 0.0, 0.0],
+            [4.0, 0.2, 3.0],
+            "IFCWALL('GID',$,$,$,$,PL,REP,$,$)"
+        ),
+        placed_box(
+            20,
+            [2.0, 0.0, 0.0],
+            [1.0, 0.4, 2.1],
+            "IFCOPENINGELEMENT('GID',$,$,$,$,PL,REP,$,.OPENING.)"
+        ),
+        placed_box(30, [2.0, 0.0, 1.0], [0.2, 1.0, 0.2], duct),
+        placed_box(40, [3.5, 0.0, 1.0], [0.2, 1.0, 0.2], duct),
+    )
+}
+
+/// The object types [`provision_for_a_void`] is checked with.
+const PROVISION_TYPES: &[(&str, &str)] = &[
+    ("opening", "IfcOpeningElement"),
+    ("duct", "IfcDuctSegment"),
+    ("element", "IfcElement"),
+];
+
+/// An opening is measured as the solid of its void where a rule names it
+/// (#383): a distance rule from the ducts to the opening finds the duct
+/// passing through it at no distance and the one beside it 0.9 m away, its
+/// evidence noting the void.
+#[test]
+fn with_geometry_a_distance_to_an_opening_is_measured_to_its_void() {
+    let case = Case::new("geometry-void-distance");
+    let distance = |minimum: f64| {
+        case.geometry_rule(
+            &provision_for_a_void(),
+            PROVISION_TYPES,
+            "axioval:capability.distance",
+            &registry_signature("axioval:capability.distance"),
+            entity("duct"),
+            json!({
+                "counterparts": {"type": "selector", "value": entity("opening")},
+                "minimum_metres": {"type": "number", "value": minimum},
+            }),
+        )
+    };
+    // Only the duct through the opening is nearer than 0.5 m.
+    let (output, result) = distance(0.5);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+    let findings = finding_messages(&result);
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert_eq!(findings[0].0, "#39", "{result:#}");
+    assert!(
+        findings[0].1.contains("#29 is at distance 0.0000 m"),
+        "{findings:?}"
+    );
+    // The one beside it is 0.9 m from the void, not from the wall's
+    // remaining material it passes through.
+    let (output, result) = distance(1.0);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = finding_messages(&result);
+    assert_eq!(findings.len(), 2, "{result:#}");
+    assert_eq!(findings[1].0, "#49", "{result:#}");
+    assert!(findings[1].1.contains("0.9000 m"), "{findings:?}");
+}
+
+/// A duct lies within an opening's void (#383): the duct passing through
+/// it, 0.4 of its volume inside, is held by it where 0.3 is asked; the one
+/// beside it is an orphan.
+#[test]
+fn with_geometry_a_duct_is_contained_in_an_openings_void() {
+    let case = Case::new("geometry-void-containment");
+    let (output, result) = case.geometry_rule(
+        &provision_for_a_void(),
+        PROVISION_TYPES,
+        "axioval:capability.containment",
+        &registry_signature("axioval:capability.containment"),
+        entity("duct"),
+        json!({
+            "counterparts": {"type": "selector", "value": entity("opening")},
+            "minimum_volume_ratio": {"type": "number", "value": 0.3},
+            "report_orphans": {"type": "boolean", "value": true},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+    let findings = finding_messages(&result);
+    let objects: Vec<&str> = findings.iter().map(|(id, _)| id.as_str()).collect();
+    assert_eq!(objects, ["#49"], "{result:#}");
+}
+
+/// An opening's height is its void's (#383): `extent_z` selects provisions
+/// by size, and the 2.1 m opening is taller than 1.8 m.
+#[test]
+fn with_geometry_an_openings_extent_is_its_voids() {
+    let case = Case::new("geometry-void-extent");
+    let (output, result) = case.geometry_rule(
+        &provision_for_a_void(),
+        PROVISION_TYPES,
+        "axioval:capability.expression",
+        &registry_signature("axioval:capability.expression"),
+        entity("opening"),
+        json!({"requirement": {"type": "expression", "value": {
+            "kind": "compare", "operator": "lessThan", "label": "height",
+            "left": {"kind": "property", "propertySet": "axioval:measured",
+                     "property": "extent_z"},
+            "right": {"kind": "literal",
+                      "value": {"type": "quantity", "value": 1.8, "unit": "m"}}}}}),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = finding_messages(&result);
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert_eq!(findings[0].0, "#29", "{result:#}");
+    assert!(findings[0].1.contains("2.1"), "{findings:?}");
+}
+
+/// An opening stays no material (#383): a clash rule over every element
+/// pairs the duct beside the opening with the wall, never the duct passing
+/// through the opening with its void, and the opening is not evaluated as
+/// before, occupying no material.
+#[test]
+fn with_geometry_an_opening_never_clashes() {
+    let case = Case::new("geometry-void-clash");
+    let (output, found, result) =
+        element_clashes_of(&case, &provision_for_a_void(), PROVISION_TYPES);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(found, pairs(&[("#19", "#49")]), "{result:#}");
+    let open = result["report"]["not_evaluated"].to_string();
+    assert!(
+        open.contains("#29") && open.contains("occupies no material"),
         "{result:#}"
     );
 }

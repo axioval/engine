@@ -71,7 +71,7 @@ use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Object, ObjectId};
 
 use crate::door_swing::{self, Footprint, box_gap};
-use crate::pairs::{Prepared, Unevaluated, fidelity_note, reason};
+use crate::pairs::{Prepared, Unevaluated, Voids, fidelity_note, reason};
 #[cfg(feature = "parity-reference")]
 use crate::selection::select_objects;
 use crate::support::{Parameters, Traversal, Unavailable, invalid, traversal_parameters};
@@ -1077,7 +1077,7 @@ impl Swings {
                 "door swings need the object-frame service, which is not registered".to_owned(),
             ));
         };
-        let proximity = context.services.get::<ProximityServiceHandle>();
+        let proximity = crate::pairs::proximity(context, Voids::Measured);
         if proximity.is_none() && !(declared.swings.0 && declared.swings.1) {
             return Err((
                 NotEvaluatedReason::MissingService,
@@ -1322,7 +1322,7 @@ impl Pairs {
                 context,
                 groups,
                 unevaluated,
-                (declared.margin(), declared.projection),
+                (declared.margin(), declared.projection, Voids::Measured),
             )
             .map(|prepared| Pairs::Bodies(prepared.into()))
         }
@@ -1369,7 +1369,7 @@ impl Pairs {
         scope: &mut Scope<'_, '_>,
         subject: (&ObjectId, &BTreeSet<ObjectId>),
     ) -> (Vec<Candidate>, Vec<Candidate>) {
-        let proximity = context.services.get::<ProximityServiceHandle>();
+        let proximity = crate::pairs::proximity(context, Voids::Measured);
         match self {
             Self::Bodies(bodies) => bodies.candidates(
                 proximity.unwrap_or_else(|| unreachable!("bodies are measured by the service")),

@@ -196,7 +196,10 @@ type Volume = Result<(f64, f64), ProximityError>;
 /// Measures pairwise proximity between registered meshes using Axiolid.
 #[derive(Debug)]
 pub struct AxiolidProximityService {
-    geometry: AxiolidGeometry,
+    geometry: Arc<AxiolidGeometry>,
+    /// Whether a bodiless object's registered void is measured as the
+    /// solid of that void ([`Self::measuring_voids`]).
+    voids: bool,
     /// Each whole measured through its parts' enclosed volume
     /// (`union_volume`), taken once: every pair the whole is in reads it,
     /// and it costs a mesh boolean per two of its pieces.
@@ -212,10 +215,39 @@ impl AxiolidProximityService {
     #[must_use]
     pub fn new(geometry: AxiolidGeometry) -> Self {
         Self {
-            geometry,
+            geometry: Arc::new(geometry),
+            voids: false,
             volumes: Mutex::new(BTreeMap::new()),
             shells: Mutex::new(BTreeMap::new()),
         }
+    }
+
+    /// The view of the same geometry that measures voids: an object
+    /// declared bodiless with a registered void
+    /// ([`AxiolidGeometry::with_void`], an opening) is measured as the
+    /// solid of its void, exact or tessellated as registered, and one
+    /// whose void is unmeasured is [`ProximityError::Unavailable`]. Every
+    /// other object answers as through [`Self::new`]. The host registers
+    /// it beside the material view
+    /// ([`axioval_engine::ProximityServiceHandle::with_voids`]); only rules
+    /// naming voids in their own right ask for it.
+    #[must_use]
+    pub fn measuring_voids(&self) -> Self {
+        Self {
+            geometry: Arc::clone(&self.geometry),
+            voids: true,
+            volumes: Mutex::new(BTreeMap::new()),
+            shells: Mutex::new(BTreeMap::new()),
+        }
+    }
+
+    /// How faithfully an object's measured mesh represents it: its void's
+    /// in the view measuring voids, its body's otherwise.
+    pub(crate) fn fidelity(&self, object: &ObjectId) -> Result<GeometryFidelity, ProximityError> {
+        if self.voids && self.geometry.void(object).is_some() {
+            return self.geometry.void_fidelity(object);
+        }
+        self.geometry.fidelity(object)
     }
 
     /// One closed body's enclosed volume, widened by its tessellation band,
@@ -226,7 +258,7 @@ impl AxiolidProximityService {
         if !body.solid {
             return Err(ProximityError::Refused(OPEN_SURFACE));
         }
-        let deviation = self.geometry.fidelity(object)?.deviation_metres();
+        let deviation = self.fidelity(object)?.deviation_metres();
         let enclosed = enclosed_volume(body.mesh)
             .map_err(|error| ProximityError::Refused(volume_refusal(error)))?;
         let band = volume_band(&body, deviation);
@@ -253,8 +285,8 @@ impl AxiolidProximityService {
         }
         let shared = intersection_volume(one.mesh, other.mesh)
             .map_err(|error| ProximityError::Refused(volume_refusal(error)))?;
-        let band = volume_band(&one, self.geometry.fidelity(first)?.deviation_metres())
-            + volume_band(&other, self.geometry.fidelity(second)?.deviation_metres());
+        let band = volume_band(&one, self.fidelity(first)?.deviation_metres())
+            + volume_band(&other, self.fidelity(second)?.deviation_metres());
         Ok(((shared.lower - band).max(0.0), shared.upper + band))
     }
 
@@ -401,13 +433,19 @@ impl AxiolidProximityService {
     }
 
     pub(crate) fn body(&self, object: &ObjectId) -> Result<Body<'_>, ProximityError> {
-        if self.geometry.has_no_body(object) {
-            return Err(ProximityError::NoBody);
-        }
-        let mesh = self
-            .geometry
-            .mesh(object)
-            .ok_or(ProximityError::Unavailable)?;
+        let mesh = if self.geometry.has_no_body(object) {
+            // A void is measured only in the view measuring voids, and then
+            // as the solid of space it keeps free; it is never material.
+            match self.geometry.void(object).filter(|_| self.voids) {
+                Some(Ok(mesh)) => mesh,
+                Some(Err(_)) => return Err(ProximityError::Unavailable),
+                None => return Err(ProximityError::NoBody),
+            }
+        } else {
+            self.geometry
+                .mesh(object)
+                .ok_or(ProximityError::Unavailable)?
+        };
         let triangles = triangles(mesh);
         let tolerance = tolerance()?;
         let health = audit_mesh(mesh, tolerance);
@@ -454,9 +492,8 @@ impl AxiolidProximityService {
         counterpart: &ObjectId,
     ) -> Result<Option<Boundaries<'_>>, ProximityError> {
         let fidelity = self
-            .geometry
             .fidelity(subject)?
-            .combined(self.geometry.fidelity(counterpart)?);
+            .combined(self.fidelity(counterpart)?);
         if fidelity.is_exact() {
             return Ok(None);
         }
@@ -557,8 +594,8 @@ impl AxiolidProximityService {
         subject: &Body<'_>,
         counterpart: &Body<'_>,
     ) -> Result<(f64, f64), ProximityError> {
-        let subject_fidelity = self.geometry.fidelity(request.subject())?;
-        let counterpart_fidelity = self.geometry.fidelity(request.counterpart())?;
+        let subject_fidelity = self.fidelity(request.subject())?;
+        let counterpart_fidelity = self.fidelity(request.counterpart())?;
         let deviation = subject_fidelity
             .combined(counterpart_fidelity)
             .deviation_metres();
@@ -2157,11 +2194,7 @@ impl ProximityService for AxiolidProximityService {
 
     fn bounds(&self, object: &ObjectId) -> Result<ObjectBounds, ProximityError> {
         let body = self.body(object)?;
-        ObjectBounds::try_new(
-            object.clone(),
-            body.soup.bounds,
-            self.geometry.fidelity(object)?,
-        )
+        ObjectBounds::try_new(object.clone(), body.soup.bounds, self.fidelity(object)?)
     }
 
     /// The registered mesh as it stands, in the host's world coordinates.
@@ -2181,7 +2214,7 @@ impl ProximityService for AxiolidProximityService {
                 .map(|point| [point.x, point.y, point.z])
                 .collect(),
             triangles,
-            self.geometry.fidelity(object)?,
+            self.fidelity(object)?,
         )
         .map(
             |surface| match self.geometry.shared_exact_boundary(object) {
@@ -2208,7 +2241,7 @@ impl ProximityService for AxiolidProximityService {
         if let Some(measured) = self.boundary_surface_distance(request)? {
             return Ok(measured);
         }
-        if !self.geometry.fidelity(request.subject())?.is_exact()
+        if !self.fidelity(request.subject())?.is_exact()
             || !request.counterpart().fidelity().is_exact()
         {
             return Err(ProximityError::EvidenceFidelityMismatch);
@@ -2246,9 +2279,8 @@ impl ProximityService for AxiolidProximityService {
         let subject = self.body(request.subject())?;
         let counterpart = self.body(request.counterpart())?;
         let fidelity = self
-            .geometry
             .fidelity(request.subject())?
-            .combined(self.geometry.fidelity(request.counterpart())?);
+            .combined(self.fidelity(request.counterpart())?);
 
         let separation = separation(&subject.soup, &counterpart.soup)?;
         // No separation, penetration or containment rests on the plan
@@ -2262,8 +2294,8 @@ impl ProximityService for AxiolidProximityService {
         };
 
         let (penetration, containment) = penetration(&subject, &counterpart, separation)?;
-        let subject_fidelity = self.geometry.fidelity(request.subject())?;
-        let counterpart_fidelity = self.geometry.fidelity(request.counterpart())?;
+        let subject_fidelity = self.fidelity(request.subject())?;
+        let counterpart_fidelity = self.fidelity(request.counterpart())?;
         let extents = match penetration {
             Some(_) => Some(overlap_extents(
                 &subject,
@@ -2361,8 +2393,8 @@ impl ProximityService for AxiolidProximityService {
     ) -> Result<OverlapAlongEvidence, ProximityError> {
         let subject = self.body(request.subject())?;
         let counterpart = self.body(request.counterpart())?;
-        let subject_fidelity = self.geometry.fidelity(request.subject())?;
-        let counterpart_fidelity = self.geometry.fidelity(request.counterpart())?;
+        let subject_fidelity = self.fidelity(request.subject())?;
+        let counterpart_fidelity = self.fidelity(request.counterpart())?;
         let fidelity = subject_fidelity.combined(counterpart_fidelity);
         let separation = separation(&subject.soup, &counterpart.soup)?;
         let (penetration, containment) = penetration(&subject, &counterpart, separation)?;
@@ -2402,25 +2434,25 @@ impl ProximityService for AxiolidProximityService {
         &self,
         request: &FaceDistanceRequest,
     ) -> Result<FaceDistanceEvidence, FaceDistanceError> {
-        crate::face_distance::measure(self, &self.geometry, request)
+        crate::face_distance::measure(self, request)
     }
 
     fn measure_height_above(
         &self,
         request: &HeightAboveRequest,
     ) -> Result<HeightAboveEvidence, ProximityError> {
-        crate::height_above::measure(self, &self.geometry, request)
+        crate::height_above::measure(self, request)
     }
 
     fn measure_drainage(
         &self,
         request: &DrainageRequest,
     ) -> Result<DrainageEvidence, ProximityError> {
-        crate::drainage::measure(self, &self.geometry, request)
+        crate::drainage::measure(self, request)
     }
 
     fn measure_body_volume(&self, object: &ObjectId) -> Result<BodyVolume, ProximityError> {
-        let fidelity = self.geometry.fidelity(object)?;
+        let fidelity = self.fidelity(object)?;
         let (lower, upper) = self.union_volume(object)?;
         let volume = VolumeInterval::try_new(lower, upper)?;
         BodyVolume::try_new(
@@ -2444,7 +2476,7 @@ impl ProximityService for AxiolidProximityService {
     ) -> Result<RegionDistanceEvidence, ProximityError> {
         let counterpart = request.counterpart();
         let body = self.body(counterpart)?;
-        let fidelity = self.geometry.fidelity(counterpart)?;
+        let fidelity = self.fidelity(counterpart)?;
         let distance = nearest(
             &region_flats(request.region())?,
             &footprint(&body)?,
@@ -2477,7 +2509,7 @@ impl ProximityService for AxiolidProximityService {
     ) -> Result<LineDistanceEvidence, ProximityError> {
         let object = request.object();
         let body = self.body(object)?;
-        let fidelity = self.geometry.fidelity(object)?;
+        let fidelity = self.fidelity(object)?;
         let plan = request.projection() == LineProjection::Plan;
         let axes = if plan { 2 } else { 3 };
         let (start, end) = (request.start(), request.end());
@@ -2555,9 +2587,8 @@ impl ProximityService for AxiolidProximityService {
         let subject = self.body(request.subject())?;
         let counterpart = self.body(request.counterpart())?;
         let fidelity = self
-            .geometry
             .fidelity(request.subject())?
-            .combined(self.geometry.fidelity(request.counterpart())?);
+            .combined(self.fidelity(request.counterpart())?);
         let (lower, upper) = self.projected_interval(request, &subject, &counterpart)?;
         ProjectedDistanceEvidence::try_new(
             request.clone(),

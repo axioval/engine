@@ -21,6 +21,29 @@ All notable changes are documented here. This project follows Semantic Versionin
   counts them, so the alignment reads as declared, not read. Off by
   default, with results unchanged
   ([#382](https://github.com/axioval/engine/issues/382)).
+- **Openings measured as the solids of their voids**: an opening occupies
+  no material and stays bodiless, so it never clashes, supports, obstructs,
+  bounds a space, faces outside or blocks a route. Where a rule names it,
+  it is now measured as the solid of its void: `distance` and
+  `containment` measure their subjects and counterparts through the
+  proximity handle's new view measuring voids
+  (`ProximityServiceHandle::with_voids` and `measuring_voids`), so a duct
+  crossing an opening is at distance zero from it, one beside it at its
+  separation from the void, and a duct is contained in an opening by the
+  volume it shares with the void; `extent_z`, `extent_x`, `extent_y`,
+  `bottom`, `top` and `body-extent` of an opening are its void's, so
+  provisions for voids can be selected by size. `clash`, `clash-matrix`
+  and every other capability keep refusing an opening as occupying no
+  material. The Axiolid adapter registers voids beside bodies
+  (`AxiolidGeometry::with_void`, `with_tessellated_void`,
+  `with_unmeasured_void`, `AxiolidProximityService::measuring_voids`),
+  evidence about one carries `;void:<opening>`, and the IFC geometry
+  bridge registers every opening's void it already meshed
+  (`GeometryReport::voids`). In the public parity corpus the one opening,
+  #80 of `bs-ifc4-wall-with-opening-and-window.ifc`, is now decided by
+  `containment-cover` (its void lies in no wall's material), so its wall
+  #45 holds no inner element and fails the rule instead of being not
+  evaluated ([#383](https://github.com/axioval/engine/issues/383)).
 - **The IFC geometry bridge as a library for hosts**: the bridge
   `check --geometry` runs, which meshes IFC bodies with `ifc-geometry` and
   registers them as the Axiolid geometry services of an IFC session, is the

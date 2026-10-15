@@ -35,7 +35,7 @@ use axioval_ir::measured::{
 use axioval_ir::{Evidence, ObjectId, QuantityDimension, RuleId};
 
 use super::{Bodies, Caches, Candidate, Scope, declaration};
-use crate::pairs::prepare;
+use crate::pairs::{Voids, prepare};
 use crate::support::{PropertyRef, Unavailable};
 
 /// Measures `distance`, `count_within`, and `sum_within`, `min_within`,
@@ -771,13 +771,18 @@ impl MeasuredProvider for DistanceMeasures {
                 format!("`{name}` of {object}: {why}"),
             ))
         })?;
-        let prepared = prepare(context, &rule, Some(declared.margin()), declared.projection)
-            .map_err(|refused| {
-                unavailable(refused.not_evaluated_outcomes().first().map_or_else(
-                    || "the search could not run".into(),
-                    |outcome| outcome.message().to_owned(),
-                ))
-            })?;
+        let prepared = prepare(
+            context,
+            &rule,
+            Some(declared.margin()),
+            (declared.projection, Voids::Measured),
+        )
+        .map_err(|refused| {
+            unavailable(refused.not_evaluated_outcomes().first().map_or_else(
+                || "the search could not run".into(),
+                |outcome| outcome.message().to_owned(),
+            ))
+        })?;
         if !prepared.subjects.contains(object) || prepared.unmeasurable_subjects.contains(object) {
             return Err(unavailable("its extent could not be read".into()));
         }

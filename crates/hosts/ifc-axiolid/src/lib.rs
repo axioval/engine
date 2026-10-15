@@ -107,6 +107,13 @@
 //! opening occupies no material, so its void is meshed separately and handed
 //! to the derivation alone.
 //!
+//! The same void is registered with the geometry as the opening's
+//! (`AxiolidGeometry::with_void`, #383): the opening stays bodiless, so no
+//! clash, obstacle, support, space boundary, facade or route ever sees it,
+//! but the proximity handle's view measuring voids and the extents measure
+//! it as the solid of its void where a rule names it (a distance to a duct
+//! through it, a duct contained in it, its height).
+//!
 //! A host is meshed net of its openings (`lower_product_net_with`). Since
 //! `ifc-geometry` 0.13 (openbimrs/ifc#388) the openings are subtracted in
 //! the host's own frame and one `Instance` with the host's world transform
@@ -223,6 +230,10 @@ pub struct GeometryReport {
     pub tessellated: usize,
     /// Objects that occupy no material (storeys, zones, openings).
     pub no_body: usize,
+    /// Openings among them measured as the solids of their voids, which
+    /// distance, containment and extents answer for when a rule names
+    /// them (#383); never material to clash with or stand on.
+    pub voids: usize,
     /// Meshed objects registered with their exact boundary as well.
     pub exact_boundaries: usize,
     /// Wholes with no body of their own measured as the union of their
@@ -1285,6 +1296,7 @@ pub fn attach(
     }
     .compose_all(&wholes);
     geometry = composed;
+    geometry = with_voids(geometry, &voids, &mut report);
     report.applied_openings.sort();
     clock.lap("geometry: compose wholes");
     report.unmeasured.sort_by(|a, b| a.0.cmp(&b.0));
@@ -1346,6 +1358,30 @@ pub fn attach(
         )?;
     clock.lap("geometry: register services");
     Ok((session, report))
+}
+
+/// Registers each opening's void, measured as the solid of space it keeps
+/// free (#383): exact or tessellated as its mesh is, or unmeasured with the
+/// reason. Each opening stays bodiless, so no service iterating bodies
+/// (clash candidates, obstacles, supports, space boundaries, facades,
+/// routes) sees it; only the services measuring voids, asked about the
+/// opening by name, do.
+fn with_voids(
+    mut geometry: AxiolidGeometry,
+    voids: &[(ObjectId, Void)],
+    report: &mut GeometryReport,
+) -> AxiolidGeometry {
+    for (id, void) in voids {
+        geometry = match void {
+            Ok((mesh, Fit::Exact)) => geometry.with_void(id.clone(), mesh.clone()),
+            Ok((mesh, Fit::Within(deviation))) => {
+                geometry.with_tessellated_void(id.clone(), mesh.clone(), *deviation)
+            }
+            Err(reason) => geometry.with_unmeasured_void(id.clone(), reason.clone()),
+        };
+        report.voids += usize::from(void.is_ok());
+    }
+    geometry
 }
 
 /// Every whole's parts, from the session's `IfcRelAggregates` edges, or
@@ -2993,8 +3029,14 @@ fn register(
             SightServiceHandle::new(Arc::new(AxiolidSightService::new(geometry.clone()))),
             bound,
         )?
+        // Openings are no material: the handle measures bodies, and its
+        // view measuring voids answers for an opening a rule names (#383).
         .with_host_service(
-            ProximityServiceHandle::new(Arc::new(AxiolidProximityService::new(geometry))),
+            {
+                let proximity = AxiolidProximityService::new(geometry);
+                let voids = proximity.measuring_voids();
+                ProximityServiceHandle::new(Arc::new(proximity)).with_voids(Arc::new(voids))
+            },
             bound,
         )?
         // Bounding spaces are the envelope rule's selection, carried in each

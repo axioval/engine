@@ -2314,27 +2314,61 @@ pub trait ProximityService: Send + Sync + 'static {
 }
 
 /// Registry handle for a [`ProximityService`].
+///
+/// A handle may also carry a second view of the same geometry that measures
+/// voids ([`Self::with_voids`]): an object occupying no material whose void
+/// the host measured (an opening) is then measured as the solid of its
+/// void. The handle itself measures material only, so every pairwise rule
+/// that does not ask for voids (clashes above all) keeps refusing such an
+/// object as [`ProximityError::NoBody`].
 #[derive(Clone)]
-pub struct ProximityServiceHandle(Arc<dyn ProximityService>);
+pub struct ProximityServiceHandle {
+    service: Arc<dyn ProximityService>,
+    voids: Option<Arc<ProximityServiceHandle>>,
+}
 
 impl ProximityServiceHandle {
     pub fn new(service: Arc<dyn ProximityService>) -> Self {
-        Self(service)
+        Self {
+            service,
+            voids: None,
+        }
+    }
+
+    /// The handle with `service` as its view measuring voids: the same
+    /// geometry, where an object declared to occupy no material whose void
+    /// the host measured (an opening) answers as the solid of that void,
+    /// and every other object as through this handle.
+    #[must_use]
+    pub fn with_voids(mut self, service: Arc<dyn ProximityService>) -> Self {
+        self.voids = Some(Arc::new(Self::new(service)));
+        self
+    }
+
+    /// The view measuring voids ([`Self::with_voids`]), or this handle when
+    /// the host registered none, so a void stays
+    /// [`ProximityError::NoBody`]. Only rules that name voids as subjects
+    /// or counterparts in their own right (distance, containment, a body's
+    /// volume) ask for it; a void is never material to clash with or stand
+    /// on.
+    #[must_use]
+    pub fn measuring_voids(&self) -> &Self {
+        self.voids.as_deref().unwrap_or(self)
     }
     pub fn bounds(&self, object: &ObjectId) -> Result<ObjectBounds, ProximityError> {
-        self.0.bounds(object)
+        self.service.bounds(object)
     }
     /// Whether one body is built from the other's
     /// ([`ProximityService::shares_body`]), so the two never form a pair.
     #[must_use]
     pub fn shares_body(&self, first: &ObjectId, second: &ObjectId) -> bool {
-        self.0.shares_body(first, second)
+        self.service.shares_body(first, second)
     }
     pub fn measure_proximity(
         &self,
         request: &ProximityRequest,
     ) -> Result<ProximityEvidence, ProximityError> {
-        self.0.measure_proximity(request)
+        self.service.measure_proximity(request)
     }
     /// The distance in the request's projection. Evidence answering another
     /// request, projection included, is refused.
@@ -2342,7 +2376,7 @@ impl ProximityServiceHandle {
         &self,
         request: &ProximityRequest,
     ) -> Result<ProjectedDistanceEvidence, ProximityError> {
-        let measured = self.0.measure_distance(request)?;
+        let measured = self.service.measure_distance(request)?;
         if measured.request() != request {
             return Err(ProximityError::InvalidMeasurement);
         }
@@ -2354,7 +2388,7 @@ impl ProximityServiceHandle {
         &self,
         request: &FaceDistanceRequest,
     ) -> Result<FaceDistanceEvidence, FaceDistanceError> {
-        let measured = self.0.measure_face_distance(request)?;
+        let measured = self.service.measure_face_distance(request)?;
         if measured.request() != request {
             return Err(FaceDistanceError::InvalidMeasurement);
         }
@@ -2366,7 +2400,7 @@ impl ProximityServiceHandle {
         &self,
         request: &OverlapAlongRequest,
     ) -> Result<OverlapAlongEvidence, ProximityError> {
-        let measured = self.0.measure_overlap_along(request)?;
+        let measured = self.service.measure_overlap_along(request)?;
         if measured.request() != request {
             return Err(ProximityError::InvalidMeasurement);
         }
@@ -2378,7 +2412,7 @@ impl ProximityServiceHandle {
         &self,
         request: &HeightAboveRequest,
     ) -> Result<HeightAboveEvidence, ProximityError> {
-        let measured = self.0.measure_height_above(request)?;
+        let measured = self.service.measure_height_above(request)?;
         if measured.request() != request {
             return Err(ProximityError::InvalidMeasurement);
         }
@@ -2390,7 +2424,7 @@ impl ProximityServiceHandle {
         &self,
         request: &DrainageRequest,
     ) -> Result<DrainageEvidence, ProximityError> {
-        let measured = self.0.measure_drainage(request)?;
+        let measured = self.service.measure_drainage(request)?;
         if measured.request() != request {
             return Err(ProximityError::InvalidMeasurement);
         }
@@ -2399,7 +2433,7 @@ impl ProximityServiceHandle {
     /// The volume `object` encloses. A volume naming another object answers
     /// a different question and is refused.
     pub fn measure_body_volume(&self, object: &ObjectId) -> Result<BodyVolume, ProximityError> {
-        let measured = self.0.measure_body_volume(object)?;
+        let measured = self.service.measure_body_volume(object)?;
         if measured.object() != object {
             return Err(ProximityError::InvalidMeasurement);
         }
@@ -2407,7 +2441,7 @@ impl ProximityServiceHandle {
     }
     /// The surface of `object`. A surface of another object is refused.
     pub fn body_surface(&self, object: &ObjectId) -> Result<BodySurface, ProximityError> {
-        let surface = self.0.body_surface(object)?;
+        let surface = self.service.body_surface(object)?;
         if surface.object() != object {
             return Err(ProximityError::InvalidMeasurement);
         }
@@ -2419,7 +2453,7 @@ impl ProximityServiceHandle {
         &self,
         request: &SurfaceDistanceRequest,
     ) -> Result<SurfaceDistanceEvidence, ProximityError> {
-        let measured = self.0.measure_surface_distance(request)?;
+        let measured = self.service.measure_surface_distance(request)?;
         if measured.request() != request {
             return Err(ProximityError::InvalidMeasurement);
         }
@@ -2431,7 +2465,7 @@ impl ProximityServiceHandle {
         &self,
         request: &RegionDistanceRequest,
     ) -> Result<RegionDistanceEvidence, ProximityError> {
-        let measured = self.0.measure_region_distance(request)?;
+        let measured = self.service.measure_region_distance(request)?;
         if measured.request() != request {
             return Err(ProximityError::InvalidMeasurement);
         }
@@ -2443,7 +2477,7 @@ impl ProximityServiceHandle {
         &self,
         request: &LineDistanceRequest,
     ) -> Result<LineDistanceEvidence, ProximityError> {
-        let measured = self.0.measure_line_distance(request)?;
+        let measured = self.service.measure_line_distance(request)?;
         if measured.request() != request {
             return Err(ProximityError::InvalidMeasurement);
         }

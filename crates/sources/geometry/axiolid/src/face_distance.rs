@@ -40,7 +40,7 @@ use axioval_engine::{
 };
 use axioval_ir::Evidence;
 
-use crate::geometry::{AxiolidGeometry, Triangle};
+use crate::geometry::Triangle;
 use crate::proximity::{
     AxiolidProximityService, Body, Indexed, LINEAR_TOLERANCE, crossings, separation,
     soup_distance_above, surface_distance, triangle_box, vertices,
@@ -60,11 +60,10 @@ fn refusal(error: ProximityError) -> FaceDistanceError {
 /// Measures the request.
 pub(crate) fn measure(
     service: &AxiolidProximityService,
-    geometry: &AxiolidGeometry,
     request: &FaceDistanceRequest,
 ) -> Result<FaceDistanceEvidence, FaceDistanceError> {
     let host = service.body(request.host()).map_err(refusal)?;
-    if !geometry
+    if !service
         .fidelity(request.host())
         .map_err(refusal)?
         .is_exact()
@@ -75,7 +74,7 @@ pub(crate) fn measure(
         return Err(FaceDistanceError::NotClosed);
     }
     let body = service.body(request.body()).map_err(refusal)?;
-    let fidelity = geometry.fidelity(request.body()).map_err(refusal)?;
+    let fidelity = service.fidelity(request.body()).map_err(refusal)?;
     let faces = faces(&host, request.faces())?;
     let (lower, upper) = signed(&body, &host, &faces, fidelity.deviation_metres())?;
     let signed = SignedDistanceInterval::try_new(lower, upper)

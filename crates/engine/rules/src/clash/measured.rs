@@ -35,7 +35,7 @@ use crate::clash_cases::{Cases, Excuse, described as described_extent, lesser};
 use crate::clash_groups::{Context, GroupKeys};
 use crate::clash_matrix::Categories;
 use crate::clash_severity::{Severities, label};
-use crate::pairs::{Unevaluated, fidelity_note, prepare_among, reason};
+use crate::pairs::{Unevaluated, Voids, fidelity_note, prepare_among, reason};
 use crate::selection::{Selection, selector_matches};
 use crate::support::Unavailable;
 use crate::support::table::{Matched, RowSelection, match_rows};
@@ -213,7 +213,7 @@ fn propose<'s>(
         context,
         (&found(&subjects), &found(&counterparts)),
         Unevaluated::default(),
-        (margin, ProximityProjection::Minimum3d),
+        (margin, ProximityProjection::Minimum3d, Voids::Refused),
     )
     .map_err(|(reason, message)| match reason {
         NotEvaluatedReason::MissingService => PropertyResolutionError::MissingService(message),

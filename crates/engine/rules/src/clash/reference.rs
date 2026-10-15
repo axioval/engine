@@ -22,7 +22,7 @@ use crate::clash_cases::{Cases, Excuse};
 use crate::clash_groups::{Context, GroupBy, GroupKeys, Grouping, Key};
 use crate::clash_matrix::Categories;
 use crate::clash_severity::{Severities, label};
-use crate::pairs::{Unevaluated, fidelity_note, prepare, refuse_declaration, severity};
+use crate::pairs::{Unevaluated, Voids, fidelity_note, prepare, refuse_declaration, severity};
 use crate::support::Unavailable;
 use crate::support::table::{Matched, RowSelection, match_rows};
 
@@ -636,7 +636,7 @@ impl RuleCapability for Clash {
             context,
             rule,
             Some(declared.profile.margin()),
-            ProximityProjection::Minimum3d,
+            (ProximityProjection::Minimum3d, Voids::Refused),
         ) {
             Ok(prepared) => prepared,
             Err(refused) => return refused,
@@ -736,7 +736,12 @@ impl RuleCapability for ClashMatrix {
             .iter()
             .map(|cell| cell.profile.margin())
             .fold(0.0, f64::max);
-        let prepared = match prepare(context, rule, Some(margin), ProximityProjection::Minimum3d) {
+        let prepared = match prepare(
+            context,
+            rule,
+            Some(margin),
+            (ProximityProjection::Minimum3d, Voids::Refused),
+        ) {
             Ok(prepared) => prepared,
             Err(refused) => return refused,
         };

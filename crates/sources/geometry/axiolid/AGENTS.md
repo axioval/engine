@@ -25,6 +25,23 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   count overlaps twice. A whole's `union_volume` (a boolean per two of its
   pieces) is taken once per service and cached, never per pair it is in. `tests/composed_bodies.rs`,
   `tests/applied_openings.rs` and `tests/exact_bodies.rs` pin it.
+- Voids (#383): `with_void`, `with_tessellated_void` and
+  `with_unmeasured_void` register the solid of space a bodiless object (an
+  opening) keeps free, in their own map beside `meshes`; the object stays
+  in `bodiless`. Never put a void in `meshes` or `chord_deviations`: every
+  service iterating bodies (`objects`, `tessellated_near`, obstacles, clash
+  candidates, supports, space boundaries, facades, routes) must keep not
+  seeing it, and `mesh` answers `None` for it. Only two readers measure a
+  void, and only for an object named in the request: the proximity
+  service's view `AxiolidProximityService::measuring_voids` (sharing the
+  geometry through an `Arc`; `body` and `fidelity` resolve the void there,
+  an unmeasured void is `Unavailable`, a bodiless object without one stays
+  `NoBody`; `face_distance`, `height_above` and `drainage` read fidelity
+  through the service so a void's is its own) and the vertical extent
+  service's vertical and directional extents (thickness, faces and edges
+  still refuse a void as bodiless). `body_note` adds `;void:<object>`.
+  `tests/voids.rs` pins both views, containment, the unmeasured void and a
+  tessellated one.
 - `src/exact_boundary.rs` builds a body's exact solid from the Axiolid
   geometry graph a host meshes (`exact_boundary`), and
   `AxiolidGeometry::check_exact_boundary` compares its extent with the

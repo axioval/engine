@@ -10,12 +10,18 @@
 //!
 //! The extent along any other direction projects the same positions onto
 //! it; see [`VerticalExtentService::measure_directional_extent`] below.
+//!
+//! An object declared bodiless whose void the host registered (an opening,
+//! [`AxiolidGeometry::with_void`]) is measured as the solid of its void for
+//! both extents, its evidence noting `;void:<object>` on the vertical one:
+//! an opening's height is its void's. Its thickness, faces and edges are
+//! still refused as of an object with no body: they describe material.
 
 use axiolid_core::Tolerance;
-use axiolid_mesh::audit_mesh;
+use axiolid_mesh::{TriMesh, audit_mesh};
 use axioval_engine::{
     DirectionalExtent, ElevationInterval, FaceEdges, FaceNormals, FacePieceSet, FacePieces,
-    MetricDirection, SurfaceFace, Thickness, VerticalExtent, VerticalExtentError,
+    GeometryFidelity, MetricDirection, SurfaceFace, Thickness, VerticalExtent, VerticalExtentError,
     VerticalExtentService,
 };
 use axioval_ir::{Evidence, ObjectId};
@@ -50,13 +56,27 @@ struct Body {
 }
 
 impl AxiolidVerticalExtentService {
-    fn body(&self, object: &ObjectId) -> Result<Body, VerticalExtentError> {
+    /// The object's body, or with `voids` the solid of a bodiless
+    /// object's registered void ([`AxiolidGeometry::with_void`]).
+    fn body(&self, object: &ObjectId, voids: bool) -> Result<Body, VerticalExtentError> {
         // A bodiless object has no bottom or top; an unmeasured one has
         // elevations nobody knows. Neither is zero.
         if self.geometry.has_no_body(object) {
-            return Err(VerticalExtentError::Unavailable(format!(
-                "{object} is declared to have no body"
-            )));
+            return match self.geometry.void(object).filter(|_| voids) {
+                Some(Ok(mesh)) => {
+                    let fidelity = self
+                        .geometry
+                        .void_fidelity(object)
+                        .map_err(|_| VerticalExtentError::InvalidMeasurement)?;
+                    Self::measurable(object, mesh, fidelity)
+                }
+                Some(Err(reason)) => Err(VerticalExtentError::Unavailable(format!(
+                    "{object} has a void that was not measured: {reason}"
+                ))),
+                None => Err(VerticalExtentError::Unavailable(format!(
+                    "{object} is declared to have no body"
+                ))),
+            };
         }
         if let Some((_, reason)) = self
             .geometry
@@ -71,6 +91,19 @@ impl AxiolidVerticalExtentService {
             .geometry
             .mesh(object)
             .ok_or_else(|| VerticalExtentError::UnknownObject(object.clone()))?;
+        let fidelity = self
+            .geometry
+            .fidelity(object)
+            .map_err(|_| VerticalExtentError::InvalidMeasurement)?;
+        Self::measurable(object, mesh, fidelity)
+    }
+
+    /// A mesh's triangles, if it can be measured at all.
+    fn measurable(
+        object: &ObjectId,
+        mesh: &TriMesh,
+        fidelity: GeometryFidelity,
+    ) -> Result<Body, VerticalExtentError> {
         let tolerance = Tolerance::new(LINEAR_TOLERANCE, ANGULAR_TOLERANCE)
             .map_err(|_| VerticalExtentError::Unavailable("invalid audit tolerance".into()))?;
         // Only positions a triangle uses belong to the body; a mesh with bad
@@ -82,10 +115,6 @@ impl AxiolidVerticalExtentService {
                 "the mesh of {object} cannot be measured"
             )));
         }
-        let fidelity = self
-            .geometry
-            .fidelity(object)
-            .map_err(|_| VerticalExtentError::InvalidMeasurement)?;
         // A tessellation is never exact, even with a zero declared deviation.
         let tessellation = (!fidelity.is_exact()).then(|| fidelity.deviation_metres());
         Ok(Body {
@@ -116,7 +145,7 @@ impl VerticalExtentService for AxiolidVerticalExtentService {
     ) -> Result<VerticalExtent, VerticalExtentError> {
         let Body {
             soup, tessellation, ..
-        } = self.body(object)?;
+        } = self.body(object, true)?;
         let (bottom, top) =
             soup.iter()
                 .flatten()
@@ -155,7 +184,7 @@ impl VerticalExtentService for AxiolidVerticalExtentService {
     ) -> Result<DirectionalExtent, VerticalExtentError> {
         let Body {
             soup, tessellation, ..
-        } = self.body(object)?;
+        } = self.body(object, true)?;
         let axis = direction.components();
         // A unit direction with one non-zero component is exactly a
         // coordinate axis: its products and sums are exact.
@@ -220,7 +249,7 @@ impl VerticalExtentService for AxiolidVerticalExtentService {
             soup,
             tessellation,
             closed,
-        } = self.body(object)?;
+        } = self.body(object, false)?;
         crate::thickness::measure(object, direction, &soup, tessellation, closed)
     }
 
@@ -236,7 +265,7 @@ impl VerticalExtentService for AxiolidVerticalExtentService {
             soup,
             tessellation,
             closed,
-        } = self.body(object)?;
+        } = self.body(object, false)?;
         crate::face_normals::measure(object, face, &soup, tessellation, closed)
     }
 
@@ -251,7 +280,7 @@ impl VerticalExtentService for AxiolidVerticalExtentService {
             soup,
             tessellation,
             closed,
-        } = self.body(object)?;
+        } = self.body(object, false)?;
         crate::face_normals::measure_pieces(object, set, &soup, tessellation, closed)
     }
 
@@ -263,7 +292,7 @@ impl VerticalExtentService for AxiolidVerticalExtentService {
             soup,
             tessellation,
             closed,
-        } = self.body(object)?;
+        } = self.body(object, false)?;
         crate::face_normals::measure_edges(object, &soup, tessellation, closed)
     }
 }

@@ -52,6 +52,9 @@ pub struct AxiolidGeometry {
     /// The local frames the host states sources' meshes in
     /// ([`Self::with_local_origins`]).
     origins: LocalOrigins,
+    /// The voids of bodiless objects ([`Self::with_void`]): each mesh and
+    /// its chord deviation (`None` when exact), or why it is unmeasured.
+    voids: BTreeMap<ObjectId, Result<(TriMesh, Option<f64>), String>>,
 }
 
 /// How a whole's body is built from its parts.
@@ -150,6 +153,90 @@ impl AxiolidGeometry {
     pub fn with_no_body(mut self, object: ObjectId) -> Self {
         self.bodiless.insert(object);
         self
+    }
+
+    /// Registers the void of an object that occupies no material, such as
+    /// an opening: the solid of space it keeps free, every face planar so
+    /// the mesh is its exact shape.
+    ///
+    /// The object is declared bodiless ([`Self::with_no_body`]) and stays
+    /// so: no service iterating bodies (obstacles, clash candidates,
+    /// supports, space boundaries, facades, routes) ever sees a void, and
+    /// [`Self::mesh`] answers `None` for it. Only a service built to
+    /// measure voids, asked about the object by name, measures it as the
+    /// solid of its void ([`Self::void`]): the proximity service's void view
+    /// ([`crate::AxiolidProximityService::measuring_voids`]) and the
+    /// vertical and directional extents. Repeated corners are shared as in
+    /// [`Self::with_mesh`].
+    #[must_use]
+    pub fn with_void(mut self, object: ObjectId, mesh: TriMesh) -> Self {
+        self.bodiless.insert(object.clone());
+        self.voids
+            .insert(object, Ok((crate::shell::welded_where_closed(mesh), None)));
+        self
+    }
+
+    /// Registers the void of a bodiless object as a tessellation of curved
+    /// faces within `chord_deviation_metres` of the true void, as
+    /// [`Self::with_void`] and [`Self::with_tessellated_mesh`].
+    #[must_use]
+    pub fn with_tessellated_void(
+        mut self,
+        object: ObjectId,
+        mesh: TriMesh,
+        chord_deviation_metres: f64,
+    ) -> Self {
+        self.bodiless.insert(object.clone());
+        self.voids.insert(
+            object,
+            Ok((
+                crate::shell::welded_where_closed(mesh),
+                Some(chord_deviation_metres),
+            )),
+        );
+        self
+    }
+
+    /// Declares that a bodiless object has a void this host could not
+    /// mesh, with the reason: a service measuring voids refuses it as
+    /// unmeasured, never as an object without a void.
+    #[must_use]
+    pub fn with_unmeasured_void(mut self, object: ObjectId, reason: impl Into<String>) -> Self {
+        self.bodiless.insert(object.clone());
+        self.voids.insert(object, Err(reason.into()));
+        self
+    }
+
+    /// The void registered for a bodiless object ([`Self::with_void`]), or
+    /// why it is unmeasured; `None` for an object with no declared void.
+    #[must_use]
+    pub fn void(&self, object: &ObjectId) -> Option<Result<&TriMesh, &str>> {
+        self.voids.get(object).map(|void| match void {
+            Ok((mesh, _)) => Ok(mesh),
+            Err(reason) => Err(reason.as_str()),
+        })
+    }
+
+    /// How faithfully a registered void's mesh represents it, as
+    /// [`Self::fidelity`] for a body.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ProximityError::Unavailable`] when the object has no
+    /// measured void, and an error when its declared chord deviation is
+    /// negative or non-finite.
+    pub fn void_fidelity(&self, object: &ObjectId) -> Result<GeometryFidelity, ProximityError> {
+        match self.voids.get(object) {
+            Some(Ok((_, None))) => Ok(GeometryFidelity::Exact),
+            Some(Ok((_, Some(deviation)))) => GeometryFidelity::tessellated(*deviation),
+            _ => Err(ProximityError::Unavailable),
+        }
+    }
+
+    /// How many voids are registered with a mesh.
+    #[must_use]
+    pub fn measured_voids(&self) -> usize {
+        self.voids.values().filter(|void| void.is_ok()).count()
     }
 
     /// Declares that an object has a body this host could not mesh.
@@ -737,6 +824,8 @@ impl AxiolidGeometry {
 
     /// The suffix an evidence locator carries about how the bodies of
     /// `objects` were obtained, empty when there is nothing to state: for
+    /// each object measured as the solid of its void
+    /// ([`Self::with_void`]) `;void:<object>`, for
     /// each object measured through its parts `;union:<object>=<n>-parts`,
     /// so the evidence states that its body is the union of them, and for
     /// each host whose body already carries openings
@@ -747,6 +836,9 @@ impl AxiolidGeometry {
         use std::fmt::Write as _;
         let mut note = String::new();
         for object in objects {
+            if self.voids.contains_key(*object) {
+                let _ = write!(note, ";void:{object}");
+            }
             if let Some(parts) = self.parts_of(object) {
                 let _ = write!(note, ";union:{object}={}-parts", parts.len());
             }

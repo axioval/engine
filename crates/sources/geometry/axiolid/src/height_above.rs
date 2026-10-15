@@ -31,7 +31,7 @@ use axioval_engine::{
 };
 use axioval_ir::Evidence;
 
-use crate::geometry::{AxiolidGeometry, Triangle};
+use crate::geometry::Triangle;
 use crate::planar::{footprint_polygons, polygon_area, polygons_overlap_area, projected_polygons};
 use crate::proximity::{AxiolidProximityService, Body, LINEAR_TOLERANCE, tolerance};
 use crate::vertical_surface::{Plan, apart, clip, over, plan_area, triangle_box};
@@ -53,11 +53,10 @@ enum Looking {
 /// Measures the request.
 pub(crate) fn measure(
     service: &AxiolidProximityService,
-    geometry: &AxiolidGeometry,
     request: &HeightAboveRequest,
 ) -> Result<HeightAboveEvidence, ProximityError> {
     for object in std::iter::once(request.subject()).chain(request.surfaces()) {
-        if !geometry.fidelity(object)?.is_exact() {
+        if !service.fidelity(object)?.is_exact() {
             return Err(ProximityError::Refused(
                 "a tessellated body's faces are not its true faces, so no height above a \
                  surface is measured on it",

@@ -617,6 +617,16 @@ measurements refuse while one exists that could affect them, and
 free-space checks refuse it as an obstacle. Treating an unmeasured slab as
 absent would make a wall above it look unsupported, exactly.
 
+A bodiless object may carry a **void** (`with_void`,
+`with_tessellated_void`, or `with_unmeasured_void` with the reason it could
+not be meshed): the solid of space an opening keeps free. It stays bodiless,
+so no service iterating bodies sees it and `mesh` answers `None` for it.
+`AxiolidProximityService::measuring_voids` is the view of the same geometry
+that measures it as the solid of its void (a host registers it with
+`ProximityServiceHandle::with_voids`), and the vertical extent service
+measures its vertical and directional extents; its evidence carries
+`;void:<object>` (see [Openings as voids](./clash.md#openings-as-voids)).
+
 A whole with no body of its own is measured as the union of its parts'
 registered bodies (`compose`, `with_composed_body`); evidence about it
 ends in `;union:<whole>=<n>-parts`. How a body was obtained is the host's

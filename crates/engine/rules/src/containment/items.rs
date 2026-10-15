@@ -26,7 +26,7 @@ use axioval_ir::{Evidence, Object, ObjectId};
 
 use super::{Assessed, Declaration, Item, assess, declaration};
 use crate::measured_kinds::{interval, refused};
-use crate::pairs::{Unevaluated, prepare_among};
+use crate::pairs::{Unevaluated, Voids, prepare_among};
 use crate::support::{Unavailable, invalid};
 
 /// Measures what `containment` reads of an inner element, and of the outer
@@ -112,7 +112,7 @@ fn reading(call: &MeasuredCall, context: &RuleContext<'_>) -> Arc<Result<Reading
             context,
             (&objects(inner), &objects(outer)),
             unevaluated,
-            (0.0, ProximityProjection::Minimum3d),
+            (0.0, ProximityProjection::Minimum3d, Voids::Measured),
         )?;
         let assessed = assess(&declared, prepared);
         Ok(Reading { declared, assessed })

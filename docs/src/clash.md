@@ -603,6 +603,40 @@ measurement's reach: the contact gap, the guard radius, or the clearance
 volume. A curved part elsewhere in the model does not block anything. Shelf
 length is an upper bound, so it widens by the deviation instead of refusing.
 
+## Openings as voids
+
+An opening (an `IfcOpeningElement`) occupies no material, so it is no body:
+it never clashes, supports, obstructs, bounds a space, faces outside or
+blocks a route, and no capability iterating bodies ever sees it. It is
+still a solid of space, the void it keeps free, and a rule may ask about
+that solid by name: is a duct passing through it, how far is the nearest
+service, how tall is it. **An opening is measured as the solid of its
+void** where a rule names it in its own right (#383):
+
+- `distance` and `containment` measure their subjects and counterparts
+  through the proximity handle's view measuring voids
+  (`ProximityServiceHandle::measuring_voids`): a duct crossing an opening
+  is at distance zero from it, one beside it at its separation from the
+  void (not from the wall's remaining material), and a duct is contained in
+  an opening by the volume it shares with the void. A body wholly inside
+  the void is at its surface distance from the void's faces, its margin to
+  the rim.
+- The vertical and directional extents measure the void, so `extent_z`,
+  `extent_x`, `extent_y`, `bottom` and `top` of an opening, and
+  `body-extent`, are its void's. Its thickness, faces and edges stay
+  refused: they describe material.
+- `clash`, `clash-matrix` and every other capability keep the material
+  view: an opening they select is not evaluated as occupying no material,
+  as before, so a material clash never pairs an opening.
+
+The void is the opening's own `Body` (its `Reference` solid where the file
+states the opening already applied), exact or tessellated within the
+compiler's certified deviation like any body; evidence about it carries
+`;void:<opening>`. An opening whose void could not be meshed is not
+evaluated as unmeasured, never as having no void. The opening's host is
+still measured net of it, so a void and its host's material only touch:
+an opening is not contained in the wall it voids.
+
 ## Capabilities
 
 `clash` and `clash-matrix` run as [templates](./templates.md#clash): the

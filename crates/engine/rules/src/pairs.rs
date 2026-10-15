@@ -56,6 +56,35 @@ pub(crate) struct Prepared<'a> {
     pub(crate) unevaluated: Unevaluated,
 }
 
+/// Whether a pairwise rule measures voids: an object occupying no material
+/// whose void the host measured (an opening) as the solid of that void
+/// ([`ProximityServiceHandle::measuring_voids`]).
+///
+/// Distance and containment name their subjects and counterparts in their
+/// own right, so a selected opening is measured as its void: how far a
+/// duct passes from it, whether a duct lies within it. A clash, a support
+/// or a contact is about material, so an opening stays what it is there,
+/// an object occupying none, refused as [`ProximityError::NoBody`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Voids {
+    /// Voids are no bodies: material only.
+    Refused,
+    /// Voids are measured as the solids of space they keep free.
+    Measured,
+}
+
+/// The proximity service a rule measuring `voids` asks, if registered.
+pub(crate) fn proximity<'a>(
+    context: &RuleContext<'a>,
+    voids: Voids,
+) -> Option<&'a ProximityServiceHandle> {
+    let service = context.services.get::<ProximityServiceHandle>()?;
+    Some(match voids {
+        Voids::Refused => service,
+        Voids::Measured => service.measuring_voids(),
+    })
+}
+
 pub(crate) fn severity(rule: &CompiledRule) -> Severity {
     match rule.severity {
         axioval_ir::contract::Severity::Error => Severity::Error,
@@ -113,7 +142,7 @@ pub(crate) fn refuse_all(
 }
 
 /// Selects both groups and runs the broad phase within `margin_metres` in
-/// `projection`.
+/// `projection`, measuring voids as `voids` says.
 ///
 /// Returns the evaluation early, with every subject refused, when the
 /// declaration or the service is unusable.
@@ -121,7 +150,7 @@ pub(crate) fn prepare<'a>(
     context: &RuleContext<'a>,
     rule: &CompiledRule,
     margin_metres: Option<f64>,
-    projection: ProximityProjection,
+    (projection, voids): (ProximityProjection, Voids),
 ) -> Result<Prepared<'a>, CapabilityEvaluation> {
     let (subjects, evaluation) = select_objects(context, &rule.selector);
     let (Some(selector), Some(margin)) = (counterpart_selector(rule), margin_metres) else {
@@ -159,22 +188,23 @@ pub(crate) fn prepare<'a>(
         context,
         (&subjects, &counterparts),
         unevaluated,
-        (margin, projection),
+        (margin, projection, voids),
     )
     .map_err(|(reason, message)| refuse_all(&subjects, evaluation, &reason, &message))
 }
 
 /// Reads the extent of every object of both groups, already selected
 /// (`unevaluated` the objects their selections left undecided), and runs
-/// the broad phase within `margin` in `projection`; why every subject is
-/// refused, when the service is unusable.
+/// the broad phase within `margin` in `projection`, measuring voids as
+/// `voids` says; why every subject is refused, when the service is
+/// unusable.
 pub(crate) fn prepare_among<'a>(
     context: &RuleContext<'a>,
     (subjects, counterparts): (&[&Object], &[&Object]),
     mut unevaluated: Unevaluated,
-    (margin, projection): (f64, ProximityProjection),
+    (margin, projection, voids): (f64, ProximityProjection, Voids),
 ) -> Result<Prepared<'a>, (NotEvaluatedReason, String)> {
-    let Some(service) = context.services.get::<ProximityServiceHandle>() else {
+    let Some(service) = proximity(context, voids) else {
         return Err((
             NotEvaluatedReason::MissingService,
             "proximity service is not registered".to_owned(),

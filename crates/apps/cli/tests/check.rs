@@ -21184,12 +21184,20 @@ fn wall_clipped_within_a_boundary(boundary: &str) -> String {
 
 /// A wall clipped by a polygonal half-space bounded by a composite curve
 /// of polyline segments, or by an indexed poly curve of line segments or
-/// with a circular arc, is measured like its `IfcPolyline` twin
-/// (openbimrs/ifc#393, #398, engine#307):
-/// the member above its clipped top is 0.5 m from it, where the unclipped
-/// wall would reach through it.
+/// with a circular arc, lowers like its `IfcPolyline` twin
+/// (openbimrs/ifc#393, #398, engine#307) to a bounded half-space clip, and
+/// like it is unmeasured with a reason naming the clip (#412): the mesh
+/// compiler cuts such a clip only as deep as twice its boundary's extent
+/// (axiolid/kernel#325), so its mesh is never measured. The member above
+/// the clipped top is then not evaluated against it, neither cleared nor
+/// found by the unclipped wall reaching through it.
 #[test]
-fn with_geometry_a_wall_clipped_within_a_composite_boundary_is_measured() {
+fn with_geometry_a_wall_clipped_within_a_composite_boundary_is_refused_like_its_twin() {
+    let polyline = "#15=IFCCARTESIANPOINT((0.,-1.));\n\
+         #16=IFCCARTESIANPOINT((3.,-1.));\n\
+         #17=IFCCARTESIANPOINT((3.,1.));\n\
+         #18=IFCCARTESIANPOINT((0.,1.));\n\
+         #20=IFCPOLYLINE((#15,#16,#17,#18,#15));\n";
     let composite = "#15=IFCCARTESIANPOINT((0.,-1.));\n\
          #16=IFCCARTESIANPOINT((3.,-1.));\n\
          #17=IFCCARTESIANPOINT((3.,1.));\n\
@@ -21205,42 +21213,41 @@ fn with_geometry_a_wall_clipped_within_a_composite_boundary_is_measured() {
     // (openbimrs/ifc#398, axiolid/kernel#277, ifc-geometry 0.17).
     let arc = "#15=IFCCARTESIANPOINTLIST2D(((0.,-1.),(3.,-1.),(3.5,0.),(3.,1.),(0.,1.)));\n\
          #20=IFCINDEXEDPOLYCURVE(#15,(IFCLINEINDEX((1,2)),IFCARCINDEX((2,3,4)),IFCLINEINDEX((4,5,1))),$);\n";
-    for (name, boundary) in [("composite", composite), ("indexed", indexed), ("arc", arc)] {
+    for (name, boundary) in [
+        ("polyline", polyline),
+        ("composite", composite),
+        ("indexed", indexed),
+        ("arc", arc),
+    ] {
         let case = Case::new(&format!("geometry-clipped-within-{name}"));
         case.write("model.ifc", &wall_clipped_within_a_boundary(boundary));
-        let distance = |minimum: f64| {
-            case.geometry_rule_with(
-                &["model.ifc"],
-                &[("member", "IfcMember"), ("wall", "IfcWall")],
-                (
-                    "axioval:capability.distance",
-                    &registry_signature("axioval:capability.distance"),
-                ),
-                entity("member"),
-                json!({
-                    "counterparts": {"type": "selector", "value": entity("wall")},
-                    "mode": {"type": "string", "value": "none_closer_than"},
-                    "minimum_metres": {"type": "number", "value": minimum},
-                }),
-                &json!({}),
-                &[],
-            )
-        };
-
-        let (output, result) = distance(0.49);
-        assert_eq!(output.status.code(), Some(0), "{name}: {}", stderr(&output));
-        assert!(
-            result["geometry"]["unmeasured"]
-                .as_array()
-                .is_none_or(Vec::is_empty),
-            "{name}: {result:#}"
+        let (output, result) = case.geometry_rule_with(
+            &["model.ifc"],
+            &[("member", "IfcMember"), ("wall", "IfcWall")],
+            (
+                "axioval:capability.distance",
+                &registry_signature("axioval:capability.distance"),
+            ),
+            entity("member"),
+            json!({
+                "counterparts": {"type": "selector", "value": entity("wall")},
+                "mode": {"type": "string", "value": "none_closer_than"},
+                "minimum_metres": {"type": "number", "value": 0.49},
+            }),
+            &json!({}),
+            &[],
         );
+        assert_eq!(output.status.code(), Some(4), "{name}: {}", stderr(&output));
         assert!(finding_ids(&result).is_empty(), "{name}: {result:#}");
-
-        // The clip leaves 0.5 m, not more.
-        let (output, result) = distance(0.51);
-        assert_eq!(output.status.code(), Some(3), "{name}: {}", stderr(&output));
-        assert_eq!(finding_ids(&result), ["#69"], "{name}: {result:#}");
+        let unmeasured = result["geometry"]["unmeasured"].as_array().unwrap();
+        assert_eq!(unmeasured.len(), 1, "{name}: {result:#}");
+        assert_eq!(unmeasured[0]["object"]["local_id"], "#31", "{name}");
+        let reason = unmeasured[0]["reason"].as_str().unwrap();
+        assert!(
+            reason.starts_with("it is clipped by a bounded half-space #24, ")
+                && reason.contains("axiolid/kernel#325"),
+            "{name}: {reason}"
+        );
     }
 }
 

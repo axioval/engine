@@ -4,6 +4,24 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+### Fixed
+
+- **Bodies clipped by a polygonally bounded half-space are no longer
+  measured from a mesh that keeps material the clip removes**
+  ([#412](https://github.com/axioval/engine/issues/412)). The mesh compiler
+  cuts an aligned `IfcPolygonalBoundedHalfSpace` only as deep as twice its
+  boundary's extent, not through the solid it clips (axiolid/kernel#325),
+  so a tall wall clipped within a small boundary kept a strip metres high,
+  and the deviation reported for it understated that by metres. The
+  geometry bridge now refuses every mesh whose graph holds such a clip:
+  the body (or opening void, space-boundary surface or glazing item) is
+  unmeasured with the reason `it is clipped by a bounded half-space #<id>,
+  …`, its volume, extents, distances, clashes and free-floor obstacles are
+  not evaluated, and space measurements bound it by the clip's first
+  operand. Oblique clips, lowered to half-spaces sized from the solid, are
+  measured as before. The refusal is lifted once the kernel fix is
+  adopted.
+
 ## [0.6.1] - 2026-10-16
 
 Free-floor speed and coverage. The largest-shape bracket of 0.6.0 starts

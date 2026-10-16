@@ -181,8 +181,9 @@ use axioval_ir::{ObjectId, PropertyValue, SourceId};
 use axioval_rules::{CoordinateAspect, CoordinateTolerance, compare_coordinate_systems};
 use ifc_geometry::constraint::local::PlacementResolver;
 use ifc_geometry::lower::{
-    AppliedReason, LoweringSession, NetOptions, ReferenceOnlyOpenings, lower_connection_surface,
-    lower_product_net_with, lower_product_representation, lower_representation_item,
+    AppliedReason, LoweringSession, NetOptions, ProvenanceMap, ReferenceOnlyOpenings,
+    lower_connection_surface, lower_product_net_with, lower_product_representation,
+    lower_representation_item,
 };
 use ifc_geometry::{CachedPositionPolicy, GeometryError, RepresentationPurpose, Transform};
 use ifc_model::{EntityId, Model};
@@ -3633,7 +3634,7 @@ fn boundary_surface(
     let root = lower_connection_surface(&mut session, connection, frame)
         .map_err(|error| error.to_string())?;
     let lowered = session.finish(root).map_err(|error| error.to_string())?;
-    compile(backend, &lowered.graph, lowered.root)
+    compile(backend, &lowered.graph, lowered.root, &lowered.provenance)
 }
 
 /// How a compiled mesh stands for the surface it was compiled from.
@@ -3669,14 +3670,77 @@ enum Fit {
 ///
 /// Either fit then counts the rounding of the mesh's coordinates
 /// ([`placed`]): a mesh placed far from the origin is no longer exact.
+///
+/// A graph holding a bounded half-space clip is refused before the
+/// compiler is asked ([`bounded_clip`], engine#412): its mesh may keep
+/// material the clip removes, by more than any deviation the compiler
+/// reports. `provenance` names the clip's IFC entity in the reason.
 fn compile(
     backend: &Compiler,
     graph: &GeometryGraph,
     root: NodeId,
+    provenance: &ProvenanceMap,
 ) -> Result<(axiolid_mesh::TriMesh, Fit), String> {
+    if let Some(clip) = bounded_clip(graph, root) {
+        return Err(bounded_clip_reason(provenance.source(clip)));
+    }
     let (mesh, fit) = compile_unplaced(backend, graph, root)?;
     let fit = placed(&mesh, fit);
     Ok((mesh, fit))
+}
+
+/// The first bounded half-space clip (`SolidOperation::BoundedHalfSpace`,
+/// what `ifc-geometry` lowers an aligned `IfcPolygonalBoundedHalfSpace`
+/// to) reachable from `root`, in a deterministic walk of the graph.
+///
+/// No mesh of it can be trusted (engine#412, axiolid/kernel#325,
+/// openbimrs/ifc#519): the mesh compiler sizes the prism it cuts with from
+/// the clip's boundary, twice its extent, never from the solid it cuts. A
+/// small boundary over a tall solid is cut too shallow and the mesh keeps
+/// material the clip removes (a wall clipped down its full height of
+/// 16 m within a boundary 0.35 m across kept a strip 4 m high), and the
+/// deviation the compiler reports for it is one-sided and understates that
+/// by metres, so neither its bound nor `meets_requested` detects it. Under
+/// the tool of a difference the same clip removes too little of the tool,
+/// so too much of the body. The exact compiler sizes the prism from the
+/// solid and is right, but nothing here meshes its result, so every mesh
+/// of such a graph is refused through [`compile`]: bodies, opening voids,
+/// space-boundary surfaces, glazing items, gross bodies, enclosures and the
+/// boxes of items alike (an item's box then falls back to its first
+/// operand's, which a clip only removes from). An oblique clip is lowered
+/// to half-spaces sized from the solid (`ifc-geometry` 0.27.2) and is not
+/// affected. Lift this once the kernel sizes the prism from the solid.
+fn bounded_clip(graph: &GeometryGraph, root: NodeId) -> Option<NodeId> {
+    let mut seen = BTreeSet::new();
+    let mut pending = vec![root];
+    while let Some(id) = pending.pop() {
+        if !seen.insert(id) {
+            continue;
+        }
+        let Some(node) = graph.get(id) else {
+            continue;
+        };
+        if matches!(
+            node,
+            GeometryNode::SolidOperation(SolidOperation::BoundedHalfSpace { .. })
+        ) {
+            return Some(id);
+        }
+        pending.extend(node.references().into_iter().rev());
+    }
+    None
+}
+
+/// Why a body holding a bounded half-space clip ([`bounded_clip`]) is
+/// unmeasured, naming the clip's IFC entity where lowering recorded it.
+fn bounded_clip_reason(clip: Option<EntityId>) -> String {
+    let clip = clip.map_or_else(String::new, |clip| format!(" #{}", clip.0));
+    format!(
+        "it is clipped by a bounded half-space{clip}, which the mesh compiler cuts only as \
+         deep as twice its boundary's extent instead of through the solid it clips, so the \
+         mesh may keep material the clip removes, by more than any deviation it reports \
+         (axiolid/kernel#325); it is not measured from that mesh"
+    )
 }
 
 /// Coordinates up to this many metres from the origin round by no more
@@ -4197,7 +4261,7 @@ fn mesh_less(
             .map_err(|error| format!("the opening #{} cannot be subtracted: {error}", opening.0))?;
     }
     let lowered = session.finish(root).map_err(|e| e.to_string())?;
-    let (mesh, fit) = match compile(backend, &lowered.graph, lowered.root) {
+    let (mesh, fit) = match compile(backend, &lowered.graph, lowered.root, &lowered.provenance) {
         // Removed whole only by the openings of a whole it is part of (its
         // own net body was measured before): not its own openings' voided
         // body (#310); the caller names the whole's openings.
@@ -4256,7 +4320,8 @@ fn gross_has_triangles(
     let Ok(lowered) = session.finish(net.gross) else {
         return false;
     };
-    compile(backend, &lowered.graph, lowered.root).is_ok_and(|(mesh, _)| mesh.triangle_count() > 0)
+    compile(backend, &lowered.graph, lowered.root, &lowered.provenance)
+        .is_ok_and(|(mesh, _)| mesh.triangle_count() > 0)
 }
 
 /// The world box that `product`'s gross `Body`, before the openings voiding
@@ -4284,7 +4349,7 @@ fn gross_bound(
         return None;
     }
     let lowered = session.finish(net.gross).ok()?;
-    let (mesh, fit) = compile(backend, &lowered.graph, lowered.root).ok()?;
+    let (mesh, fit) = compile(backend, &lowered.graph, lowered.root, &lowered.provenance).ok()?;
     let grown = match fit {
         Fit::Exact => 0.0,
         Fit::Within(deviation) => deviation,
@@ -4334,7 +4399,8 @@ fn enclosure(
         .into_iter()
         .take(MOST_SUBJECTS)
     {
-        let Ok((mut mesh, fit)) = compile(backend, &lowered.graph, subject) else {
+        let Ok((mut mesh, fit)) = compile(backend, &lowered.graph, subject, &lowered.provenance)
+        else {
             continue;
         };
         let fit = if transform == axiolid_core::Transform3::IDENTITY {
@@ -4451,7 +4517,7 @@ fn reference_void(
             .map_err(|error| error.to_string())?,
     };
     let lowered = session.finish(root).map_err(|error| error.to_string())?;
-    compile(backend, &lowered.graph, lowered.root)
+    compile(backend, &lowered.graph, lowered.root, &lowered.provenance)
 }
 
 /// The frame a representation's context places it in: the context's
@@ -5295,7 +5361,8 @@ mod tests {
         let backend = ifc_geometry::compile::default_backend();
         let fit = |transform, cut| {
             let (graph, root) = warped_graph(transform, cut);
-            super::compile(&backend, &graph, root).map(|(_, fit)| fit)
+            super::compile(&backend, &graph, root, &super::ProvenanceMap::default())
+                .map(|(_, fit)| fit)
         };
         let within = |fit: Result<super::Fit, String>| match fit {
             Ok(super::Fit::Within(bound)) => bound,
@@ -5330,6 +5397,110 @@ mod tests {
             let refusal = fit(Transform3::IDENTITY, Some(subject)).unwrap_err();
             assert!(refusal.contains("operand of a boolean"), "{refusal}");
         }
+    }
+
+    /// A wall #90 4 m long (`x` -2 to 2), 0.35 m thick and 16 m high,
+    /// clipped by `IfcPolygonalBoundedHalfSpace` #21 down its full height
+    /// within a square 0.5 m across at its end (`x` 1.5 to 2): the material
+    /// below the plane `z = 16` inside the boundary is removed, leaving
+    /// 3.5 m x 0.35 m x 16 m = 19.6 m3.
+    fn tall_wall_with_a_small_clip() -> String {
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         #10=IFCRECTANGLEPROFILEDEF(.AREA.,$,$,4.,0.35);\n\
+         #11=IFCDIRECTION((0.,0.,1.));\n\
+         #12=IFCEXTRUDEDAREASOLID(#10,#2,#11,16.);\n\
+         #13=IFCCARTESIANPOINT((1.75,0.,16.));\n\
+         #14=IFCAXIS2PLACEMENT3D(#13,$,$);\n\
+         #15=IFCPLANE(#14);\n\
+         #16=IFCCARTESIANPOINT((-0.25,-0.25));\n\
+         #17=IFCCARTESIANPOINT((0.25,-0.25));\n\
+         #18=IFCCARTESIANPOINT((0.25,0.25));\n\
+         #19=IFCCARTESIANPOINT((-0.25,0.25));\n\
+         #20=IFCPOLYLINE((#16,#17,#18,#19,#16));\n\
+         #21=IFCPOLYGONALBOUNDEDHALFSPACE(#15,.T.,#14,#20);\n\
+         #22=IFCBOOLEANCLIPPINGRESULT(.DIFFERENCE.,#12,#21);\n\
+         #62=IFCSHAPEREPRESENTATION(#5,'Body','Clipping',(#22));\n\
+         #63=IFCPRODUCTDEFINITIONSHAPE($,$,(#62));\n\
+         #90=IFCWALL('0000000000000000000090',$,$,$,$,#3,#63,$,$);\n\
+         ENDSEC;\nEND-ISO-10303-21;\n"
+            .to_owned()
+    }
+
+    /// The volume a closed triangle mesh encloses.
+    fn enclosed_volume(mesh: &axiolid_mesh::TriMesh) -> f64 {
+        mesh.indices
+            .chunks_exact(3)
+            .map(|corners| {
+                let [a, b, c] = [0, 1, 2].map(|k| mesh.positions[corners[k] as usize]);
+                a.dot(b.cross(c)) / 6.0
+            })
+            .sum()
+    }
+
+    /// engine#412 (axiolid/kernel#325): the mesh compiler cuts an aligned
+    /// polygonal bounded half-space only as deep as twice its boundary's
+    /// extent, so a tall wall clipped within a small boundary keeps
+    /// material the clip removes, and the wall is unmeasured with a reason
+    /// naming the clip instead of measured from that mesh.
+    #[test]
+    fn a_small_bounded_clip_over_a_tall_wall_is_never_measured_from_its_mesh() {
+        use axiolid_mesh_compile_contract::MeshCompiler as _;
+        let model = axioval_ifc::read_ifc_step(tall_wall_with_a_small_clip().as_bytes()).unwrap();
+        let units = ifc_geometry::units::resolve(&model);
+        let backend = ifc_geometry::compile::default_backend();
+        let analytic = 3.5 * 0.35 * 16.0;
+
+        // The repro: the clip lowers to a bounded half-space, and its mesh
+        // keeps a strip the clip removes. Once the kernel sizes the prism
+        // from the solid this fails: lift the refusal then.
+        let mut session = super::session(&model, &units);
+        let root = ifc_geometry::lower::lower_product_representation(
+            &mut session,
+            ifc_model::EntityId(90),
+            ifc_geometry::RepresentationPurpose::Body,
+        )
+        .unwrap()
+        .expect("a body");
+        let lowered = session.finish(root).unwrap();
+        let clip = super::bounded_clip(&lowered.graph, lowered.root).expect("a bounded clip");
+        assert_eq!(
+            lowered.provenance.source(clip),
+            Some(ifc_model::EntityId(21))
+        );
+        let mesh = backend
+            .compile_mesh(
+                &lowered.graph,
+                lowered.root,
+                &super::ExecutionOptions::new(super::TOLERANCE),
+            )
+            .unwrap();
+        let meshed = enclosed_volume(&mesh);
+        assert!(meshed > analytic + 1.0, "{meshed} m3 against {analytic} m3");
+
+        // So the wall is refused, naming the clip, never measured.
+        let refusal = super::mesh(
+            &backend,
+            &model,
+            &units,
+            &super::Linear::default(),
+            ifc_model::EntityId(90),
+            false,
+            super::NetOptions::default(),
+        )
+        .map(|body| body.map(|body| enclosed_volume(&body.mesh)))
+        .unwrap_err();
+        assert!(
+            refusal.starts_with("it is clipped by a bounded half-space #21, ")
+                && refusal.contains("axiolid/kernel#325"),
+            "{refusal}"
+        );
     }
 
     /// engine#224, openbimrs/ifc#355: a product on a linear placement with

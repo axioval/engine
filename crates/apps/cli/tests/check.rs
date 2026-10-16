@@ -17294,31 +17294,43 @@ fn with_geometry_an_open_terminal_is_bounded_by_its_vertices() {
 /// Quarter-ring wall #29 about the origin (radii 4.8 to 5, 0 to 90
 /// degrees, 3 m high) with niche #49 cut from its inner face between 40
 /// and 50 degrees and z 1 to 2, the niche's inner arc one unit in the
-/// last place inside the wall's: the exact boolean refuses the difference
-/// (its kept faces do not sew into a solid), so the wall is unmeasured.
-fn curved_wall_with_a_flush_niche() -> String {
-    let arc =
-        |first: u32, (outer, inner): (f64, f64), (from, to): (f64, f64), z: f64, depth: f64| {
-            let middle = f64::midpoint(from, to);
-            let at = |r: f64, angle: f64| format!("({:?},{:?})", r * angle.cos(), r * angle.sin());
-            let [list, curve, profile, origin, frame, solid] =
-                [0, 1, 2, 3, 4, 5].map(|offset| first + offset);
-            format!(
-                "#{list}=IFCCARTESIANPOINTLIST2D(({},{},{},{},{},{}),$);\n\
+/// last place inside the wall's. The exact boolean reads the two inner
+/// faces as one surface (axiolid/kernel#324), so the wall is measured
+/// (#403). `tapered` states the niche as an `IfcExtrudedAreaSolidTapered`
+/// with the same end profile, an operand the exact boolean refuses, so
+/// the wall is unmeasured.
+fn curved_wall_with_a_flush_niche(tapered: bool) -> String {
+    let arc = |first: u32,
+               (outer, inner): (f64, f64),
+               (from, to): (f64, f64),
+               z: f64,
+               depth: f64,
+               tapered: bool| {
+        let middle = f64::midpoint(from, to);
+        let at = |r: f64, angle: f64| format!("({:?},{:?})", r * angle.cos(), r * angle.sin());
+        let [list, curve, profile, origin, frame, solid] =
+            [0, 1, 2, 3, 4, 5].map(|offset| first + offset);
+        format!(
+            "#{list}=IFCCARTESIANPOINTLIST2D(({},{},{},{},{},{}),$);\n\
              #{curve}=IFCINDEXEDPOLYCURVE(#{list},(IFCARCINDEX((1,2,3)),IFCLINEINDEX((3,4)),\
              IFCARCINDEX((4,5,6)),IFCLINEINDEX((6,1))),.F.);\n\
              #{profile}=IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,#{curve});\n\
              #{origin}=IFCCARTESIANPOINT((0.,0.,{z:?}));\n\
              #{frame}=IFCAXIS2PLACEMENT3D(#{origin},$,$);\n\
-             #{solid}=IFCEXTRUDEDAREASOLID(#{profile},#{frame},#4,{depth:?});\n",
-                at(outer, from),
-                at(outer, middle),
-                at(outer, to),
-                at(inner, to),
-                at(inner, middle),
-                at(inner, from),
-            )
-        };
+             #{solid}={};\n",
+            at(outer, from),
+            at(outer, middle),
+            at(outer, to),
+            at(inner, to),
+            at(inner, middle),
+            at(inner, from),
+            if tapered {
+                format!("IFCEXTRUDEDAREASOLIDTAPERED(#{profile},#{frame},#4,{depth:?},#{profile})")
+            } else {
+                format!("IFCEXTRUDEDAREASOLID(#{profile},#{frame},#4,{depth:?})")
+            },
+        )
+    };
     let (from, to) = (40.0_f64.to_radians(), 50.0_f64.to_radians());
     format!(
         "{}#26=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#25));\n\
@@ -17328,17 +17340,32 @@ fn curved_wall_with_a_flush_niche() -> String {
          #47=IFCPRODUCTDEFINITIONSHAPE($,$,(#46));\n\
          #49=IFCOPENINGELEMENT('0000000000000000000049',$,$,$,$,#3,#47,$,.OPENING.);\n\
          #50=IFCRELVOIDSELEMENT('0000000000000000000050',$,$,$,#29,#49);\n",
-        arc(20, (5.0, 4.8), (0.0, std::f64::consts::FRAC_PI_2), 0.0, 3.0),
-        arc(40, (4.9, 4.8_f64.next_down()), (from, to), 1.0, 1.0),
+        arc(
+            20,
+            (5.0, 4.8),
+            (0.0, std::f64::consts::FRAC_PI_2),
+            0.0,
+            3.0,
+            false
+        ),
+        arc(
+            40,
+            (4.9, 4.8_f64.next_down()),
+            (from, to),
+            1.0,
+            1.0,
+            tapered
+        ),
     )
 }
 
-/// #401: a curved wall whose opening the exact boolean refuses is
-/// unmeasured, and its box (5 m square) reached every room inside the
-/// ring, leaving it not evaluated. The wall lies within its uncut body,
-/// which the host measures, so that body bounds it as a possible obstacle:
-/// a room inside the ring holds the circle, and a room the wall's corner
-/// cuts stays not evaluated naming it, its absence unproven without it.
+/// #401: a curved wall whose opening the exact boolean refuses (here a
+/// tapered niche) is unmeasured, and its box (5 m square) reached every
+/// room inside the ring, leaving it not evaluated. The wall lies within
+/// its uncut body, which the host measures, so that body bounds it as a
+/// possible obstacle: a room inside the ring holds the circle, and a room
+/// the wall's corner cuts stays not evaluated naming it, its absence
+/// unproven without it.
 #[test]
 fn with_geometry_a_curved_wall_whose_opening_is_refused_is_bounded_by_its_uncut_body() {
     let case = Case::new("geometry-free-floor-refused-opening");
@@ -17347,7 +17374,7 @@ fn with_geometry_a_curved_wall_whose_opening_is_refused_is_bounded_by_its_uncut_
         model_with(&format!(
             "{}{}",
             placed_box(10, [centre, centre, 0.0], [side, side, 3.0], space),
-            curved_wall_with_a_flush_niche(),
+            curved_wall_with_a_flush_niche(true),
         ))
     };
     for args in [&[][..], &["--no-exact-boundaries"][..]] {
@@ -17384,6 +17411,54 @@ fn with_geometry_a_curved_wall_whose_opening_is_refused_is_bounded_by_its_uncut_
                 && messages[0].contains("/#29"),
             "{args:?} {messages:?}"
         );
+    }
+}
+
+/// #403: the same wall with its niche flush on the inner face is measured
+/// since the exact boolean reads the two inner faces as one surface
+/// (axiolid/kernel#324), so neither room is left undecided by it: the room
+/// inside the ring holds the circle, and the room the wall's corner cuts
+/// is decided by the wall's measured body.
+#[test]
+fn with_geometry_a_curved_wall_with_a_flush_niche_is_measured() {
+    let case = Case::new("geometry-free-floor-flush-niche");
+    let space = "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,$,$)";
+    let room = |centre: f64, side: f64| {
+        model_with(&format!(
+            "{}{}",
+            placed_box(10, [centre, centre, 0.0], [side, side, 3.0], space),
+            curved_wall_with_a_flush_niche(false),
+        ))
+    };
+    for args in [&[][..], &["--no-exact-boundaries"][..]] {
+        // Inside the ring, and x and y 2.5 to 4.5, where the wall crosses
+        // the room and leaves no 1.5 m circle: the largest lies beyond it.
+        for (centre, side, code) in [(1.5, 3.0, 0), (3.5, 2.0, 3)] {
+            let (output, result) = turning_circle(&case, &room(centre, side), args);
+            assert_eq!(
+                output.status.code(),
+                Some(code),
+                "{args:?} {centre}: {}",
+                stderr(&output)
+            );
+            let reasons = unmeasured_reasons(&result);
+            assert!(reasons.is_empty(), "{args:?} {centre}: {reasons:?}");
+            assert_eq!(
+                not_evaluated_messages(&result),
+                Vec::<String>::new(),
+                "{args:?} {centre}: {result:#}"
+            );
+            let findings = finding_messages(&result);
+            assert!(
+                if code == 0 {
+                    findings.is_empty()
+                } else {
+                    findings.len() == 1
+                        && findings[0].1.starts_with("NO_FREE_FLOOR_SPACE_FOR_CIRCLE")
+                },
+                "{args:?} {centre}: {findings:?}"
+            );
+        }
     }
 }
 

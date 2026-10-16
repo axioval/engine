@@ -5466,6 +5466,115 @@ mod tests {
         );
     }
 
+    /// A quarter-ring wall #29 about the origin (radii 4.8 to 5, 0 to 90
+    /// degrees, 3 m high) voided by opening #49, an annular sector between
+    /// `inner` and `outer` from 40 to 50 degrees and `z` 1 to 2: each
+    /// profile an `IfcIndexedPolyCurve` of two arcs and two lines.
+    fn curved_wall_with_an_opening(outer: f64, inner: f64) -> String {
+        let sector = |first: u32, (outer, inner): (f64, f64), (from, to): (f64, f64)| {
+            let middle = f64::midpoint(from, to);
+            let at = |r: f64, angle: f64| format!("({:?},{:?})", r * angle.cos(), r * angle.sin());
+            let [list, curve, profile] = [0, 1, 2].map(|offset| first + offset);
+            format!(
+                "#{list}=IFCCARTESIANPOINTLIST2D(({},{},{},{},{},{}),$);\n\
+                 #{curve}=IFCINDEXEDPOLYCURVE(#{list},(IFCARCINDEX((1,2,3)),IFCLINEINDEX((3,4)),\
+                 IFCARCINDEX((4,5,6)),IFCLINEINDEX((6,1))),.F.);\n\
+                 #{profile}=IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,#{curve});\n",
+                at(outer, from),
+                at(outer, middle),
+                at(outer, to),
+                at(inner, to),
+                at(inner, middle),
+                at(inner, from),
+            )
+        };
+        let (from, to) = (40.0_f64.to_radians(), 50.0_f64.to_radians());
+        format!(
+            "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+             #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+             #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+             #3=IFCLOCALPLACEMENT($,#2);\n\
+             #4=IFCDIRECTION((0.,0.,1.));\n\
+             #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+             #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+             #7=IFCUNITASSIGNMENT((#6));\n\
+             #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+             {}#25=IFCEXTRUDEDAREASOLID(#22,#2,#4,3.);\n\
+             #26=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#25));\n\
+             #27=IFCPRODUCTDEFINITIONSHAPE($,$,(#26));\n\
+             #29=IFCWALL('0000000000000000000029',$,$,$,$,#3,#27,$,$);\n\
+             {}#43=IFCCARTESIANPOINT((0.,0.,1.));\n\
+             #44=IFCAXIS2PLACEMENT3D(#43,$,$);\n\
+             #45=IFCEXTRUDEDAREASOLID(#42,#44,#4,1.);\n\
+             #46=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#45));\n\
+             #47=IFCPRODUCTDEFINITIONSHAPE($,$,(#46));\n\
+             #49=IFCOPENINGELEMENT('0000000000000000000049',$,$,$,$,#3,#47,$,.OPENING.);\n\
+             #50=IFCRELVOIDSELEMENT('0000000000000000000050',$,$,$,#29,#49);\n\
+             ENDSEC;\nEND-ISO-10303-21;\n",
+            sector(20, (5.0, 4.8), (0.0, std::f64::consts::FRAC_PI_2)),
+            sector(40, (outer, inner), (from, to)),
+        )
+    }
+
+    /// engine#403 (axiolid/kernel#324): a curved wall whose opening or
+    /// niche shares its curved faces, cut through the full thickness with
+    /// both cylinders coincident, flush with the inner face, or with its
+    /// inner arc a unit in the last place inside it, was unmeasured: the
+    /// exact boolean the deviation is measured against refused it ("exact
+    /// boolean whose kept faces do not sew into a solid"). Since
+    /// axiolid-mesh-compile 0.3.27 it reads the coincident faces as one
+    /// surface within tolerance, reports that move, and the wall is
+    /// measured within a certified bound. Its volume, within the surface
+    /// that bound allows, holds the annular sectors' closed form.
+    #[test]
+    fn a_curved_wall_with_a_flush_opening_is_measured_within_a_certified_bound() {
+        let ring = |outer: f64, inner: f64, sweep: f64, height: f64| {
+            0.5 * sweep * (outer * outer - inner * inner) * height
+        };
+        let wall = ring(5.0, 4.8, std::f64::consts::FRAC_PI_2, 3.0);
+        for (name, outer, inner) in [
+            ("through", 5.0, 4.8),
+            ("flush niche", 4.9, 4.8),
+            ("niche an ulp inside", 4.9, 4.8_f64.next_down()),
+        ] {
+            let model =
+                axioval_ifc::read_ifc_step(curved_wall_with_an_opening(outer, inner).as_bytes())
+                    .unwrap();
+            let units = ifc_geometry::units::resolve(&model);
+            let backend = ifc_geometry::compile::default_backend();
+            let body = super::mesh(
+                &backend,
+                &model,
+                &units,
+                &super::Linear::default(),
+                ifc_model::EntityId(29),
+                false,
+                super::NetOptions::default(),
+            )
+            .unwrap_or_else(|reason| panic!("{name}: {reason}"))
+            .unwrap_or_else(|| panic!("{name}: no body"));
+            let super::Fit::Within(bound) = body.fit else {
+                panic!("{name}: a curved wall measured as exact");
+            };
+            assert!(
+                bound > 0.0 && bound <= super::TOLERANCE.linear(),
+                "{name}: {bound}"
+            );
+            let exact = wall - ring(outer, inner.max(4.8), 10.0_f64.to_radians(), 1.0);
+            let (volume, area) = enclosed_volume_and_area(&body.mesh);
+            let slack = area * bound + 1e-9;
+            assert!(
+                (volume - exact).abs() <= slack,
+                "{name}: {volume} m3 against {exact} m3 within {slack}"
+            );
+            // Cut, not the uncut wall.
+            assert!(
+                wall - volume > slack,
+                "{name}: {volume} m3, {wall} m3 uncut"
+            );
+        }
+    }
+
     /// engine#224, openbimrs/ifc#355: a product on a linear placement with
     /// a positive `OffsetLateral` lies to the LEFT of the basis curve's
     /// direction, and its local Z is up. The curve runs along +Y, so left

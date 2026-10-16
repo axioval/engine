@@ -18,6 +18,17 @@ All notable changes are documented here. This project follows Semantic Versionin
   clip, are measured exactly as their clipped shape, for polyline,
   composite, indexed and arc boundaries alike.
 
+- **Curved walls with openings flush with a curved face are measured**
+  ([#403](https://github.com/axioval/engine/issues/403)). A curved wall
+  less a niche flush with its inner face, an opening through its whole
+  thickness, or one a unit in the last place off the face was unmeasured
+  ("exact boolean whose kept faces do not sew into a solid"), leaving rooms
+  beside it undecided or bounded by its uncut body. With
+  axiolid-mesh-compile 0.3.27 the exact boolean reads the coincident faces
+  as one surface within tolerance and reports that move
+  (axiolid/kernel#324), and the wall is measured within its certified
+  deviation.
+
 ### Changed
 
 - Moved to axiolid-model 0.3.14, axiolid-construct 0.3.19,

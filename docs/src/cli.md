@@ -1553,7 +1553,13 @@ gross body before its openings, else the subject of an authored difference,
 placed by the transform above it (its deviation scaled by the placement's
 largest stretch), between the elevations the net body's construction
 certifies. A part a whole's opening cannot be subtracted from is enclosed
-in its body before that opening. Anything else has no enclosure.
+in its body before that opening. Anything else has no enclosure. Since
+axiolid-mesh-compile 0.3.27 a curved wall whose opening or niche is flush
+with its curved face (a niche on the inner face, an opening through the
+whole thickness, or one a unit in the last place off it) is no longer
+refused: the exact boolean reads the coincident faces as one surface within
+tolerance (axiolid/kernel#324) and the wall is measured within its
+certified deviation (#403).
 
 The kernel keeps every surface point of a revolution (tapered too), a sphere,
 a torus and a sweep along one circle or ellipse arc within the 1 mm of its

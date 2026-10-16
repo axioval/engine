@@ -35,6 +35,17 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Units in SI notation with a parenthesised denominator**
+  ([#397](https://github.com/axioval/engine/issues/397)). `parse_unit`
+  reads `W/(m·K)`, `W/(m²·K)` and `kg/(m·s²)` as the units `W/m·K`,
+  `W/m²·K` and `kg/m·s²`, so a package writing a catalogue, table or
+  literal unit as SI does compiles. Every form accepted before is
+  unchanged; a repeated solidus (also inside the group), an unclosed,
+  empty or nested group, a parenthesis anywhere but around the whole
+  denominator and anything after the closing one are refused, naming the
+  character's position. The unit grammar is documented under
+  [Written units](docs/src/expressions.md#written-units).
+
 - **A rule definition may fix parameters its instances may not override**
   ([#387](https://github.com/axioval/engine/issues/387), mirroring
   axioval/mcs#11). `ParameterDefinition::fixed` keeps every instance on the

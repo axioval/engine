@@ -411,27 +411,34 @@ fn symbol(name: &str) -> Option<(f64, [i8; 8])> {
         .map(|unit| (unit.scale, unit.exponents))
 }
 
-/// A unit as written, such as `m2`, `m²`, `EUR/m²` or `W/m²·K`, and its
-/// scale to the coherent unit: factors joined by `·` or `*`, each a
-/// symbol with an optional exponent (`2`, `²`, `^-1`, `⁻¹`), every
-/// factor after a `/` dividing. A currency is three capital letters
-/// (`EUR`); `1` is a plain number.
+/// A unit as written, such as `m2`, `m²`, `EUR/m²`, `W/(m·K)` or
+/// `W/m²·K`, and its scale to the coherent unit: factors joined by `·` or
+/// `*`, each a symbol with an optional exponent (`2`, `²`, `^-1`, `⁻¹`),
+/// every factor after the one `/` dividing, whether or not parentheses
+/// enclose them (`W/(m·K)` is `W/m·K`). A currency is three capital
+/// letters (`EUR`); `1` is a plain number.
+///
+/// ```text
+/// unit        := "1" | numerator [ "/" denominator ]
+/// numerator   := "1" | product
+/// denominator := product | "(" product ")"
+/// product     := factor ( ( "·" | "*" ) factor )*
+/// factor      := symbol [ exponent ]
+/// ```
+///
+/// A second `/`, a parenthesis anywhere but around the whole denominator,
+/// a nested, unclosed or empty group, and anything after the closing
+/// parenthesis are refused, naming the character's position (counted from
+/// one, in the unit without surrounding blanks).
 pub fn parse_unit(text: &str) -> Result<(f64, Unit), String> {
     let text = text.trim();
     if text == "1" {
         return Ok((1.0, Unit::NONE));
     }
+    let (numerator, denominator) =
+        split_unit(text).map_err(|why| format!("unit `{text}`: {why}"))?;
     let mut scale = 1.0;
     let mut unit = Unit::NONE;
-    let (numerator, denominator) = match text.split_once('/') {
-        Some((numerator, denominator)) => (numerator, Some(denominator)),
-        None => (text, None),
-    };
-    if denominator.is_some_and(|denominator| denominator.contains('/')) {
-        return Err(format!(
-            "unit `{text}` divides twice; write every factor after one `/`"
-        ));
-    }
     for (part, sign) in [(numerator, 1), (denominator.unwrap_or(""), -1)] {
         if sign == -1 && denominator.is_none() {
             continue;
@@ -453,6 +460,72 @@ pub fn parse_unit(text: &str) -> Result<(f64, Unit), String> {
         }
     }
     Ok((scale, unit))
+}
+
+/// A unit's numerator and, if it divides, its denominator, without the
+/// parentheses that may enclose it.
+fn split_unit(text: &str) -> Result<(&str, Option<&str>), String> {
+    let mut solidus = None;
+    // Each group end as its position (from one) and its byte index.
+    let mut open: Option<(usize, usize)> = None;
+    let mut close: Option<(usize, usize)> = None;
+    for (position, (index, character)) in (1..).zip(text.char_indices()) {
+        if let Some((closed, _)) = close
+            && !character.is_whitespace()
+        {
+            return Err(format!(
+                "`{character}` at character {position} follows the parenthesis closed at \
+                 character {closed}; write every divisor inside it"
+            ));
+        }
+        match character {
+            '/' if solidus.is_some() => {
+                return Err(format!(
+                    "it divides twice, at character {position}; write every divisor after \
+                     one `/`, in parentheses where there are several"
+                ));
+            }
+            '/' => solidus = Some(index),
+            '(' if open.is_some() => {
+                return Err(format!(
+                    "`(` at character {position} nests a group; write every divisor in one \
+                     pair of parentheses"
+                ));
+            }
+            '(' if solidus.is_some_and(|solidus| text[solidus + 1..index].trim().is_empty()) => {
+                open = Some((position, index));
+            }
+            '(' => {
+                return Err(format!(
+                    "`(` at character {position} does not open the denominator; only the \
+                     factors after `/` may be enclosed in parentheses"
+                ));
+            }
+            ')' => match open {
+                None => return Err(format!("`)` at character {position} closes no `(`")),
+                Some((opened, start)) => {
+                    if text[start + 1..index].trim().is_empty() {
+                        return Err(format!(
+                            "the parentheses at character {opened} enclose no unit"
+                        ));
+                    }
+                    close = Some((position, index));
+                }
+            },
+            _ => {}
+        }
+    }
+    let Some(solidus) = solidus else {
+        return Ok((text, None));
+    };
+    let denominator = match (open, close) {
+        (None, _) => &text[solidus + 1..],
+        (Some((opened, _)), None) => {
+            return Err(format!("`(` at character {opened} is never closed"));
+        }
+        (Some((_, start)), Some((_, end))) => &text[start + 1..end],
+    };
+    Ok((&text[..solidus], Some(denominator)))
 }
 
 /// One factor of a unit: a symbol and its exponent.
@@ -561,5 +634,61 @@ mod tests {
         assert!(parse_unit("m/s/s").is_err());
         assert!(parse_unit("EUR·USD").is_err());
         assert!(parse_unit("rad·m").unwrap().1.dimension().is_err());
+    }
+
+    #[test]
+    fn a_parenthesised_denominator_divides_by_every_factor_in_it() {
+        for (grouped, plain) in [
+            ("W/(m·K)", "W/m·K"),
+            ("W/(m²·K)", "W/m²·K"),
+            ("kg/(m·s²)", "kg/m·s²"),
+            ("W / ( m * K )", "W/m*K"),
+            ("EUR/(m2)", "EUR/m2"),
+            ("1/(s)", "1/s"),
+            ("kW/(km·h^-1)", "kW/km·h^-1"),
+        ] {
+            assert_eq!(parse_unit(grouped), parse_unit(plain), "{grouped}");
+        }
+        assert_eq!(parse_unit("W/(m·K)").unwrap().1.to_string(), "m·kg·s⁻³·K⁻¹");
+        let (scale, _) = parse_unit("kN/(mm·m)").unwrap();
+        assert!((scale - 1e6).abs() < 1e-6);
+    }
+
+    #[test]
+    fn malformed_groups_are_refused_naming_the_position() {
+        for (text, expected) in [
+            ("W/(m·K", "`(` at character 3 is never closed"),
+            ("W/m·K)", "`)` at character 6 closes no `(`"),
+            ("W/()", "the parentheses at character 3 enclose no unit"),
+            ("W/( )", "the parentheses at character 3 enclose no unit"),
+            ("W/((m))", "`(` at character 4 nests a group"),
+            (
+                "W/(m)·K",
+                "`·` at character 6 follows the parenthesis closed at character 5",
+            ),
+            (
+                "W/(m)²",
+                "`²` at character 6 follows the parenthesis closed at character 5",
+            ),
+            (
+                "W/(m)(K)",
+                "`(` at character 6 follows the parenthesis closed at character 5",
+            ),
+            ("(W)/m", "`(` at character 1 does not open the denominator"),
+            (
+                "W/m·(K)",
+                "`(` at character 5 does not open the denominator",
+            ),
+            ("W/(m/K)", "it divides twice, at character 5"),
+            ("m/s/s", "it divides twice, at character 4"),
+            (
+                "W/(m)/K",
+                "`/` at character 6 follows the parenthesis closed at character 5",
+            ),
+        ] {
+            let why = parse_unit(text).unwrap_err();
+            assert!(why.starts_with(&format!("unit `{text}`: ")), "{why}");
+            assert!(why.contains(expected), "{text}: {why}");
+        }
     }
 }

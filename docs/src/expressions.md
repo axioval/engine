@@ -713,3 +713,44 @@ A type error names its kind and path:
 
 `quantity-takeoff` computed columns are expressions: they parse, check and
 evaluate through this module, with the same units and intervals.
+
+## Written units
+
+Every unit a package writes (a quantity literal, `inUnit`, a table,
+catalogue or takeoff column, a parameter's quantity) is read by one parser,
+`expression::parse_unit`, against the unit symbols the
+[catalogue](./catalogue.md) lists under `units`:
+
+```text
+unit        := "1" | numerator [ "/" denominator ]
+numerator   := "1" | product
+denominator := product | "(" product ")"
+product     := factor ( ( "·" | "*" ) factor )*
+factor      := symbol [ exponent ]
+exponent    := digits | "^" [ "-" ] digits | superscripts
+symbol      := a unit symbol or alias | a currency (three capital letters)
+```
+
+Blanks around factors, `/` and parentheses are ignored. Every factor after
+the one `/` divides, so the SI notation `W/(m·K)` and the shorter `W/m·K`
+are one unit, and so are `W/(m²·K)` and `W/m²·K`, `kg/(m·s²)` and
+`kg/m·s²`. `1` alone is a plain number, and `1/s` divides it.
+
+Only the whole denominator may be enclosed, once. The parser refuses, naming
+the character's position (counted from one, without surrounding blanks):
+
+| Written | Refused because |
+| --- | --- |
+| `m/s/s`, `W/(m/K)` | it divides twice, at character 4 or 5: SI leaves a repeated solidus ambiguous |
+| `W/(m·K` | the `(` at character 3 is never closed |
+| `W/m·K)` | the `)` at character 6 closes no `(` |
+| `W/()` | the parentheses at character 3 enclose no unit |
+| `W/((m))` | the `(` at character 4 nests a group |
+| `W/(m)·K`, `W/(m)²` | a character follows the closing parenthesis |
+| `(W)/m`, `W/m·(K)` | the `(` does not open the denominator |
+
+A symbol that is neither a unit symbol nor a currency, a factor without a
+symbol and an exponent of zero are refused too, as are two different
+currencies in one unit. The [text form](#text-form) reads no parenthesis
+in a number's unit, since `(` there groups an expression: write a unit
+there without one (`0.04 W/m·K`).

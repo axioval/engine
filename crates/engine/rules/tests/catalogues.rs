@@ -220,6 +220,41 @@ fn a_catalogue_joined_by_material_name_gives_lambda_to_an_expression() {
     );
 }
 
+/// #397: a column and a literal in SI notation, `W/(m·K)`, are the unit
+/// `W/m·K` and judge exactly as it does.
+#[test]
+fn a_parenthesised_denominator_is_the_unit_written_without_it() {
+    let registry = registry();
+    let requirement = json!({"kind": "compare", "operator": "lessThanOrEquals",
+                             "left": catalogue("lambda"), "right": quantity(0.04, "W/(m·K)")});
+    let mut set = ruleset(vec![requirement_rule(&requirement)]);
+    let mut catalogues = materials();
+    catalogues["materials"]["columns"][1]["unit"] = json!("W/(m·K)");
+    set.catalogues = serde_json::from_value(catalogues).unwrap();
+    let mut plan = compile(&registry, &[vocabulary(&registry)], &set).unwrap();
+    supplied(&mut plan);
+    let report = check(
+        plan,
+        walls(&[
+            ("brick", Some("ex-clay-brick")),
+            ("foam", Some("ex-foam-board")),
+        ]),
+    );
+    assert_eq!(subjects(&report), ["brick"]);
+    assert!(
+        report.findings()[0]
+            .message
+            .contains("catalogue materials[ex-clay-brick].lambda = 0.81 m·kg·s⁻³·K⁻¹"),
+        "{}",
+        report.findings()[0].message
+    );
+    assert!(
+        report.not_evaluated.is_empty(),
+        "{:?}",
+        report.not_evaluated
+    );
+}
+
 #[test]
 fn an_empty_cell_is_null_and_never_not_evaluated() {
     let mut plan = compiled(

@@ -1130,11 +1130,14 @@ pub(crate) fn circle(scene: &Scene, radius: f64) -> Result<Search, FreeSpaceErro
 }
 
 /// The most corners a region a circle search erodes or dilates by a disc
-/// may have (#394). The overlay's arrangement of a disc morphology grows
-/// with every edge and with how many of them lie within the disc of each
-/// other: a free floor of 830 corners took eight seconds and over 2 GB, one
-/// of 25,716 exhausted 16 GB. A search past it is refused with the count.
-pub(crate) const MORPHOLOGY_POINTS: usize = 1_000;
+/// may have: a safety net, not a cost model (#394, #402). Since
+/// axiolid-overlay 0.3.16 a disc morphology no longer builds one hull per
+/// edge against every neighbour, and a toothed floor of 1,202 corners is
+/// eroded in about 0.3 s, but the cost still grows faster than the edges
+/// where dense teeth line a hole: at 2,400 corners such an erosion takes
+/// about 2.5 s, at 5,000 about 17 s and 300 MB, at 10,000 over two
+/// minutes. A search past it is refused with the count.
+pub(crate) const MORPHOLOGY_POINTS: usize = 5_000;
 
 /// `region` where a disc search may erode or dilate it, else the refusal
 /// naming its corners ([`MORPHOLOGY_POINTS`]).
@@ -1832,6 +1835,29 @@ mod tests {
         }
     }
 
+    /// A free floor past the old 1,000-corner budget (a 1 x 1 column
+    /// toothed 0.5 mm deep along two sides, 1,202 corners) is eroded and
+    /// decided both ways since axiolid-overlay 0.3.16 (#402): no disc of
+    /// 1 m radius fits in the 1 m band round it, and one of 0.4 m does.
+    #[test]
+    fn a_floor_past_the_old_corner_budget_is_decided() {
+        let mut deep = scene((0.0, 0.0), (3.0, 3.0), &[], &[]);
+        let column = Region::new(
+            vec![Polygon {
+                outer: jagged(1.0, 1.0, 1.0, 1.0 / 600.0, 5.0e-4),
+                holes: Vec::new(),
+            }],
+            deep.tolerance,
+        )
+        .unwrap();
+        assert_eq!(column.polygons()[0].outer.points.len(), 1_202);
+        deep.obstacles = column.clone();
+        deep.sure = column;
+        assert!(region_points(deep.clear(true).unwrap()) > 1_000);
+        assert!(matches!(circle(&deep, 1.0), Ok(Search::Nowhere)));
+        assert!(matches!(circle(&deep, 0.4), Ok(Search::Found { .. })));
+    }
+
     /// A free floor of more corners than a disc search erodes is refused
     /// with their count (#394), not eroded until memory runs out; a disc
     /// that fits at the floor's estimated pole is still found there.
@@ -1840,7 +1866,7 @@ mod tests {
         let mut scene = jagged_scene((0.0, 0.0), 0.001);
         let column = Region::new(
             vec![Polygon {
-                outer: jagged(1.0, 1.0, 1.0, 0.001, 5.0e-4),
+                outer: jagged(1.0, 1.0, 1.0, 1.0e-4, 5.0e-4),
                 holes: Vec::new(),
             }],
             scene.tolerance,
@@ -1851,7 +1877,7 @@ mod tests {
         assert!(region_points(scene.clear(true).unwrap()) > MORPHOLOGY_POINTS);
         let refused = circle(&scene, 1.0).expect_err("refused");
         assert!(
-            refused.to_string().contains("corners, more than the 1000"),
+            refused.to_string().contains("corners, more than the 5000"),
             "{refused}"
         );
         assert!(matches!(circle(&scene, 0.4), Ok(Search::Found { .. })));

@@ -191,10 +191,12 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   witness's clear part and the sure obstacles, filled for the absence's
   clear part and the obstacles, each checked on its side by the overlay),
   and again over the regions as built only where that is undecided or
-  refused; a disc morphology's arrangement grows with the square of the
-  edges, sub-millimetre ones included. A region past `MORPHOLOGY_POINTS`
-  corners is refused by name (#394), never eroded; keep the pole first,
-  which needs no morphology. `any_rectangle` takes its first interval
+  refused; a disc morphology's cost grows faster than the edges,
+  sub-millimetre ones included. A region past `MORPHOLOGY_POINTS` (5,000)
+  corners is refused by name (#394), never eroded; it is a safety net
+  since axiolid-overlay 0.3.16 (#402), not a cost model, so raise it only
+  with timings of a hole lined by dense teeth. Keep the pole first, which
+  needs no morphology. `any_rectangle` takes its first interval
   witness first, as it always did, then may end the search over every
   angle at once (#371): `Scene::fits_nowhere` (the clear part eroded by an
   octagon inside every first interval's shrunk rectangle, less

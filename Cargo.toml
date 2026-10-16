@@ -100,7 +100,9 @@ axiolid-measure = "0.3.10"
 # pieces, with bit-identical results (#292); 0.3.13 decides exact edge
 # contact and accepts its own settled output fed back (#272); 0.3.15
 # unions and intersects overlapping slender soups about ten times faster,
-# with byte-identical output (#315); 0.3.16 erodes polygons fast (#323).
+# with byte-identical output (#315); 0.3.16 erodes and dilates a region of
+# many corners without the quadratic arrangement (#323), dropping exactly
+# collinear vertices only.
 axiolid-overlay = "0.3.16"
 axiolid-ray-mesh = "0.4.0"
 axiolid-route = "0.3.7"

@@ -17292,8 +17292,9 @@ fn with_geometry_a_turning_circle_needs_the_floor_a_door_swings_over() {
             // The circle the swing leaves room for, and the floor it leaves
             // (#391): its sector is polygonised from both sides, so the
             // area is a narrow bracket.
-            "NO_FREE_FLOOR_SPACE_FOR_CIRCLE: the largest free circle is between 1.225 m and \
-             1.231 m across, centred at (1.785742 m, 0.616088 m, 0 m); required 1.5 m; the free \
+            // The bracket starts from the service's estimate (#400).
+            "NO_FREE_FLOOR_SPACE_FOR_CIRCLE: the largest free circle is between 1.227 m and \
+             1.231 m across, centred at (1.785645 m, 0.614355 m, 0 m); required 1.5 m; the free \
              floor is between 3.2935 and 3.2939 m²"
                 .to_owned()
         )],

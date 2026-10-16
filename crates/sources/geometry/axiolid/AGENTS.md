@@ -168,7 +168,27 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   never the shape's footprint, domain or reach, which are set on a copy),
   with the differences their searches took (`keep_clear`): a space is
   searched over one scene several times (undecided obstacles first, a
-  path and none, the bracket of the largest shape, #391). `any_rectangle` takes its first interval
+  path and none, the bracket of the largest shape, #391).
+  `Scene::inscribed` (#400) estimates the largest disc of each clear
+  part in floating point (`placement::inscribed_disc`, the pole of
+  inaccessibility over at most `INSCRIBED_CELLS` cells), kept with the
+  scene; `estimate_largest_disc` answers it through
+  `placement::searched_radii`. It is a hint only: `circle` asks the
+  absence first where the witnesses' clear part holds no disc of the
+  radius, and the witness after an absence not proven or refused, so the
+  answer is the witness-first one (`placement::tests`
+  `a_circle_asked_absence_first_gets_the_verdicts_of_the_witness_first`);
+  never decide a verdict from the estimate. The circle search asks
+  first over regions simplified on the side it may use them
+  (`placement::simplified`, `Scene::simple`: corners within
+  `SIMPLIFY_WITHIN_METRES` of their neighbours' chord cut off for a
+  witness's clear part and the sure obstacles, filled for the absence's
+  clear part and the obstacles, each checked on its side by the overlay),
+  and again over the regions as built only where that is undecided or
+  refused; a disc morphology's arrangement grows with the square of the
+  edges, sub-millimetre ones included. A region past `MORPHOLOGY_POINTS`
+  corners is refused by name (#394), never eroded; keep the pole first,
+  which needs no morphology. `any_rectangle` takes its first interval
   witness first, as it always did, then may end the search over every
   angle at once (#371): `Scene::fits_nowhere` (the clear part eroded by an
   octagon inside every first interval's shrunk rectangle, less

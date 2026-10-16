@@ -180,6 +180,13 @@ pub(crate) struct Scene {
     /// each taken once a search first erodes it: every shape and angle
     /// erodes the same difference ([`Self::free_for`]).
     pub(crate) clear: [OnceCell<Region>; 2],
+    /// The largest disc in each of `clear`, estimated
+    /// ([`Self::inscribed`]), `None` where the difference is refused;
+    /// taken once.
+    pub(crate) inscribed: [OnceCell<Option<Inscribed>>; 2],
+    /// The regions a circle search erodes or dilates, simplified on the
+    /// side it may use them ([`Self::simple`]); taken once.
+    pub(crate) simple: [OnceCell<Option<Region>>; 4],
 }
 
 /// The pieces of the free area eroded by half a path's width that come
@@ -371,6 +378,37 @@ impl Scene {
         Ok(cell.get_or_init(|| clear))
     }
 
+    /// One of the regions a circle search erodes or dilates, simplified
+    /// ([`simplified`], #400) on the side the search may use it: the
+    /// witnesses' clear part from inside (`0`), the absence's from around
+    /// (`1`), the obstacles from around (`2`) and the sure ones from
+    /// inside (`3`). `None` where nothing simplifies. Taken once.
+    fn simple(&self, which: usize) -> Option<&Region> {
+        self.simple[which]
+            .get_or_init(|| {
+                let (region, side) = match which {
+                    0 => (self.clear(false).ok()?, Side::Inside),
+                    1 => (self.clear(true).ok()?, Side::Around),
+                    2 => (&self.obstacles, Side::Around),
+                    _ => (&self.sure, Side::Inside),
+                };
+                simplified(region, SIMPLIFY_WITHIN_METRES, side, self.tolerance)
+            })
+            .as_ref()
+    }
+
+    /// The largest disc in the clear part ([`Self::clear`]) of a witness,
+    /// or of an absence (`absence`), estimated by [`inscribed_disc`]: a
+    /// hint, never evidence; [`Inscribed::NONE`] where the part has no
+    /// area, `None` where the difference is refused. Taken once per scene.
+    pub(crate) fn inscribed(&self, absence: bool) -> Option<Inscribed> {
+        *self.inscribed[usize::from(absence)].get_or_init(|| {
+            self.clear(absence).ok().map(|clear| {
+                inscribed_disc(clear, INSCRIBED_PRECISION_METRES).unwrap_or(Inscribed::NONE)
+            })
+        })
+    }
+
     /// Whether no rotation of a centred rectangle whose half-sizes are at
     /// least `half` fits anywhere clear: `scope` less `obstacles` for a
     /// witness, `room` less `sure` for an absence (`absence`), eroded by a
@@ -424,6 +462,156 @@ fn octagon(corner: f64) -> Ring {
 /// Obstacle regions with more corners than this are not summed with the
 /// shape ([`Scene::free_for`]).
 const OBSTACLE_SUM_POINTS: usize = 500;
+
+/// Which side of a region its simplification ([`simplified`]) lies on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Side {
+    /// Inside the region: corners are only cut off.
+    Inside,
+    /// Around the region: notches are only filled.
+    Around,
+}
+
+/// How far a corner a circle search leaves out may lie from the chord
+/// between its neighbours ([`Scene::simple`]).
+const SIMPLIFY_WITHIN_METRES: f64 = 1.0e-4;
+
+/// How many times [`simplified`] passes over the rings at most.
+const SIMPLIFY_PASSES: usize = 8;
+
+/// `region` with corners lying within `within` of the chord between their
+/// neighbours left out, each only where that keeps the result on `side` of
+/// the region (#400): for [`Side::Inside`] a corner whose removal cuts off
+/// the triangle it spans, for [`Side::Around`] one whose removal fills it,
+/// and only where no other corner of the region lies in that triangle, so
+/// no ring comes to cross another. `None` where nothing is left out, the
+/// overlay refuses the result or does not find it on its side.
+///
+/// A disc morphology's arrangement grows with every edge, however short,
+/// and overlay output along tessellated or flush bodies is jagged with
+/// edges of a millimetre and less: a free floor of 600 corners, 500 of
+/// them on edges under a centimetre, took the overlay seconds and
+/// gigabytes per erosion.
+#[allow(clippy::too_many_lines, clippy::many_single_char_names)]
+pub(crate) fn simplified(
+    region: &Region,
+    within: f64,
+    side: Side,
+    tolerance: Tolerance,
+) -> Option<Region> {
+    let cross =
+        |o: Point2, a: Point2, b: Point2| (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+    // Every corner, sorted by x, for the triangles' emptiness.
+    let mut corners: Vec<Point2> = region
+        .polygons()
+        .iter()
+        .flat_map(|polygon| std::iter::once(&polygon.outer).chain(&polygon.holes))
+        .flat_map(|ring| ring.points.iter().copied())
+        .collect();
+    corners.sort_by(|a, b| a.x.total_cmp(&b.x));
+    let empty = |u: Point2, v: Point2, w: Point2| {
+        let (low, high) = (u.x.min(v.x).min(w.x), u.x.max(v.x).max(w.x));
+        let (bottom, top) = (u.y.min(v.y).min(w.y), u.y.max(v.y).max(w.y));
+        let first = corners.partition_point(|p| p.x < low);
+        let turn = cross(u, v, w);
+        corners[first..]
+            .iter()
+            .take_while(|p| p.x <= high)
+            .filter(|p| p.y >= bottom && p.y <= top)
+            .filter(|&&p| p != u && p != v && p != w)
+            .all(|&p| {
+                // Strictly outside the closed triangle on some edge.
+                let sides = [cross(u, v, p), cross(v, w, p), cross(w, u, p)];
+                sides.iter().any(|s| s * turn < 0.0)
+            })
+    };
+    let mut removed = 0usize;
+    let mut polygons = Vec::new();
+    for polygon in region.polygons() {
+        let mut rings = Vec::new();
+        for (index, ring) in std::iter::once(&polygon.outer)
+            .chain(&polygon.holes)
+            .enumerate()
+        {
+            let mut points = ring.points.clone();
+            let area: f64 = (0..points.len())
+                .map(|i| {
+                    cross(
+                        Point2::new(0.0, 0.0),
+                        points[i],
+                        points[(i + 1) % points.len()],
+                    )
+                })
+                .sum();
+            // The region lies left of an outer ring wound anticlockwise
+            // and of a hole wound clockwise.
+            let left = (area > 0.0) == (index == 0);
+            for _ in 0..SIMPLIFY_PASSES {
+                // One pass leaves out no two neighbouring corners, so each
+                // triangle is spanned by corners the pass keeps.
+                let n = points.len();
+                let mut keep = vec![true; n];
+                let mut count = n;
+                let mut i = 0;
+                while i < n && count > 3 {
+                    let (before, after) = ((i + n - 1) % n, (i + 1) % n);
+                    if !(keep[before] && keep[after]) {
+                        i += 1;
+                        continue;
+                    }
+                    let (u, v, w) = (points[before], points[i], points[after]);
+                    let turn = cross(u, v, w);
+                    let convex = if left { turn > 0.0 } else { turn < 0.0 };
+                    let chord = (w.x - u.x).hypot(w.y - u.y);
+                    let removable = chord > 0.0
+                        && turn.abs() / chord <= within
+                        && match side {
+                            Side::Inside => convex || turn == 0.0,
+                            Side::Around => !convex,
+                        }
+                        && empty(u, v, w);
+                    if removable {
+                        keep[i] = false;
+                        count -= 1;
+                        removed += 1;
+                        i += 2;
+                    } else {
+                        i += 1;
+                    }
+                }
+                if count == n {
+                    break;
+                }
+                points = points
+                    .into_iter()
+                    .zip(keep)
+                    .filter_map(|(point, kept)| kept.then_some(point))
+                    .collect();
+            }
+            if points.len() < 3 {
+                return None;
+            }
+            rings.push(Ring { points });
+        }
+        let outer = rings.remove(0);
+        polygons.push(Polygon {
+            outer,
+            holes: rings,
+        });
+    }
+    if removed == 0 {
+        return None;
+    }
+    let simple = Region::new(polygons, tolerance).ok()?;
+    let (inner, outer) = match side {
+        Side::Inside => (&simple, region),
+        Side::Around => (region, &simple),
+    };
+    inner
+        .difference(outer, tolerance)
+        .is_ok_and(|beyond| beyond.is_empty())
+        .then_some(simple)
+}
 
 /// The corners of every ring of `region`.
 fn region_points(region: &Region) -> usize {
@@ -911,38 +1099,179 @@ pub(crate) fn any_rectangle(
 /// centres where the disc only touches an obstacle, so it only widens
 /// what an absence must rule out, and witnesses are verified by overlap
 /// either way. Smaller scenes are searched as before, bit for bit.
+///
+/// Where the largest disc of the witnesses' clear part is estimated
+/// smaller than this one ([`Scene::inscribed`]), no witness is expected:
+/// the absence is asked first, and the witness only where it is not
+/// proven (#400). The answer is the one asking the witness first gives:
+/// a witness's region lies inside the absence's, so a proven absence
+/// leaves no witness, and a refused absence still yields to a witness.
+///
+/// Each search is asked first over the scene's regions simplified on the
+/// side it may use them ([`Scene::simple`]): a witness from inside the
+/// free region, an absence around it, so either verdict holds. Only where
+/// that leaves the circle undecided, or is refused, is it asked again over
+/// the regions as built, so the verdicts are theirs (#400).
 pub(crate) fn circle(scene: &Scene, radius: f64) -> Result<Search, FreeSpaceError> {
+    let simplified = std::cell::Cell::new(false);
+    let fast = circle_decided(scene, radius, Some(&simplified));
+    if matches!(fast, Ok(Search::Found { .. } | Search::Nowhere)) || !simplified.get() {
+        return fast;
+    }
+    match circle_decided(scene, radius, None) {
+        // Undecided either way: the regions as built may be past the
+        // budget the simplified ones kept within.
+        Err(_) if matches!(fast, Ok(Search::Undecided(_))) => fast,
+        exact => exact,
+    }
+}
+
+/// The most corners a region a circle search erodes or dilates by a disc
+/// may have (#394). The overlay's arrangement of a disc morphology grows
+/// with every edge and with how many of them lie within the disc of each
+/// other: a free floor of 830 corners took eight seconds and over 2 GB, one
+/// of 25,716 exhausted 16 GB. A search past it is refused with the count.
+pub(crate) const MORPHOLOGY_POINTS: usize = 1_000;
+
+/// `region` where a disc search may erode or dilate it, else the refusal
+/// naming its corners ([`MORPHOLOGY_POINTS`]).
+fn within_budget<'a>(region: &'a Region, what: &str) -> Result<&'a Region, FreeSpaceError> {
+    let corners = region_points(region);
+    if corners > MORPHOLOGY_POINTS {
+        return Err(FreeSpaceError::Unavailable(format!(
+            "{what} has {corners} corners, more than the {MORPHOLOGY_POINTS} a disc search \
+             erodes or dilates"
+        )));
+    }
+    Ok(region)
+}
+
+/// [`circle`] over the regions as built, or with `simple`, over the
+/// simplified ones where there are, noting there whether any was.
+fn circle_decided(
+    scene: &Scene,
+    radius: f64,
+    simple: Option<&std::cell::Cell<bool>>,
+) -> Result<Search, FreeSpaceError> {
+    let found = |centre| Search::Found {
+        centre,
+        right: Axis::at(0.0),
+    };
+    let band = "the circle's fit lies within the disc approximation band";
+    let unlikely = scene
+        .inscribed(false)
+        .is_some_and(|estimate| estimate.bound + INSCRIBED_SLACK_METRES < radius);
+    if unlikely {
+        return match circle_absent(scene, radius, simple) {
+            Ok(true) => Ok(Search::Nowhere),
+            Ok(false) => {
+                Ok(circle_witness(scene, radius, simple)?.map_or(Search::Undecided(band), found))
+            }
+            Err(refused) => circle_witness(scene, radius, simple)?
+                .map(found)
+                .ok_or(refused),
+        };
+    }
+    if let Some(centre) = circle_witness(scene, radius, simple)? {
+        return Ok(found(centre));
+    }
+    if circle_absent(scene, radius, simple)? {
+        return Ok(Search::Nowhere);
+    }
+    Ok(Search::Undecided(band))
+}
+
+/// How far below a circle's radius the estimated largest disc must lie
+/// for [`circle`] to ask the absence first: far above the estimate's
+/// rounding.
+const INSCRIBED_SLACK_METRES: f64 = 1.0e-6;
+
+/// The radii at which [`circle`] is expected to place a disc and to prove
+/// one absent, from the largest disc estimated in the witnesses' clear
+/// part (`found`) and bounded in the absence's (`bound`), as
+/// [`Scene::inscribed`] gives them. A witness is verified with the
+/// circumscribed polygon, which reaches `1 / cos(π / 64)` of the radius;
+/// an absence erodes by the inscribed polygon of the radius less the
+/// knife edge, whose sides lie `cos(π / 64)` of it from the centre.
+pub(crate) fn searched_radii(found: f64, bound: f64) -> (f64, f64) {
+    let apothem = (PI / f64::from(VERIFY_SIDES)).cos();
+    let fits = (found * apothem - INSCRIBED_SLACK_METRES).max(0.0);
+    // An absence is asked first around simplified regions, whose largest
+    // disc may exceed the region's by the corners filled.
+    let exceeds = (bound + 2.0 * SIMPLIFY_WITHIN_METRES + INSCRIBED_SLACK_METRES) / apothem
+        + KNIFE_EDGE_METRES;
+    (fits, exceeds.max(fits))
+}
+
+/// A centre at which a disc of `radius` verifiably fits, if any.
+fn circle_witness(
+    scene: &Scene,
+    radius: f64,
+    simple: Option<&std::cell::Cell<bool>>,
+) -> Result<Option<Point2>, FreeSpaceError> {
     let t = scene.tolerance;
     let err = |e| unavailable("disc morphology", e);
+    // The estimated pole of the clear part, where it lies far enough
+    // inside, is tried first (#400): verified by direct overlap like any
+    // candidate, it spares the erosion.
+    let apothem = (PI / f64::from(VERIFY_SIDES)).cos();
+    if scene.window.is_none()
+        && let Some(estimate) = scene.inscribed(false)
+        && estimate.found * apothem > radius + INSCRIBED_SLACK_METRES
+        && scene.fits(circumscribed(estimate.centre, radius))?
+        && scene.reaches(inscribed(estimate.centre, radius))?
+    {
+        return Ok(Some(estimate.centre));
+    }
     // Contained in the exact free region: any point in it is a true centre.
     let inner = if region_points(&scene.obstacles) > OBSTACLE_SUM_POINTS {
-        scene.clear(false)?.erode_inner(radius, t).map_err(err)?
+        let clear = match simplest(scene, 0, simple) {
+            Some(clear) => clear,
+            None => scene.clear(false)?,
+        };
+        within_budget(clear, "the free floor")?
+            .erode_inner(radius, t)
+            .map_err(err)?
     } else {
-        let inner = scene.scope.erode_inner(radius, t).map_err(err)?;
-        if scene.obstacles.is_empty() || inner.is_empty() {
+        let inner = within_budget(&scene.scope, "the floor")?
+            .erode_inner(radius, t)
+            .map_err(err)?;
+        let obstacles = simplest(scene, 2, simple).unwrap_or(&scene.obstacles);
+        if obstacles.is_empty() || inner.is_empty() {
             inner
         } else {
             inner
-                .difference(&scene.obstacles.dilate_outer(radius, t).map_err(err)?, t)
+                .difference(
+                    &within_budget(obstacles, "the obstacles' footprint")?
+                        .dilate_outer(radius, t)
+                        .map_err(err)?,
+                    t,
+                )
                 .map_err(err)?
         }
     };
     let inner = scene.for_witness(scene.reaching_disc(inner, radius, false)?)?;
-    if (!inner.is_empty() || scene.window.is_some())
-        && let Some(centre) = scene.witness(
-            &inner,
-            |c| circumscribed(c, radius),
-            |c| inscribed(c, radius),
-        )?
-    {
-        return Ok(Search::Found {
-            centre,
-            right: Axis::at(0.0),
-        });
+    if inner.is_empty() && scene.window.is_none() {
+        return Ok(None);
     }
-    // Containing the exact free region of a slightly smaller circle: if even
-    // that is empty, no centre exists. The margin keeps a fit by contact,
-    // whose free region is a single point, from reading as none.
+    scene.witness(
+        &inner,
+        |c| circumscribed(c, radius),
+        |c| inscribed(c, radius),
+    )
+}
+
+/// Whether no disc of `radius` fits anywhere: the region containing the
+/// exact free region of a slightly smaller disc is empty. The margin keeps
+/// a fit by contact, whose free region is a single point, from reading as
+/// none.
+fn circle_absent(
+    scene: &Scene,
+    radius: f64,
+    simple: Option<&std::cell::Cell<bool>>,
+) -> Result<bool, FreeSpaceError> {
+    let t = scene.tolerance;
+    let err = |e| unavailable("disc morphology", e);
     let shrunk = radius - KNIFE_EDGE_METRES;
     if shrunk <= 0.0 {
         return Err(FreeSpaceError::Unavailable(
@@ -950,23 +1279,221 @@ pub(crate) fn circle(scene: &Scene, radius: f64) -> Result<Search, FreeSpaceErro
         ));
     }
     let outer = if region_points(&scene.sure) > OBSTACLE_SUM_POINTS {
-        scene.clear(true)?.erode_outer(shrunk, t).map_err(err)?
+        let clear = match simplest(scene, 1, simple) {
+            Some(clear) => clear,
+            None => scene.clear(true)?,
+        };
+        within_budget(clear, "the free floor")?
+            .erode_outer(shrunk, t)
+            .map_err(err)?
     } else {
-        let outer = scene.room.erode_outer(shrunk, t).map_err(err)?;
-        if scene.sure.is_empty() || outer.is_empty() {
+        let outer = within_budget(&scene.room, "the floor")?
+            .erode_outer(shrunk, t)
+            .map_err(err)?;
+        let sure = simplest(scene, 3, simple).unwrap_or(&scene.sure);
+        if sure.is_empty() || outer.is_empty() {
             outer
         } else {
             outer
-                .difference(&scene.sure.dilate_inner(shrunk, t).map_err(err)?, t)
+                .difference(
+                    &within_budget(sure, "the obstacles' footprint")?
+                        .dilate_inner(shrunk, t)
+                        .map_err(err)?,
+                    t,
+                )
                 .map_err(err)?
         }
     };
-    if scene.nowhere_in_domain(&scene.reaching_disc(outer, radius, true)?)? {
-        return Ok(Search::Nowhere);
+    scene.nowhere_in_domain(&scene.reaching_disc(outer, radius, true)?)
+}
+
+/// The scene's simplified region `which` ([`Scene::simple`]) where a
+/// search asks for simplified regions (`simple`) and there is one, noting
+/// it there.
+fn simplest<'a>(
+    scene: &'a Scene,
+    which: usize,
+    simple: Option<&std::cell::Cell<bool>>,
+) -> Option<&'a Region> {
+    let used = simple?;
+    let region = scene.simple(which)?;
+    used.set(true);
+    Some(region)
+}
+
+/// Cells [`inscribed_disc`] measures at most.
+const INSCRIBED_CELLS: usize = 4096;
+
+/// How closely [`Scene::inscribed`] estimates the largest disc's radius.
+const INSCRIBED_PRECISION_METRES: f64 = 1.0e-4;
+
+/// The largest disc in a region, estimated ([`inscribed_disc`]): a hint
+/// for a search, never evidence.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Inscribed {
+    /// A point lying `found` inside the region, up to rounding.
+    pub(crate) centre: Point2,
+    /// A radius the region holds a disc of, up to rounding.
+    pub(crate) found: f64,
+    /// A radius no disc in the region exceeds, up to rounding.
+    pub(crate) bound: f64,
+}
+
+impl Inscribed {
+    /// No disc: a region without area.
+    pub(crate) const NONE: Self = Self {
+        centre: Point2::new(0.0, 0.0),
+        found: 0.0,
+        bound: 0.0,
+    };
+}
+
+/// The largest disc inside `region`, estimated in floating point: a
+/// point some radius inside the region and a radius no point lies farther
+/// inside than, each up to the rounding of the distances.
+///
+/// Square cells over the region's box are measured at their centres
+/// (the signed distance to the nearest ring edge, positive inside) and
+/// split where the centre's distance plus the half diagonal, which bounds
+/// every point of the cell since the distance is 1-Lipschitz, could still
+/// beat the best centre by more than `precision` (the pole of
+/// inaccessibility). Once [`INSCRIBED_CELLS`] cells are measured, the
+/// bound is the largest any unsplit cell allows. A region without area
+/// holds no disc: `None`.
+#[allow(clippy::too_many_lines)]
+pub(crate) fn inscribed_disc(region: &Region, precision: f64) -> Option<Inscribed> {
+    use std::cmp::Ordering;
+    use std::collections::BinaryHeap;
+
+    struct Cell {
+        centre: Point2,
+        half: f64,
+        distance: f64,
+        most: f64,
     }
-    Ok(Search::Undecided(
-        "the circle's fit lies within the disc approximation band",
-    ))
+    impl PartialEq for Cell {
+        fn eq(&self, other: &Self) -> bool {
+            self.most.total_cmp(&other.most) == Ordering::Equal
+        }
+    }
+    impl Eq for Cell {}
+    impl PartialOrd for Cell {
+        fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+            Some(self.cmp(other))
+        }
+    }
+    impl Ord for Cell {
+        fn cmp(&self, other: &Self) -> Ordering {
+            self.most.total_cmp(&other.most)
+        }
+    }
+
+    let rings: Vec<&[Point2]> = region
+        .polygons()
+        .iter()
+        .flat_map(|polygon| std::iter::once(&polygon.outer).chain(&polygon.holes))
+        .map(|ring| ring.points.as_slice())
+        .filter(|points| points.len() >= 3)
+        .collect();
+    let (mut low, mut high) = (
+        Point2::new(f64::INFINITY, f64::INFINITY),
+        Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY),
+    );
+    for point in rings.iter().copied().flatten() {
+        low = Point2::new(low.x.min(point.x), low.y.min(point.y));
+        high = Point2::new(high.x.max(point.x), high.y.max(point.y));
+    }
+    let side = (high.x - low.x).min(high.y - low.y);
+    if !(side.is_finite() && side > 0.0) {
+        return None;
+    }
+    // Measured about the box's corner: the differences stay small at
+    // georeferenced coordinates.
+    let rings: Vec<Vec<Point2>> = rings
+        .iter()
+        .map(|ring| {
+            ring.iter()
+                .map(|p| Point2::new(p.x - low.x, p.y - low.y))
+                .collect()
+        })
+        .collect();
+    let signed = |p: Point2| {
+        let mut inside = false;
+        let mut nearest = f64::INFINITY;
+        for ring in &rings {
+            for i in 0..ring.len() {
+                let (a, b) = (ring[i], ring[(i + 1) % ring.len()]);
+                if (a.y > p.y) != (b.y > p.y) && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x
+                {
+                    inside = !inside;
+                }
+                let (dx, dy) = (b.x - a.x, b.y - a.y);
+                let length = dx * dx + dy * dy;
+                let t = if length > 0.0 {
+                    (((p.x - a.x) * dx + (p.y - a.y) * dy) / length).clamp(0.0, 1.0)
+                } else {
+                    0.0
+                };
+                let (ex, ey) = (a.x + t * dx - p.x, a.y + t * dy - p.y);
+                nearest = nearest.min(ex * ex + ey * ey);
+            }
+        }
+        let distance = nearest.sqrt();
+        if inside { distance } else { -distance }
+    };
+    let cell = |centre: Point2, half: f64| {
+        let distance = signed(centre);
+        Cell {
+            centre,
+            half,
+            distance,
+            most: distance + half * std::f64::consts::SQRT_2,
+        }
+    };
+    let (width, height) = (high.x - low.x, high.y - low.y);
+    // A thin box is covered by at most a quarter of the cells at first.
+    #[allow(clippy::cast_precision_loss)]
+    let side = side.max((width * height / (INSCRIBED_CELLS / 4) as f64).sqrt());
+    let half = side / 2.0;
+    let mut queue = BinaryHeap::new();
+    let mut x = 0.0;
+    while x < width {
+        let mut y = 0.0;
+        while y < height {
+            queue.push(cell(Point2::new(x + half, y + half), half));
+            y += side;
+        }
+        x += side;
+    }
+    let mut measured = queue.len() + 1;
+    let first = cell(Point2::new(width / 2.0, height / 2.0), 0.0);
+    let (mut best, mut at) = (first.distance, first.centre);
+    let found = |best: f64, at: Point2, bound: f64| {
+        (best > 0.0).then(|| Inscribed {
+            centre: Point2::new(at.x + low.x, at.y + low.y),
+            found: best,
+            bound: bound.max(best),
+        })
+    };
+    while let Some(next) = queue.pop() {
+        if next.distance > best {
+            (best, at) = (next.distance, next.centre);
+        }
+        if next.most - best <= precision {
+            continue;
+        }
+        if measured >= INSCRIBED_CELLS {
+            // The largest bound left: the queue is ordered by it.
+            return found(best, at, next.most);
+        }
+        let h = next.half / 2.0;
+        for (dx, dy) in [(-h, -h), (h, -h), (-h, h), (h, h)] {
+            let centre = Point2::new(next.centre.x + dx, next.centre.y + dy);
+            queue.push(cell(centre, h));
+        }
+        measured += 4;
+    }
+    found(best, at, best + precision)
 }
 
 #[cfg(test)]
@@ -1138,6 +1665,8 @@ mod tests {
             reach: None,
             bracketed: Vec::new(),
             clear: Default::default(),
+            inscribed: Default::default(),
+            simple: Default::default(),
         }
     }
 
@@ -1202,6 +1731,205 @@ mod tests {
                     );
                     assert_eq!(now, before, "{name} at {offset:?}, {width} x {depth}");
                 }
+            }
+        }
+    }
+
+    /// The largest disc is estimated within a millimetre (#400): a 4 x 3
+    /// room holds one of radius 1.5, and a 3 x 3 room round a 1 x 1
+    /// column one of `2 - √2` in a corner, touching both walls and the
+    /// column's corner; near the origin and far from it. Nothing holds
+    /// none.
+    #[test]
+    fn the_largest_disc_is_estimated_within_a_millimetre() {
+        let precision = INSCRIBED_PRECISION_METRES;
+        let column = [(1.0, 1.0, 1.0, 1.0)];
+        for offset in [(0.0, 0.0), (643_692.0, 5_649_156.0)] {
+            for (room, obstacles, largest) in [
+                ((4.0, 3.0), &[][..], 1.5),
+                ((3.0, 3.0), &column[..], 2.0 - 2.0_f64.sqrt()),
+            ] {
+                let scene = scene(offset, room, obstacles, obstacles);
+                for absence in [false, true] {
+                    let estimate = scene.inscribed(absence).expect("measured");
+                    let (found, bound) = (estimate.found, estimate.bound);
+                    assert!(found <= largest + 1.0e-7, "{found} {largest}");
+                    assert!(bound >= largest - 1.0e-7, "{bound} {largest}");
+                    // A room's centre line is a ridge of largest discs,
+                    // which spends the cells before the precision.
+                    assert!(bound - found <= 1.0e-3, "{found} {bound}");
+                }
+            }
+        }
+        assert_eq!(inscribed_disc(&Region::empty(), precision), None);
+    }
+
+    /// A square of `side` on `(x, y)`, anticlockwise, whose bottom and top
+    /// edges are toothed `depth` deep every `step`, as overlay output along
+    /// a tessellated or flush body is jagged.
+    fn jagged(x: f64, y: f64, side: f64, step: f64, depth: f64) -> Ring {
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let n = (side / step).round() as u32;
+        let at = |k: u32| f64::from(k) * side / f64::from(n);
+        let tooth = |k: u32| if k % 2 == 1 { depth } else { 0.0 };
+        let mut points: Vec<Point2> = (0..=n)
+            .map(|k| Point2::new(x + at(k), y + tooth(k)))
+            .collect();
+        points.extend((0..=n).map(|k| Point2::new(x + side - at(k), y + side - tooth(k))));
+        Ring { points }
+    }
+
+    /// A 3 x 3 room round a jagged 1 x 1 column, possible and sure; teeth
+    /// every 4 mm (past `OBSTACLE_SUM_POINTS` corners, so eroded) or 2 cm
+    /// (summed).
+    fn jagged_scene(offset: (f64, f64), step: f64) -> Scene {
+        let mut scene = scene(offset, (3.0, 3.0), &[], &[]);
+        let column = Region::new(
+            vec![Polygon {
+                outer: jagged(offset.0 + 1.0, offset.1 + 1.0, 1.0, step, 5.0e-5),
+                holes: Vec::new(),
+            }],
+            scene.tolerance,
+        )
+        .unwrap();
+        scene.obstacles = column.clone();
+        scene.sure = column;
+        scene
+    }
+
+    /// A jagged region simplifies on the side asked (#400): cutting off
+    /// corners stays inside it, filling notches around it, each with a
+    /// fraction of its corners, near the origin and far from it.
+    #[test]
+    fn a_jagged_region_simplifies_on_the_side_asked() {
+        for offset in [(0.0, 0.0), (643_692.0, 5_649_156.0)] {
+            let plain = scene(offset, (3.0, 3.0), &[], &[]);
+            let scene = jagged_scene(offset, 0.004);
+            let clear = scene.clear(false).unwrap();
+            let t = scene.tolerance;
+            for (side, which) in [(Side::Inside, 0), (Side::Around, 1)] {
+                let simple = scene.simple(which).expect("simplified");
+                assert!(
+                    region_points(simple) * 3 < region_points(clear),
+                    "{side:?}: {} of {}",
+                    region_points(simple),
+                    region_points(clear)
+                );
+                let (inner, outer) = match side {
+                    Side::Inside => (simple, clear),
+                    Side::Around => (clear, simple),
+                };
+                assert!(inner.difference(outer, t).unwrap().is_empty(), "{side:?}");
+                assert!((simple.area() - clear.area()).abs() < 1.0e-3, "{side:?}");
+            }
+            // A plain room has nothing to leave out.
+            assert!(scene.simple(2).is_some());
+            assert!(plain.simple(0).is_none());
+        }
+    }
+
+    /// A free floor of more corners than a disc search erodes is refused
+    /// with their count (#394), not eroded until memory runs out; a disc
+    /// that fits at the floor's estimated pole is still found there.
+    #[test]
+    fn a_floor_past_the_corner_budget_is_refused_by_name() {
+        let mut scene = jagged_scene((0.0, 0.0), 0.001);
+        let column = Region::new(
+            vec![Polygon {
+                outer: jagged(1.0, 1.0, 1.0, 0.001, 5.0e-4),
+                holes: Vec::new(),
+            }],
+            scene.tolerance,
+        )
+        .unwrap();
+        scene.obstacles = column.clone();
+        scene.sure = column;
+        assert!(region_points(scene.clear(true).unwrap()) > MORPHOLOGY_POINTS);
+        let refused = circle(&scene, 1.0).expect_err("refused");
+        assert!(
+            refused.to_string().contains("corners, more than the 1000"),
+            "{refused}"
+        );
+        assert!(matches!(circle(&scene, 0.4), Ok(Search::Found { .. })));
+    }
+
+    /// The circle search as it ran before #400: the witness first, then
+    /// the absence.
+    fn circle_before(scene: &Scene, radius: f64) -> Result<Search, FreeSpaceError> {
+        if let Some(centre) = circle_witness(scene, radius, None)? {
+            return Ok(Search::Found {
+                centre,
+                right: Axis::at(0.0),
+            });
+        }
+        if circle_absent(scene, radius, None)? {
+            return Ok(Search::Nowhere);
+        }
+        Ok(Search::Undecided(
+            "the circle's fit lies within the disc approximation band",
+        ))
+    }
+
+    /// Asking the absence first where the estimate expects no witness
+    /// (#400) gives the verdicts, and found centres, of asking the witness
+    /// first: around the largest disc of a room, of a room round a column
+    /// and of one whose obstacle is only possible, near the origin and far
+    /// from it.
+    #[test]
+    fn a_circle_asked_absence_first_gets_the_verdicts_of_the_witness_first() {
+        let column = [(1.0, 1.0, 1.0, 1.0)];
+        let cases: Vec<Case> = vec![
+            ("an empty room", (4.0, 3.0), vec![], vec![]),
+            (
+                "a room round a column",
+                (3.0, 3.0),
+                column.to_vec(),
+                column.to_vec(),
+            ),
+            (
+                "a room round a possible column",
+                (3.0, 3.0),
+                column.to_vec(),
+                vec![],
+            ),
+        ];
+        let corner = 2.0 - 2.0_f64.sqrt();
+        for offset in [(0.0, 0.0), (643_692.0, 5_649_156.0)] {
+            for (name, room, obstacles, sure) in &cases {
+                for radius in [
+                    0.4,
+                    corner - 0.01,
+                    corner,
+                    corner + 0.01,
+                    1.0,
+                    1.499,
+                    1.5,
+                    1.6,
+                ] {
+                    let before = format!(
+                        "{:?}",
+                        circle_before(&scene(offset, *room, obstacles, sure), radius)
+                    );
+                    let now = format!(
+                        "{:?}",
+                        circle(&scene(offset, *room, obstacles, sure), radius)
+                    );
+                    assert_eq!(now, before, "{name} at {offset:?}, radius {radius}");
+                }
+            }
+            // Round a jagged column the simplified regions decide alike.
+            let kind = |search: Result<Search, FreeSpaceError>| match search {
+                Ok(Search::Found { .. }) => "found",
+                Ok(Search::Nowhere) => "nowhere",
+                Ok(Search::Undecided(_)) => "undecided",
+                Err(_) => "refused",
+            };
+            for radius in [0.4, corner - 0.01, corner + 0.01, 1.0] {
+                assert_eq!(
+                    kind(circle(&jagged_scene(offset, 0.02), radius)),
+                    kind(circle_before(&jagged_scene(offset, 0.02), radius)),
+                    "a jagged column at {offset:?}, radius {radius}"
+                );
             }
         }
     }

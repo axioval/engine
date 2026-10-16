@@ -464,7 +464,7 @@
         },
         {
           "exact": true,
-          "locator": "axioval:free-floor:ifc-step:bs-ifc4x3-building-architecture.ifc/#135:largest=[1.597,1.603]:centre=[5.100000151378072,4.0000000000010285,0]",
+          "locator": "axioval:free-floor:ifc-step:bs-ifc4x3-building-architecture.ifc/#135:largest=[1.598,1.602]:centre=[5.100000151377532,3.9999999999999565,0]",
           "source": {
             "document": "bs-ifc4x3-building-architecture.ifc",
             "system": "ifc-step"
@@ -479,8 +479,8 @@
           }
         }
       ],
-      "id": "7a176dbb-c620-5208-a546-579d7acd9a80",
-      "message": "NO_FREE_FLOOR_SPACE_FOR_CIRCLE: the largest free circle is between 1.597 m and 1.603 m across, centred at (5.1 m, 4 m, 0 m); required 12 m; the free floor is 6.08 m²",
+      "id": "68831687-2192-5fde-b6c9-b0daf6ddb876",
+      "message": "NO_FREE_FLOOR_SPACE_FOR_CIRCLE: the largest free circle is between 1.598 m and 1.602 m across, centred at (5.1 m, 4 m, 0 m); required 12 m; the free floor is 6.08 m²",
       "object_id": {
         "local_id": "#135",
         "source": {
@@ -519,7 +519,7 @@
         },
         {
           "exact": true,
-          "locator": "axioval:free-floor:ifc-step:bs-ifc4x3-building-architecture.ifc/#85:largest=[3.795,3.803]:centre=[5.375000151397885,6.900000000023618,0]",
+          "locator": "axioval:free-floor:ifc-step:bs-ifc4x3-building-architecture.ifc/#85:largest=[3.795,3.801]:centre=[5.100000151377506,6.899999999999924,0]",
           "source": {
             "document": "bs-ifc4x3-building-architecture.ifc",
             "system": "ifc-step"
@@ -534,8 +534,8 @@
           }
         }
       ],
-      "id": "eb930d08-15d4-5b79-90d1-dcf14ec71317",
-      "message": "NO_FREE_FLOOR_SPACE_FOR_CIRCLE: the largest free circle is between 3.795 m and 3.803 m across, centred at (5.375 m, 6.9 m, 0 m); required 12 m; the free floor is 17.535 m²",
+      "id": "6b78143b-4bab-54dd-a82f-681a8a51ad5c",
+      "message": "NO_FREE_FLOOR_SPACE_FOR_CIRCLE: the largest free circle is between 3.795 m and 3.801 m across, centred at (5.1 m, 6.9 m, 0 m); required 12 m; the free floor is 17.535 m²",
       "object_id": {
         "local_id": "#85",
         "source": {

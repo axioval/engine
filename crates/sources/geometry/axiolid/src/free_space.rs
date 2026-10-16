@@ -9,6 +9,7 @@
 //! search found nowhere it fits. Neither may be returned on a hunch -- an
 //! adapter that cannot search exhaustively must say so instead.
 
+use std::cell::OnceCell;
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::sync::{Mutex, PoisonError};
@@ -21,9 +22,9 @@ use axioval_engine::{
     ClearanceRequest, ClearanceShape, CompleteClearanceEvidence, CompletePlacementEvidence,
     CompleteSupportEvidence, ContainmentOutcome, ContainmentRequest, ElevationBand,
     FrameOffsetPlacement, FreeAreaEvidence, FreeAreaRequest, FreeFloorEvidence, FreeSpaceError,
-    FreeSpaceService, MetricDirection, MetricFrame, MetricPoint, ObstructionEvidence,
-    PlacementDomain, PlacementOrientation, PlacementOutcome, PlacementRequest, PlacementShape,
-    SupportedPlacement, SweptDoor,
+    FreeSpaceService, LargestDiscEstimate, MetricDirection, MetricFrame, MetricPoint,
+    ObstructionEvidence, PlacementDomain, PlacementOrientation, PlacementOutcome, PlacementRequest,
+    PlacementShape, SupportedPlacement, SweptDoor,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
@@ -98,8 +99,19 @@ struct KeptScene {
     sure: Region,
     tolerance: axiolid_core::Tolerance,
     bracketed: Vec<(ObjectId, f64)>,
-    clear: [Option<Region>; 2],
+    clear: [OnceCell<Region>; 2],
+    inscribed: [OnceCell<Option<placement::Inscribed>>; 2],
+    simple: [OnceCell<Option<Region>>; 4],
     floor: f64,
+}
+
+/// Fills the cells of `held` that `taken` has and it lacks.
+fn fill<T: Clone, const N: usize>(held: &[OnceCell<T>; N], taken: &[OnceCell<T>; N]) {
+    for (held, taken) in held.iter().zip(taken) {
+        if let Some(value) = taken.get() {
+            let _ = held.set(value.clone());
+        }
+    }
 }
 
 impl KeptScene {
@@ -112,19 +124,23 @@ impl KeptScene {
             sure: scene.sure.clone(),
             tolerance: scene.tolerance,
             bracketed: scene.bracketed.clone(),
-            clear: [scene.clear[0].get().cloned(), scene.clear[1].get().cloned()],
+            clear: scene.clear.clone(),
+            inscribed: scene.inscribed.clone(),
+            simple: scene.simple.clone(),
             floor,
         }
     }
 
-    /// The scene again, as built.
+    /// Keeps what a search of the scene took that this one lacks: its
+    /// clear parts, their largest discs and the simplified regions.
+    fn keep(&self, scene: &Scene) {
+        fill(&self.clear, &scene.clear);
+        fill(&self.inscribed, &scene.inscribed);
+        fill(&self.simple, &scene.simple);
+    }
+
+    /// The scene again, as built, with what its searches took.
     fn scene(&self) -> Scene {
-        let clear: [std::cell::OnceCell<Region>; 2] = Default::default();
-        for (cell, kept) in clear.iter().zip(&self.clear) {
-            if let Some(kept) = kept {
-                let _ = cell.set(kept.clone());
-            }
-        }
         Scene {
             scope: self.scope.clone(),
             room: self.room.clone(),
@@ -134,7 +150,9 @@ impl KeptScene {
             window: None,
             reach: None,
             bracketed: self.bracketed.clone(),
-            clear,
+            clear: self.clear.clone(),
+            inscribed: self.inscribed.clone(),
+            simple: self.simple.clone(),
         }
     }
 }
@@ -591,13 +609,9 @@ impl AxiolidFreeSpaceService {
     /// next search over it.
     fn keep_clear(&self, request: &PlacementRequest, scene: &Scene) {
         let key = SceneKey::of(request);
-        let mut kept = self.scenes.lock().unwrap_or_else(PoisonError::into_inner);
-        if let Some(kept) = kept.iter_mut().find(|kept| kept.key == key) {
-            for (held, cell) in kept.clear.iter_mut().zip(&scene.clear) {
-                if held.is_none() {
-                    *held = cell.get().cloned();
-                }
-            }
+        let kept = self.scenes.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(kept) = kept.iter().find(|kept| kept.key == key) {
+            kept.keep(scene);
         }
     }
 
@@ -915,6 +929,8 @@ impl AxiolidFreeSpaceService {
             reach: None,
             bracketed,
             clear: Default::default(),
+            inscribed: Default::default(),
+            simple: Default::default(),
         };
         Ok((scene, floor))
     }
@@ -1247,6 +1263,30 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
             )?,
         };
         Ok(PlacementOutcome::Found(found))
+    }
+
+    /// The largest disc of the placement scene's clear floor, estimated
+    /// (`placement::inscribed_disc`, the pole of inaccessibility) in the
+    /// witnesses' clear part for the radius expected to fit and in the
+    /// absence's for the one expected to be proven absent, each moved by
+    /// the polygons a circle search verifies and proves with
+    /// (`placement::searched_radii`). The scene and its clear parts are
+    /// kept as a search keeps them.
+    fn estimate_largest_disc(
+        &self,
+        request: &PlacementRequest,
+    ) -> Result<LargestDiscEstimate, FreeSpaceError> {
+        let tolerance = tolerance()?;
+        let (scene, _) = self.placement_scene(request, tolerance)?;
+        let estimate = scene.inscribed(false).zip(scene.inscribed(true));
+        self.keep_clear(request, &scene);
+        let (witness, absence) = estimate.ok_or_else(|| {
+            FreeSpaceError::Unavailable("the overlay refused the clear floor".into())
+        })?;
+        let (fits, exceeds) = placement::searched_radii(witness.found, absence.bound);
+        LargestDiscEstimate::new(fits, exceeds).ok_or_else(|| {
+            FreeSpaceError::Unavailable("the largest disc's estimate is not finite".into())
+        })
     }
 
     /// The placement scene's free floor: the witnesses' scope less every

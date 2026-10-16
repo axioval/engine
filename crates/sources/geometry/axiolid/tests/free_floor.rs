@@ -5,8 +5,8 @@ use axiolid_core::Point3;
 use axiolid_mesh::TriMesh;
 use axioval_axiolid::{AxiolidFreeSpaceService, AxiolidGeometry};
 use axioval_engine::{
-    CylinderClearance, FreeSpaceService, PlacementDomain, PlacementRequest, PlacementShape,
-    SupportedPlacement,
+    CylinderClearance, FreeSpaceService, PlacementDomain, PlacementOutcome, PlacementRequest,
+    PlacementShape, SupportedPlacement,
 };
 use axioval_ir::{ObjectId, SourceId};
 
@@ -166,4 +166,42 @@ fn a_tessellated_column_takes_floor_within_its_deviation() {
         "{}",
         floor.evidence().locator
     );
+}
+
+/// The largest disc of the furnished room's floor is estimated where the
+/// searches then decide it (#400): the room is 3 m deep, and the cabinet
+/// keeps no disc of 1.5 m from its east end, so the largest has radius
+/// 1.5. A disc of the radius estimated to fit is placed, one of the
+/// radius estimated to exceed proven absent, and the two lie within a few
+/// millimetres of it.
+#[test]
+fn the_largest_disc_is_estimated_where_the_searches_decide_it() {
+    let service = AxiolidFreeSpaceService::new(furnished(), source());
+    let obstacles = ["walls", "cabinet", "lamp", "next", "crate"];
+    let estimate = service
+        .estimate_largest_disc(&request(&obstacles))
+        .expect("estimated");
+    let (fits, exceeds) = (
+        estimate.fits_radius_metres(),
+        estimate.exceeds_radius_metres(),
+    );
+    assert!(fits <= 1.5 && 1.5 <= exceeds, "{fits} {exceeds}");
+    assert!(exceeds - fits < 0.005, "{fits} {exceeds}");
+    let sized = |radius: f64| {
+        PlacementRequest::new_in_domain(
+            id("room"),
+            PlacementShape::Cylinder(CylinderClearance::try_new(radius, 2.0).unwrap()),
+            obstacles.iter().map(|o| id(o)).collect(),
+            PlacementDomain::Supported(SupportedPlacement::try_new(id("room"), 0.0).unwrap()),
+        )
+        .unwrap()
+    };
+    assert!(matches!(
+        service.find_placement(&sized(fits)),
+        Ok(PlacementOutcome::Found(_))
+    ));
+    assert!(matches!(
+        service.find_placement(&sized(exceeds)),
+        Ok(PlacementOutcome::NoPlacement(_))
+    ));
 }

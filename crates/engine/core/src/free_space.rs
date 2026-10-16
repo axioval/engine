@@ -1240,6 +1240,43 @@ impl FreeFloorEvidence {
     }
 }
 
+/// Where the largest disc a placement request's free floor holds probably
+/// lies (#400): a radius at which the backend expects
+/// [`FreeSpaceService::find_placement`] to place a disc and one at which
+/// it expects the search to prove a disc absent, both for the request's
+/// scope, obstacles, swept doors and band, ignoring its shape. An
+/// estimate, never evidence: a caller states a size only from those
+/// searches, so a wrong estimate costs searches, never a wrong value.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LargestDiscEstimate {
+    fits_radius_metres: f64,
+    exceeds_radius_metres: f64,
+}
+impl LargestDiscEstimate {
+    /// An estimate, `None` unless both radii are finite and
+    /// `0 ≤ fits ≤ exceeds`.
+    #[must_use]
+    pub fn new(fits_radius_metres: f64, exceeds_radius_metres: f64) -> Option<Self> {
+        (valid_non_negative(fits_radius_metres)
+            && exceeds_radius_metres.is_finite()
+            && fits_radius_metres <= exceeds_radius_metres)
+            .then_some(Self {
+                fits_radius_metres,
+                exceeds_radius_metres,
+            })
+    }
+    /// A radius at which a disc is expected to be placed.
+    #[must_use]
+    pub fn fits_radius_metres(&self) -> f64 {
+        self.fits_radius_metres
+    }
+    /// A radius at which a disc is expected to be proven absent.
+    #[must_use]
+    pub fn exceeds_radius_metres(&self) -> f64 {
+        self.exceeds_radius_metres
+    }
+}
+
 pub trait FreeSpaceService: Send + Sync + 'static {
     // gate: measures truth, length
     fn assess_clearance(
@@ -1292,6 +1329,20 @@ pub trait FreeSpaceService: Send + Sync + 'static {
         let _ = request;
         Err(FreeSpaceError::Unavailable(
             "this free-space service does not measure the free floor".into(),
+        ))
+    }
+    /// Where the largest disc the request's free floor holds probably lies
+    /// (see [`LargestDiscEstimate`]): a hint for a search of the largest
+    /// shape, never evidence. A service that does not estimate it refuses,
+    /// and the caller searches without one.
+    // gate: measures length
+    fn estimate_largest_disc(
+        &self,
+        request: &PlacementRequest,
+    ) -> Result<LargestDiscEstimate, FreeSpaceError> {
+        let _ = request;
+        Err(FreeSpaceError::Unavailable(
+            "this free-space service does not estimate the largest disc".into(),
         ))
     }
     /// Where a path of the request's width can run in its space, and which
@@ -1409,6 +1460,19 @@ impl FreeSpaceServiceHandle {
             return Err(FreeSpaceError::ResponseRequestMismatch);
         }
         Ok(evidence)
+    }
+
+    /// Estimates where the largest disc the request's free floor holds
+    /// lies: a hint, never evidence.
+    ///
+    /// # Errors
+    ///
+    /// The backend's refusal.
+    pub fn estimate_largest_disc(
+        &self,
+        request: &PlacementRequest,
+    ) -> Result<LargestDiscEstimate, FreeSpaceError> {
+        crate::timing::host("free-space", || self.0.estimate_largest_disc(request))
     }
 
     /// Maps circulation and checks that the map answers `request`.

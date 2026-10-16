@@ -4,6 +4,32 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+### Changed
+
+- **Free-floor circles are searched in a fraction of the time and
+  memory** ([#400](https://github.com/axioval/engine/issues/400),
+  [#394](https://github.com/axioval/engine/issues/394)). The bracket of
+  the largest shape (#391) bisected the shape with up to 24 searches per
+  failing space, each as costly as the decision. The free-space service
+  now estimates the largest disc of a request's free floor
+  (`FreeSpaceService::estimate_largest_disc`, `LargestDiscEstimate`; a
+  hint, never evidence, refused by default), and the capabilities search
+  the sizes it suggests first, so a bracket usually closes after two or
+  three searches; at most 10 are asked. The Axiolid service estimates it
+  as the pole of inaccessibility of the scene's clear floor, verifies a
+  disc fitting there directly, asks the absence first where no disc of
+  the radius is expected, and erodes regions simplified on the side each
+  search may use them (sub-millimetre corners cut off for a witness,
+  filled for an absence) before the regions as built. A disc morphology
+  is refused by name past 1,000 corners instead of exhausting memory. On a
+  private multi-family house federated with its building-services model
+  (116 spaces, physical obstacles) the run fell from 322 s and 6.4 GB to
+  64 s and 2.7 GB (0.5.0 ran out of 20 GB), on a 157-space model from
+  144 s to 63 s (0.5.0: 108 s), and the house alone with default
+  obstacles, out of memory at 16 GB before, now finishes in 86 s within
+  5.9 GB. Fit and no-fit outcomes are unchanged; brackets move by a
+  millimetre or two within their certified width.
+
 ## [0.6.0] - 2026-10-16
 
 Federation, free floor and packages. A host can declare that one federated

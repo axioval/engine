@@ -1,14 +1,21 @@
 //! Free-floor-circle capability contract tests.
 #![allow(missing_docs)]
 
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::BTreeMap,
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
+};
 
 use axioval_engine::{
     AreaInterval, ClearanceOutcome, ClearancePlacementEvidence, ClearanceRequest, CompiledRule,
     CompletePlacementEvidence, CompleteSupportEvidence, FreeAreaEvidence, FreeAreaRequest,
-    FreeFloorEvidence, FreeSpaceError, FreeSpaceService, FreeSpaceServiceHandle, MetricDirection,
-    MetricFrame, MetricPoint, NotEvaluatedReason, PlacementDomain, PlacementOutcome,
-    PlacementRequest, PlacementShape, RuleCapability, RuleContext, ServiceRegistry,
+    FreeFloorEvidence, FreeSpaceError, FreeSpaceService, FreeSpaceServiceHandle,
+    LargestDiscEstimate, MetricDirection, MetricFrame, MetricPoint, NotEvaluatedReason,
+    PlacementDomain, PlacementOutcome, PlacementRequest, PlacementShape, RuleCapability,
+    RuleContext, ServiceRegistry,
 };
 use axioval_ir::contract::{ParameterValue, Selector, Severity as RuleSeverity};
 use axioval_ir::{Evidence, Object, ObjectId, Project, RuleId, SourceId};
@@ -187,6 +194,10 @@ impl FreeSpaceService for FakeService {
 }
 
 fn evaluate(answer: Answer) -> axioval_engine::CapabilityEvaluation {
+    evaluate_with(Arc::new(FakeService(answer)))
+}
+
+fn evaluate_with(service: Arc<dyn FreeSpaceService>) -> axioval_engine::CapabilityEvaluation {
     let project = Project::new(vec![
         Object::new(ObjectId::new(source(), "room").unwrap(), "space"),
         Object::new(ObjectId::new(source(), "chair").unwrap(), "furniture"),
@@ -194,7 +205,7 @@ fn evaluate(answer: Answer) -> axioval_engine::CapabilityEvaluation {
     .unwrap();
     let mut services = ServiceRegistry::new();
     services
-        .register(FreeSpaceServiceHandle::new(Arc::new(FakeService(answer))))
+        .register(FreeSpaceServiceHandle::new(service))
         .unwrap();
     services.register(common::natures(source())).unwrap();
     HELD.evaluate(
@@ -236,6 +247,86 @@ fn exact_complete_no_placement_emits_native_circle_issue() {
         assert!(locators.contains(&cited), "{cited} in {locators:?}");
     }
     assert!(finding.evidence.iter().all(|evidence| evidence.exact));
+}
+
+/// The proven absence of `FakeService`, from a service that also
+/// estimates the largest disc (#400), counting the searches for smaller
+/// circles.
+struct Estimating {
+    estimate: (f64, f64),
+    smaller: AtomicUsize,
+}
+
+impl FreeSpaceService for Estimating {
+    fn assess_clearance(
+        &self,
+        request: &ClearanceRequest,
+    ) -> Result<ClearanceOutcome, FreeSpaceError> {
+        FakeService(Answer::NoPlacement).assess_clearance(request)
+    }
+    fn measure_free_area(
+        &self,
+        request: &FreeAreaRequest,
+    ) -> Result<FreeAreaEvidence, FreeSpaceError> {
+        FakeService(Answer::NoPlacement).measure_free_area(request)
+    }
+    fn measure_free_floor(
+        &self,
+        request: &PlacementRequest,
+    ) -> Result<FreeFloorEvidence, FreeSpaceError> {
+        FakeService(Answer::NoPlacement).measure_free_floor(request)
+    }
+    fn find_placement(
+        &self,
+        request: &PlacementRequest,
+    ) -> Result<PlacementOutcome, FreeSpaceError> {
+        if let PlacementShape::Cylinder(shape) = request.shape()
+            && shape.radius_metres() < 0.75
+        {
+            self.smaller.fetch_add(1, Ordering::SeqCst);
+        }
+        FakeService(Answer::NoPlacement).find_placement(request)
+    }
+    fn estimate_largest_disc(
+        &self,
+        _: &PlacementRequest,
+    ) -> Result<LargestDiscEstimate, FreeSpaceError> {
+        LargestDiscEstimate::new(self.estimate.0, self.estimate.1)
+            .ok_or_else(|| FreeSpaceError::Unavailable("no estimate".into()))
+    }
+}
+
+/// The largest circle is bracketed from the service's estimate (#400):
+/// the sizes it suggests are searched first, a circle of 1.119 m placed
+/// and one of 1.126 m proven absent, and one search between them closes
+/// the bracket, three searches where the bisection took eight. An
+/// estimate far off only orders the searches: the bracket still holds the
+/// largest circle, within the searches' budget, from both the template
+/// and the implementation it replaced.
+#[test]
+fn the_largest_circle_is_bracketed_from_the_estimate_in_a_few_searches() {
+    let close = Arc::new(Estimating {
+        estimate: (0.5599, 0.5626),
+        smaller: AtomicUsize::new(0),
+    });
+    let outcome = evaluate_with(close.clone());
+    assert_eq!(
+        outcome.findings()[0].message,
+        "NO_FREE_FLOOR_SPACE_FOR_CIRCLE: the largest free circle is between 1.119 m and \
+         1.123 m across, centred at (0 m, 0 m, 0 m); required 1.5 m; the free floor is 6.25 m²"
+    );
+    // The template and the implementation it is held to search alike.
+    assert_eq!(close.smaller.load(Ordering::SeqCst), 2 * 3);
+    let wrong = Arc::new(Estimating {
+        estimate: (0.1, 0.2),
+        smaller: AtomicUsize::new(0),
+    });
+    let message = evaluate_with(wrong.clone()).findings()[0].message.clone();
+    assert!(
+        message.contains("the largest free circle is between 1.1"),
+        "{message}"
+    );
+    assert!(wrong.smaller.load(Ordering::SeqCst) <= 2 * 10);
 }
 
 #[test]

@@ -972,6 +972,12 @@
       "providedBy": [
         "free_floor_fit"
       ]
+    },
+    "free_floor::measure::hints::estimate_largest_disc": {
+      "count": 1,
+      "providedBy": [
+        "free_floor_fit"
+      ]
     }
   }
 }

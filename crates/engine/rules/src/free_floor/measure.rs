@@ -30,8 +30,12 @@ use std::fmt::Write as _;
 /// narrow, in metres of the shape's larger side.
 const PRECISION_METRES: f64 = 0.005;
 
-/// The most searches one bisection asks, whatever the bracket.
-const MOST_STEPS: usize = 24;
+/// The most searches one bracket asks, whatever its width (#400): each
+/// is a search as costly as the decision's. Without an estimate a bracket
+/// asked with one search for both ends still halves to
+/// [`PRECISION_METRES`] on a shape of up to about 5 m; with undecided
+/// selections each end gets half of them.
+const MOST_STEPS: usize = 10;
 
 /// What a proven absence measured of the floor; every part empty where
 /// the service could not measure it.
@@ -233,6 +237,69 @@ fn sizes(shape: &PlacementShape) -> Vec<f64> {
     }
 }
 
+/// The sizes of the larger side the service's estimate of the largest
+/// disc suggests searching first (#400), on whole millimetres: one
+/// expected to be placed (`true`, from the wide request, only where a
+/// witness can stand) and one expected to be proven absent (from the
+/// narrow one). A shape of the declared proportions lies within the disc
+/// of half its sides' sum and holds the disc of half its smaller side, so
+/// it is expected to fit where the first disc does and not where the
+/// second does not. Nothing where the service gives no estimate; an
+/// estimate only orders the searches, never bounds the bracket.
+fn hints(
+    setting: &Setting<'_>,
+    candidates: &[ObjectId],
+    swept: &[SweptDoor],
+    decided: bool,
+    full: f64,
+) -> Vec<(bool, f64)> {
+    let estimate = |request: Option<PlacementRequest>| {
+        request.and_then(|request| setting.service.estimate_largest_disc(&request).ok())
+    };
+    let wide = estimate(request(
+        setting,
+        setting.shape.clone(),
+        candidates,
+        swept.to_vec(),
+    ));
+    let narrow = if decided {
+        wide
+    } else {
+        estimate(request(
+            setting,
+            setting.shape.clone(),
+            setting.sure,
+            setting.swings.sure.clone(),
+        ))
+    };
+    // The radii of the discs around and within the shape, per metre of its
+    // larger side.
+    let (around, within) = match setting.shape {
+        PlacementShape::Cylinder(_) => (0.5, 0.5),
+        PlacementShape::Box { shape, .. } => {
+            let larger = 2.0 * main_size_of(shape);
+            (
+                (shape.width_metres() + shape.depth_metres()) / larger,
+                shape.width_metres().min(shape.depth_metres()) / larger,
+            )
+        }
+    };
+    let mut sizes = Vec::new();
+    if let Some(wide) = wide.filter(|_| setting.swings.unknown.is_empty()) {
+        let size = (wide.fits_radius_metres() / around * 1000.0).floor() / 1000.0;
+        if size > 0.0 && size < full {
+            sizes.push((true, size));
+        }
+    }
+    if let Some(narrow) = narrow {
+        let size = (narrow.exceeds_radius_metres() / within * 1000.0).ceil() / 1000.0;
+        if size > 0.0 && size < full {
+            sizes.push((false, size));
+        }
+    }
+    sizes
+}
+
 /// The largest shape of the declared proportions, by two bisections of
 /// its larger side on whole millimetres: one raising the lower end by
 /// sizes placed (witnesses, asked with every obstacle and swing the
@@ -242,6 +309,11 @@ fn sizes(shape: &PlacementShape) -> Vec<f64> {
 /// contact, within the search's margins) bounds each search from its
 /// side, so the two close in on it from both. Only a placement and a
 /// proof of absence end the bracket; `None` where neither was found.
+///
+/// The sizes the service's estimate suggests ([`hints`]) are searched
+/// first, so where it is right the bracket closes after a few searches;
+/// at most [`MOST_STEPS`] are asked whatever the estimate, and the
+/// bracket is reported as wide as they leave it.
 fn largest(
     context: &RuleContext<'_>,
     setting: &Setting<'_>,
@@ -262,15 +334,25 @@ fn largest(
         let mid = (f64::midpoint(low, high) * 1000.0).round() / 1000.0;
         (high - low > PRECISION_METRES && mid > low && mid < high).then_some(mid)
     };
+    // The service's estimate, where it gives one, is searched first: a
+    // size expected to be placed and one expected to be proven absent.
+    let mut hinted = hints(setting, &candidates, &swept, decided, full).into_iter();
     let mut turn = false;
     for _ in 0..MOST_STEPS {
-        // Each open side in turn; one search serves both where the
+        let open = |(low, high): (f64, f64), mid: f64| {
+            high - low > PRECISION_METRES && mid > low && mid < high
+        };
+        let hint = hinted
+            .by_ref()
+            .find(|&(witness, mid)| open(if witness { placing } else { proving }, mid));
+        // Else each open side in turn; one search serves both where the
         // selections leave nothing undecided.
-        let (witness, mid) = match (midpoint(placing), midpoint(proving)) {
-            (None, None) => break,
-            (Some(mid), None) => (true, mid),
-            (None, Some(mid)) => (false, mid),
-            (Some(placing), Some(proving)) => {
+        let (witness, mid) = match (hint, midpoint(placing), midpoint(proving)) {
+            (Some(hint), _, _) => hint,
+            (None, None, None) => break,
+            (None, Some(mid), None) => (true, mid),
+            (None, None, Some(mid)) => (false, mid),
+            (None, Some(placing), Some(proving)) => {
                 turn = !turn;
                 if turn {
                     (true, placing)

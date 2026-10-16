@@ -717,7 +717,10 @@ fn half_space(graph: &GeometryGraph, mut id: NodeId) -> bool {
             Some(GeometryNode::Instance(instance)) => id = instance.source,
             Some(
                 GeometryNode::HalfSpace(_)
-                | GeometryNode::SolidOperation(SolidOperation::BoundedHalfSpace { .. }),
+                | GeometryNode::SolidOperation(
+                    SolidOperation::BoundedHalfSpace { .. }
+                    | SolidOperation::BoundedHalfSpaceAlongZ { .. },
+                ),
             ) => return true,
             _ => return false,
         }
@@ -904,7 +907,9 @@ fn solid_family(operation: &SolidOperation) -> &'static str {
         SolidOperation::SurfaceCurveSweep { .. } => "a surface-curve sweep",
         SolidOperation::SectionedSpine { .. } => "a sectioned spine",
         SolidOperation::Boolean { .. } => "a boolean operand",
-        SolidOperation::BoundedHalfSpace { .. } => "a bounded half-space",
+        SolidOperation::BoundedHalfSpace { .. } | SolidOperation::BoundedHalfSpaceAlongZ { .. } => {
+            "a bounded half-space"
+        }
         _ => "this solid",
     }
 }

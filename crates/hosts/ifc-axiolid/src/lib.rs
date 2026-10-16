@@ -147,7 +147,7 @@ use axiolid_core::{BooleanOperator, Tolerance};
 use axiolid_curve::{Curve2, Curve3};
 use axiolid_evaluate::ReferenceCurveEvaluator;
 use axiolid_mesh_boolean_boolmesh::BoolmeshBoolean;
-use axiolid_mesh_compile::deviation::SNAPPED_OPERANDS;
+use axiolid_mesh_compile::deviation::{COINCIDENT_OPERANDS, SNAPPED_OPERANDS};
 use axiolid_mesh_compile::{DeviationBound, DeviationReport, ReferenceMeshCompiler};
 use axiolid_mesh_compile_contract::MeshCompiler;
 use axiolid_model::{GeometryGraph, GeometryNode, NodeId, SolidOperation, SurfaceRelation};
@@ -3901,12 +3901,18 @@ fn warped_width(report: &DeviationReport) -> Option<f64> {
 /// moved by at most that much, not exact. A move no larger than
 /// [`ON_SURFACE`] (an opening exported a few 1e-15 m short of the face)
 /// is rounding, the distance at which every service reads two points as
-/// one, and keeps the body exact. `None` when it reports neither.
+/// one, and keeps the body exact. Operand faces the exact boolean read as
+/// one surface within tolerance (`deviation::COINCIDENT_OPERANDS`, since
+/// axiolid-mesh-compile 0.3.27, axiolid/kernel#324) are an operand move of
+/// the same kind and declared alike; a curved body's report bound already
+/// holds them. `None` when it reports none of these.
 fn planar_width(report: &DeviationReport) -> Option<f64> {
     let snapped = report
         .contributions
         .iter()
-        .filter(|contribution| contribution.detail == SNAPPED_OPERANDS)
+        .filter(|contribution| {
+            [SNAPPED_OPERANDS, COINCIDENT_OPERANDS].contains(&contribution.detail)
+        })
         .filter_map(|contribution| contribution.bound.value())
         .filter(|moved| *moved > ON_SURFACE)
         .reduce(f64::max);
@@ -4575,12 +4581,20 @@ fn planar(graph: &GeometryGraph, id: NodeId, budget: &mut usize) -> bool {
         GeometryNode::SolidOperation(SolidOperation::Boolean { left, right, .. }) => {
             planar(graph, *left, budget) && planar(graph, *right, budget)
         }
-        // A plane cut down to the prism of a polygon in it: planes only.
-        GeometryNode::SolidOperation(SolidOperation::BoundedHalfSpace {
-            half_space,
-            boundary,
-            ..
-        }) => {
+        // A plane cut down to the prism of a polygon, along its normal or
+        // along the boundary's `z` (axiolid/kernel#321): planes only.
+        GeometryNode::SolidOperation(
+            SolidOperation::BoundedHalfSpace {
+                half_space,
+                boundary,
+                ..
+            }
+            | SolidOperation::BoundedHalfSpaceAlongZ {
+                half_space,
+                boundary,
+                ..
+            },
+        ) => {
             planar(graph, *half_space, budget)
                 && matches!(
                     graph.get(*boundary),

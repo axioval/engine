@@ -83,8 +83,9 @@ axiolid-brep = "0.3.3"
 # keyhole rings on surface paths (#270) and builds exact extrusions down or
 # oblique to the profile normal (#275); 0.3.17 builds exact oblique
 # extrusions of arc profiles and oblique circles with exact tilted
-# elliptical-cylinder walls and refuses oblique ellipses by name (#280).
-axiolid-construct = "0.3.18"
+# elliptical-cylinder walls and refuses oblique ellipses by name (#280);
+# 0.3.19 builds the new `SolidOperation::BoundedHalfSpaceAlongZ` (#321).
+axiolid-construct = "0.3.19"
 axiolid-core = "0.3.0"
 axiolid-inspect = "0.3.6"
 axiolid-mesh = "0.3.0"
@@ -99,8 +100,8 @@ axiolid-measure = "0.3.10"
 # pieces, with bit-identical results (#292); 0.3.13 decides exact edge
 # contact and accepts its own settled output fed back (#272); 0.3.15
 # unions and intersects overlapping slender soups about ten times faster,
-# with byte-identical output (#315).
-axiolid-overlay = "0.3.15"
+# with byte-identical output (#315); 0.3.16 erodes polygons fast (#323).
+axiolid-overlay = "0.3.16"
 axiolid-ray-mesh = "0.4.0"
 axiolid-route = "0.3.7"
 axiolid-spatial = "0.3.0"
@@ -162,16 +163,24 @@ axiolid-evaluate = "0.3.16"
 # refused by memory budget (#308), which the engine does not set. 0.3.26
 # includes the f64 placement rounding in placed bounds and refuses a budget
 # below it by name (#295), bounds all-planar booleans at rounding scale
-# (#314), and compiles curved faces without p-curves (#310).
-axiolid-mesh-compile = "0.3.26"
+# (#314), and compiles curved faces without p-curves (#310). 0.3.27 reads a
+# `BoundedHalfSpace` placement whole and sizes its slab from the subject, so
+# a small boundary over a tall solid cuts through it (#322, #325, engine#412),
+# refuses a root or union bounded half-space by name, compiles
+# `BoundedHalfSpaceAlongZ` (#321), and certifies flush and 1-ulp niches on a
+# curved wall, listing a `COINCIDENT_OPERANDS` contribution (#324, through
+# axiolid-brep-boolean 0.1.10).
+axiolid-mesh-compile = "0.3.27"
 axiolid-exact-compile-contract = "0.3.1"
 # 0.3.3 adds `MeshClosure::OpenSolid` (#265).
 axiolid-mesh-compile-contract = "0.3.4"
 # 0.3.4 declares its scratch as a true upper bound on a thread pool (#226).
 axiolid-mesh-boolean-boolmesh = "0.3.6"
 # 0.3.5 adds oriented stations (#246), additively; `ifc-geometry` 0.9
-# requires it for the IFC4X3 stations it lowers.
-axiolid-model = "0.3.13"
+# requires it for the IFC4X3 stations it lowers; 0.3.14 adds
+# `SolidOperation::BoundedHalfSpaceAlongZ` (#321), written as wire 1.4 only
+# when present.
+axiolid-model = "0.3.14"
 axiolid-primitive = "0.3.0"
 axiolid-profile = "0.3.0"
 axiolid-surface = "0.3.0"

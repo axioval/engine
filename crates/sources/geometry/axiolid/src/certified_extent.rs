@@ -217,7 +217,10 @@ impl Walk {
                 }
                 Some(
                     GeometryNode::HalfSpace(_)
-                    | GeometryNode::SolidOperation(SolidOperation::BoundedHalfSpace { .. }),
+                    | GeometryNode::SolidOperation(
+                        SolidOperation::BoundedHalfSpace { .. }
+                        | SolidOperation::BoundedHalfSpaceAlongZ { .. },
+                    ),
                 ) => return Err("a half-space has no height".into()),
                 Some(_) => {
                     return Err(

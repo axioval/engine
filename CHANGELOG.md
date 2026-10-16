@@ -21,6 +21,22 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **Bodies clipped by a polygonal bounded half-space oblique to its plane
+  are measured, for any boundary**
+  ([#404](https://github.com/axioval/engine/issues/404)). ifc-geometry 0.28
+  lowers every `IfcPolygonalBoundedHalfSpace` to one clip along its
+  `Position`'s Z (openbimrs/ifc#515), which the mesh and exact compilers
+  both build (axiolid/kernel#321). A wall clipped under a sloped plane by a
+  non-convex boundary, or by one with a circular arc, was refused as "not
+  yet interpreted" and left unmeasured; it is now measured, the arc's
+  cylinder wall within a certified bound. The gable wall of
+  openbimrs/ifc#515 measures 49.999912042537 m³. The kernel still refuses
+  by name a `Position` whose Z lies in the clip's plane, and a clip used as
+  a union's operand, a boolean's first operand or a body's root. On the
+  not-evaluated inventory corpus only one model holds polygonal clips
+  (68): none of its bodies was refused for this reason before or after,
+  and its report is byte-identical.
+
 - **Bodies clipped by a polygonally bounded half-space are measured with
   the clip cut through the whole body**
   ([#412](https://github.com/axioval/engine/issues/412)). The mesh compiler
@@ -51,6 +67,10 @@ All notable changes are documented here. This project follows Semantic Versionin
   axiolid-brep-boolean 0.1.10). The new
   `SolidOperation::BoundedHalfSpaceAlongZ` (axiolid/kernel#321) is read
   like a bounded half-space wherever the engine reads one.
+- Moved to ifc-geometry 0.28.0 and openbim-ifc 0.35.0, which re-exports
+  it. Its lowered graphs holding a polygonal clip are Axiolid wire format
+  1.4; the engine leaves the wire format off and records no format
+  version.
 
 ## [0.6.1] - 2026-10-16
 

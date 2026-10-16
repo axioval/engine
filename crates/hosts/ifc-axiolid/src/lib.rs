@@ -4516,7 +4516,11 @@ fn planar(graph: &GeometryGraph, id: NodeId, budget: &mut usize) -> bool {
             planar(graph, *left, budget) && planar(graph, *right, budget)
         }
         // A plane cut down to the prism of a polygon, along its normal or
-        // along the boundary's `z` (axiolid/kernel#321): planes only.
+        // along the boundary's `z` (axiolid/kernel#321): planes only, for
+        // a prism oblique to the plane and a non-convex polygon too. Since
+        // ifc-geometry 0.28 every `IfcPolygonalBoundedHalfSpace` arrives
+        // along `z` (openbimrs/ifc#515); a boundary with an arc sweeps a
+        // cylinder and is curved.
         GeometryNode::SolidOperation(
             SolidOperation::BoundedHalfSpace {
                 half_space,

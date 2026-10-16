@@ -1654,7 +1654,14 @@ polygonally bounded half-spaces included, stay exact and are meshed
 without a deviation report. Since axiolid-mesh-compile 0.3.27 a polygonal
 clip is cut through the whole solid it clips, however small its boundary
 (axiolid/kernel#325, #412): a tall wall clipped within a small boundary at
-its end is measured without the strip an earlier compiler left. Since axiolid-mesh-compile 0.3.16 the
+its end is measured without the strip an earlier compiler left. Since ifc-geometry 0.28 every `IfcPolygonalBoundedHalfSpace` is one
+clip along its `Position`'s Z (openbimrs/ifc#515), so a prism oblique to
+its plane (a gable wall under sloped roof planes, #404) is measured for a
+non-convex boundary and one with an arc too, where a non-convex or arc
+boundary under an oblique prism was refused. The kernel refuses by name,
+and leaves unmeasured, a `Position` whose Z lies in the clip's plane and
+a clip used as a union's operand, a boolean's first operand or a
+body's root. Since axiolid-mesh-compile 0.3.16 the
 compiler snaps operand vertices onto the other operand's faces before it
 cuts (axiolid/kernel#276), so an opening exported a rounding error short of
 its host's face leaves no skin of rounding residue, which self-intersected

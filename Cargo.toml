@@ -193,8 +193,9 @@ openbim-ids = { version = "0.2.2", features = ["audit-schema"] }
 # Door and window operation geometry (openbimrs/ifc#148, #170) is published
 # only in the IFC facade, which joins `ifc-geometry` and `ifc-properties`; `geometry-select`
 # compiles no geometry kernel.
-# 0.24 re-exports `ifc-geometry` 0.18; its `authoring` feature stays off.
-openbim_ifc = { package = "openbim-ifc", version = "0.34.0", default-features = false, features = ["geometry-select", "properties", "ifc2x3", "ifc4", "ifc4x3"] }
+# 0.24 re-exports `ifc-geometry` 0.18 (0.35 re-exports 0.28); its `authoring`
+# feature stays off.
+openbim_ifc = { package = "openbim-ifc", version = "0.35.0", default-features = false, features = ["geometry-select", "properties", "ifc2x3", "ifc4", "ifc4x3"] }
 ifc-classification = "0.4.0"
 # The CLI reads each `IfcAlignment`'s centreline, stationing and cant to
 # locate products along it (engine#252). 0.7 evaluates Viennese bends for
@@ -252,8 +253,12 @@ ifc-alignment = "0.9.0"
 # mirrors the footprint of one bounded normal against Z (#515). 0.27.2
 # compiles an oblique clip with a convex polyline boundary as a chain of
 # half spaces; its exact bound waits on the kernel, so such a body is still
-# left unmeasured (#518).
-ifc-geometry = { version = "0.27.2", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
+# left unmeasured (#518). 0.28 lowers every polygonal bounded half space to
+# one `BoundedHalfSpaceAlongZ` (axiolid-model 0.3.14, axiolid/kernel#321),
+# so oblique, non-convex and arc boundaries are compiled and certified
+# (#515, #519); the kernel refuses a `Position` Z in the plane and the clip
+# as a union operand, first operand or root by name.
+ifc-geometry = { version = "0.28.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
 # Map conversions only: without the default `transform` feature it links no
 # geometry crate (never Axiolid). 0.7 resolves IFC2X3's
 # ePSet_MapConversion and ePSet_ProjectedCRS (openbimrs/ifc#451), where

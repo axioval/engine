@@ -454,7 +454,8 @@ It is built only where the construction is exact:
 - a clip of such a body by a half-space, bounded by a polygon in its plane
   or not: a wall under its roof planes, an `IfcBooleanClippingResult` of
   `IfcHalfSpaceSolid` or `IfcPolygonalBoundedHalfSpace`, in any order with
-  its openings (axiolid/kernel#234);
+  its openings (axiolid/kernel#234), a polygonal prism oblique to its plane
+  included (axiolid/kernel#321, engine#404);
 - several such items in one body, a column on its footing say
   (axiolid/kernel#229).
 

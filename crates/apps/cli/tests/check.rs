@@ -21329,6 +21329,163 @@ fn with_geometry_a_wall_clipped_within_a_composite_boundary_is_measured_like_its
     }
 }
 
+/// A gable wall #9031 in millimetres: a 9.775 x 0.35 x 16.165 m extrusion
+/// clipped by four `IfcPolygonalBoundedHalfSpace`s whose planes slope and
+/// whose `Position`s are level, so every prism is vertical and oblique to
+/// its plane (openbimrs/ifc#515). Its volume, 49.999912042537 m³, is
+/// derived from the planes and matched by `IfcOpenShell` 0.8.5.
+const GABLE_WALL: &str = "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('gable','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+#3=IFCCARTESIANPOINT((0.,0.,0.));\n\
+#4=IFCCARTESIANPOINT((0.,0.));\n\
+#7=IFCDIRECTION((0.,1.,0.));\n\
+#9=IFCDIRECTION((0.,0.,1.));\n\
+#12=IFCDIRECTION((-1.,0.));\n\
+#19=IFCSIUNIT(*,.LENGTHUNIT.,.MILLI.,.METRE.);\n\
+#23=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);\n\
+#96=IFCUNITASSIGNMENT((#19,#23));\n\
+#97=IFCAXIS2PLACEMENT3D(#3,$,$);\n\
+#99=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,0.01,#97,$);\n\
+#101=IFCGEOMETRICREPRESENTATIONSUBCONTEXT('Body','Model',*,*,*,*,#99,$,.MODEL_VIEW.,$);\n\
+#104=IFCPROJECT('0000000000000000000104',$,'P',$,$,$,$,(#99),#96);\n\
+#8969=IFCCARTESIANPOINT((-8071.0663924178298,-722.43106880235769,0.));\n\
+#8970=IFCAXIS2PLACEMENT3D(#8969,#9,#7);\n\
+#8971=IFCLOCALPLACEMENT($,#8970);\n\
+#8975=IFCCARTESIANPOINT((4887.5000000000018,5.6843418860808015E-14));\n\
+#8976=IFCAXIS2PLACEMENT2D(#8975,#12);\n\
+#8977=IFCRECTANGLEPROFILEDEF(.AREA.,$,#8976,9775.0000000000036,350.00000000000057);\n\
+#8978=IFCAXIS2PLACEMENT3D(#3,$,$);\n\
+#8979=IFCEXTRUDEDAREASOLID(#8977,#8978,#9,16165.033064627303);\n\
+#8980=IFCCARTESIANPOINT((550.69387809692876,-0.));\n\
+#8981=IFCCARTESIANPOINT((550.69387809692739,350.));\n\
+#8982=IFCCARTESIANPOINT((0.,350.));\n\
+#8983=IFCPOLYLINE((#4,#8980,#8981,#8982,#4));\n\
+#8984=IFCCARTESIANPOINT((0.,-175.,11537.100698716456));\n\
+#8985=IFCDIRECTION((0.96410569120432499,0.,-0.26551876805120728));\n\
+#8986=IFCAXIS2PLACEMENT3D(#8984,#8985,#7);\n\
+#8987=IFCPLANE(#8986);\n\
+#8988=IFCCARTESIANPOINT((0.,-175.,11537.100698716456));\n\
+#8989=IFCAXIS2PLACEMENT3D(#8988,$,$);\n\
+#8990=IFCPOLYGONALBOUNDEDHALFSPACE(#8987,.T.,#8989,#8983);\n\
+#8991=IFCBOOLEANCLIPPINGRESULT(.DIFFERENCE.,#8979,#8990);\n\
+#8992=IFCCARTESIANPOINT((4374.3061219031079,0.));\n\
+#8993=IFCCARTESIANPOINT((4374.3061219031097,350.));\n\
+#8994=IFCCARTESIANPOINT((0.,350.));\n\
+#8995=IFCPOLYLINE((#4,#8992,#8993,#8994,#4));\n\
+#8996=IFCCARTESIANPOINT((550.69387809692716,-175.,13536.684780404561));\n\
+#8997=IFCDIRECTION((0.51503807491005349,0.,-0.85716730070211278));\n\
+#8998=IFCAXIS2PLACEMENT3D(#8996,#8997,#7);\n\
+#8999=IFCPLANE(#8998);\n\
+#9000=IFCCARTESIANPOINT((550.69387809692716,-175.,13536.684780404561));\n\
+#9001=IFCAXIS2PLACEMENT3D(#9000,$,$);\n\
+#9002=IFCPOLYGONALBOUNDEDHALFSPACE(#8999,.T.,#9001,#8995);\n\
+#9003=IFCBOOLEANCLIPPINGRESULT(.DIFFERENCE.,#8991,#9002);\n\
+#9004=IFCCARTESIANPOINT((4374.3061219030942,0.));\n\
+#9005=IFCCARTESIANPOINT((4374.306121903096,350.));\n\
+#9006=IFCCARTESIANPOINT((-0.,350.));\n\
+#9007=IFCPOLYLINE((#4,#9004,#9005,#9006,#4));\n\
+#9008=IFCCARTESIANPOINT((4925.,-175.,16165.033064627303));\n\
+#9009=IFCDIRECTION((-0.51503807491005638,0.,-0.85716730070211111));\n\
+#9010=IFCAXIS2PLACEMENT3D(#9008,#9009,#7);\n\
+#9011=IFCPLANE(#9010);\n\
+#9012=IFCCARTESIANPOINT((4925.,-175.,16165.033064627303));\n\
+#9013=IFCAXIS2PLACEMENT3D(#9012,$,$);\n\
+#9014=IFCPOLYGONALBOUNDEDHALFSPACE(#9011,.T.,#9013,#9007);\n\
+#9015=IFCBOOLEANCLIPPINGRESULT(.DIFFERENCE.,#9003,#9014);\n\
+#9016=IFCCARTESIANPOINT((475.6938780968685,-0.));\n\
+#9017=IFCCARTESIANPOINT((475.69387809687032,350.));\n\
+#9018=IFCCARTESIANPOINT((0.,350.));\n\
+#9019=IFCPOLYLINE((#4,#9016,#9017,#9018,#4));\n\
+#9020=IFCCARTESIANPOINT((9299.3061219031333,-175.,13536.684780404546));\n\
+#9021=IFCDIRECTION((-0.96410569120432588,-0.,-0.26551876805120411));\n\
+#9022=IFCAXIS2PLACEMENT3D(#9020,#9021,#7);\n\
+#9023=IFCPLANE(#9022);\n\
+#9024=IFCCARTESIANPOINT((9299.3061219031333,-175.,13536.684780404546));\n\
+#9025=IFCAXIS2PLACEMENT3D(#9024,$,$);\n\
+#9026=IFCPOLYGONALBOUNDEDHALFSPACE(#9023,.T.,#9025,#9019);\n\
+#9027=IFCBOOLEANCLIPPINGRESULT(.DIFFERENCE.,#9015,#9026);\n\
+#9029=IFCSHAPEREPRESENTATION(#101,'Body','Clipping',(#9027));\n\
+#9030=IFCPRODUCTDEFINITIONSHAPE($,$,(#9029));\n\
+#9031=IFCWALL('0000000000000000009031',$,'Gable wall',$,$,#8971,#9030,$,.STANDARD.);\n\
+ENDSEC;\nEND-ISO-10303-21;\n";
+
+/// engine#404: a body clipped by an `IfcPolygonalBoundedHalfSpace` whose
+/// prism is oblique to its plane is measured at its clipped volume, where
+/// ifc-geometry 0.27.1 refused it and 0.27.2 compiled convex boundaries
+/// only, without an exact body to certify against. Since ifc-geometry 0.28
+/// every such clip lowers to one bounded half-space along `Position`'s Z,
+/// which both kernel compilers build (openbimrs/ifc#515,
+/// axiolid/kernel#321): the gable wall at 49.999912042537 m³, and
+/// [`wall_clipped_within_a_boundary`]'s wall with its clipping plane
+/// sloped to `z = 2 - 0.3 x` under a rectangular, an L-shaped
+/// (non-convex) and an arc boundary.
+#[test]
+fn with_geometry_a_wall_clipped_by_an_oblique_bounded_half_space_is_measured() {
+    let volume = json!({"kind": "property", "propertySet": "axioval:measured",
+                        "property": "volume"});
+    let cubic = |value: f64| json!({"kind": "literal", "value": {"type": "quantity", "value": value, "unit": "m3"}});
+    let within = |expected: f64| {
+        json!({"requirement": {"type": "expression", "value":
+            {"kind": "between", "operand": volume,
+             "low": cubic(expected - 1e-6), "high": cubic(expected + 1e-6)}}})
+    };
+    let sloped = |boundary: &str| {
+        wall_clipped_within_a_boundary(boundary).replace(
+            "#22=IFCAXIS2PLACEMENT3D(#21,$,$);\n",
+            "#22=IFCAXIS2PLACEMENT3D(#21,#32,$);\n#32=IFCDIRECTION((0.3,0.,1.));\n",
+        )
+    };
+    let rectangle = "#15=IFCCARTESIANPOINT((0.,-1.));\n\
+         #16=IFCCARTESIANPOINT((3.,-1.));\n\
+         #17=IFCCARTESIANPOINT((3.,1.));\n\
+         #18=IFCCARTESIANPOINT((0.,1.));\n\
+         #20=IFCPOLYLINE((#15,#16,#17,#18,#15));\n";
+    // An L: x 1 to 2 across the wall, x 0 to 1 over its y < 0 half only.
+    let l_shaped = "#15=IFCCARTESIANPOINTLIST2D(((0.,-1.),(3.,-1.),(3.,1.),(1.,1.),(1.,0.),(0.,0.)));\n\
+         #20=IFCINDEXEDPOLYCURVE(#15,(IFCLINEINDEX((1,2,3,4,5,6,1))),$);\n";
+    let arc = "#15=IFCCARTESIANPOINTLIST2D(((0.,-1.),(3.,-1.),(3.5,0.),(3.,1.),(0.,1.)));\n\
+         #20=IFCINDEXEDPOLYCURVE(#15,(IFCLINEINDEX((1,2)),IFCARCINDEX((2,3,4)),IFCLINEINDEX((4,5,1))),$);\n";
+    // The uncut wall is 3.6 m³. Above the sloped plane, x 0 to 2 loses
+    // 0.3 m x 2.6 m² = 0.78 m³; under the L, x 0 to 1 loses
+    // 0.15 m x 1.15 m² and x 1 to 2 loses 0.3 m x 1.45 m².
+    for (name, model, expected) in [
+        ("gable", GABLE_WALL.to_owned(), 49.999_912_042_537),
+        ("rectangle", sloped(rectangle), 2.82),
+        ("l-shaped", sloped(l_shaped), 3.6 - 0.15 * 1.15 - 0.3 * 1.45),
+        ("arc", sloped(arc), 2.82),
+    ] {
+        let case = Case::new(&format!("geometry-oblique-clip-{name}"));
+        let (output, result) = case.geometry_rule(
+            &model,
+            &[("wall", "IfcWall")],
+            "axioval:capability.expression",
+            &registry_signature("axioval:capability.expression"),
+            entity("wall"),
+            within(expected),
+        );
+        assert_eq!(output.status.code(), Some(0), "{name}: {result:#}");
+        assert_eq!(result["report"]["findings"], json!([]), "{name}");
+        assert_eq!(
+            result["report"]["not_evaluated"],
+            json!([]),
+            "{name}: {result:#}"
+        );
+        assert!(
+            result["geometry"]["unmeasured"]
+                .as_array()
+                .is_none_or(Vec::is_empty),
+            "{name}: {result:#}"
+        );
+        // Planar clips are meshed exactly; the arc's cylinder wall is
+        // tessellated within the deviation certified against the exact
+        // body.
+        assert_eq!(
+            result["geometry"]["tessellated"],
+            u64::from(name == "arc"),
+            "{name}: {result:#}"
+        );
+    }
+}
+
 /// A disk swept along a polyline with a sharp corner and no fillet radius
 /// is mitred at half angle, as `IfcSweptDiskSolid` defines it, and the
 /// kernel proves its mesh within the chord budget again

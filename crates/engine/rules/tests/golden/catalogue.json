@@ -124272,6 +124272,36 @@
           "description": null,
           "capability": "axioval:capability.expression",
           "parameters": {
+            "deviation": {
+              "id": "deviation",
+              "name": {
+                "default": "Deviation",
+                "translations": {}
+              },
+              "description": null,
+              "kind": "expression",
+              "referencedValueKind": null,
+              "required": false,
+              "defaultValue": null,
+              "allowedValues": [],
+              "unitDimension": null,
+              "citations": []
+            },
+            "message": {
+              "id": "message",
+              "name": {
+                "default": "Message",
+                "translations": {}
+              },
+              "description": null,
+              "kind": "string",
+              "referencedValueKind": null,
+              "required": false,
+              "defaultValue": null,
+              "allowedValues": [],
+              "unitDimension": null,
+              "citations": []
+            },
             "minimum": {
               "id": "minimum",
               "name": {
@@ -124320,11 +124350,7 @@
           },
           "tags": [],
           "citations": [],
-          "available": false,
-          "unavailable": {
-            "reason": "signatureMismatch",
-            "message": "definition `axioval:example.minimum-width` conflicts with capability `axioval:capability.expression`: parameter name differs"
-          }
+          "available": true
         }
       }
     }

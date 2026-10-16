@@ -17,7 +17,7 @@ never edit them by hand.
 
 `fixed-parameter/definitions.json` is the normalized output of the Axioval MCS
 fixture `tests/fixtures/fixed-parameter.pkl` at commit
-`68ac59f960f76fa286dfe3e6cbfe40f955553500`, evaluated and validated by that
+`87d233614f1e07dbacf2c05135a70b7b412c8d43`, evaluated and validated by that
 commit's `scripts/validate.py` and written as indented JSON. Its definition
 fixes the `requirement` parameter of an `expression` rule and leaves `minimum`
 to instances, so the binder's handling of `fixed` is pinned to the contract's

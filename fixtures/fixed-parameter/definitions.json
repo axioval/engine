@@ -79,6 +79,28 @@
           "required": true,
           "allowedValues": [],
           "citations": []
+        },
+        "deviation": {
+          "id": "deviation",
+          "name": {
+            "default": "Deviation",
+            "translations": {}
+          },
+          "kind": "expression",
+          "required": false,
+          "allowedValues": [],
+          "citations": []
+        },
+        "message": {
+          "id": "message",
+          "name": {
+            "default": "Message",
+            "translations": {}
+          },
+          "kind": "string",
+          "required": false,
+          "allowedValues": [],
+          "citations": []
         }
       },
       "citations": [],

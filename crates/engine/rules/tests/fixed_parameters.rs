@@ -31,16 +31,8 @@ fn fixture(path: &str) -> String {
 /// the example's rule bound to the fixed definition and stating `minimum`
 /// only, as the MCS binder's tests do.
 fn documents() -> (RuleSetPackage, Vec<DefinitionPackage>) {
-    let mut fixed: DefinitionPackage =
+    let fixed: DefinitionPackage =
         serde_json::from_str(&fixture("fixed-parameter/definitions.json")).unwrap();
-    // The engine binds a definition to the capability's whole signature,
-    // its optional parameters included, which the MCS fixture leaves out.
-    let parameters = &mut fixed.definitions.get_mut(DEFINITION).unwrap().parameters;
-    for (id, kind) in [("deviation", "expression"), ("message", "string")] {
-        let parameter = json!({"id": id, "name": {"default": id, "translations": {}},
-                               "kind": kind, "required": false});
-        parameters.insert(id.into(), serde_json::from_value(parameter).unwrap());
-    }
     let minimal: DefinitionPackage =
         serde_json::from_str(&fixture("schema-v0.1.0/definitions.json")).unwrap();
     let mut ruleset: serde_json::Value =

@@ -18,7 +18,7 @@ doc = false
 # The CLI is the host that composes a source adapter with a report sink.
 # `--geometry` meshes IFC bodies and registers them with the Axiolid services
 # through the host layer's bridge (`ifc-geometry`), as any host does.
-axioval = { path = "../../facade/axioval", version = "0.6.1", features = ["ifc", "ifc-geometry", "bcf", "bcf-api", "bcf-snapshot", "axiolid", "xlsx", "html"] }
+axioval = { path = "../../facade/axioval", version = "0.7.0", features = ["ifc", "ifc-geometry", "bcf", "bcf-api", "bcf-snapshot", "axiolid", "xlsx", "html"] }
 # `check --ids` and `ids translate`: IDS documents read and translated
 # into rule packages in memory.
 axioval-ids.workspace = true

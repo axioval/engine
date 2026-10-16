@@ -4,20 +4,16 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
-### Changed
+## [0.7.0] - 2026-10-16
 
-- **Free floors of up to 5,000 corners are searched for a disc again**
-  ([#402](https://github.com/axioval/engine/issues/402)). axiolid-overlay
-  0.3.16 erodes and dilates a region without building one hull per edge
-  against every neighbour (axiolid/kernel#323): a toothed floor of 1,202
-  corners takes about 0.3 s instead of 4.4 s and 1.7 GB. The disc-search
-  corner bound of 0.6.1 is raised from 1,000 to 5,000 corners and kept
-  only as a safety net, since a hole lined by dense sub-millimetre teeth
-  still takes about 17 s at 5,000 corners; past it the search is refused,
-  naming the count, as before. Free-floor circles, and the largest disc,
-  on floors between the two bounds are decided rather than not evaluated.
-  The overlay now drops vertices lying exactly between their neighbours
-  from eroded and dilated regions; the point sets are unchanged.
+Clipped and curved bodies are measured. Every polygonal bounded half-space
+clip is cut through the whole body it clips, whether aligned with or
+oblique to its plane and for any boundary, and a curved wall with an
+opening flush with its curved face is measured within a certified bound,
+so the rooms beside it are decided. Free floors of up to 5,000 corners are
+searched for a disc. The release moves to ifc-geometry 0.28 and the
+matching Axiolid crates, whose types appear in the geometry API, hence
+the minor version.
 
 ### Fixed
 
@@ -73,8 +69,21 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **Free floors of up to 5,000 corners are searched for a disc again**
+  ([#402](https://github.com/axioval/engine/issues/402)). axiolid-overlay
+  0.3.16 erodes and dilates a region without building one hull per edge
+  against every neighbour (axiolid/kernel#323): a toothed floor of 1,202
+  corners takes about 0.3 s instead of 4.4 s and 1.7 GB. The disc-search
+  corner bound of 0.6.1 is raised from 1,000 to 5,000 corners and kept
+  only as a safety net, since a hole lined by dense sub-millimetre teeth
+  still takes about 17 s at 5,000 corners; past it the search is refused,
+  naming the count, as before. Free-floor circles, and the largest disc,
+  on floors between the two bounds are decided rather than not evaluated.
+  The overlay now drops vertices lying exactly between their neighbours
+  from eroded and dilated regions; the point sets are unchanged.
+
 - Moved to axiolid-model 0.3.14, axiolid-construct 0.3.19,
-  axiolid-overlay 0.3.16 and axiolid-mesh-compile 0.3.27 (with
+  axiolid-overlay 0.3.17 and axiolid-mesh-compile 0.3.27 (with
   axiolid-brep-boolean 0.1.10). The new
   `SolidOperation::BoundedHalfSpaceAlongZ` (axiolid/kernel#321) is read
   like a bounded half-space wherever the engine reads one.
@@ -6900,7 +6909,8 @@ meshes with `axiolid-mesh` 0.1.
 
 - Placement offset bounds no longer admit tolerance-expanded witnesses; supported found placements now require exact frame-bound whole-base support evidence.
 
-[Unreleased]: https://github.com/axioval/engine/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/axioval/engine/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/axioval/engine/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/axioval/engine/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/axioval/engine/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/axioval/engine/compare/v0.4.0...v0.5.0

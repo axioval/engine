@@ -40,6 +40,7 @@
 - [Rule drafts](./drafts.md)
 - [Block editors](./block-editors.md)
 - [JSON Schemas](./json-schema.md)
+- [MCS package archives](./mcs-archives.md)
 
 # Reports and exchange
 

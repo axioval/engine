@@ -4,7 +4,7 @@
 
 use std::{error::Error, path::PathBuf};
 
-use axioval::ir::{DefinitionPackage, RuleSetPackage};
+use axioval::ir::RuleSetPackage;
 use axioval_export::{ExportProfile, LossKind};
 use axioval_ids::IdsProfile;
 use clap::Args;
@@ -32,10 +32,11 @@ impl ProfileExportArgs {
 
 #[derive(Args)]
 pub(crate) struct ExportArgs {
-    /// A definition package the ruleset uses; repeat for several.
-    #[arg(long = "definitions", required = true, value_name = "FILE")]
+    /// A definition package the ruleset uses (JSON, or an MCS `definitions`
+    /// archive); repeat for several. A ruleset archive carries its own.
+    #[arg(long = "definitions", value_name = "FILE")]
     definitions: Vec<PathBuf>,
-    /// The ruleset to export.
+    /// The ruleset to export: JSON, or an MCS `ruleset` archive.
     #[arg(long, value_name = "FILE")]
     ruleset: PathBuf,
     /// Where to write the exported document.
@@ -56,12 +57,11 @@ pub(crate) fn export_command(id: &str, args: &ExportArgs) -> Result<bool, Box<dy
         )
         .into());
     };
-    let definitions = args
-        .definitions
-        .iter()
-        .map(|path| crate::load_definitions(path))
-        .collect::<Result<Vec<DefinitionPackage>, _>>()?;
-    let ruleset: RuleSetPackage = crate::load_ruleset(&args.ruleset)?;
+    let (definitions, rulesets) =
+        crate::packages(&args.definitions, std::slice::from_ref(&args.ruleset))?;
+    let [ruleset]: [RuleSetPackage; 1] = rulesets
+        .try_into()
+        .map_err(|_| "expected exactly one ruleset")?;
     let outcome = profile.export(&definitions, &ruleset);
     let shown = args.ruleset.display();
     for loss in &outcome.losses {

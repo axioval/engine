@@ -65,6 +65,12 @@ A package importer writes definition packages and rulesets from another rule
 format. It reads the engine's capability descriptors so its definitions match
 them, and never a model, so it links no source adapter.
 
+`axioval-mcs` reads the packages' own transport, the `.mcs` archive of an
+[MCS package](./mcs-archives.md): the canonical container, its inventory and
+manifest, checked fail closed, and the normalized packages it carries as the
+IR's. It is a packages crate, not part of the IR or the engine, so the core
+crates stay free of any container format; it reads packages, never a model.
+
 An exporter writes packages back as another format through an
 [export profile](./export.md). The profile trait, the loss kinds and the
 rule comparator live in `axioval-export`, which depends on the IR alone and
@@ -77,7 +83,7 @@ crate of this tree. It knows the format's grammar, not the classes or
 records an application stores in it; the application that owns those binds
 them on top ([Java serialization streams](./java-stream.md)).
 
-`axioval-ir`, `axioval-export`, `axioval-engine`, and `axioval-rules` may not import source formats, federation containers, geometry kernels, or vendor types. Adapters depend inward; core never depends outward.
+`axioval-ir`, `axioval-export`, `axioval-mcs`, `axioval-engine`, and `axioval-rules` may not import source formats, federation containers, geometry kernels, or vendor types. Adapters depend inward; core never depends outward.
 
 ## Host compositions
 

@@ -70,9 +70,16 @@ CLI output and exit codes are public automation contracts. Parse packages fail c
   so a missing or refused template fails (status 1) before any work.
   Never run anything from a template; never print a PDF here.
 - Packages are read only through `load_ruleset` and `load_definitions` in
-  `main.rs`, which load the table files they name from the directory
-  holding the package file; never parse a package with `load` alone, or a
-  `tableFile` parameter reaches the binder unloaded.
+  `main.rs` (and `packages`, which joins them), which load the table files
+  they name from the directory holding the package file; never parse a
+  package with `load` alone, or a `tableFile` parameter reaches the binder
+  unloaded. A `.mcs` file, or one opening with the ZIP magic, is an MCS
+  archive read by `axioval_mcs` (table files from the archive): a `ruleset`
+  archive only through `--ruleset`, with the definitions it carries, a
+  `definitions` archive only through `--definitions`. Carried and supplied
+  definitions are joined by `axioval_mcs::resolve_definitions`, never here;
+  never unzip an archive in the CLI. `tests/mcs.rs` pins that archives check
+  as the JSON they carry.
 - `check` reports every end of a declared relation's listed pair that names
   no single object (`unknown_relation_objects`, taken before the run) as an
   integrity record `relation-object-unknown` (warning, locator

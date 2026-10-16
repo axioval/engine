@@ -69,6 +69,8 @@ of `scripts/architecture.py` are exempted, and only for that crate.
 - `export` (`axioval-export`) — export profiles, losses (refused or
   degraded) and the shared rule comparator; depends on `axioval-ir` only.
 - `ids` (`axioval-ids`) — rule packages from buildingSMART IDS documents, and exported back to them (the `ids` export profile).
+- `mcs` (`axioval-mcs`) — MCS package archives (`.mcs`) of both kinds,
+  read fail closed into the IR's packages; the engine's own transport.
 
 `axioval-spec` is retired: its notice lives in `attic/axioval-spec-notice`.
 

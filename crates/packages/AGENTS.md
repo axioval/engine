@@ -1,8 +1,9 @@
 # `packages/`
 
 Importers that write Axioval rule packages (definition packages and
-rulesets) from other rule formats, one subdirectory per format, and
-`export/`, the framework every export target shares.
+rulesets) from other rule formats, one subdirectory per format,
+`export/`, the framework every export target shares, and `mcs/`, the
+reader of the packages' own `.mcs` transport.
 
 - An importer never reads a model and adapts no source: it depends on
   `axioval-ir`, the engine's capability descriptors and `axioval-rules`
@@ -27,3 +28,4 @@ rulesets) from other rule formats, one subdirectory per format, and
 
 - `export/` (`axioval-export`) — export profiles, losses and the shared rule comparator.
 - `ids/` (`axioval-ids`) — rule packages from buildingSMART IDS documents, and exported back to them.
+- `mcs/` (`axioval-mcs`) — MCS package archives (`.mcs`), rule sets and definitions packages, read fail closed.

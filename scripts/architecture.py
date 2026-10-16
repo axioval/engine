@@ -713,6 +713,7 @@ def self_test() -> None:
     root = Path(__file__).resolve().parents[1]
     derived = {name for name, _ in core_crates(root)}
     assert "axioval-export" in derived, derived
+    assert "axioval-mcs" in derived, derived
     assert "axioval-engine" in derived, derived
     assert "axioval-ifc" not in derived, derived
     assert "axioval-cli" not in derived, derived

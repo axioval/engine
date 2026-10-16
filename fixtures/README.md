@@ -24,6 +24,27 @@ to instances, so the binder's handling of `fixed` is pinned to the contract's
 own example. Refresh it by evaluating the same fixture again and updating the
 commit above; never edit it by hand.
 
+## MCS archives
+
+`mcs-v0.1.0/` holds `.mcs` archives packed with the Axioval MCS packer
+(`python3 scripts/mcs.py pack`) at commit
+`42c97b547c98f1dc28dcda436a776db3fae5d15d`, byte for byte as it wrote them:
+
+- `template-library.mcs` is `examples/template-library`, a `definitions`
+  package (rule templates, no rule set).
+- `minimal.mcs` is `examples/minimal`, a `ruleset` package carrying its
+  definitions.
+- `library-rules.mcs` is a `ruleset` package written for this repository and
+  packed in a copy of that checkout as `examples/library-rules`: a rule set
+  instantiating the template library's `property-exists` template, carrying
+  the library (`library.pkl` amends its `definitions.pkl`) and IFC4-bound
+  concepts. Its sources are inside the archive.
+
+`crates/packages/mcs/tests/read.rs` reads them and refuses tampered copies;
+`crates/apps/cli/tests/mcs.rs` checks a model with them and with the
+normalized JSON they carry. Refresh them by packing the same packages again
+and updating the commit above; never edit an archive by hand.
+
 ## Parity models and cases
 
 `parity/models.json` pins the public IFC models the parity harness runs on,

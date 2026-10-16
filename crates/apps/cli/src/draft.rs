@@ -18,10 +18,13 @@ use crate::{ModelArg, Outcome, model_arg, packages};
 
 #[derive(Args)]
 pub(crate) struct ValidateArgs {
-    #[arg(long, required = true)]
+    /// A definition package (JSON, or an MCS `definitions` archive); repeat
+    /// for several. A ruleset archive carries its own.
+    #[arg(long)]
     definitions: Vec<PathBuf>,
-    /// A ruleset; repeat to bind several together, as `check` does. With a
-    /// draft, they are its context.
+    /// A ruleset (JSON, or an MCS `ruleset` archive); repeat to bind
+    /// several together, as `check` does. With a draft, they are its
+    /// context.
     #[arg(long = "ruleset", required = true)]
     rulesets: Vec<PathBuf>,
     /// A rule draft (one rule as a ruleset writes it, JSON; `-` reads

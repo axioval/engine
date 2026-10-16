@@ -1,0 +1,38 @@
+[package]
+name = "axioval-mcs"
+description = "Fail-closed reader of Axioval MCS package archives (.mcs), rule sets and definitions packages"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+readme.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+# The MCS transport: a deterministic ZIP archive of reviewed sources and the
+# normalized JSON packages the engine binds. It reads packages, never a model,
+# so it adapts no source and depends on no adapter.
+[dependencies]
+# The normalized package contracts the archive carries.
+axioval-ir.workspace = true
+# The table files a package's parameters name, loaded from the archive.
+axioval-engine.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+# The inventory's SHA-256 of every member.
+sha2.workspace = true
+# Raw deflate members and their CRC-32.
+flate2.workspace = true
+# Member names must be in NFC.
+unicode-normalization.workspace = true
+
+# The tests compile what they read against the built-in capabilities. A
+# path-only dev-dependency is left out of the published manifest.
+[dev-dependencies]
+axioval = { path = "../../facade/axioval" }
+
+[lints]
+workspace = true

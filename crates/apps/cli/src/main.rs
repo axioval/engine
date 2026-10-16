@@ -81,6 +81,8 @@ enum Command {
     /// With `--definitions`, it also lists each package's concept
     /// vocabulary. Exit status: 0 written, 1 nothing written.
     Catalogue {
+        /// A definition package: JSON, or an MCS `definitions` archive.
+        /// Repeat for several.
         #[arg(long)]
         definitions: Vec<PathBuf>,
         /// Write to this file instead of standard output.
@@ -163,12 +165,17 @@ struct CheckArgs {
     /// discipline came from.
     #[arg(long = "discipline-map", value_name = "FIELD:PATTERN=DISCIPLINE", value_parser = discipline_rule)]
     discipline_map: Vec<DisciplineRule>,
-    #[arg(long, required_unless_present = "ids")]
+    /// A definition package the rulesets bind: JSON, or an MCS
+    /// `definitions` archive (`.mcs`, a template library). Repeat for
+    /// several. A ruleset archive carries its own definitions; those it
+    /// lacks are taken from these.
+    #[arg(long)]
     definitions: Vec<PathBuf>,
-    /// A ruleset to check. Repeat for several: each is compiled against
-    /// its own definition packages and its rule ids are qualified by its
-    /// package id (`package-id/rule-id`), so two rulesets may both define
-    /// a rule `r1`. With one ruleset the ids stay as written.
+    /// A ruleset to check: JSON, or an MCS `ruleset` archive (`.mcs`) with
+    /// the definitions it carries. Repeat for several: each is compiled
+    /// against its own definition packages and its rule ids are qualified
+    /// by its package id (`package-id/rule-id`), so two rulesets may both
+    /// define a rule `r1`. With one ruleset the ids stay as written.
     #[arg(long = "ruleset", required_unless_present = "ids")]
     rulesets: Vec<PathBuf>,
     /// Check against a buildingSMART IDS 1.0 document instead of packages:
@@ -842,37 +849,103 @@ fn package_root(path: &Path) -> axioval::engine::PackageDirectory {
     })
 }
 
-/// The definition package at `path`, with the table files its defaults
-/// name loaded from beside it.
-pub(crate) fn load_definitions(path: &Path) -> Result<DefinitionPackage, Box<dyn Error>> {
-    let mut package: DefinitionPackage = load(path)?;
-    axioval::engine::load_definition_table_files(&mut package, &package_root(path))
-        .map_err(|error| format!("{}: {error}", path.display()))?;
-    Ok(package)
+/// A package file as given: an MCS archive, or the bytes of a JSON package.
+enum PackageFile {
+    Archive(Box<axioval_mcs::Archive>),
+    Json(Vec<u8>),
 }
 
-/// The ruleset at `path`, with the table files its rules name loaded from
-/// beside it.
-pub(crate) fn load_ruleset(path: &Path) -> Result<RuleSetPackage, Box<dyn Error>> {
-    let mut ruleset: RuleSetPackage = load(path)?;
-    axioval::engine::load_table_files(&mut ruleset, &package_root(path))
-        .map_err(|error| format!("{}: {error}", path.display()))?;
-    Ok(ruleset)
+/// The package file at `path`, read as an MCS archive when it is one: a
+/// `.mcs` file, or one opening as a ZIP archive (`PK`), as an ifcZIP model
+/// is recognised.
+fn read_package(path: &Path) -> Result<PackageFile, Box<dyn Error>> {
+    let shown = path.display();
+    if path
+        .extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("mcs"))
+    {
+        let archive = axioval_mcs::read_file(path).map_err(|error| format!("{shown}: {error}"))?;
+        return Ok(PackageFile::Archive(Box::new(archive)));
+    }
+    let bytes = fs::read(path).map_err(|error| format!("{shown}: {error}"))?;
+    if bytes.starts_with(b"PK\x03\x04") {
+        let archive = axioval_mcs::read(&bytes).map_err(|error| format!("{shown}: {error}"))?;
+        return Ok(PackageFile::Archive(Box::new(archive)));
+    }
+    Ok(PackageFile::Json(bytes))
 }
 
-fn packages(
+/// The JSON package `bytes` read from `path`.
+fn parse<T: serde::de::DeserializeOwned>(path: &Path, bytes: &[u8]) -> Result<T, Box<dyn Error>> {
+    let text =
+        std::str::from_utf8(bytes).map_err(|error| format!("{}: {error}", path.display()))?;
+    Ok(serde_json::from_str(text).map_err(|error| format!("{}: {error}", path.display()))?)
+}
+
+/// The definition packages at `path`: one JSON package, with the table
+/// files its defaults name loaded from beside it, or the documents of an
+/// MCS `definitions` archive, with theirs loaded from the archive.
+pub(crate) fn load_definitions(path: &Path) -> Result<Vec<DefinitionPackage>, Box<dyn Error>> {
+    match read_package(path)? {
+        PackageFile::Archive(archive) => Ok(archive.into_definitions().map_err(|error| {
+            format!(
+                "{}: {error}; a rule-set archive is given with --ruleset, and carries its \
+                 definitions",
+                path.display()
+            )
+        })?),
+        PackageFile::Json(bytes) => {
+            let mut package: DefinitionPackage = parse(path, &bytes)?;
+            axioval::engine::load_definition_table_files(&mut package, &package_root(path))
+                .map_err(|error| format!("{}: {error}", path.display()))?;
+            Ok(vec![package])
+        }
+    }
+}
+
+/// The ruleset at `path` and the definition packages it carries: a JSON
+/// ruleset, with the table files its rules name loaded from beside it, and
+/// none, or the rule set of an MCS `ruleset` archive and its definition
+/// documents, with their table files loaded from the archive.
+pub(crate) fn load_ruleset(
+    path: &Path,
+) -> Result<(RuleSetPackage, Vec<DefinitionPackage>), Box<dyn Error>> {
+    match read_package(path)? {
+        PackageFile::Archive(archive) => Ok(archive.into_ruleset().map_err(|error| {
+            format!(
+                "{}: {error}; a definitions archive is given with --definitions",
+                path.display()
+            )
+        })?),
+        PackageFile::Json(bytes) => {
+            let mut ruleset: RuleSetPackage = parse(path, &bytes)?;
+            axioval::engine::load_table_files(&mut ruleset, &package_root(path))
+                .map_err(|error| format!("{}: {error}", path.display()))?;
+            Ok((ruleset, Vec::new()))
+        }
+    }
+}
+
+/// The definition packages and rulesets of `--definitions` and
+/// `--ruleset`: every definition package given, then each one a rule-set
+/// archive carries that none given has the ID of
+/// (`axioval_mcs::resolve_definitions`).
+pub(crate) fn packages(
     definitions: &[PathBuf],
     rulesets: &[PathBuf],
 ) -> Result<(Vec<DefinitionPackage>, Vec<RuleSetPackage>), Box<dyn Error>> {
-    let definitions = definitions
-        .iter()
-        .map(|path| load_definitions(path))
-        .collect::<Result<Vec<DefinitionPackage>, _>>()?;
-    let rulesets = rulesets
-        .iter()
-        .map(|path| load_ruleset(path))
-        .collect::<Result<Vec<RuleSetPackage>, _>>()?;
-    Ok((definitions, rulesets))
+    let mut supplied = Vec::new();
+    for path in definitions {
+        supplied.extend(load_definitions(path)?);
+    }
+    let mut carried = Vec::new();
+    let mut loaded = Vec::with_capacity(rulesets.len());
+    for path in rulesets {
+        let (ruleset, definitions) = load_ruleset(path)?;
+        loaded.push(ruleset);
+        carried.extend(definitions);
+    }
+    Ok((axioval_mcs::resolve_definitions(supplied, carried)?, loaded))
 }
 
 fn run() -> Result<Outcome, Box<dyn Error>> {
@@ -883,10 +956,10 @@ fn run() -> Result<Outcome, Box<dyn Error>> {
             output,
             locale,
         } => {
-            let packages = definitions
-                .iter()
-                .map(|path| load_definitions(path))
-                .collect::<Result<Vec<_>, _>>()?;
+            let mut packages = Vec::new();
+            for path in &definitions {
+                packages.extend(load_definitions(path)?);
+            }
             let catalogue = axioval::catalogue(&packages).map_err(|error| error.to_string())?;
             let mut json = match locale {
                 Some(locale) => {

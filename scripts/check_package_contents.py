@@ -26,6 +26,7 @@ EXPECTED = {
     "axioval-java-stream",
     "axioval-ifc",
     "axioval-ir",
+    "axioval-mcs",
     "axioval-rules",
     "axioval-xlsx",
 }

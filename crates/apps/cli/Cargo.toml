@@ -23,6 +23,8 @@ axioval = { path = "../../facade/axioval", version = "0.5.0", features = ["ifc",
 # into rule packages in memory.
 axioval-ids.workspace = true
 openbim-ids.workspace = true
+# `.mcs` package archives wherever a ruleset or definitions are read.
+axioval-mcs.workspace = true
 # `export --profile`: the profiles every export target implements.
 axioval-export.workspace = true
 clap.workspace = true

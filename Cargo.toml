@@ -49,6 +49,7 @@ axioval-xlsx = { path = "crates/sinks/xlsx", version = "0.5.0" }
 axioval-html = { path = "crates/sinks/html", version = "0.5.0" }
 axioval-ids = { path = "crates/packages/ids", version = "0.5.0" }
 axioval-export = { path = "crates/packages/export", version = "0.5.0" }
+axioval-mcs = { path = "crates/packages/mcs", version = "0.5.0" }
 axioval-java-stream = { path = "crates/codecs/java-stream", version = "0.5.0" }
 axioval-host-ifc-axiolid = { path = "crates/hosts/ifc-axiolid", version = "0.5.0" }
 serde = { version = "1.0.219", features = ["derive"] }
@@ -262,6 +263,11 @@ regex = "1.11.2"
 sha2 = "0.11.0"
 # ifcZIP archives; deflate is the only compression method they use.
 zip = { version = "8.6", default-features = false }
+# Raw deflate members of `.mcs` archives, read by `axioval-mcs` through the
+# zlib-rs backend `zip` already builds.
+flate2 = { version = "1.1.10", default-features = false, features = ["zlib-rs"] }
+# The NFC check MCS applies to every archive member name.
+unicode-normalization = "0.1.25"
 # Holds `ifc-properties`' `PropertyIndex`, which borrows the model, beside
 # the `Arc<Model>` it borrows (the IFC adapter's property service).
 yoke = { version = "0.8.3", default-features = false, features = ["alloc", "derive"] }

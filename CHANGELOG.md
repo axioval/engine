@@ -52,6 +52,26 @@ All notable changes are documented here. This project follows Semantic Versionin
   field. The authoring catalogue (schema 1.7.0) lists it with each
   package's definitions, so editors show such parameters read-only.
   `fixtures/fixed-parameter` holds the MCS contract's own example.
+- **MCS package archives, template libraries included**
+  ([#395](https://github.com/axioval/engine/issues/395)). The new crate
+  `axioval-mcs` reads `.mcs` archives as the MCS reader does
+  (axioval/mcs#12): the canonical ZIP container, the inventory, the archived
+  manifest and the normalized packages, returned as the IR's packages with
+  their table files loaded from the archive. The kind comes from the
+  manifest: a `ruleset` archive carries its rule set and the definitions it
+  binds, a `definitions` archive (a template library) carries definitions
+  only, and its manifest's identity is that of exactly one of them. Refused,
+  each as its own `McsError`: a definitions archive carrying a rule set, a
+  ruleset archive without one, metadata naming another package than the
+  manifest, unsafe, duplicate or oversized members, and any member the
+  inventory does not state. `resolve_definitions` joins the definitions a
+  rule-set archive carries with those a host supplies, refusing two
+  different packages of one ID; an ID neither gives fails in the compiler as
+  before. The CLI reads an archive (`.mcs`, or the ZIP magic) wherever it
+  takes `--ruleset` or `--definitions`, so `check --ruleset rules.mcs
+  --definitions library.mcs` reports what the same check with the JSON the
+  archives carry reports; `--definitions` is no longer required, since a
+  ruleset archive carries its own.
 
 - **A failed free-floor shape says what blocks it and how far it misses**
   ([#391](https://github.com/axioval/engine/issues/391)). A

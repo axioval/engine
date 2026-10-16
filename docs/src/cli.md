@@ -43,13 +43,40 @@ directory holding that package file. A file that is missing, outside that
 directory, of another digest or not fitting its declared columns fails the
 command (status 1) before any model is read.
 
+### MCS package archives
+
+Wherever a command takes `--ruleset` or `--definitions` (`validate`,
+`check`, `export`, `catalogue`), the file may also be an
+[MCS package archive](./mcs-archives.md): a file named `.mcs`, or one
+opening as a ZIP archive, is read as one; anything else is read as JSON.
+
+```bash
+axioval check --model building.ifc --ruleset rules.mcs --definitions library.mcs
+```
+
+The archive's own manifest says what it is. A `ruleset` archive goes to
+`--ruleset` and carries the definition packages its rule set binds, so it
+needs no `--definitions` of its own; a `definitions` archive (a template
+library) goes to `--definitions`. The other way round is refused (status 1).
+A rule set's `definitionPackages` resolve from the packages its archive
+carries and from every `--definitions` given; a package carried and given
+is kept once when both copies are equal and refused when they differ, and
+an ID neither gives fails as it does for JSON (status 1). Table files are
+read from the archive's package root. An archive the MCS reader would
+refuse (an unsafe or duplicate member, a size over its limits, a member
+not matching the inventory, an identity the metadata and the manifest do
+not share) fails the command before any model is read. `check --ruleset
+rules.mcs --definitions library.mcs` reports exactly what the same check
+with the normalized JSON the archives carry reports.
+
 ## `axioval catalogue`
 
 Prints the [authoring catalogue](./catalogue.md): every capability with its
 parameters, the measured values, expression node kinds, operators,
 selector kinds, relationships and units, labelled in English and German,
 as versioned JSON a rule editor is generated from. `--definitions` (repeat
-for several) adds each package's concept vocabulary; `--output FILE`
+for several; JSON or a `definitions` archive) adds each package's concept
+vocabulary; `--output FILE`
 writes to a file instead of standard output; `--locale de` writes every
 text in German only, listing on stderr any that fell back to English.
 Exit status: 0 written, 1 nothing written (an unreadable package, an

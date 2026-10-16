@@ -11,5 +11,6 @@ Generated rustdoc is deployed under this book:
 - [`axioval_xlsx`](./api/axioval_xlsx/index.html)
 - [`axioval_html`](./api/axioval_html/index.html)
 - [`axioval_export`](./api/axioval_export/index.html)
+- [`axioval_mcs`](./api/axioval_mcs/index.html)
 - [`axioval_host_ifc_axiolid`](./api/axioval_host_ifc_axiolid/index.html)
 - [`axioval`](./api/axioval/index.html)

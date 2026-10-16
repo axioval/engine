@@ -335,6 +335,25 @@ fn diagnose(
             diagnostic.pointer = draft.expression.is_none().then(|| "/parameters".into());
             diagnostic.suggestion = Some(format!("add the parameter `{parameter}`"));
         }
+        EngineError::FixedParameter {
+            rule,
+            definition,
+            parameters,
+        } => {
+            diagnostic.rule = Some(rule.clone());
+            if let Some(parameter) = parameters.first() {
+                diagnostic.parameter = Some(parameter.clone());
+                if rule == draft.id {
+                    diagnostic.pointer = parameter_pointer(parameter);
+                }
+                diagnostic.suggestion = Some(format!(
+                    "remove the parameter `{parameter}`, or fork the definition `{definition}` to change it"
+                ));
+            }
+        }
+        EngineError::FixedWithoutDefault { parameter, .. } => {
+            diagnostic.parameter = Some(parameter.clone());
+        }
         EngineError::InvalidParameterType { parameter, .. }
         | EngineError::InvalidTableRow { parameter, .. }
         | EngineError::InvalidTableFile { parameter, .. } => {

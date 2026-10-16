@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.6.0",
+  "schemaVersion": "1.7.0",
   "languages": [
     "en",
     "de"
@@ -124234,5 +124234,94 @@
       ]
     }
   },
-  "concepts": []
+  "concepts": [
+    {
+      "package": "axioval:example.fixed-parameter",
+      "name": {
+        "default": "Fixed parameter",
+        "translations": {}
+      },
+      "objectTypes": {},
+      "propertySets": {},
+      "properties": {
+        "axioval:example.width": {
+          "id": "axioval:example.width",
+          "name": {
+            "default": "Width",
+            "translations": {}
+          },
+          "description": null,
+          "valueKind": "number",
+          "unitDimension": null,
+          "externalNames": [
+            {
+              "typeSystem": "ifc:4x3",
+              "name": "Width"
+            }
+          ],
+          "citations": []
+        }
+      },
+      "definitions": {
+        "axioval:example.minimum-width": {
+          "id": "axioval:example.minimum-width",
+          "name": {
+            "default": "Minimum width",
+            "translations": {}
+          },
+          "description": null,
+          "capability": "axioval:capability.expression",
+          "parameters": {
+            "minimum": {
+              "id": "minimum",
+              "name": {
+                "default": "Minimum",
+                "translations": {}
+              },
+              "description": null,
+              "kind": "number",
+              "referencedValueKind": null,
+              "required": true,
+              "defaultValue": null,
+              "allowedValues": [],
+              "unitDimension": null,
+              "citations": []
+            },
+            "requirement": {
+              "id": "requirement",
+              "name": {
+                "default": "Requirement",
+                "translations": {}
+              },
+              "description": null,
+              "kind": "expression",
+              "referencedValueKind": null,
+              "required": true,
+              "defaultValue": {
+                "type": "expression",
+                "value": {
+                  "kind": "compare",
+                  "operator": "greaterThanOrEquals",
+                  "left": {
+                    "kind": "property",
+                    "property": "axioval:example.width"
+                  },
+                  "right": {
+                    "kind": "parameter",
+                    "name": "minimum"
+                  }
+                }
+              },
+              "fixed": true,
+              "allowedValues": [],
+              "unitDimension": null,
+              "citations": []
+            }
+          },
+          "tags": [],
+          "citations": []
+        }
+      }
+    }
+  ]
 }

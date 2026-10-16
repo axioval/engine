@@ -35,6 +35,24 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **A rule definition may fix parameters its instances may not override**
+  ([#387](https://github.com/axioval/engine/issues/387), mirroring
+  axioval/mcs#11). `ParameterDefinition::fixed` keeps every instance on the
+  parameter's `defaultValue`, so a definition can carry its logic, such as
+  an `expression` requirement reading the definition's other parameters,
+  while instances state only values. A fixed parameter without a default
+  fails compilation (`FixedWithoutDefault`), its default binds it whatever
+  `required` says, and a rule instance stating it is refused
+  (`FixedParameter`, `fixedParameter` in draft diagnostics, pointing at the
+  parameter) with the MCS binder's message: `parameters [...] are fixed by
+  definition '...'; instances may not state them, and changing them means
+  forking the definition`. A fork, a definition under a new id, may change
+  or unfix it. The flag is omitted when false, so existing packages bind
+  and serialize byte-identically; the definitions JSON Schema gains the
+  field. The authoring catalogue (schema 1.7.0) lists it with each
+  package's definitions, so editors show such parameters read-only.
+  `fixtures/fixed-parameter` holds the MCS contract's own example.
+
 - **A failed free-floor shape says what blocks it and how far it misses**
   ([#391](https://github.com/axioval/engine/issues/391)). A
   `free-floor-circle` or `free-floor-rectangle` finding relates the

@@ -107,6 +107,11 @@ and `none(and(isDefined(gap), gap > 0.15 m))` every piece followed by a
 gap. A member value that is not evaluated leaves the aggregate not
 evaluated.
 
+A composition meant for reuse can be a definition of its own: its
+`requirement` default reads the definition's other parameters, and
+`"fixed": true` keeps every instance on that composition, stating only
+the values ([Fixed parameters](./capabilities.md#fixed-parameters)).
+
 ## Example: an embankment slope limit by soil class
 
 *Every embankment side slope is no steeper than the rise per run its soil

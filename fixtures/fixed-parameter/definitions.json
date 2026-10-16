@@ -1,0 +1,88 @@
+{
+  "schemaVersion": "0.1.0",
+  "package": {
+    "id": "axioval:example.fixed-parameter",
+    "name": {
+      "default": "Fixed parameter",
+      "translations": {}
+    },
+    "version": "0.1.0",
+    "description": {
+      "default": "A template that fixes its logic and leaves a value to instances.",
+      "translations": {}
+    },
+    "authors": []
+  },
+  "sources": {},
+  "objectTypes": {},
+  "properties": {
+    "axioval:example.width": {
+      "id": "axioval:example.width",
+      "name": {
+        "default": "Width",
+        "translations": {}
+      },
+      "valueKind": "number",
+      "externalNames": [
+        {
+          "typeSystem": "ifc:4x3",
+          "name": "Width"
+        }
+      ],
+      "citations": []
+    }
+  },
+  "propertySets": {},
+  "definitions": {
+    "axioval:example.minimum-width": {
+      "id": "axioval:example.minimum-width",
+      "name": {
+        "default": "Minimum width",
+        "translations": {}
+      },
+      "capability": "axioval:capability.expression",
+      "parameters": {
+        "requirement": {
+          "id": "requirement",
+          "name": {
+            "default": "Requirement",
+            "translations": {}
+          },
+          "kind": "expression",
+          "required": true,
+          "defaultValue": {
+            "type": "expression",
+            "value": {
+              "kind": "compare",
+              "operator": "greaterThanOrEquals",
+              "left": {
+                "kind": "property",
+                "property": "axioval:example.width"
+              },
+              "right": {
+                "kind": "parameter",
+                "name": "minimum"
+              }
+            }
+          },
+          "fixed": true,
+          "allowedValues": [],
+          "citations": []
+        },
+        "minimum": {
+          "id": "minimum",
+          "name": {
+            "default": "Minimum",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": true,
+          "allowedValues": [],
+          "citations": []
+        }
+      },
+      "citations": [],
+      "tags": []
+    }
+  }
+}

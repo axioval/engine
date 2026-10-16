@@ -1063,6 +1063,22 @@ fn bind_parameters(
         &definition.parameters,
         authored,
     )?;
+    // A fixed parameter takes its definition's default. An instance that
+    // states its own would replace the template's logic, which only a new
+    // definition may do.
+    let stated: Vec<String> = definition
+        .parameters
+        .iter()
+        .filter(|(name, parameter)| parameter.fixed && rule.parameters.contains_key(*name))
+        .map(|(name, _)| name.clone())
+        .collect();
+    if !stated.is_empty() {
+        return Err(EngineError::FixedParameter {
+            rule: rule.id.clone(),
+            definition: rule.definition_id.clone(),
+            parameters: stated,
+        });
+    }
     let mut parameters = rule.parameters.clone();
     for (name, parameter) in &definition.parameters {
         if !parameters.contains_key(name) {
@@ -1566,6 +1582,20 @@ fn collect_definition_packages(
             return Err(EngineError::DuplicateDefinitionPackage(
                 package.package.id.clone(),
             ));
+        }
+        // A fixed parameter binds every instance to its default, so it
+        // must have one.
+        for (id, definition) in &package.definitions {
+            if let Some((name, _)) = definition
+                .parameters
+                .iter()
+                .find(|(_, parameter)| parameter.fixed && parameter.default_value.is_none())
+            {
+                return Err(EngineError::FixedWithoutDefault {
+                    definition: id.clone(),
+                    parameter: name.clone(),
+                });
+            }
         }
     }
     Ok(packages)

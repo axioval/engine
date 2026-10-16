@@ -309,3 +309,60 @@ fn a_property_pattern_selector_round_trips() {
     ));
     assert_eq!(serde_json::to_value(&selector).unwrap(), json);
 }
+
+/// A definition may fix a parameter (axioval/mcs#11). The flag is read
+/// from the MCS fixture and written only when set, so packages that fix
+/// nothing serialize exactly as before.
+mod fixed_parameters {
+    use super::{D, DefinitionPackage};
+
+    const FIXED: &str = include_str!("../../../../fixtures/fixed-parameter/definitions.json");
+
+    fn without_nulls(value: serde_json::Value) -> serde_json::Value {
+        match value {
+            serde_json::Value::Object(map) => map
+                .into_iter()
+                .filter(|(_, value)| !value.is_null())
+                .map(|(key, value)| (key, without_nulls(value)))
+                .collect(),
+            serde_json::Value::Array(items) => items.into_iter().map(without_nulls).collect(),
+            other => other,
+        }
+    }
+
+    #[test]
+    fn the_mcs_fixture_reads_and_writes_the_flag() {
+        let package: DefinitionPackage = serde_json::from_str(FIXED).unwrap();
+        let parameters = &package.definitions["axioval:example.minimum-width"].parameters;
+        assert!(parameters["requirement"].fixed && parameters["requirement"].required);
+        assert!(!parameters["minimum"].fixed);
+        let written = serde_json::to_value(&package).unwrap();
+        let parameters = &written["definitions"]["axioval:example.minimum-width"]["parameters"];
+        assert_eq!(parameters["requirement"]["fixed"], true);
+        assert!(parameters["minimum"].get("fixed").is_none());
+        // What the engine writes is the MCS rendering, but for the empty
+        // optional fields the engine writes as `null`.
+        assert_eq!(
+            without_nulls(written),
+            serde_json::from_str::<serde_json::Value>(FIXED).unwrap()
+        );
+    }
+
+    #[test]
+    fn packages_without_the_flag_serialize_unchanged() {
+        let package: DefinitionPackage = serde_json::from_str(D).unwrap();
+        let written = serde_json::to_string(&package).unwrap();
+        assert!(!written.contains("\"fixed\""));
+        assert_eq!(
+            serde_json::from_str::<DefinitionPackage>(&written).unwrap(),
+            package
+        );
+        // A false flag stated anyway reads as the default and is not written.
+        let mut stated: serde_json::Value = serde_json::from_str(D).unwrap();
+        stated["definitions"]["axioval:example.property-exists"]["parameters"]["property"]["fixed"] =
+            false.into();
+        let read: DefinitionPackage = serde_json::from_value(stated).unwrap();
+        assert_eq!(read, package);
+        assert_eq!(serde_json::to_string(&read).unwrap(), written);
+    }
+}

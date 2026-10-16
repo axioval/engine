@@ -2339,6 +2339,7 @@ fn parameter(id: &str, kind: ParameterKind, required: bool) -> ParameterDefiniti
         referenced_value_kind: None,
         required,
         default_value: None,
+        fixed: false,
         allowed_values: Vec::new(),
         unit_dimension: None,
         columns: Vec::new(),

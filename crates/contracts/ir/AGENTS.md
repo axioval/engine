@@ -85,6 +85,11 @@ Keep this crate serializable and deterministic. It must not depend on a source f
   by object; omitted when empty, so a report without a declaration
   serializes as before. `Project::without` is the only way to drop
   objects from a project; it cannot make one ambiguous.
+- `ParameterDefinition::fixed` (axioval/mcs#11) keeps every instance on
+  the parameter's default; it is omitted when false, so packages that fix
+  nothing serialize byte-identically. The binder, not this crate, refuses
+  a fixed parameter without a default and an instance stating one. The
+  MCS parameter definition must mirror it.
 - `PropertyValue::Reference` names another instance of the same source. It
   is never compared with a literal and never read as text or a number.
 - `PropertyValue::Complex` is a property grouping members, present and no

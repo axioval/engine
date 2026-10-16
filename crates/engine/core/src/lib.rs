@@ -24,6 +24,12 @@ pub mod decimal;
 /// Expressions: units, intervals, evaluation and type checking.
 pub mod expression;
 
+/// Writes names as the MCS binder lists them: `['a', 'b']`.
+fn quoted_list(names: &[String]) -> String {
+    let quoted: Vec<String> = names.iter().map(|name| format!("'{name}'")).collect();
+    format!("[{}]", quoted.join(", "))
+}
+
 /// Errors while compiling untrusted declarations into a trusted execution plan.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum EngineError {
@@ -60,6 +66,27 @@ pub enum EngineError {
     #[error("capability `{capability}` requires parameter `{parameter}`")]
     MissingParameter {
         capability: String,
+        parameter: String,
+    },
+    /// A rule instance states parameters its definition fixes. A fixed
+    /// parameter takes the definition's default; changing it means forking
+    /// the definition. `parameters` is sorted.
+    #[error(
+        "rule `{rule}`: parameters {} are fixed by definition '{definition}'; instances may not \
+         state them, and changing them means forking the definition",
+        quoted_list(.parameters)
+    )]
+    FixedParameter {
+        rule: String,
+        definition: String,
+        parameters: Vec<String>,
+    },
+    /// A definition fixes a parameter without giving it a default.
+    #[error(
+        "definition `{definition}` parameter `{parameter}`: a fixed parameter requires a defaultValue"
+    )]
+    FixedWithoutDefault {
+        definition: String,
         parameter: String,
     },
     /// A binding type did not conform to its descriptor.

@@ -13,6 +13,17 @@ JSON, a contract drift between MCS and the engine fails here first.
 Refresh them by copying the same two files again and updating the commit above;
 never edit them by hand.
 
+## Fixed parameter
+
+`fixed-parameter/definitions.json` is the normalized output of the Axioval MCS
+fixture `tests/fixtures/fixed-parameter.pkl` at commit
+`68ac59f960f76fa286dfe3e6cbfe40f955553500`, evaluated and validated by that
+commit's `scripts/validate.py` and written as indented JSON. Its definition
+fixes the `requirement` parameter of an `expression` rule and leaves `minimum`
+to instances, so the binder's handling of `fixed` is pinned to the contract's
+own example. Refresh it by evaluating the same fixture again and updating the
+commit above; never edit it by hand.
+
 ## Parity models and cases
 
 `parity/models.json` pins the public IFC models the parity harness runs on,

@@ -11,13 +11,13 @@ The library entry points are `axioval_engine::draft::validate_rule` and
 
 | Field | What it holds |
 | --- | --- |
-| `code` | The refusal's kind: `syntax` or `shape` for a draft that does not parse, `unknownRule` for an expression placed in no rule, else the engine's (`invalidExpression`, `unknownDefinition`, `unknownParameter`, `missingParameter`, `invalidParameterType`, `invalidMeasured`, `invalidRuleId`, …). |
+| `code` | The refusal's kind: `syntax` or `shape` for a draft that does not parse, `unknownRule` for an expression placed in no rule, else the engine's (`invalidExpression`, `unknownDefinition`, `unknownParameter`, `missingParameter`, `fixedParameter`, `invalidParameterType`, `invalidMeasured`, `invalidRuleId`, …). |
 | `message` | The engine's message, as `validate` and `check` print it. |
 | `rule`, `parameter` | The rule and parameter it is about. |
 | `path` | The engine's path into an expression: `requirement.and[1].compare.right`. |
 | `pointer` | A JSON pointer into the draft (for an expression draft, into the expression): `/parameters/requirement/value/operands/1/right`. |
 | `line`, `column` | Where a draft that does not parse goes wrong. |
-| `suggestion` | A fix: the nearest known definition, parameter, concept, measured value or rule for an unknown one (`did you mean `t.Cover`?`), or the parameter a rule must add. |
+| `suggestion` | A fix: the nearest known definition, parameter, concept, measured value or rule for an unknown one (`did you mean `t.Cover`?`), or the parameter a rule must add, or remove when its definition fixes it. |
 
 The compiler stops at the first refusal, so a draft has at most one
 diagnostic; fixing it shows the next. A refusal elsewhere in the context

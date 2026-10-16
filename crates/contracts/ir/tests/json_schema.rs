@@ -111,6 +111,9 @@ fn package_fixtures_are_valid() {
             assert_valid(validator, &path.display().to_string(), &read(&path));
         }
     }
+    // The MCS example of a definition fixing a parameter.
+    let path = root().join("fixtures/fixed-parameter/definitions.json");
+    assert_valid(&definitions, &path.display().to_string(), &read(&path));
 }
 
 #[test]

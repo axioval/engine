@@ -2116,6 +2116,10 @@
             }
           ]
         },
+        "fixed": {
+          "description": "The definition fixes this parameter: every instance takes\n`defaultValue` and may not state its own, so changing it means\nforking the definition. A fixed parameter requires a default, which\nbinds it whatever `required` says. Omitted when false, so packages\nthat fix nothing serialize unchanged.",
+          "type": "boolean"
+        },
         "id": {
           "type": "string"
         },

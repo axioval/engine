@@ -50,6 +50,13 @@ pub struct ParameterDefinition {
     #[serde(default = "yes")]
     pub required: bool,
     pub default_value: Option<ParameterValue>,
+    /// The definition fixes this parameter: every instance takes
+    /// `defaultValue` and may not state its own, so changing it means
+    /// forking the definition. A fixed parameter requires a default, which
+    /// binds it whatever `required` says. Omitted when false, so packages
+    /// that fix nothing serialize unchanged.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub fixed: bool,
     #[serde(default)]
     pub allowed_values: Vec<ParameterValue>,
     pub unit_dimension: Option<String>,
@@ -193,6 +200,10 @@ pub enum PropertyValueKind {
     Reference,
     StringList,
     ReferenceList,
+}
+#[allow(clippy::trivially_copy_pass_by_ref)] // serde's skip_serializing_if signature
+const fn is_false(value: &bool) -> bool {
+    !*value
 }
 const fn yes() -> bool {
     true

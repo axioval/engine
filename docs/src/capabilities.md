@@ -53,6 +53,42 @@ These parameters are computed per object today:
 
 A capability opts a parameter in with `ParameterDescriptor::per_object` and starts its `evaluate` with the shared per-object dispatch (`object_parameters::per_object` in `axioval-rules`).
 
+## Fixed parameters
+
+A rule definition is a template its rule instances bind values to, and it
+can carry its logic as a parameter default: an `expression` definition
+whose `requirement` reads the definition's own parameters
+(`{"kind": "parameter", "name": "minimum"}`), so instances state only the
+values. A parameter with `"fixed": true` keeps that default for every
+instance (axioval/mcs#11):
+
+```json
+"requirement": {"id": "requirement", "name": {"default": "Requirement", "translations": {}},
+                "kind": "expression", "required": true,
+                "defaultValue": {"type": "expression", "value": {"kind": "compare",
+                  "operator": "greaterThanOrEquals",
+                  "left": {"kind": "property", "property": "axioval:example.width"},
+                  "right": {"kind": "parameter", "name": "minimum"}}},
+                "fixed": true, "allowedValues": [], "citations": []}
+```
+
+- A fixed parameter requires a `defaultValue`; a definition package with
+  one that has none fails compilation with `FixedWithoutDefault`, whether
+  or not a rule uses the definition.
+- Its default binds it whatever `required` says.
+- A rule instance that states a fixed parameter, even with the default's
+  own value, fails compilation with `FixedParameter`: ``rule `…`: parameters ['requirement'] are fixed by
+  definition '…'; instances may not state them, and changing them means
+  forking the definition``. The
+  parameters are listed sorted, as the MCS binder lists them.
+- Fixing binds instances only. Another definition, a fork under a new id,
+  may change the default or leave the parameter unfixed.
+
+`fixed` is omitted when false, so packages that fix nothing read and write
+exactly as before; a stated `false` reads as the default. The authoring
+catalogue lists each package's definitions with the flag, so an editor
+shows such a parameter read-only.
+
 ## Table parameters
 
 Many checks are naturally a table: rows of patterns and limits, such as a minimum area per space type or the components required per class. A `table` parameter carries such a table in one rule instead of one rule per row.

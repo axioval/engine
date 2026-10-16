@@ -20,9 +20,20 @@ fn rendered(packages: &[DefinitionPackage]) -> String {
     json
 }
 
+/// The MCS example of a definition fixing a parameter, whose concepts the
+/// golden copy lists so the `fixed` flag an editor reads shows in review.
+fn fixed_parameter() -> DefinitionPackage {
+    let text = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../../fixtures/fixed-parameter/definitions.json"
+    ))
+    .unwrap();
+    serde_json::from_str(&text).unwrap()
+}
+
 #[test]
 fn the_catalogue_matches_its_golden_copy() {
-    let json = rendered(&[]);
+    let json = rendered(&[fixed_parameter()]);
     if std::env::var_os("AXIOVAL_BLESS").is_some() {
         std::fs::write(GOLDEN, &json).expect("the golden copy is writable");
         return;
@@ -84,6 +95,18 @@ fn the_catalogue_lists_a_package_s_concepts() {
         concepts["definitions"].as_object().unwrap().len(),
         package.definitions.len()
     );
+}
+
+/// An editor shows a parameter its definition fixes as read-only: the
+/// catalogue carries `fixed` for it and leaves the flag out elsewhere.
+#[test]
+fn the_catalogue_marks_a_fixed_parameter() {
+    let value: serde_json::Value = serde_json::from_str(&rendered(&[fixed_parameter()])).unwrap();
+    let parameters =
+        &value["concepts"][0]["definitions"]["axioval:example.minimum-width"]["parameters"];
+    assert_eq!(parameters["requirement"]["fixed"], true);
+    assert!(parameters["requirement"]["defaultValue"].is_object());
+    assert!(parameters["minimum"].get("fixed").is_none());
 }
 
 #[test]

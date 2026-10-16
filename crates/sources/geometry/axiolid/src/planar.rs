@@ -616,6 +616,49 @@ pub(crate) fn hull_of(mut points: Vec<(f64, f64)>) -> Vec<(f64, f64)> {
     hull
 }
 
+/// A polygon holding every plan point, counter-clockwise (#401): the
+/// convex hull by the monotone chain, except that a point is dropped only
+/// where its turn is certainly not to the left, by the static error bound
+/// of the orientation determinant (Shewchuk's `ccwerrboundA`). A point the
+/// arithmetic cannot place stays a vertex, so the polygon may keep a corner
+/// a rounding inwards of the hull's edge, but no point lies outside it:
+/// each point dropped lies on or inside the segment over it, and so inside
+/// the chain that replaces that segment. Its vertices are input points.
+pub(crate) fn enclosing_hull(mut points: Vec<(f64, f64)>) -> Vec<(f64, f64)> {
+    const ERROR: f64 = (3.0 + 16.0 * (f64::EPSILON / 2.0)) * (f64::EPSILON / 2.0);
+    let surely_not_left = |o: (f64, f64), a: (f64, f64), b: (f64, f64)| {
+        let left = (a.0 - o.0) * (b.1 - o.1);
+        let right = (a.1 - o.1) * (b.0 - o.0);
+        let determinant = left - right;
+        determinant < -ERROR * (left.abs() + right.abs())
+            || (determinant == 0.0 && left == 0.0 && right == 0.0)
+    };
+    points.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1)));
+    points.dedup();
+    if points.len() < 3 {
+        return points;
+    }
+    let mut hull: Vec<(f64, f64)> = Vec::with_capacity(2 * points.len());
+    for pass in [false, true] {
+        let floor = hull.len() + 1;
+        let ordered: Box<dyn Iterator<Item = &(f64, f64)>> = if pass {
+            Box::new(points.iter().rev().skip(1))
+        } else {
+            Box::new(points.iter())
+        };
+        for point in ordered {
+            while hull.len() >= floor.max(2)
+                && surely_not_left(hull[hull.len() - 2], hull[hull.len() - 1], *point)
+            {
+                hull.pop();
+            }
+            hull.push(*point);
+        }
+    }
+    hull.pop();
+    hull
+}
+
 /// The smallest growth drawn as a polygon, in metres. The overlay refuses
 /// vertices closer than its tolerance, so a smaller inscribed growth is
 /// dropped (growing less is still inside the true growth) and a smaller
@@ -893,5 +936,49 @@ mod polygon_area_tests {
         // Below the smallest drawn growth, inscribed growth is dropped.
         assert_eq!(grown_polygons(&square, 1e-9, Disc::Inscribed).len(), 2);
         assert!(grown_polygons(&square, 1e-9, Disc::Circumscribed).len() > 2);
+    }
+}
+
+#[cfg(test)]
+mod enclosing_hull_tests {
+    use super::enclosing_hull;
+
+    /// Whether `point` lies on or left of every edge of the
+    /// counter-clockwise `polygon`, in exact arithmetic: the products of
+    /// differences of these small dyadic coordinates are exact in `f64`.
+    fn holds(polygon: &[(f64, f64)], point: (f64, f64)) -> bool {
+        (0..polygon.len()).all(|i| {
+            let (a, b) = (polygon[i], polygon[(i + 1) % polygon.len()]);
+            (b.0 - a.0) * (point.1 - a.1) - (b.1 - a.1) * (point.0 - a.0) >= 0.0
+        })
+    }
+
+    /// The hull of a square's corners and points inside, on its edges and
+    /// a rounding off them: every point is held, and the vertices are
+    /// input points, the square's corners among them.
+    #[test]
+    fn the_hull_holds_every_point_and_keeps_points_it_cannot_place() {
+        let mut points = vec![(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)];
+        points.extend([(0.5, 0.5), (0.5, 0.0), (1.0, 0.25), (0.25, 1.0)]);
+        // Just outside the bottom edge, one unit in the last place below it.
+        let below = (0.75, -f64::from_bits(1));
+        points.push(below);
+        let hull = enclosing_hull(points.clone());
+        assert!(hull.len() >= 4, "{hull:?}");
+        assert!(
+            hull.iter().all(|vertex| points.contains(vertex)),
+            "{hull:?}"
+        );
+        assert!(hull.contains(&below), "{hull:?}");
+        for point in &points {
+            assert!(holds(&hull, *point), "{point:?} outside {hull:?}");
+        }
+        // Points exactly on an edge are dropped.
+        assert!(!hull.contains(&(0.5, 0.0)) && !hull.contains(&(1.0, 0.25)));
+        // Fewer than three distinct points are their own hull.
+        assert_eq!(
+            enclosing_hull(vec![(1.0, 2.0), (1.0, 2.0)]),
+            vec![(1.0, 2.0)]
+        );
     }
 }

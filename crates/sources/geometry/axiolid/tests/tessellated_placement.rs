@@ -258,8 +258,9 @@ fn column_with_sheet(bottom: f64) -> TriMesh {
 /// The sure core of a tessellated obstacle (`solid_column`) needs only the
 /// pieces standing across its column to be closed: the column proves that a
 /// 5 m square fits nowhere in space `a`, beside an open quad hanging in the
-/// band. A quad standing on the floor leaves its piece's inside undecided,
-/// and the request refuses rather than prove an absence on it.
+/// band. A quad standing on the floor leaves its piece's inside undecided:
+/// the body is bounded by its vertices' hull (#401), and the absence rests
+/// on its closed column alone.
 #[test]
 fn a_tessellated_column_beside_an_open_piece_is_measured() {
     let square = || rectangle(5.0, 5.0, Some((1.0, 0.0)));
@@ -270,11 +271,10 @@ fn a_tessellated_column_beside_an_open_piece_is_measured() {
     nowhere(place(hanging, "a", square(), &obstacles));
     let standing =
         holed_room(true).with_tessellated_mesh(id("column"), column_with_sheet(0.0), 0.001);
-    let refused =
-        place(standing, "a", square(), &obstacles).expect_err("an open piece on the floor");
+    let locator = nowhere(place(standing, "a", square(), &obstacles));
     assert!(
-        refused.to_string().contains("is not a closed solid"),
-        "{refused}"
+        locator.contains(":bounded-not-measured=cad:model/column"),
+        "{locator}"
     );
 }
 
@@ -517,6 +517,166 @@ fn an_unmeasured_obstacle_bounded_elsewhere_is_left_out() {
         place(into, "room", shape(), &["lost"]),
         Err(FreeSpaceError::MissingGeometry(_))
     ));
+}
+
+/// An upright box over `[x0, x1] x [y0, y1]` from `z0` to `z1` with its top
+/// left out: an open shell, as a sanitary terminal's authored body is.
+fn open_box(x0: f64, x1: f64, y0: f64, y1: f64, z0: f64, z1: f64) -> TriMesh {
+    let mut shell = prisms(&[rect(x0, x1, y0, y1)], z0, z1);
+    // The top's two triangles follow the bottom's in `prisms`.
+    shell.indices.drain(6..12);
+    shell
+}
+
+/// A room `side` square, 3 m high, with `obstacle` registered by `with`.
+fn room_with(side: f64, with: impl FnOnce(AxiolidGeometry) -> AxiolidGeometry) -> AxiolidGeometry {
+    with(
+        AxiolidGeometry::new()
+            .with_mesh(id("room"), prisms(&[rect(0.0, side, 0.0, side)], 0.0, 3.0)),
+    )
+}
+
+/// What an undecided search reports about obstacles bounded rather than
+/// measured.
+fn bounded(outcome: Result<PlacementOutcome, FreeSpaceError>) -> String {
+    match outcome {
+        Err(FreeSpaceError::Unavailable(why)) if why.contains("bounded rather than measured") => {
+            why
+        }
+        other => panic!("expected an undecided search around bounds, got {other:?}"),
+    }
+}
+
+/// #401: an open shell standing on the floor has no inside, so its band
+/// footprint is refused; its body lies within the hull of its vertices, a
+/// possible obstacle. A square fits beside the hull (the witness names it
+/// as bounded), a room where the square fits only over the shell stays
+/// undecided naming it, and a room too small without it proves absence.
+/// The hull follows the shell turned 45 degrees, where its box would not.
+#[test]
+fn an_open_shell_is_a_possible_obstacle_within_its_vertices_hull() {
+    let square = || rectangle(1.0, 1.0, Some((1.0, 0.0)));
+    let shell = |geometry: AxiolidGeometry, mesh| geometry.with_mesh(id("basin"), mesh);
+    let corner = room_with(3.0, |g| shell(g, open_box(0.1, 0.7, 0.1, 0.8, 0.0, 0.9)));
+    let locator = found(place(corner, "room", square(), &["basin"]));
+    assert!(
+        locator.contains(":bounded-not-measured=cad:model/basin"),
+        "{locator}"
+    );
+    let middle = || open_box(0.5, 0.9, 0.5, 0.9, 0.0, 0.9);
+    let why = bounded(place(
+        room_with(1.4, |g| shell(g, middle())),
+        "room",
+        square(),
+        &["basin"],
+    ));
+    assert!(why.contains("cad:model/basin"), "{why}");
+    nowhere(place(
+        room_with(0.9, |g| shell(g, middle())),
+        "room",
+        square(),
+        &["basin"],
+    ));
+    // Hanging in the band above the floor, its surface is its footprint,
+    // as before: nothing is bounded.
+    let hanging = room_with(3.0, |g| shell(g, open_box(0.1, 0.7, 0.1, 0.8, 0.5, 0.9)));
+    let locator = found(place(hanging, "room", square(), &["basin"]));
+    assert!(!locator.contains("bounded"), "{locator}");
+    // A diamond (a square turned 45 degrees) in a 2 m room's corner: its
+    // hull leaves the far corner free for a 1.1 m square, its box (0.5 to
+    // 1.5 m along each axis) would not.
+    let diamond = {
+        let mut mesh = open_box(-0.5, 0.5, -0.5, 0.5, 0.0, 0.9);
+        let turn = std::f64::consts::FRAC_1_SQRT_2;
+        for point in &mut mesh.positions {
+            let (x, y) = (point.x, point.y);
+            point.x = (x - y) * turn * 0.7 + 1.0;
+            point.y = (x + y) * turn * 0.7 + 1.0;
+        }
+        mesh
+    };
+    let room = room_with(2.0, |g| shell(g, diamond));
+    found(place(
+        room,
+        "room",
+        rectangle(0.55, 0.55, Some((1.0, 0.0))),
+        &["basin"],
+    ));
+}
+
+/// #401: an unmeasured obstacle the host encloses in a closed solid (a
+/// curved wall whose openings the exact boolean refused, within its uncut
+/// body) is a possible obstacle within that solid, widened by its chord
+/// deviation: a square fits beside it, and a room where the square fits
+/// only within the enclosure stays undecided naming it. An enclosure out
+/// of the band (below the floor, by its certified height) occupies
+/// nothing. An enclosure for a measured object, or a deviation that bounds
+/// nothing, is not declared, and the bare unmeasured body refuses as
+/// before.
+#[test]
+fn an_unmeasured_obstacle_is_a_possible_obstacle_within_its_enclosure() {
+    let square = || rectangle(1.0, 1.0, Some((1.0, 0.0)));
+    let lost = |geometry: AxiolidGeometry| geometry.with_unmeasured(id("wall"), "refused");
+    let enclosed = |side: f64, x0: f64, z0: f64, height: Option<VerticalExtentBounds>| {
+        room_with(side, |g| {
+            lost(g).with_unmeasured_enclosure(
+                id("wall"),
+                prisms(&[rect(x0, x0 + 0.2, 0.0, side)], z0, z0 + 3.0),
+                Some(0.001),
+                height,
+            )
+        })
+    };
+    let locator = found(place(
+        enclosed(3.0, 2.8, 0.0, None),
+        "room",
+        square(),
+        &["wall"],
+    ));
+    assert!(
+        locator.contains(":bounded-not-measured=cad:model/wall"),
+        "{locator}"
+    );
+    // The square fits in a 1.2 m room only where the wall's body may be.
+    let why = bounded(place(
+        enclosed(1.2, 0.5, 0.0, None),
+        "room",
+        square(),
+        &["wall"],
+    ));
+    assert!(why.contains("cad:model/wall"), "{why}");
+    // Below the floor, its certified top at the floor: out of the band.
+    let below = Some(VerticalExtentBounds {
+        outer: (-3.0, 0.0),
+        inner: None,
+    });
+    found(place(
+        enclosed(1.2, 0.5, -3.0, below),
+        "room",
+        square(),
+        &["wall"],
+    ));
+    // Without its certified top, its deviation may lift it into the band.
+    bounded(place(
+        enclosed(1.2, 0.5, -3.0, None),
+        "room",
+        square(),
+        &["wall"],
+    ));
+    let refused = |geometry: AxiolidGeometry| {
+        assert!(matches!(
+            place(geometry, "room", square(), &["wall"]),
+            Err(FreeSpaceError::MissingGeometry(_))
+        ));
+    };
+    let solid = || prisms(&[rect(2.8, 3.0, 0.0, 3.0)], 0.0, 3.0);
+    refused(room_with(3.0, |g| {
+        lost(g).with_unmeasured_enclosure(id("wall"), solid(), Some(f64::NAN), None)
+    }));
+    // Declared before the body is unmeasured, it is not kept.
+    refused(room_with(3.0, |g| {
+        lost(g.with_unmeasured_enclosure(id("wall"), solid(), None, None))
+    }));
 }
 
 /// An unmeasured obstacle bounded by several boxes (a whole by its parts,

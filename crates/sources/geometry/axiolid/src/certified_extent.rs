@@ -65,6 +65,48 @@ pub fn certified_vertical_extent(
     })
 }
 
+/// The subjects `root`'s solid lies within as a difference (#401), each
+/// with the placement composed above it, outermost first: walking down
+/// instances (and collections of one member), every left operand of a
+/// difference is a solid its result lies within, since a difference only
+/// removes material from its subject. A clip or other intersection, a
+/// union, or any other node ends the walk.
+///
+/// A host whose body is refused (a curved wall less its openings, whose
+/// exact boolean cannot classify a point) compiles these in turn and
+/// bounds the body by the first it can measure: an enclosure
+/// ([`AxiolidGeometry::with_unmeasured_enclosure`](crate::AxiolidGeometry::with_unmeasured_enclosure)).
+/// Each subject is compiled in its own frame, so its mesh is to be placed
+/// by the transform given with it.
+///
+/// Empty when `root` is no difference, or the graph is malformed: then no
+/// subject bounds the body.
+#[must_use]
+pub fn difference_subjects(graph: &GeometryGraph, root: NodeId) -> Vec<(NodeId, Transform3)> {
+    let mut subjects = Vec::new();
+    let mut transform = Transform3::IDENTITY;
+    let mut id = root;
+    for _ in 0..MAX_VISITS {
+        match graph.get(id) {
+            Some(GeometryNode::Instance(instance)) => {
+                transform *= instance.transform;
+                id = instance.source;
+            }
+            Some(GeometryNode::Collection(children)) if children.len() == 1 => id = children[0],
+            Some(GeometryNode::SolidOperation(SolidOperation::Boolean {
+                left,
+                operator: BooleanOperator::Difference,
+                ..
+            })) => {
+                subjects.push((*left, transform));
+                id = *left;
+            }
+            _ => break,
+        }
+    }
+    subjects
+}
+
 /// A node's elevations: within `outer`, reaching `inner` where known.
 #[derive(Clone, Copy, Debug)]
 struct Height {
@@ -336,6 +378,42 @@ mod tests {
         .unwrap();
         assert!(close(bounds.outer, (0.0, 4.0)), "{bounds:?}");
         assert!(close(bounds.inner.unwrap(), (0.0, 4.0)), "{bounds:?}");
+    }
+
+    #[test]
+    fn a_difference_chain_is_walked_along_its_subjects_with_their_placements() {
+        let up = |z: f64| Transform3::from_translation(Vec3::new(0.0, 0.0, z));
+        let mut builder = GeometryGraphBuilder::new();
+        let wall = extruded(&mut builder, 4.0, Vec3::Z, 3.0, up(0.0));
+        let window = extruded(&mut builder, 0.5, Vec3::Z, 1.0, up(1.0));
+        let door = extruded(&mut builder, 0.5, Vec3::Z, 2.0, up(0.0));
+        let cut = |builder: &mut GeometryGraphBuilder, left, right| {
+            push(
+                builder,
+                GeometryNode::SolidOperation(SolidOperation::Boolean {
+                    left,
+                    right,
+                    operator: BooleanOperator::Difference,
+                }),
+            )
+        };
+        let once = cut(&mut builder, wall, window);
+        let twice = cut(&mut builder, once, door);
+        let placed = push(
+            &mut builder,
+            GeometryNode::Instance(Instance {
+                source: twice,
+                transform: up(3.5),
+            }),
+        );
+        let graph = builder.finish(vec![placed]).unwrap();
+        let subjects = difference_subjects(&graph, placed);
+        assert_eq!(subjects, vec![(once, up(3.5)), (wall, up(3.5))]);
+        // The subject's height holds the difference's.
+        let bounds = certified_vertical_extent(&graph, placed).unwrap();
+        assert!(close(bounds.outer, (3.5, 6.5)) && bounds.inner.is_none());
+        // A solid that is no difference has no subject to bound it.
+        assert!(difference_subjects(&graph, wall).is_empty());
     }
 
     #[test]

@@ -343,6 +343,7 @@ impl AxiolidFreeSpaceService {
             locator.push_str(&merged.to_string());
         }
         locator.push_str(&crate::free_space::within_deviation(&scene.bracketed));
+        locator.push_str(&crate::free_space::within_bounds(&scene.bounded));
         let evidence = Evidence::exact(request.scope().source.clone(), locator);
         CirculationMap::try_new(
             request.clone(),

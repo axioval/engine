@@ -195,7 +195,9 @@ fn sheet(corners: [[f64; 3]; 4]) -> TriMesh {
 /// `an_obstacle_closes_the_last_gap` with an open sheet hanging in the band
 /// still closes the gap; the sheet counts by its surface, as a body that
 /// stays off the floor does. A sheet reaching down to the floor leaves what
-/// its piece occupies in the band undecided, and the request refuses.
+/// its piece occupies in the band undecided: the body is bounded by its
+/// vertices' hull instead (#401), and the gap stays closed by the column,
+/// a closed piece, alone.
 #[test]
 fn an_open_piece_off_the_floor_leaves_a_closed_piece_measured() {
     let geometry = || room(&[rect(0.0, 3.0, 0.0, 3.0)]);
@@ -217,14 +219,13 @@ fn an_open_piece_off_the_floor_leaves_a_closed_piece_measured() {
         [0.1, 0.1, 1.0],
     ]);
     let body = geometry().with_mesh(id("column"), joined(column(), &standing));
-    let refused = place(body, square(), &["column"]).expect_err("an open piece on the floor");
-    assert!(
-        refused.to_string().contains(
-            "reaches below the headroom band but is not a closed solid, so what it occupies \
-             in the band is undecided"
-        ),
-        "{refused}"
-    );
+    match place(body, square(), &["column"]) {
+        Ok(PlacementOutcome::NoPlacement(proof)) => {
+            let locator = &proof.evidence().locator;
+            assert!(locator.contains(":bounded-not-measured="), "{locator}");
+        }
+        other => panic!("expected no placement, got {other:?}"),
+    }
 }
 
 /// A column whose side splits a bottom edge the floor face keeps whole (a

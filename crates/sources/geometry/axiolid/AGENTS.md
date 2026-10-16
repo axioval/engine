@@ -58,6 +58,12 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   magnitude. Everything else refuses with the reason, and the body keeps
   its deviation-widened extent. Add a family only where its elevations
   are stated exactly by the construction; never read them from the mesh.
+  `difference_subjects` (#401) lists the subjects a difference chain lies
+  within, outermost first, each with the placement above it (instances
+  and one-member collections walked, a difference's left operand
+  followed); a host encloses a refused body in the first it can measure
+  (`with_unmeasured_enclosure`). Never follow anything but a difference's
+  subject: an intersection, union or clip ends the walk.
 - `src/exact_boundary.rs` builds a body's exact solid from the Axiolid
   geometry graph a host meshes (`exact_boundary`), and
   `AxiolidGeometry::check_exact_boundary` compares its extent with the
@@ -240,6 +246,26 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   into the witness band and the search refuses; never narrow the floor
   from the mesh alone (`tests/tessellated_placement.rs`
   `a_curved_room_on_a_slab_is_decided_only_over_a_certified_floor`).
+  Obstacles bounded rather than measured (#401, `Scene::bounded`) join
+  `Scene::obstacles` within their bound and never `Scene::sure`: an
+  unmeasured body with an enclosure (`AxiolidGeometry::enclosure`, the
+  band footprint of its solid over the band widened by its deviation,
+  grown by it; left out where its vertical bounds keep it out of the
+  band), and a measured mesh whose band footprint or sure column is
+  refused while some piece is open (`band_refusal` mirrors the calls
+  `floor_scene` makes, after the room-box skip, so far obstacles still
+  cost nothing): the hull of its vertices (`planar::enclosing_hull`, which
+  drops a point only where its turn is certainly not left, grown by a square of half side
+  `d + 16 ε |coordinate|`, at least `HULL_GROWTH_METRES`; the vertices'
+  box where the overlay refuses the hull's ring), with only its closed
+  pieces' footprint or core in `sure`. A refusal on a mesh whose pieces
+  are all closed still refuses. `Search::Undecided` with anything bounded
+  is `Unavailable` naming the bounded obstacles, and every locator adds
+  `free_space::within_bounds` (`:bounded-not-measured=`). Never prove an
+  absence against a bound, and never bound an obstacle with no enclosure
+  or no open piece (`tests/tessellated_placement.rs`
+  `an_open_shell_is_a_possible_obstacle_within_its_vertices_hull`,
+  `an_unmeasured_obstacle_is_a_possible_obstacle_within_its_enclosure`).
   This bracketing is the clearance rule of #393: a witness stands when
   its clearance to every tessellated body exceeds that body's deviation
   (a box of the deviation, which holds its ball), so curved furniture
@@ -799,7 +825,10 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   apart from the scope in plan or wholly at or below the band's bottom or
   at or above its top (the band is open at both ends; pinned by
   `tests/tessellated_placement.rs`
-  `an_unmeasured_obstacle_bounded_elsewhere_is_left_out`). A host-declared
+  `an_unmeasured_obstacle_bounded_elsewhere_is_left_out`), or the host
+  encloses it in a closed solid (`with_unmeasured_enclosure`, #401), which
+  a free-floor search takes as a possible obstacle; no other service reads
+  an enclosure. A host-declared
   bound (`with_unmeasured_bound`, or several boxes the body lies within
   the union of, `with_unmeasured_bounds`, #358) only says where the body
   cannot be; an invalid box, or none, is no bound, and more than

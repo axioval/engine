@@ -176,6 +176,9 @@ pub(crate) struct Scene {
     pub(crate) reach: Option<Reached>,
     /// The tessellated bodies bracketed by their chord deviation, with it.
     pub(crate) bracketed: Vec<(axioval_ir::ObjectId, f64)>,
+    /// The obstacles bounded rather than measured (#401): in `obstacles`
+    /// within their bounds, never in `sure`.
+    pub(crate) bounded: Vec<axioval_ir::ObjectId>,
     /// `scope` less `obstacles` (`[0]`) and `room` less `sure` (`[1]`),
     /// each taken once a search first erodes it: every shape and angle
     /// erodes the same difference ([`Self::free_for`]).
@@ -1664,6 +1667,7 @@ mod tests {
             window: None,
             reach: None,
             bracketed: Vec::new(),
+            bounded: Vec::new(),
             clear: Default::default(),
             inscribed: Default::default(),
             simple: Default::default(),

@@ -6,6 +6,31 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **Free-floor searches bound obstacles they cannot measure instead of
+  leaving the space undecided**
+  ([#401](https://github.com/axioval/engine/issues/401)). An obstacle with
+  a certified enclosing bound is a possible obstacle within it: a witness
+  avoids the bound, an absence is proven without it, and the locator names
+  it (`:bounded-not-measured=<object>,…`). An open mesh whose pieces reach
+  from the floor into the band (a sanitary terminal authored as an open
+  shell) is bounded by the hull of its vertices, computed so that no vertex
+  falls outside it, grown by its deviation and the coordinates' rounding;
+  its closed pieces still surely occupy what they do. An unmeasured body
+  is bounded by the closed solid the host encloses it in
+  (`AxiolidGeometry::with_unmeasured_enclosure`): the CLI encloses a body
+  whose difference the mesh compiler refuses (a curved wall less openings
+  the exact boolean cannot cut) in the first subject of its differences it
+  measures (`difference_subjects`; the gross body before its openings), and
+  a part a whole's opening cannot be subtracted from in its uncut body. A
+  search the bounds leave undecided says which obstacles were bounded
+  rather than measured, and a failed free-floor finding lists them as
+  perhaps taking floor. Without a certified bound the space stays not
+  evaluated, as before. On a private multi-family house federated with its
+  building-services model (116 spaces, meshed obstacles) not evaluated fell
+  from 77 to 60 (8 spaces pass, 9 fail), and on a 157-space model from 34
+  to 17 (all pass); the rule takes longer where it now searches (64 s to
+  91 s, 66 s to 92 s). The public parity models are unchanged.
+
 - **Free-floor circles are searched in a fraction of the time and
   memory** ([#400](https://github.com/axioval/engine/issues/400),
   [#394](https://github.com/axioval/engine/issues/394)). The bracket of

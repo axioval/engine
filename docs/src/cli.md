@@ -1331,7 +1331,8 @@ reported once with the code of the part its reason names (located
 A body whose faces, as authored, do not close is an open surface: it has
 no inside, so a clash between two such bodies cannot tell touching from
 crossing, and the room it takes up above a floor is undecided where it
-reaches the floor. Whether faces close is a fact about the file: each
+reaches the floor; a free-floor search bounds it there by the hull of its
+vertices instead (#401). Whether faces close is a fact about the file: each
 `Body` item that lists its faces (a polygonal or triangulated face set, a
 faceted B-rep, a shell- or face-based surface model, through mapped
 items) is read item by item, its corners by their exact coordinates, and
@@ -1541,6 +1542,18 @@ measurement no bound can reach is evaluated; one a bound reaches is not
 evaluated and names the product. Without a bound, or with one that cannot
 be read, the product may be anywhere and refuses every space measurement
 it could change.
+
+The free-space service is also told a closed solid an unmeasured body lies
+within, its enclosure (#401), which a free-floor search takes as a possible
+obstacle (see [free space](./free-space.md)). A product whose net body is
+refused as a difference (a curved wall less openings the exact boolean
+cannot cut) is enclosed in the first subject of its differences, outermost
+first, that the mesh compiler measures with a certified deviation: its
+gross body before its openings, else the subject of an authored difference,
+placed by the transform above it (its deviation scaled by the placement's
+largest stretch), between the elevations the net body's construction
+certifies. A part a whole's opening cannot be subtracted from is enclosed
+in its body before that opening. Anything else has no enclosure.
 
 The kernel keeps every surface point of a revolution (tapered too), a sphere,
 a torus and a sweep along one circle or ellipse arc within the 1 mm of its

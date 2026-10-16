@@ -36,6 +36,9 @@ pub struct AxiolidGeometry {
     /// The boxes an unmeasured object's body lies within the union of
     /// ([`Self::with_unmeasured_bounds`]); never empty.
     unmeasured_bounds: BTreeMap<ObjectId, Vec<Extent>>,
+    /// The closed solid an unmeasured object's body lies within
+    /// ([`Self::with_unmeasured_enclosure`]).
+    enclosures: BTreeMap<ObjectId, Arc<Enclosure>>,
     /// Host-certified bounds on a tessellated body's true vertical extent
     /// ([`Self::with_extent_bounds`], [`Self::with_vertical_extent_bounds`]),
     /// every certificate given for it combined.
@@ -305,6 +308,70 @@ impl AxiolidGeometry {
             return None;
         }
         self.unmeasured_bounds.get(object).map(Vec::as_slice)
+    }
+
+    /// Declares a closed solid an unmeasured object's body is certified to
+    /// lie within (#401), as `mesh` stands for it: exactly when `deviation`
+    /// is `None`, else within that chord deviation, and between the
+    /// elevations `height` certifies where given (the solid's, read as
+    /// [`fn@crate::certified_vertical_extent`] reads them). A body refused
+    /// as a difference lies within its subject
+    /// ([`fn@crate::difference_subjects`]): a curved wall less openings
+    /// the exact boolean cannot cut lies within the uncut wall.
+    ///
+    /// The body stays unmeasured. Only a free-floor search reads the
+    /// enclosure, as a possible obstacle: witnesses avoid the enclosure,
+    /// absence is proven without it. An empty mesh, a deviation that bounds
+    /// nothing, or a call for an object not declared unmeasured declares
+    /// nothing; a `height` that is not finite, is reversed or contradicts
+    /// the mesh by more than its deviation is ignored.
+    #[must_use]
+    pub fn with_unmeasured_enclosure(
+        mut self,
+        object: ObjectId,
+        mesh: TriMesh,
+        deviation: Option<f64>,
+        height: Option<VerticalExtentBounds>,
+    ) -> Self {
+        let deviation = deviation.unwrap_or(0.0);
+        let Some((min, max)) = mesh_extent(&mesh) else {
+            return self;
+        };
+        if !self.is_unmeasured(&object)
+            || !deviation.is_finite()
+            || deviation < 0.0
+            || min.iter().chain(&max).any(|value| !value.is_finite())
+        {
+            return self;
+        }
+        // The mesh's lowest and highest points lie within the deviation of
+        // the solid's, which lie within the certified elevations.
+        let height = height.filter(|height| {
+            let (low, high) = height.outer;
+            low.is_finite()
+                && high.is_finite()
+                && low <= high
+                && low - deviation <= min[2]
+                && max[2] <= high + deviation
+        });
+        self.enclosures.insert(
+            object,
+            Arc::new(Enclosure {
+                mesh,
+                deviation,
+                height,
+            }),
+        );
+        self
+    }
+
+    /// The closed solid an unmeasured object's body lies within, when the
+    /// host declared one; `None` for a measured object.
+    pub(crate) fn enclosure(&self, object: &ObjectId) -> Option<&Enclosure> {
+        if !self.is_unmeasured(object) {
+            return None;
+        }
+        self.enclosures.get(object).map(AsRef::as_ref)
     }
 
     /// Certifies bounds on the extent of a tessellated object's true body,
@@ -999,6 +1066,36 @@ fn hull(boxes: &[Extent]) -> Extent {
                 std::array::from_fn(|axis| max[axis].max(high[axis])),
             )
         })
+}
+
+/// A closed solid an unmeasured body lies within
+/// ([`AxiolidGeometry::with_unmeasured_enclosure`]).
+#[derive(Debug)]
+pub(crate) struct Enclosure {
+    /// The solid's mesh, within `deviation` of it.
+    pub(crate) mesh: TriMesh,
+    /// Zero when the mesh is the solid.
+    pub(crate) deviation: f64,
+    /// The solid's certified elevations, where known.
+    pub(crate) height: Option<VerticalExtentBounds>,
+}
+
+impl Enclosure {
+    /// Where the solid's lowest and highest points lie: the mesh's,
+    /// widened by its deviation and narrowed by the certified elevations.
+    pub(crate) fn vertical_bounds(&self) -> Option<VerticalBounds> {
+        let (min, max) = mesh_extent(&self.mesh)?;
+        let d = self.deviation;
+        let mut bounds = VerticalBounds {
+            bottom: (min[2] - d, min[2] + d),
+            top: (max[2] - d, max[2] + d),
+        };
+        if let Some(height) = self.height {
+            bounds.bottom.0 = bounds.bottom.0.max(height.outer.0);
+            bounds.top.1 = bounds.top.1.min(height.outer.1);
+        }
+        Some(bounds)
+    }
 }
 
 /// Certified bounds on the elevations of a tessellated body's true solid,

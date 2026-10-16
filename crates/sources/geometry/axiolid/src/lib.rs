@@ -52,7 +52,7 @@ pub mod walking_surface;
 pub(crate) mod zone_area;
 
 pub use boundary_coverage::AxiolidBoundaryCoverageService;
-pub use certified_extent::certified_vertical_extent;
+pub use certified_extent::{certified_vertical_extent, difference_subjects};
 pub use contact::AxiolidContactService;
 pub use derived_relationships::AxiolidDerivedRelationshipService;
 pub use envelope_membership::AxiolidEnvelopeMembershipService;

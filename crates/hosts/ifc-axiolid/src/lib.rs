@@ -161,7 +161,7 @@ use axioval_axiolid::{
     AxiolidMetricRoutingService, AxiolidPlanAreaService, AxiolidPlanSpanService,
     AxiolidProximityService, AxiolidSightService, AxiolidSpaceService, AxiolidTriangleCountService,
     AxiolidVerticalExtentService, AxiolidWalkabilityService, AxiolidWalkingSurfaceService,
-    ExactBoundary, VerticalExtentBounds, certified_vertical_extent,
+    ExactBoundary, VerticalExtentBounds, certified_vertical_extent, difference_subjects,
 };
 use axioval_engine::{
     AlignmentServiceHandle, BodyContainment, BoundaryCoverageServiceHandle, ContactServiceHandle,
@@ -1266,7 +1266,15 @@ pub fn attach(
                     .map(|bound| vec![bound])
                     .or_else(|| outer_bound::outer_bound(&backend, model, units, linear, entity))
                 {
-                    geometry = geometry.with_unmeasured_bounds(id, boxes);
+                    geometry = geometry.with_unmeasured_bounds(id.clone(), boxes);
+                }
+                if let Some(enclosure) = enclosure(&backend, model, units, linear, entity, *net) {
+                    geometry = geometry.with_unmeasured_enclosure(
+                        id,
+                        enclosure.mesh,
+                        fit_deviation(enclosure.fit),
+                        enclosure.height,
+                    );
                 }
             }
         }
@@ -1291,11 +1299,21 @@ pub fn attach(
         &mut report,
     );
     for (part, (reason, bound)) in std::mem::take(&mut cuts.unmeasured_parts) {
-        bodies.remove(&part);
+        let uncut = bodies.remove(&part);
         report.unmeasured.push((part.clone(), reason.clone()));
         geometry = geometry.with_unmeasured(part.clone(), reason);
         if let Some((min, max)) = bound {
-            geometry = geometry.with_unmeasured_bound(part, min, max);
+            geometry = geometry.with_unmeasured_bound(part.clone(), min, max);
+        }
+        // A whole's openings only take material from the part: its body
+        // before them encloses it (#401).
+        if let Some(uncut) = uncut {
+            geometry = geometry.with_unmeasured_enclosure(
+                part,
+                uncut.mesh,
+                fit_deviation(uncut.fit),
+                uncut.height,
+            );
         }
     }
     for (id, body) in bodies {
@@ -4279,6 +4297,96 @@ fn gross_bound(
         .chain(&max)
         .all(|value| value.is_finite())
         .then_some((min, max))
+}
+
+/// A closed solid an unmeasured product's net body lies within (#401):
+/// the first subject of its differences, outermost first, the mesh
+/// compiler measures with a certified bound
+/// ([`axioval_axiolid::difference_subjects`]): its gross body before its
+/// openings, else an authored difference's subject. A difference only
+/// removes material from its subject. The subject is compiled in its own
+/// frame and placed by the transform above it; under a scale its
+/// deviation grows by the placement's largest stretch (bounded by the
+/// Frobenius norm of its linear part) and the coordinates' rounding, as
+/// [`placed`] counts it. Its elevations are the net body's certified ones
+/// (`certified_vertical_extent` reads a difference within its subject).
+///
+/// `None` when the body is no difference, or no subject is measured.
+fn enclosure(
+    backend: &Compiler,
+    model: &Model,
+    units: &ifc_geometry::units::UnitScale,
+    linear: &Linear,
+    product: EntityId,
+    net: NetOptions,
+) -> Option<Body> {
+    /// Subjects compiled before giving up: each is a body the compiler
+    /// may refuse at length.
+    const MOST_SUBJECTS: usize = 4;
+    if linear.refusal(model, product).is_some() {
+        return None;
+    }
+    let mut session = session(model, units);
+    let net = lower_product_net_with(&mut session, product, net).ok()??;
+    let lowered = session.finish(net.root).ok()?;
+    let height = certified_vertical_extent(&lowered.graph, lowered.root).ok();
+    for (subject, transform) in difference_subjects(&lowered.graph, lowered.root)
+        .into_iter()
+        .take(MOST_SUBJECTS)
+    {
+        let Ok((mut mesh, fit)) = compile(backend, &lowered.graph, subject) else {
+            continue;
+        };
+        let fit = if transform == axiolid_core::Transform3::IDENTITY {
+            fit
+        } else {
+            let stretch = [
+                axiolid_core::Vec3::X,
+                axiolid_core::Vec3::Y,
+                axiolid_core::Vec3::Z,
+            ]
+            .iter()
+            .map(|axis| transform.transform_vector3(*axis).length_squared())
+            .sum::<f64>()
+            .sqrt();
+            for point in &mut mesh.positions {
+                *point = transform.transform_point3(*point);
+            }
+            match fit {
+                Fit::Exact => placed(&mesh, Fit::Exact),
+                Fit::Within(deviation) => {
+                    placed(&mesh, Fit::Within((deviation * stretch).next_up()))
+                }
+            }
+        };
+        if !finite_mesh(&mesh) {
+            continue;
+        }
+        return Some(Body {
+            mesh,
+            fit,
+            boundary: None,
+            height,
+            applied: Vec::new(),
+            taken: Vec::new(),
+        });
+    }
+    None
+}
+
+/// Whether every coordinate of `mesh` is finite.
+fn finite_mesh(mesh: &axiolid_mesh::TriMesh) -> bool {
+    mesh.positions
+        .iter()
+        .all(|point| point.x.is_finite() && point.y.is_finite() && point.z.is_finite())
+}
+
+/// The chord deviation a fit declares, `None` when the mesh is exact.
+fn fit_deviation(fit: Fit) -> Option<f64> {
+    match fit {
+        Fit::Exact => None,
+        Fit::Within(deviation) => Some(deviation),
+    }
 }
 
 /// The void of an opening taken as already applied: its `Reference`

@@ -30,7 +30,7 @@ use axioval_ir::{Evidence, ObjectId, SourceId};
 
 use crate::geometry::{AxiolidGeometry, Extent, Triangle, extent_gap, mesh_extent, triangles};
 use crate::placement::{self, Axis, Scene, Search, Window};
-use crate::planar::{plan_frame, polygon_area, projected_polygons};
+use crate::planar::{enclosing_hull, plan_frame, polygon_area, projected_polygons};
 use crate::walkable::{ON_SURFACE, Plan, band_footprint, solid_column, trapezoids};
 use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, Polygon, Region, Ring, overlay};
 
@@ -99,6 +99,7 @@ struct KeptScene {
     sure: Region,
     tolerance: axiolid_core::Tolerance,
     bracketed: Vec<(ObjectId, f64)>,
+    bounded: Vec<ObjectId>,
     clear: [OnceCell<Region>; 2],
     inscribed: [OnceCell<Option<placement::Inscribed>>; 2],
     simple: [OnceCell<Option<Region>>; 4],
@@ -124,6 +125,7 @@ impl KeptScene {
             sure: scene.sure.clone(),
             tolerance: scene.tolerance,
             bracketed: scene.bracketed.clone(),
+            bounded: scene.bounded.clone(),
             clear: scene.clear.clone(),
             inscribed: scene.inscribed.clone(),
             simple: scene.simple.clone(),
@@ -150,6 +152,7 @@ impl KeptScene {
             window: None,
             reach: None,
             bracketed: self.bracketed.clone(),
+            bounded: self.bounded.clone(),
             clear: self.clear.clone(),
             inscribed: self.inscribed.clone(),
             simple: self.simple.clone(),
@@ -221,6 +224,44 @@ impl AxiolidFreeSpaceService {
             .unwrap_or_else(PoisonError::into_inner)
             .insert(key, footprint.clone());
         footprint
+    }
+
+    /// Why the footprints a scene takes of a measured obstacle (as
+    /// [`Self::floor_scene`] takes them: in the band, and, for a tessellated
+    /// body, its sure column) are refused, if they are; `None` when each
+    /// is built, or a tessellated body's bounds leave it out of the scene
+    /// either way. The footprints are kept, so the scene reads them again.
+    fn band_refusal(
+        &self,
+        obstacle: &ObjectId,
+        mesh: &TriMesh,
+        d: f64,
+        low: f64,
+        high: f64,
+        u: f64,
+    ) -> Option<String> {
+        if d == 0.0 {
+            self.band_footprint(obstacle, mesh, low - u, high + u)
+                .err()
+                .or_else(|| {
+                    (u != 0.0 && high - u > low + u)
+                        .then(|| self.band_footprint(obstacle, mesh, low + u, high - u).err())
+                        .flatten()
+                })
+        } else {
+            let bounds = self.geometry.vertical_bounds(obstacle)?;
+            if bounds.clear_of(low - u, high + u, ON_SURFACE) {
+                return None;
+            }
+            self.band_footprint(obstacle, mesh, low - u - d, high + u + d)
+                .err()
+                .or_else(|| {
+                    let level = low + u + 2.0 * d;
+                    (level < high - u)
+                        .then(|| self.solid_column(obstacle, mesh, level, d).err())
+                        .flatten()
+                })
+        }
     }
 
     fn evidence(&self) -> Evidence {
@@ -654,6 +695,8 @@ impl AxiolidFreeSpaceService {
         };
         let region_error = |e| FreeSpaceError::Unavailable(format!("bracketed footprint: {e:?}"));
         let mut bracketed: Vec<(ObjectId, f64)> = Vec::new();
+        // Obstacles bounded rather than measured (#401).
+        let mut bounded: Vec<ObjectId> = Vec::new();
         let mut floor = None;
         // How far the true floor may lie from the mesh's.
         let mut uncertainty: f64 = 0.0;
@@ -808,6 +851,46 @@ impl AxiolidFreeSpaceService {
             {
                 continue;
             }
+            // An unmeasured body the host encloses in a closed solid (#401):
+            // a possible obstacle within it. Witnesses avoid what the solid
+            // may occupy, as a tessellated body's; no absence rests on it.
+            if self.geometry.mesh(obstacle).is_none()
+                && let Some(enclosure) = self.geometry.enclosure(obstacle)
+            {
+                let vertical = enclosure
+                    .vertical_bounds()
+                    .ok_or_else(|| missing(obstacle))?;
+                if vertical.clear_of(low - u, high + u, ON_SURFACE) {
+                    continue;
+                }
+                let d = enclosure.deviation;
+                if let Some((low_corner, high_corner)) = mesh_extent(&enclosure.mesh) {
+                    let grown: Extent = (
+                        [low_corner[0] - d, low_corner[1] - d, low_corner[2]],
+                        [high_corner[0] + d, high_corner[1] + d, high_corner[2]],
+                    );
+                    if extent_gap(&grown, &room_box, true) > 0.0 {
+                        continue;
+                    }
+                }
+                let widened = self
+                    .band_footprint(obstacle, &enclosure.mesh, low - u - d, high + u + d)
+                    .map_err(FreeSpaceError::Unavailable)?;
+                let mut may = to_local(&widened)?;
+                if d > 0.0 && !may.is_empty() {
+                    may = may.dilate_outer(d, tolerance).map_err(region_error)?;
+                }
+                bounded.push(obstacle.clone());
+                possible = possible.union(&may, tolerance).map_err(region_error)?;
+                if let Some(taken) = taken.as_mut() {
+                    taken.push(Taken {
+                        object: obstacle.clone(),
+                        possible: world(may)?,
+                        sure: Region::empty(),
+                    });
+                }
+                continue;
+            }
             let mesh = self
                 .geometry
                 .mesh(obstacle)
@@ -821,6 +904,59 @@ impl AxiolidFreeSpaceService {
                 if extent_gap(&grown, &room_box, true) > 0.0 {
                     continue;
                 }
+            }
+            // An open authored mesh whose solid the band needs (a sanitary
+            // terminal's open shell standing on the floor) is bounded by
+            // its vertices' hull (#401), a possible obstacle as above; its
+            // closed pieces still surely occupy what they do.
+            if let Some(refusal) = self.band_refusal(obstacle, mesh, d, low, high, u) {
+                if !open(mesh) {
+                    return Err(FreeSpaceError::Unavailable(refusal));
+                }
+                let may = hull_region(mesh, origin, d, tolerance)?;
+                let mut surely = Region::empty();
+                if let Some(closed) = closed_pieces(mesh) {
+                    let core = if d == 0.0 {
+                        let (bottom, top) = if u == 0.0 {
+                            (low, high)
+                        } else {
+                            (low + u, high - u)
+                        };
+                        (top > bottom)
+                            .then(|| band_footprint(obstacle, &closed, bottom, top).ok())
+                            .flatten()
+                            .and_then(|plan| to_local(&plan).ok())
+                    } else {
+                        let level = low + u + 2.0 * d;
+                        (level < high - u)
+                            .then(|| solid_column(obstacle, &closed, level, d).ok())
+                            .flatten()
+                            .and_then(|(section, shadow)| {
+                                to_local(&section)
+                                    .ok()?
+                                    .difference(&to_local(&shadow).ok()?, tolerance)
+                                    .ok()?
+                                    .erode_inner(d, tolerance)
+                                    .ok()
+                            })
+                    };
+                    // A core the overlay refuses is left out: absence is
+                    // then proven without it.
+                    surely = core.unwrap_or_else(Region::empty);
+                }
+                bounded.push(obstacle.clone());
+                possible = possible.union(&may, tolerance).map_err(region_error)?;
+                if !surely.is_empty() {
+                    certain = certain.union(&surely, tolerance).map_err(region_error)?;
+                }
+                if let Some(taken) = taken.as_mut() {
+                    taken.push(Taken {
+                        object: obstacle.clone(),
+                        possible: world(may)?,
+                        sure: world(surely)?,
+                    });
+                }
+                continue;
             }
             if d == 0.0 {
                 let witness = self
@@ -928,6 +1064,7 @@ impl AxiolidFreeSpaceService {
             window: None,
             reach: None,
             bracketed,
+            bounded,
             clear: Default::default(),
             inscribed: Default::default(),
             simple: Default::default(),
@@ -935,6 +1072,108 @@ impl AxiolidFreeSpaceService {
         Ok((scene, floor))
     }
 }
+
+/// Whether some piece of `mesh` is open ([`crate::shell::pieces`]): an
+/// authored surface with no inside, whose solid only its vertices bound.
+fn open(mesh: &TriMesh) -> bool {
+    crate::shell::pieces(mesh).is_some_and(|pieces| pieces.iter().any(|piece| !piece.closed))
+}
+
+/// The closed pieces of `mesh` ([`crate::shell::pieces`]) as a mesh of
+/// their own: each bounds a solid that is part of the body, whatever its
+/// open pieces stand for. `None` when it has none.
+fn closed_pieces(mesh: &TriMesh) -> Option<TriMesh> {
+    let mut indices = Vec::new();
+    for piece in crate::shell::pieces(mesh)? {
+        if piece.closed {
+            for triangle in piece.triangles {
+                indices.extend_from_slice(mesh.indices.get(3 * triangle..3 * triangle + 3)?);
+            }
+        }
+    }
+    (!indices.is_empty()).then(|| TriMesh::new(mesh.positions.clone(), indices))
+}
+
+/// The plan region, in the frame at `origin`, that an open mesh's body
+/// lies within (#401): the hull of its vertices ([`enclosing_hull`]),
+/// grown by a square of half side its chord deviation `d` plus the
+/// rounding of the vertices' coordinates and their move to the frame, at
+/// least [`HULL_GROWTH_METRES`] (growing more still holds it). Every point of
+/// a triangle lies in the hull of its corners, and the faces the surface
+/// lacks span its vertices as well, so the solid it stands for lies in
+/// the hull of every vertex: exactly, up to that rounding, for an exact
+/// mesh, and within `d` of it for a tessellated one. Where the overlay
+/// refuses the hull's ring, the box of the vertices stands for it.
+fn hull_region(
+    mesh: &TriMesh,
+    origin: Vec2,
+    d: f64,
+    tolerance: axiolid_core::Tolerance,
+) -> Result<Region, FreeSpaceError> {
+    let magnitude = mesh
+        .positions
+        .iter()
+        .fold(0.0_f64, |largest, p| largest.max(p.x.abs()).max(p.y.abs()));
+    // The square of half side `grow` holds the disc of that radius, and
+    // its sum with the hull is the hull of the vertices moved to its
+    // corners: a polygon, so the obstacles gain no arcs. Each move rounds
+    // by less than the coordinates' rounding counted in `grow`.
+    let grow = (d + 16.0 * f64::EPSILON * magnitude).max(HULL_GROWTH_METRES);
+    let points: Vec<(f64, f64)> = mesh
+        .positions
+        .iter()
+        .flat_map(|p| {
+            let (x, y) = (p.x - origin.x, p.y - origin.y);
+            [
+                (x - grow, y - grow),
+                (x + grow, y - grow),
+                (x + grow, y + grow),
+                (x - grow, y + grow),
+            ]
+        })
+        .collect();
+    if points.iter().any(|(x, y)| !x.is_finite() || !y.is_finite()) {
+        return Err(FreeSpaceError::Unavailable(
+            "an open mesh has a vertex that is not finite".into(),
+        ));
+    }
+    let ring = |corners: &[(f64, f64)]| Ring {
+        points: corners.iter().map(|&(x, y)| Point2::new(x, y)).collect(),
+    };
+    let hull = enclosing_hull(points.clone());
+    let region = (hull.len() >= 3)
+        .then(|| placement::union(&[ring(&hull)], tolerance).ok())
+        .flatten()
+        .filter(|region| !region.is_empty());
+    // The box of the grown vertices.
+    let boxed = || {
+        let (min, max) = points.iter().fold(
+            ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]),
+            |(min, max), &(x, y)| {
+                (
+                    [min[0].min(x), min[1].min(y)],
+                    [max[0].max(x), max[1].max(y)],
+                )
+            },
+        );
+        placement::union(
+            &[ring(&[
+                (min[0], min[1]),
+                (max[0], min[1]),
+                (max[0], max[1]),
+                (min[0], max[1]),
+            ])],
+            tolerance,
+        )
+    };
+    region.map_or_else(boxed, Ok).map_err(|error| {
+        FreeSpaceError::Unavailable(format!("the box of an open mesh's vertices: {error}"))
+    })
+}
+
+/// The least growth of an open mesh's hull ([`hull_region`]), in metres:
+/// above the coordinates' rounding, far below anything a shape could use.
+const HULL_GROWTH_METRES: f64 = 1.0e-6;
 
 /// The least floor an obstacle must possibly take to be named as possibly
 /// taking it: a wall flush with a scope bracketed around its slivers
@@ -991,6 +1230,25 @@ pub(crate) fn within_deviation(bracketed: &[(ObjectId, f64)]) -> String {
         .map(|(object, deviation)| format!("{object}={deviation:e}m"))
         .collect();
     format!(":within-chord-deviation={}", named.join(","))
+}
+
+/// The locator suffix naming the obstacles a placement or map was decided
+/// around within their bounds rather than measured (#401): an unmeasured
+/// body within its enclosure, an open mesh within its vertices' hull. A
+/// witness avoids each bound; no absence rests on one. Empty when every
+/// obstacle was measured.
+pub(crate) fn within_bounds(bounded: &[ObjectId]) -> String {
+    if bounded.is_empty() {
+        return String::new();
+    }
+    let named: Vec<String> = bounded.iter().map(ToString::to_string).collect();
+    format!(":bounded-not-measured={}", named.join(","))
+}
+
+/// Objects named in order, comma separated.
+fn names(objects: &[ObjectId]) -> String {
+    let named: Vec<String> = objects.iter().map(ToString::to_string).collect();
+    named.join(", ")
 }
 
 /// Merged scopes whose floors differ by more than this are not one floor.
@@ -1213,6 +1471,7 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
             );
         }
         locator.push_str(&within_deviation(&scene.bracketed));
+        locator.push_str(&within_bounds(&scene.bounded));
         self.keep_clear(request, &scene);
         let evidence = Evidence::exact(request.scope().source.clone(), locator);
         let (centre, right) = match search {
@@ -1222,6 +1481,16 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
                 ));
             }
             Search::Found { centre, right } => (centre, right),
+            // What an obstacle's bound leaves open is undecided, naming
+            // the obstacles bounded rather than measured.
+            Search::Undecided(why) if !scene.bounded.is_empty() => {
+                return Err(FreeSpaceError::Unavailable(format!(
+                    "the obstacles bounded rather than measured ({}) leave the placement \
+                     undecided: no witness avoids their bounds and no absence holds without \
+                     them ({why})",
+                    names(&scene.bounded)
+                )));
+            }
             // What a chord deviation leaves open is not exact evidence
             // either way.
             Search::Undecided(_) if !scene.bracketed.is_empty() => {
@@ -1354,6 +1623,7 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
             locator.push_str(&merged.to_string());
         }
         locator.push_str(&within_deviation(&scene.bracketed));
+        locator.push_str(&within_bounds(&scene.bounded));
         FreeFloorEvidence::try_new(
             request.clone(),
             area,

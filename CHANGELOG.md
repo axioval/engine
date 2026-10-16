@@ -6,21 +6,25 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
-- **Bodies clipped by a polygonally bounded half-space are no longer
-  measured from a mesh that keeps material the clip removes**
+- **Bodies clipped by a polygonally bounded half-space are measured with
+  the clip cut through the whole body**
   ([#412](https://github.com/axioval/engine/issues/412)). The mesh compiler
-  cuts an aligned `IfcPolygonalBoundedHalfSpace` only as deep as twice its
-  boundary's extent, not through the solid it clips (axiolid/kernel#325),
-  so a tall wall clipped within a small boundary kept a strip metres high,
-  and the deviation reported for it understated that by metres. The
-  geometry bridge now refuses every mesh whose graph holds such a clip:
-  the body (or opening void, space-boundary surface or glazing item) is
-  unmeasured with the reason `it is clipped by a bounded half-space #<id>,
-  …`, its volume, extents, distances, clashes and free-floor obstacles are
-  not evaluated, and space measurements bound it by the clip's first
-  operand. Oblique clips, lowered to half-spaces sized from the solid, are
-  measured as before. The refusal is lifted once the kernel fix is
-  adopted.
+  cut an aligned `IfcPolygonalBoundedHalfSpace` only as deep as twice its
+  boundary's extent, so a tall wall clipped within a small boundary was
+  measured with a strip metres high that the clip removes, and a deviation
+  that understated it. With axiolid-mesh-compile 0.3.27 the clip is sized
+  from the solid it clips (axiolid/kernel#322, #325): such bodies, and
+  opening voids, space-boundary surfaces and glazing items holding such a
+  clip, are measured exactly as their clipped shape, for polyline,
+  composite, indexed and arc boundaries alike.
+
+### Changed
+
+- Moved to axiolid-model 0.3.14, axiolid-construct 0.3.19,
+  axiolid-overlay 0.3.16 and axiolid-mesh-compile 0.3.27 (with
+  axiolid-brep-boolean 0.1.10). The new
+  `SolidOperation::BoundedHalfSpaceAlongZ` (axiolid/kernel#321) is read
+  like a bounded half-space wherever the engine reads one.
 
 ## [0.6.1] - 2026-10-16
 

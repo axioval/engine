@@ -37,8 +37,8 @@ use ifc_geometry::{RepresentationPurpose, Transform};
 use ifc_model::{EntityId, Model};
 
 use super::{
-    CACHED_POSITIONS, Compiler, EVALUATOR, Extent, Fit, Linear, NODE_BUDGET, ProvenanceMap,
-    TOLERANCE, compile, mesh_box, planar, session,
+    CACHED_POSITIONS, Compiler, EVALUATOR, Extent, Fit, Linear, NODE_BUDGET, TOLERANCE, compile,
+    mesh_box, planar, session,
 };
 
 /// Where an item's material can be: within the union of some boxes, none
@@ -341,9 +341,8 @@ fn profile_region(graph: &GeometryGraph, id: NodeId) -> Option<Reach> {
 
 /// Node `id` compiled into a mesh, its box grown by its certified
 /// deviation; `None` when the compiler refuses it or it has no triangles.
-/// A refusal's reason is not read here, so no provenance names its nodes.
 fn compiled(backend: &Compiler, graph: &GeometryGraph, id: NodeId) -> Option<Reach> {
-    let (mesh, fit) = compile(backend, graph, id, &ProvenanceMap::default()).ok()?;
+    let (mesh, fit) = compile(backend, graph, id).ok()?;
     let (min, max) = mesh_box(&mesh)?;
     let grow = match fit {
         Fit::Exact => 0.0,

@@ -1266,10 +1266,10 @@ states:
 
 | State | Meaning | Effect on geometric rules |
 |---|---|---|
-| exact | every face is planar (polygonal extrusions, including steel sections without fillets or rounded edges, faceted B-reps and polygon meshes whose faces keep within 1 mm of their planes, booleans of these and clips by unbounded half-spaces), so the mesh is the shape; a whole measured through its parts when every part is exact | measured as exact |
+| exact | every face is planar (polygonal extrusions, including steel sections without fillets or rounded edges, faceted B-reps and polygon meshes whose faces keep within 1 mm of their planes, booleans of these and clips by half-spaces, bounded by a polygon or not), so the mesh is the shape; a whole measured through its parts when every part is exact | measured as exact |
 | tessellated | some face is curved, or an authored polygon face is warped more than 1 mm off its plane; the mesh is within the deviation the mesh compiler certifies for it (the 1 mm chord budget, or the bound it computed), and within the reported slab width of a warped face; a whole measured through its parts when some part is tessellated, within the largest deviation of its parts | measured as approximate, never exact |
 | no body | the object occupies no material: spatial structure, openings, annotations, grids, ports, structural analysis items, non-products | ignored as an obstacle; an opening is measured as the solid of its void where a rule names it (distance, containment, extents; see [Openings as voids](./clash.md#openings-as-voids)) |
-| unmeasured | a physical product that could not be meshed: one with no representation at all and without parts (`no shape representation`, model data; see below), one whose representations include no body and without parts (`no body representation; it has Axis, FootPrint`, naming their identifiers), a whole one of whose parts is unmeasured, a curved one whose mesh the compiler certifies no deviation for, or one clipped by a polygonally bounded half-space (see below) | measurements it could affect are not evaluated; with a bound (below), space measurements it cannot reach are evaluated |
+| unmeasured | a physical product that could not be meshed: one with no representation at all and without parts (`no shape representation`, model data; see below), one whose representations include no body and without parts (`no body representation; it has Axis, FootPrint`, naming their identifiers), a whole one of whose parts is unmeasured, or a curved one whose mesh the compiler certifies no deviation for | measurements it could affect are not evaluated; with a bound (below), space measurements it cannot reach are evaluated |
 
 The two bodiless reasons tell model data from engine coverage. A product
 whose `Representation` is `$` has no shape at all: its author can fix that,
@@ -1643,26 +1643,12 @@ each corner becomes a tangent arc and is certified too. Since
 axiolid-mesh-compile 0.3.24 (axiolid/kernel#248) a disk swept along a
 closed polyline sweeps as a loop and a corner beside an arc is mitred, both
 measured. Still refused by name and unmeasured: a fillet radius equal to
-the disk radius (a horn torus) and a mitre reaching past its leg.
-
-A body clipped by an `IfcPolygonalBoundedHalfSpace` whose plane is
-parallel to its boundary's (the aligned clip `ifc-geometry` lowers to a
-bounded half-space) is unmeasured, with the reason `it is clipped by a
-bounded half-space #<id>, which the mesh compiler cuts only as deep as
-twice its boundary's extent …` (#412). The mesh compiler sizes the prism
-it cuts with from the boundary, never from the solid it clips
-(axiolid/kernel#325), so a small boundary over a tall wall leaves a strip
-of material the clip removes, metres beyond the deviation the compiler
-reports for it. Every mesh holding such a clip is refused alike: bodies,
-opening voids, space-boundary surfaces and glazing items. Its bound for
-space measurements is its clip's first operand, which the clip only
-removes material from. An oblique clip lowers to half-spaces sized from
-the solid and is measured. The refusal is lifted once the kernel sizes the
-prism from the solid.
-
-Planar bodies, booleans of planar operands and clips by unbounded
-half-spaces included, stay exact and are meshed
-without a deviation report. Since axiolid-mesh-compile 0.3.16 the
+the disk radius (a horn torus) and a mitre reaching past its leg. Planar bodies, booleans of planar operands and clips by
+polygonally bounded half-spaces included, stay exact and are meshed
+without a deviation report. Since axiolid-mesh-compile 0.3.27 a polygonal
+clip is cut through the whole solid it clips, however small its boundary
+(axiolid/kernel#325, #412): a tall wall clipped within a small boundary at
+its end is measured without the strip an earlier compiler left. Since axiolid-mesh-compile 0.3.16 the
 compiler snaps operand vertices onto the other operand's faces before it
 cuts (axiolid/kernel#276), so an opening exported a rounding error short of
 its host's face leaves no skin of rounding residue, which self-intersected

@@ -79,12 +79,11 @@ impl BodyItems {
             let lowered = lowering
                 .finish(node)
                 .map_err(|error| format!("item {label} cannot be lowered: {error}"))?;
-            let (mesh, fit) =
-                match compile(&backend, &lowered.graph, lowered.root, &lowered.provenance) {
-                    Ok(compiled) => compiled,
-                    Err(reason) if reason == NO_TRIANGLES => continue,
-                    Err(reason) => return Err(format!("item {label} cannot be meshed: {reason}")),
-                };
+            let (mesh, fit) = match compile(&backend, &lowered.graph, lowered.root) {
+                Ok(compiled) => compiled,
+                Err(reason) if reason == NO_TRIANGLES => continue,
+                Err(reason) => return Err(format!("item {label} cannot be meshed: {reason}")),
+            };
             let material =
                 match reader.item_glazing(&parsed.model, entity, &item.mapped_by, item.item) {
                     ItemGlazing::Glazed => ItemMaterial::Glazed,

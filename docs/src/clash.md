@@ -454,10 +454,7 @@ It is built only where the construction is exact:
 - a clip of such a body by a half-space, bounded by a polygon in its plane
   or not: a wall under its roof planes, an `IfcBooleanClippingResult` of
   `IfcHalfSpaceSolid` or `IfcPolygonalBoundedHalfSpace`, in any order with
-  its openings (axiolid/kernel#234). The IFC bridge leaves a body with an
-  aligned polygonal clip unmeasured until the mesh compiler cuts such a
-  clip through the whole solid (#412, axiolid/kernel#325), so it registers
-  no boundary for one;
+  its openings (axiolid/kernel#234);
 - several such items in one body, a column on its footing say
   (axiolid/kernel#229).
 

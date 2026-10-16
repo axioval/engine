@@ -32,7 +32,7 @@ takes the host's texts for every capability it registered.
 | `slopeForms` | How `convertSlope` states a slope. |
 | `selectorKinds`, `selectorComparisons` | Every selector kind a package writes, with its fields, and the operators of `property` and `source` selectors. |
 | `relationships` | Path step directions, the source-neutral stated relationships, the derived relationships with their parameters and defaults, the relation a ruleset declares, and the flow through distribution networks (`flow`, since 1.4.0). |
-| `concepts` | For each `--definitions` package: its object types, property sets, properties and rule definitions. A definition's parameter its instances may not state carries `"fixed": true` (since 1.7.0, [Fixed parameters](./capabilities.md#fixed-parameters)); an editor shows it read-only. |
+| `concepts` | For each `--definitions` package: its object types, property sets, properties and rule definitions. A definition's parameter its instances may not state carries `"fixed": true` (since 1.7.0, [Fixed parameters](./capabilities.md#fixed-parameters)); an editor shows it read-only. Each definition carries `available` (since 1.8.0): `true` when a rule of it binds to this engine, `false` when its capability is not registered here (`"unavailable": {"reason": "unknownCapability", ...}`, a package written for another engine or version) or its parameters are not the capability's signature (`signatureMismatch`), with `message` the refusal `compile` gives. The definition is listed either way; an editor disables an unavailable one instead of offering a template that cannot compile. |
 
 Every list is in a stable order: capabilities by id, measured values and
 member lists as their registries order them, node kinds and selector kinds

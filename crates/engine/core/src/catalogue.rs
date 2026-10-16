@@ -441,7 +441,65 @@ pub struct Concepts {
     pub object_types: BTreeMap<String, ObjectTypeDefinition>,
     pub property_sets: BTreeMap<String, PropertySetDefinition>,
     pub properties: BTreeMap<String, PropertyDefinition>,
-    pub definitions: BTreeMap<String, RuleDefinition>,
+    pub definitions: BTreeMap<String, DefinitionEntry>,
+}
+
+/// A package's rule definition and whether a rule of it can compile
+/// against this engine (since 1.8.0).
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DefinitionEntry {
+    #[serde(flatten)]
+    pub definition: RuleDefinition,
+    /// Whether its capability is registered and its parameters are that
+    /// capability's signature, as `compile` checks them first.
+    pub available: bool,
+    /// Why it is not available; present exactly when `available` is false.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unavailable: Option<Unavailable>,
+}
+
+/// Why a definition cannot compile against this engine.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Unavailable {
+    pub reason: UnavailableReason,
+    /// The refusal as `compile` words it.
+    pub message: String,
+}
+
+/// The kind of refusal behind [`Unavailable`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum UnavailableReason {
+    /// No capability of its id is registered with this engine: a package
+    /// written for another engine or version.
+    UnknownCapability,
+    /// The capability is registered, but the definition's parameters are
+    /// not its signature.
+    SignatureMismatch,
+}
+
+impl DefinitionEntry {
+    /// `definition`, of id `id`, as the catalogue lists it for `registry`.
+    #[must_use]
+    pub fn of(registry: &CapabilityRegistry, id: &str, definition: &RuleDefinition) -> Self {
+        let unavailable = crate::compiler::bound_capability(registry, id, definition)
+            .err()
+            .map(|error| Unavailable {
+                reason: if matches!(error, crate::EngineError::UnknownCapability(_)) {
+                    UnavailableReason::UnknownCapability
+                } else {
+                    UnavailableReason::SignatureMismatch
+                },
+                message: error.to_string(),
+            });
+        Self {
+            definition: definition.clone(),
+            available: unavailable.is_none(),
+            unavailable,
+        }
+    }
 }
 
 fn stated_texts(kind: RelationshipKind) -> (&'static [LocalizedText], &'static [LocalizedText]) {
@@ -742,7 +800,13 @@ pub fn catalogue(
                 object_types: package.object_types.clone(),
                 property_sets: package.property_sets.clone(),
                 properties: package.properties.clone(),
-                definitions: package.definitions.clone(),
+                definitions: package
+                    .definitions
+                    .iter()
+                    .map(|(id, definition)| {
+                        (id.clone(), DefinitionEntry::of(registry, id, definition))
+                    })
+                    .collect(),
             })
             .collect(),
     })

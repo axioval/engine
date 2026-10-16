@@ -35,6 +35,22 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **The catalogue marks definitions that cannot compile**
+  ([#398](https://github.com/axioval/engine/issues/398)). `axioval
+  catalogue --definitions` listed a definition naming a capability this
+  engine does not register as if it could be used, while `compile`
+  refused it. Each listed definition now carries `available` (catalogue
+  schema 1.8.0): `false` with `"unavailable": {"reason":
+  "unknownCapability", "message": …}` for an unknown capability, or
+  `signatureMismatch` for parameters that are not the capability's
+  signature, decided by the same check `compile` binds a rule with. The
+  definition is still listed and the rest of the library is unaffected, so
+  a host disables it instead of offering a template that can never
+  compile. The MCS `fixed-parameter` fixture in the golden catalogue is
+  listed as unavailable: it leaves out the expression capability's
+  optional `deviation` and `message`, which the engine's signature check
+  requires.
+
 - **Units in SI notation with a parenthesised denominator**
   ([#397](https://github.com/axioval/engine/issues/397)). `parse_unit`
   reads `W/(m·K)`, `W/(m²·K)` and `kg/(m·s²)` as the units `W/m·K`,

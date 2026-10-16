@@ -1042,6 +1042,30 @@ fn definition_catalog<'a>(
     Ok(catalog)
 }
 
+/// The trusted capability `definition` names, as its parameter descriptors
+/// and whether it takes authored parameters, once its parameters are the
+/// capability's signature: the check every rule of it passes first, and the
+/// authoring catalogue's `available`.
+pub(crate) fn bound_capability(
+    registry: &CapabilityRegistry,
+    definition_id: &str,
+    definition: &RuleDefinition,
+) -> Result<(Vec<ParameterDescriptor>, bool), EngineError> {
+    let capability = registry
+        .get(&definition.capability)
+        .ok_or_else(|| EngineError::UnknownCapability(definition.capability.clone()))?;
+    let descriptors = capability.parameters();
+    let authored = capability.takes_authored_parameters();
+    validate_signature(
+        definition_id,
+        &definition.capability,
+        &descriptors,
+        &definition.parameters,
+        authored,
+    )?;
+    Ok((descriptors, authored))
+}
+
 /// Binds a rule's parameters to its definition and to the trusted capability.
 ///
 /// Applies declared defaults, then checks every binding against the
@@ -1051,18 +1075,7 @@ fn bind_parameters(
     rule: &RuleInstance,
     definition: &RuleDefinition,
 ) -> Result<BTreeMap<String, ParameterValue>, EngineError> {
-    let capability = registry
-        .get(&definition.capability)
-        .ok_or_else(|| EngineError::UnknownCapability(definition.capability.clone()))?;
-    let descriptors = capability.parameters();
-    let authored = capability.takes_authored_parameters();
-    validate_signature(
-        &rule.definition_id,
-        &definition.capability,
-        &descriptors,
-        &definition.parameters,
-        authored,
-    )?;
+    let (descriptors, authored) = bound_capability(registry, &rule.definition_id, definition)?;
     // A fixed parameter takes its definition's default. An instance that
     // states its own would replace the template's logic, which only a new
     // definition may do.

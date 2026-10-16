@@ -109,6 +109,64 @@ fn the_catalogue_marks_a_fixed_parameter() {
     assert!(parameters["minimum"].get("fixed").is_none());
 }
 
+/// #398: a definition naming a capability this engine does not register,
+/// or stating another signature, is listed but marked unavailable with the
+/// refusal `compile` would give; the rest of the library stays available.
+#[test]
+fn the_catalogue_marks_a_definition_that_cannot_compile() {
+    let mut package = fixed_parameter();
+    // The engine binds a definition to the capability's whole signature,
+    // its optional parameters included, which the MCS fixture leaves out.
+    let fixture = package
+        .definitions
+        .get_mut("axioval:example.minimum-width")
+        .unwrap();
+    for (id, kind) in [("deviation", "expression"), ("message", "string")] {
+        let parameter = serde_json::json!({"id": id, "name": {"default": id, "translations": {}},
+                                           "kind": kind, "required": false});
+        fixture
+            .parameters
+            .insert(id.into(), serde_json::from_value(parameter).unwrap());
+    }
+    let known = fixture.clone();
+    let mut unknown = known.clone();
+    unknown.id = "axioval:example.from-a-newer-engine".into();
+    unknown.capability = "axioval:capability.not-registered".into();
+    let mut drifted = known.clone();
+    drifted.id = "axioval:example.drifted".into();
+    drifted.parameters.remove("requirement");
+    for definition in [unknown, drifted] {
+        package
+            .definitions
+            .insert(definition.id.clone(), definition);
+    }
+    let value: serde_json::Value = serde_json::from_str(&rendered(&[package])).unwrap();
+    let definitions = &value["concepts"][0]["definitions"];
+    let known = &definitions["axioval:example.minimum-width"];
+    assert_eq!(known["available"], true);
+    assert!(known.get("unavailable").is_none());
+    let unknown = &definitions["axioval:example.from-a-newer-engine"];
+    assert_eq!(unknown["capability"], "axioval:capability.not-registered");
+    assert_eq!(unknown["available"], false);
+    assert_eq!(
+        unknown["unavailable"],
+        serde_json::json!({
+            "reason": "unknownCapability",
+            "message": "unknown capability `axioval:capability.not-registered`",
+        })
+    );
+    let drifted = &definitions["axioval:example.drifted"];
+    assert_eq!(drifted["available"], false);
+    assert_eq!(drifted["unavailable"]["reason"], "signatureMismatch");
+    assert!(
+        drifted["unavailable"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("axioval:example.drifted"),
+        "{drifted}"
+    );
+}
+
 #[test]
 fn the_german_catalogue_translates_every_built_in_entry() {
     use axioval_engine::catalogue::{CatalogueError, localized};

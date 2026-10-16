@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.7.0",
+  "schemaVersion": "1.8.0",
   "languages": [
     "en",
     "de"
@@ -124319,7 +124319,12 @@
             }
           },
           "tags": [],
-          "citations": []
+          "citations": [],
+          "available": false,
+          "unavailable": {
+            "reason": "signatureMismatch",
+            "message": "definition `axioval:example.minimum-width` conflicts with capability `axioval:capability.expression`: parameter name differs"
+          }
         }
       }
     }

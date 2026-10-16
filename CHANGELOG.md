@@ -130,6 +130,13 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **MCS member names collide exactly as the MCS reader folds them**
+  ([#395](https://github.com/axioval/engine/issues/395)). `axioval-mcs`
+  approximated `str.casefold()` by upper- then lowercasing, so `STRAẞE.txt`
+  and `strasse.txt` did not collide; it now applies full Unicode default case
+  folding after NFC (`caseless`, Unicode 16), which agrees with Python 3.13's
+  `casefold()` on every code point Unicode 15.1 assigns.
+
 - **Curved slabs whose top is a floor no longer leave the rooms above
   undecided** ([#393](https://github.com/axioval/engine/issues/393)). A
   tessellated body's flat top was read as possibly its chord deviation

@@ -326,6 +326,36 @@ fn duplicate_members_are_refused() {
     );
 }
 
+/// Names collide as Python's `str.casefold()` folds them after NFC, so a
+/// non-ASCII pair is refused where upper- then lowercasing would differ
+/// (`STRAẞE` lowercases to `straße`, folds to `strasse`).
+#[test]
+fn names_equal_once_casefolded_are_refused() {
+    for (first, second) in [
+        ("source/STRASSE.txt", "source/straße.txt"),
+        ("source/strasse.txt", "source/STRAẞE.txt"),
+        ("source/ΟΔΟΣ.txt", "source/οδος.txt"),
+        ("source/Ärger.txt", "source/ärger.txt"),
+    ] {
+        let mut members = support::members(&fixture("template-library.mcs"));
+        members.push((first.to_owned(), b"x".to_vec()));
+        members.push((second.to_owned(), b"y".to_vec()));
+        assert_eq!(
+            read(&write_zip(&members)).unwrap_err(),
+            McsError::DuplicateMember(second.into()),
+            "{first:?} and {second:?}"
+        );
+    }
+    // Folding equates cases, not letters: `ä` and `a` stay apart.
+    let mut members = support::members(&fixture("template-library.mcs"));
+    members.push(("source/ärger.txt".to_owned(), b"x".to_vec()));
+    members.push(("source/arger.txt".to_owned(), b"y".to_vec()));
+    assert!(!matches!(
+        read(&write_zip(&members)).unwrap_err(),
+        McsError::DuplicateMember(_)
+    ));
+}
+
 #[test]
 fn oversized_members_and_archives_are_refused() {
     let big = vec![b'a'; axioval_mcs::MAX_FILE + 1];

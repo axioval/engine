@@ -28,6 +28,9 @@ sha2.workspace = true
 flate2.workspace = true
 # Member names must be in NFC.
 unicode-normalization.workspace = true
+# Member names must not collide once case folded, as Python's
+# `str.casefold()` folds them.
+caseless.workspace = true
 
 # The tests compile what they read against the built-in capabilities. A
 # path-only dev-dependency is left out of the published manifest.

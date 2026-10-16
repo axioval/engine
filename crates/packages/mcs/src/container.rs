@@ -86,10 +86,14 @@ pub(crate) fn safe_name(name: &str) -> Result<(), McsError> {
     Ok(())
 }
 
-/// The key two names collide under: NFC, then case folded.
+/// The key two names collide under: NFC, then full Unicode default case
+/// folding, the MCS reader's `unicodedata.normalize("NFC", name).casefold()`.
+///
+/// Folding is not upper- then lowercasing: `ẞ` folds to `ss` but lowercases
+/// to `ß`, and a final sigma folds to `σ`.
 fn folded(name: &str) -> String {
     use unicode_normalization::UnicodeNormalization as _;
-    name.nfc().collect::<String>().to_uppercase().to_lowercase()
+    caseless::default_case_fold_str(&name.nfc().collect::<String>())
 }
 
 fn entry_name(raw: &[u8], flags: u16) -> Result<String, McsError> {
@@ -305,4 +309,31 @@ pub(crate) fn members(raw: &[u8]) -> Result<Vec<Member>, McsError> {
         ));
     }
     Ok(members)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::folded;
+
+    /// Each name with its key as the MCS reader folds it, cross-checked with
+    /// `python3 -c "import unicodedata as u; print(u.normalize('NFC', '…').casefold())"`
+    /// (Python 3.13, Unicode 15.1).
+    #[test]
+    fn names_fold_as_python_casefolds_them() {
+        for (name, key) in [
+            ("source/STRASSE.txt", "source/strasse.txt"),
+            ("source/straße.txt", "source/strasse.txt"),
+            ("source/STRAẞE.txt", "source/strasse.txt"),
+            ("source/ẞ", "source/ss"),
+            ("source/ΟΔΟΣ.txt", "source/οδοσ.txt"),
+            ("source/οδος.txt", "source/οδοσ.txt"),
+            ("source/Ärger.txt", "source/ärger.txt"),
+            ("source/ärger.txt", "source/ärger.txt"),
+            ("source/A\u{308}rger.txt", "source/ärger.txt"),
+            ("source/ﬁle", "source/file"),
+            ("source/İ", "source/i\u{307}"),
+        ] {
+            assert_eq!(folded(name), key, "{name:?}");
+        }
+    }
 }

@@ -4,6 +4,21 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-16
+
+Federation, free floor and packages. A host can declare that one federated
+model is derived from another, and the objects it copies are then
+evaluated once: superseded objects are neither rule subjects nor clash
+counterparts, and the report lists them. The geometry host matches copies
+by GlobalId and certified surface distance. A failed free-floor shape now
+names what blocks it, and how large a shape does fit; free-floor
+obstacles default to physical objects, and tessellated bodies resting on
+the floor no longer leave the rooms above unevaluated. Rule definitions
+may fix parameters. The new `axioval-mcs` crate reads MCS package
+archives, template libraries included. Units accept a parenthesised
+denominator. The catalogue marks definitions that cannot compile. The
+release is breaking for the engine, host and catalogue APIs.
+
 ### Changed
 
 - **Faster free-floor searches over large scenes**
@@ -6744,7 +6759,8 @@ meshes with `axiolid-mesh` 0.1.
 
 - Placement offset bounds no longer admit tolerance-expanded witnesses; supported found placements now require exact frame-bound whole-base support evidence.
 
-[Unreleased]: https://github.com/axioval/engine/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/axioval/engine/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/axioval/engine/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/axioval/engine/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/axioval/engine/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/axioval/engine/compare/v0.1.2...v0.3.0

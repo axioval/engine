@@ -205,3 +205,101 @@ fn the_largest_disc_is_estimated_where_the_searches_decide_it() {
         Ok(PlacementOutcome::NoPlacement(_))
     ));
 }
+
+/// Space footprints of axiolid/kernel#331, synthetic: a wedge whose apex
+/// is three corners along a side of the 64-gon the disc morphology works
+/// with, the middle one off the line through the others by an ulp --
+/// outwards in the first two (the second along another side), inwards in
+/// the third. The coordinates are those of the kernel's own test.
+const PARALLEL_WALLS: [[Xy; 5]; 3] = [
+    [
+        (1.000_147_203_022_991_2, 1.997_003_613_631_385),
+        (1.0, 2.0),
+        (0.999_901_864_651_339_1, 2.001_997_590_912_41),
+        (-0.023_427_428_718_893_285, 2.452_327_644_684_508),
+        (0.001_351_746_817_966_015_3, 1.947_935_939_300_970_5),
+    ],
+    [
+        (0.998_212_902_086_515_5, 2.002_409_622_594_436_6),
+        (1.0, 2.0),
+        (1.001_191_398_608_989_8, 1.998_393_584_937_042_2),
+        (2.102_248_582_335_269_2, 2.192_489_123_692_456),
+        (1.801_420_433_565_373_6, 2.598_108_927_089_279),
+    ],
+    [
+        (1.000_147_203_022_973_2, 1.997_003_613_631_384),
+        (0.999_999_999_999_999_9, 2.0),
+        (0.999_901_864_651_351_1, 2.001_997_590_912_411),
+        (-0.023_427_428_716_179_297, 2.452_327_644_690_649),
+        (0.001_351_746_817_653_598_5, 1.947_935_939_306_962_4),
+    ],
+];
+
+/// A closed, outward-wound upright prism over a counter-clockwise ring
+/// whose first corner sees every other, fanned from that corner.
+fn prism_over(ring: &[Xy], z0: f64, z1: f64) -> TriMesh {
+    let n = u32::try_from(ring.len()).unwrap();
+    let positions = [z0, z1]
+        .into_iter()
+        .flat_map(|z| ring.iter().map(move |(x, y)| Point3::new(*x, *y, z)))
+        .collect();
+    let mut indices = Vec::new();
+    for k in 1..n - 1 {
+        indices.extend([0, k + 1, k, n, n + k, n + k + 1]);
+    }
+    for i in 0..n {
+        let j = (i + 1) % n;
+        indices.extend([i, j, n + j, i, n + j, n + i]);
+    }
+    TriMesh::new(positions, indices)
+}
+
+/// A tessellated space whose footprint has a corner an ulp off the chord
+/// across it is measured, and a turning circle in it decided, at each
+/// deviation (#415). axiolid-overlay 0.3.16 refused seven of these nine
+/// footprints (`bracketed footprint: ZeroArea`); 0.3.15 and 0.3.17
+/// measure them all. Each wedge has 0.255 m² of floor, which the bracket
+/// holds within its deviation along the 2.6 m outline.
+#[test]
+fn a_footprint_with_a_corner_an_ulp_off_its_chord_is_measured() {
+    for wall in PARALLEL_WALLS {
+        // Counter-clockwise from the wedge's far corner, which sees the rest.
+        let mut ring = wall.to_vec();
+        ring.rotate_left(3);
+        for deviation in [0.0005, 0.001, 0.002] {
+            let geometry = AxiolidGeometry::new()
+                .with_tessellated_mesh(id("space"), prism_over(&ring, 0.0, 2.5), deviation)
+                .with_extent_bounds(
+                    id("space"),
+                    ([-1.0, 1.0, -deviation], [3.0, 3.0, 2.5 + deviation]),
+                    None,
+                );
+            let service = AxiolidFreeSpaceService::new(geometry, source());
+            let request = PlacementRequest::new_in_domain(
+                id("space"),
+                PlacementShape::Cylinder(CylinderClearance::try_new(0.05, 2.0).unwrap()),
+                vec![],
+                PlacementDomain::Supported(SupportedPlacement::try_new(id("space"), 0.0).unwrap()),
+            )
+            .unwrap();
+            let floor = service
+                .measure_free_floor(&request)
+                .unwrap_or_else(|e| panic!("{wall:?} at {deviation}: {e:?}"));
+            let (lower, upper) = (
+                floor.area().lower_square_metres(),
+                floor.area().upper_square_metres(),
+            );
+            assert!(
+                lower < 0.255 && 0.255 < upper && upper - lower < 6.0 * deviation,
+                "{wall:?} at {deviation}: {lower} {upper}"
+            );
+            assert!(
+                matches!(
+                    service.find_placement(&request),
+                    Ok(PlacementOutcome::Found(_))
+                ),
+                "{wall:?} at {deviation}"
+            );
+        }
+    }
+}

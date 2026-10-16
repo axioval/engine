@@ -21,6 +21,17 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **Space footprints that overlay 0.3.16 refused as zero-area are measured
+  again** ([#415](https://github.com/axioval/engine/issues/415)).
+  axiolid-overlay 0.3.16 refused some tessellated spaces with a corner an
+  ulp off the chord across it (`free-space query unavailable: bracketed
+  footprint: ZeroArea`), so free-floor and turning-circle checks on them
+  went undecided. axiolid-overlay 0.3.17 skips a chord whose trimmed hulls
+  would be zero-area slivers (axiolid/kernel#331) and gives 0.3.15's
+  results bit for bit on those footprints, keeping 0.3.16's speed-ups.
+  `tests/free_floor.rs` pins synthetic wedges of that kind as measured,
+  with a bracketed area and a placed circle.
+
 - **Bodies clipped by a polygonal bounded half-space oblique to its plane
   are measured, for any boundary**
   ([#404](https://github.com/axioval/engine/issues/404)). ifc-geometry 0.28

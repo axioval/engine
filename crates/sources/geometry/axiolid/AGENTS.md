@@ -300,8 +300,10 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   sure footprint shares more than `AREA_EPSILON_M2` with `scope`, possibly
   where its possible one shares more than `POSSIBLE_FLOOR_M2` (1 mm²) with
   `room`. Never compare the sure footprint with `room` or the possible one
-  with `scope`. `tests/free_floor.rs` pins a furnished room and a
-  tessellated column.
+  with `scope`. `tests/free_floor.rs` pins a furnished room, a
+  tessellated column and tessellated wedges with a corner an ulp off its
+  chord, which overlay 0.3.16 refused as `ZeroArea` (#415,
+  axiolid/kernel#331; measured again since 0.3.17).
 - `src/circulation.rs` answers `map_circulation` for the free-space
   service: the placement scene's free area, pieces from `erode_inner` less
   `dilate_outer` (proof of connection), possible pieces from `erode_outer`

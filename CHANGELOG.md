@@ -4,6 +4,17 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-10-16
+
+Free-floor speed and coverage. The largest-shape bracket of 0.6.0 starts
+from an estimate and takes two or three searches, disc searches run first
+over regions simplified on their safe side, and a disc erosion past 1,000
+corners is refused instead of exhausting memory: `free-floor-circle` is
+again faster than in 0.5.0 and bounded in memory. Obstacles that cannot be
+measured but have a certified enclosing bound (open meshes, bodies whose
+openings the exact boolean refuses) count as possible obstacles instead of
+leaving the space undecided. Additive only.
+
 ### Changed
 
 - **Free-floor searches bound obstacles they cannot measure instead of
@@ -6810,7 +6821,8 @@ meshes with `axiolid-mesh` 0.1.
 
 - Placement offset bounds no longer admit tolerance-expanded witnesses; supported found placements now require exact frame-bound whole-base support evidence.
 
-[Unreleased]: https://github.com/axioval/engine/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/axioval/engine/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/axioval/engine/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/axioval/engine/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/axioval/engine/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/axioval/engine/compare/v0.3.0...v0.4.0

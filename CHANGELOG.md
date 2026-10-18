@@ -38,6 +38,38 @@ All notable changes are documented here. This project follows Semantic Versionin
   bounds and lists each witness in its description; off by default, so
   archives stay byte-identical.
 
+### Changed
+
+- **Findings name the facet an IDS states, and every property by the names
+  it binds to** ([#375](https://github.com/axioval/engine/issues/375)).
+  With `check --ids`, findings named the concepts the translation
+  generated: `property ids:library.attribute-1 is "X1053", which
+  matches no required pattern`, for what the IDS calls the attribute
+  `Tag`. `property-exists`, `property-required`, `property-data-type`,
+  `property-value`, the exact rows of `property-requirements` and the
+  values `selector-conformance` names now show a property by the set and
+  name it binds to in the checked object's source, and a property of a
+  reserved set as the field it is: `attribute Tag is "X1053", …`,
+  `property Custom_Model.Basis is "guessed", not one of the
+  required values`, ``material [`Concrete`]`` (`attribute`, `type attribute`,
+  `material <name>`, and `material` for `axioval:material.Names`). This
+  holds for every definition package, not only IDS translations
+  (`property axioval:example.ifc.Span` reads `property Pset_Kinds.Span`).
+  `classification` names the requirement and what the object carries
+  (`no classification meets the requirement (system Uniclass, code
+  EF_30); classified as Uniclass EF_25_10`, `the object has no
+  classification; required: …`). The IDS translation words its own
+  messages and rule names as the facet: an enumeration as `one of Beton,
+  Stahl`, an entity as `entity IFCWALL with predefined type SHEAR`. Rule
+  ids (`spec<n>.facet<k>`), concept ids and every rule parameter are
+  unchanged, so tools keyed on them keep working and a translation exports
+  as before. Since a finding's identity is derived from its message, the
+  findings whose text changed get new identities: BCF topics and decisions
+  recorded against them before do not carry over and are listed as
+  unmatched. The parity recordings of the `judges` case carry the new
+  messages; only their `message` fields changed. See [IDS findings](docs/src/ids.md#findings) and
+  [Names in messages](docs/src/concept-binding.md#names-in-messages).
+
 ### Security
 
 - Moved to zip 9 and rust_xlsxwriter 0.100, past RUSTSEC-2026-0367, -0368

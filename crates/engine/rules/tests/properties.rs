@@ -276,7 +276,7 @@ fn required_property_rejects_exact_absence_null_and_blank_text() {
         assert!(
             evaluation.findings()[0]
                 .message
-                .contains("missing required property Code")
+                .contains("missing required property Pset.Required.Code")
         );
         assert!(!evaluation.findings()[0].evidence.is_empty());
     }
@@ -638,21 +638,21 @@ fn data_type_accepts_a_non_empty_value_of_the_declared_type() {
 #[test]
 fn data_type_rejects_absence_emptiness_and_another_type() {
     for (value, declared, message) in [
-        (None, None, "missing required property Code"),
+        (None, None, "missing required property Pset.Typed.Code"),
         (
             Some(PropertyValue::Null),
             None,
-            "missing required property Code",
+            "missing required property Pset.Typed.Code",
         ),
         (
             Some(PropertyValue::String(" ".into())),
             Some("IFCLABEL"),
-            "missing required property Code",
+            "missing required property Pset.Typed.Code",
         ),
         (
             Some(PropertyValue::String("x".into())),
             Some("IFCTEXT"),
-            "property Code is IFCTEXT, not IFCLABEL",
+            "property Pset.Typed.Code is IFCTEXT, not IFCLABEL",
         ),
     ] {
         let evaluation = typed_property(value, declared, "IFCLABEL");
@@ -691,7 +691,7 @@ fn a_table_whose_columns_differ_has_the_type_of_either_column() {
     assert_eq!(evaluation.findings().len(), 1);
     assert_eq!(
         evaluation.findings()[0].message,
-        "property Code has no column of type IFCREAL"
+        "property Pset.Typed.Code has no column of type IFCREAL"
     );
 }
 

@@ -16,7 +16,8 @@ use super::{Constant, Outcome, Plan, Read, read_values, render};
 use crate::expression_leaves::ObjectLeaves;
 use crate::selection::{Selection, select_shared, selector_matches};
 use crate::support::{
-    Parameters, PropertyRef, display, finding, resolve, scope_key, undefined, value_key,
+    Parameters, PropertyRef, bound_label, display, finding, resolve, scope_key, undefined,
+    value_key,
 };
 
 /// An object holding a value: the object, the value, its evidence.
@@ -707,7 +708,10 @@ pub(super) fn conforms(
             evidence.extend(answer.evidence());
         }
         if answers.iter().all(|answer| undefined(answer.value())) {
-            let names: Vec<String> = consulted.iter().map(ToString::to_string).collect();
+            let names: Vec<String> = consulted
+                .iter()
+                .map(|property| bound_label(context, object, *property))
+                .collect();
             let mut read = Read::default();
             read.named.insert("properties", names.join(", "));
             let message = render(plan, &read, conformance.no_value);
@@ -725,7 +729,13 @@ pub(super) fn conforms(
             shown: consulted
                 .iter()
                 .zip(&answers)
-                .map(|(property, answer)| format!("{property} {}", display(answer.value())))
+                .map(|(property, answer)| {
+                    format!(
+                        "{} {}",
+                        bound_label(context, object, *property),
+                        display(answer.value())
+                    )
+                })
                 .collect::<Vec<_>>()
                 .join(", "),
             objects: Vec::new(),

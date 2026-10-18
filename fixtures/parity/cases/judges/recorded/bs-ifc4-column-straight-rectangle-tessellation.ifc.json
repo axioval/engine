@@ -12,7 +12,7 @@
         }
       ],
       "id": "d476daea-2373-5ea1-97da-01a5980cb989",
-      "message": "axioval:attributes.axioval:parity.public.judges.description has no value to compare with the agreed list",
+      "message": "attribute Description has no value to compare with the agreed list",
       "object_id": {
         "local_id": "#37",
         "source": {
@@ -35,7 +35,7 @@
         }
       ],
       "id": "b63e2569-b715-5030-a543-df80e5ed19e8",
-      "message": "axioval:attributes.axioval:parity.public.judges.description has no value to compare with the agreed list",
+      "message": "attribute Description has no value to compare with the agreed list",
       "object_id": {
         "local_id": "#44",
         "source": {
@@ -58,7 +58,7 @@
         }
       ],
       "id": "1d83ec34-b75b-5d18-b96a-94d540da1c66",
-      "message": "axioval:attributes.axioval:parity.public.judges.description has no value to compare with the agreed list",
+      "message": "attribute Description has no value to compare with the agreed list",
       "object_id": {
         "local_id": "#71",
         "source": {

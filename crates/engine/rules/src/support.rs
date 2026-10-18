@@ -210,6 +210,66 @@ impl std::fmt::Display for PropertyRef<'_> {
     }
 }
 
+/// How a message names the property `name` of `set`, in the names the
+/// source uses: `P.Count`, or for a reserved set the kind of field it is,
+/// `attribute Name`, `type attribute Name`, `material Kind`, and `material`
+/// for every name the material goes by.
+pub(crate) fn property_label(set: Option<&str>, name: &str) -> String {
+    match set {
+        Some(axioval_ir::ATTRIBUTE_SET) => format!("attribute {name}"),
+        Some(axioval_ir::TYPE_ATTRIBUTE_SET) => format!("type attribute {name}"),
+        Some(axioval_ir::MATERIAL_SET) if name.eq_ignore_ascii_case(axioval_ir::MATERIAL_NAMES) => {
+            "material".to_owned()
+        }
+        Some(axioval_ir::MATERIAL_SET) => format!("material {name}"),
+        Some(set) => format!("{set}.{name}"),
+        None => name.to_owned(),
+    }
+}
+
+/// [`property_label`] as the subject of a sentence: `property P.Count`,
+/// `attribute Name`, `material`.
+pub(crate) fn property_subject(set: Option<&str>, name: &str) -> String {
+    match set {
+        Some(
+            axioval_ir::ATTRIBUTE_SET | axioval_ir::TYPE_ATTRIBUTE_SET | axioval_ir::MATERIAL_SET,
+        ) => property_label(set, name),
+        _ => format!("property {}", property_label(set, name)),
+    }
+}
+
+/// The names `property` binds to in `object`'s source: a package concept
+/// by the set and property names it stands for there, so a message names
+/// what the model and the rule's author call it, never a generated concept
+/// id. A reference that cannot be bound keeps its own names; resolving it
+/// reports why.
+pub(crate) fn bound_names(
+    context: &RuleContext<'_>,
+    object: &Object,
+    property: PropertyRef<'_>,
+) -> (Option<String>, String) {
+    match bound_property_request(context, object, property.set, property.name) {
+        Ok(request) => (
+            request.property_set().map(ToOwned::to_owned),
+            request.property().to_owned(),
+        ),
+        Err(_) => (
+            property.set.map(ToOwned::to_owned),
+            property.name.to_owned(),
+        ),
+    }
+}
+
+/// [`property_label`] of `property` in the names it binds to for `object`.
+pub(crate) fn bound_label(
+    context: &RuleContext<'_>,
+    object: &Object,
+    property: PropertyRef<'_>,
+) -> String {
+    let (set, name) = bound_names(context, object, property);
+    property_label(set.as_deref(), &name)
+}
+
 /// An exact property answer.
 pub(crate) enum Resolved {
     Present(Property),

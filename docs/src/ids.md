@@ -109,6 +109,30 @@ of those (a list or bounded value is no single value to it). Digits or
 bounds on a text, enumeration or boolean attribute in those places stay a
 `RestrictionFacet` gap: no expression compares them as IDS casts.
 
+## Findings
+
+A finding names the facet it breaks in the terms the IDS states, never by
+the concepts the translation generated (`ids:<package>.attribute-1`,
+`property-4`), which stay the keys rules and definitions use. The rule id
+`spec<n>.facet<k>` says which specification (the folder `spec<n>`, named
+after it, and the `ids` field of a `check --ids` result) and which of its
+requirement facets, counted from 1; the message says what the facet tests
+and what the object holds:
+
+| Facet | Finding |
+|---|---|
+| attribute | `attribute Tag is "X1053", which matches no required pattern`; `missing required attribute Name`; prohibited: ``forbidden value: attribute ObjectType is `CUSTOM`, which is not empty (requirement row 0)`` |
+| property | `property Custom_Model.Basis is "guessed", not one of the required values`; `missing required property Pset_WallCommon.FireRating`; `property Pset_WallCommon.FireRating is IFCLABEL, not IFCTEXT`; a set or name given as a pattern: `missing required property /[PQ]/./Count/: no property matches` |
+| material | ``does not meet the IDS requirement that it has a material named one of Beton, Stahl: material [`Concrete`]``; without a material: `material has no value to compare with the agreed list` |
+| classification | `no classification meets the requirement (system Uniclass, code EF_30); classified as Uniclass EF_25_10`; `the object has no classification; required: system Uniclass, code EF_30` |
+| entity, part of | `does not meet the IDS requirement that it is entity IFCWALL with predefined type SHEAR: …` with the attributes the predefined type is resolved from; `… that it is part of entity IFCBUILDINGSTOREY through IFCRELCONTAINEDINSPATIALSTRUCTURE` |
+| prohibited with a value | `has P.Count = 1234, which IDS prohibits` |
+
+An enumeration reads `one of A, B`, a pattern `/…/`. Properties are named
+by what their concepts bind to in the model's source (see
+[Concept binding](./concept-binding.md#names-in-messages)), which for an IDS
+translation are the names the facet states.
+
 ## Command line
 
 `axioval check --ids rules.ids --model model.ifc` translates a document in

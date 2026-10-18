@@ -314,7 +314,7 @@ fn required_values_treat_absence_null_and_blank_as_missing() {
         let Outcome::Fails(message) = check(value, None, &[values(&["x"])]) else {
             panic!("must fail")
         };
-        assert_eq!(message, "missing required property Code");
+        assert_eq!(message, "missing required property P.Code");
     }
 }
 
@@ -357,7 +357,7 @@ fn the_declared_type_is_checked_before_the_value() {
     let Outcome::Fails(message) = check(string("x"), Some("IFCTEXT"), &label) else {
         panic!("must fail")
     };
-    assert_eq!(message, "property Code is IFCTEXT, not IFCLABEL");
+    assert_eq!(message, "property P.Code is IFCTEXT, not IFCLABEL");
     assert!(matches!(
         check(string("x"), None, &label),
         Outcome::NotEvaluated(NotEvaluatedReason::IncompleteEvidence)

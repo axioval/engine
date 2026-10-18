@@ -175,7 +175,7 @@
         }
       ],
       "id": "dee27317-0c3b-5f6f-9a16-06a1a09d82d9",
-      "message": "forbidden property present: axioval:parity.public.judges.wall-common.axioval:parity.public.judges.fire-rating is `` (requirement row 4)",
+      "message": "forbidden property present: Pset_WallCommon.FireRating is `` (requirement row 4)",
       "object_id": {
         "local_id": "#45",
         "source": {
@@ -291,7 +291,7 @@
         }
       ],
       "id": "c0764513-ffc9-54b0-b711-d264b3b8bad3",
-      "message": "wrong value: axioval:attributes.axioval:parity.public.judges.name is `Wall for Test Example`; required like `Basic Wall*` (requirement row 5)",
+      "message": "wrong value: attribute Name is `Wall for Test Example`; required like `Basic Wall*` (requirement row 5)",
       "object_id": {
         "local_id": "#45",
         "source": {
@@ -407,7 +407,7 @@
         }
       ],
       "id": "ab7bbb60-b685-511c-98f3-3754bcd21c24",
-      "message": "property axioval:parity.public.judges.name is \"Wall for Test Example\", which matches no required pattern",
+      "message": "attribute Name is \"Wall for Test Example\", which matches no required pattern",
       "object_id": {
         "local_id": "#45",
         "source": {
@@ -430,7 +430,7 @@
         }
       ],
       "id": "43d1a2b7-1564-57dc-b434-666d78ecf26f",
-      "message": "missing required property axioval:parity.public.judges.width",
+      "message": "missing required property Qto_WallBaseQuantities.Width",
       "object_id": {
         "local_id": "#45",
         "source": {
@@ -453,7 +453,7 @@
         }
       ],
       "id": "6f05b5f6-b895-50ff-957c-f5134b0cb21b",
-      "message": "missing required property axioval:parity.public.judges.width",
+      "message": "missing required property Qto_WallBaseQuantities.Width",
       "object_id": {
         "local_id": "#45",
         "source": {
@@ -569,7 +569,7 @@
         }
       ],
       "id": "b60d57fe-8588-50cc-8a9a-2a1c43703146",
-      "message": "axioval:attributes.axioval:parity.public.judges.description has no value to compare with the agreed list",
+      "message": "attribute Description has no value to compare with the agreed list",
       "object_id": {
         "local_id": "#110",
         "source": {
@@ -600,7 +600,7 @@
         }
       ],
       "id": "a5682ec5-db49-5e27-883a-fd22fcdf921e",
-      "message": "does not match any agreed combination of values: axioval:attributes.axioval:parity.public.judges.object-type absent, axioval:attributes.axioval:parity.public.judges.name `Wall for Test Example`",
+      "message": "does not match any agreed combination of values: attribute ObjectType absent, attribute Name `Wall for Test Example`",
       "object_id": {
         "local_id": "#45",
         "source": {

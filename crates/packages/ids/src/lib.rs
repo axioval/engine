@@ -1099,7 +1099,7 @@ impl<'o> Writer<'o> {
                 Ok(Some(conformance(
                     selector,
                     occurrence,
-                    &format!("is a {}", shown_entity(entity)),
+                    &format!("is {}", shown_entity(entity)),
                 )))
             }
             Facet::Classification(classification) => {
@@ -2117,7 +2117,7 @@ fn breaking(holds: &str) -> Check {
 /// What a facet states of an object, as required.
 fn holds(facet: &Facet) -> String {
     match facet {
-        Facet::Entity(entity) => format!("is a {}", shown_entity(entity)),
+        Facet::Entity(entity) => format!("is {}", shown_entity(entity)),
         Facet::Attribute(attribute) => match &attribute.value {
             Some(value) => format!(
                 "has attribute {} {}",
@@ -3647,11 +3647,16 @@ fn any_of(mut operands: Vec<Selector>) -> Selector {
     }
 }
 
+/// A facet's value as its author wrote it: a literal, `one of A, B` for an
+/// enumeration, a pattern between slashes.
 fn shown_value(value: &Value) -> String {
     match value {
         Value::Simple(literal) => literal.clone(),
+        Value::Restriction(restriction) if restriction.enumeration.len() == 1 => {
+            restriction.enumeration[0].clone()
+        }
         Value::Restriction(restriction) if !restriction.enumeration.is_empty() => {
-            restriction.enumeration.join("|")
+            format!("one of {}", restriction.enumeration.join(", "))
         }
         Value::Restriction(restriction) if !restriction.patterns.is_empty() => {
             format!("/{}/", restriction.patterns.join("|"))
@@ -3660,10 +3665,12 @@ fn shown_value(value: &Value) -> String {
     }
 }
 
+/// An entity facet as its author wrote it: `entity IFCWALL with predefined
+/// type SHEAR`.
 fn shown_entity(entity: &Entity) -> String {
-    let name = shown_value(&entity.name);
+    let name = format!("entity {}", shown_value(&entity.name));
     match &entity.predefined_type {
-        Some(predefined) => format!("{name}.{}", shown_value(predefined)),
+        Some(predefined) => format!("{name} with predefined type {}", shown_value(predefined)),
         None => name,
     }
 }

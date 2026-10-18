@@ -9,6 +9,7 @@ use axioval_ir::contract::ParameterValue;
 use axioval_ir::{Evidence, Finding, Object, PropertyValue, Severity};
 
 use crate::selection::{bound_property_request, property_error, select_objects};
+use crate::support::property_subject;
 
 fn property_reference<'a>(
     rule: &'a CompiledRule,
@@ -116,6 +117,7 @@ impl RuleCapability for PropertyExists {
                     continue;
                 }
             };
+            let subject = property_subject(request.property_set(), request.property());
             match service.resolve(&request) {
                 // An unreadable value is still a present property.
                 Ok(PropertyResolution::Present(_))
@@ -123,7 +125,7 @@ impl RuleCapability for PropertyExists {
                 Ok(PropertyResolution::Absent(proof)) => evaluation.push_finding(finding(
                     rule,
                     object,
-                    format!("missing exact property {name}"),
+                    format!("missing exact {subject}"),
                     vec![proof.evidence().clone()],
                 )),
                 Err(error) => resolve_error(&mut evaluation, object, error),
@@ -176,13 +178,14 @@ impl RuleCapability for PropertyRequired {
                     continue;
                 }
             };
+            let subject = property_subject(request.property_set(), request.property());
             match service.resolve(&request) {
                 Ok(PropertyResolution::Present(resolved)) => {
                     if is_empty_value(&resolved.property().value) {
                         evaluation.push_finding(finding(
                             rule,
                             object,
-                            format!("missing required property {name}"),
+                            format!("missing required {subject}"),
                             resolved.property().evidence.clone().into_iter().collect(),
                         ));
                     }
@@ -190,7 +193,7 @@ impl RuleCapability for PropertyRequired {
                 Ok(PropertyResolution::Absent(proof)) => evaluation.push_finding(finding(
                     rule,
                     object,
-                    format!("missing required property {name}"),
+                    format!("missing required {subject}"),
                     vec![proof.evidence().clone()],
                 )),
                 // The source states a value it cannot read: one is there.
@@ -257,6 +260,7 @@ impl RuleCapability for PropertyDataType {
                     continue;
                 }
             };
+            let subject = property_subject(request.property_set(), request.property());
             match service.resolve(&request) {
                 Ok(PropertyResolution::Present(resolved)) => {
                     let property = resolved.property();
@@ -265,7 +269,7 @@ impl RuleCapability for PropertyDataType {
                         evaluation.push_finding(finding(
                             rule,
                             object,
-                            format!("missing required property {name}"),
+                            format!("missing required {subject}"),
                             evidence,
                         ));
                     } else if matches!(property.value, PropertyValue::Complex) {
@@ -273,7 +277,7 @@ impl RuleCapability for PropertyDataType {
                         evaluation.push_finding(finding(
                             rule,
                             object,
-                            format!("property {name} is a complex property, not {expected}"),
+                            format!("{subject} is a complex property, not {expected}"),
                             evidence,
                         ));
                     } else {
@@ -283,7 +287,7 @@ impl RuleCapability for PropertyDataType {
                             (Some(actual), _) => evaluation.push_finding(finding(
                                 rule,
                                 object,
-                                format!("property {name} is {actual}, not {expected}"),
+                                format!("{subject} is {actual}, not {expected}"),
                                 evidence,
                             )),
                             // A table whose columns differ has the type of
@@ -292,13 +296,13 @@ impl RuleCapability for PropertyDataType {
                             (None, Some(_)) => evaluation.push_finding(finding(
                                 rule,
                                 object,
-                                format!("property {name} has no column of type {expected}"),
+                                format!("{subject} has no column of type {expected}"),
                                 evidence,
                             )),
                             (None, None) => evaluation.push_object_not_evaluated(
                                 object.id.clone(),
                                 NotEvaluatedReason::IncompleteEvidence,
-                                format!("the source does not report the type of property {name}"),
+                                format!("the source does not report the type of {subject}"),
                             ),
                         }
                     }
@@ -306,7 +310,7 @@ impl RuleCapability for PropertyDataType {
                 Ok(PropertyResolution::Absent(proof)) => evaluation.push_finding(finding(
                     rule,
                     object,
-                    format!("missing required property {name}"),
+                    format!("missing required {subject}"),
                     vec![proof.evidence().clone()],
                 )),
                 // A stated value of an exactly declared type: the type
@@ -317,7 +321,7 @@ impl RuleCapability for PropertyDataType {
                         evaluation.push_finding(finding(
                             rule,
                             object,
-                            format!("property {name} is {actual}, not {expected}"),
+                            format!("{subject} is {actual}, not {expected}"),
                             vec![unreadable.evidence().clone()],
                         ));
                     }
@@ -377,6 +381,7 @@ impl RuleCapability for BooleanPropertyEquals {
                     continue;
                 }
             };
+            let subject = property_subject(request.property_set(), request.property());
             match service.resolve(&request) {
                 Ok(PropertyResolution::Present(resolved)) => {
                     let property = resolved.property();
@@ -387,20 +392,20 @@ impl RuleCapability for BooleanPropertyEquals {
                             .push_finding(finding(
                                 rule,
                                 object,
-                                format!("property {name} does not equal {expected}"),
+                                format!("{subject} does not equal {expected}"),
                                 property.evidence.clone().into_iter().collect(),
                             )),
                         _ => evaluation.push_object_not_evaluated(
                             object.id.clone(),
                             NotEvaluatedReason::InvalidEvidence,
-                            format!("property {name} is not boolean"),
+                            format!("{subject} is not boolean"),
                         ),
                     }
                 }
                 Ok(PropertyResolution::Absent(proof)) => evaluation.push_finding(finding(
                     rule,
                     object,
-                    format!("property {name} does not equal {expected}"),
+                    format!("{subject} does not equal {expected}"),
                     vec![proof.evidence().clone()],
                 )),
                 Err(error) => resolve_error(&mut evaluation, object, error),

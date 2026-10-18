@@ -879,7 +879,7 @@ fn typed_rules_check_the_declared_type_of_a_real_model() {
         flagged("IFCLABEL"),
         [(
             "#2".into(),
-            "missing required property ids:test.property-1".into()
+            "missing required property Pset_WallCommon.FireRating".into()
         )]
     );
     assert_eq!(
@@ -887,11 +887,11 @@ fn typed_rules_check_the_declared_type_of_a_real_model() {
         [
             (
                 "#1".into(),
-                "property ids:test.property-1 is IFCLABEL, not IFCTEXT".into()
+                "property Pset_WallCommon.FireRating is IFCLABEL, not IFCTEXT".into()
             ),
             (
                 "#2".into(),
-                "missing required property ids:test.property-1".into()
+                "missing required property Pset_WallCommon.FireRating".into()
             ),
         ]
     );
@@ -2222,4 +2222,232 @@ fn digit_restrictions_no_expression_decides_as_ids_does_stay_gaps() {
             Reason::RestrictionFacet("length")
         )]
     );
+}
+
+/// A specification named `name` applying to walls and requiring
+/// `requirements`.
+fn named_wall_specification(name: &str, requirements: &str) -> String {
+    format!(
+        "<specification name=\"{name}\" ifcVersion=\"IFC4\"><applicability {OPTIONAL}>{WALL}</applicability><requirements>{requirements}</requirements></specification>"
+    )
+}
+
+#[test]
+fn findings_name_the_facets_the_ids_states() {
+    // Several specifications, every kind of facet: each finding names the
+    // attribute, property, material, classification or entity its facet
+    // tests in the names the IDS states, never a generated concept id
+    // (#375).
+    let pattern = |pattern: &str| {
+        format!(
+            "<xs:restriction base=\"xs:string\"><xs:pattern value=\"{pattern}\"/></xs:restriction>"
+        )
+    };
+    let concrete_or_steel = "<xs:restriction base=\"xs:string\"><xs:enumeration value=\"Beton\"/><xs:enumeration value=\"Stahl\"/></xs:restriction>";
+    let translation = translate_all(&[
+        named_wall_specification(
+            "Wall names",
+            &format!(
+                "<attribute><name><simpleValue>Name</simpleValue></name><value>{}</value></attribute>{}",
+                pattern("X.*"),
+                attribute("ObjectType", "cardinality=\"prohibited\"", None)
+            ),
+        ),
+        named_wall_specification(
+            "Wall properties",
+            &format!(
+                "{}{}",
+                valued("Count", "7"),
+                property("Pset_WallCommon", "FireRating", "dataType=\"IFCLABEL\"")
+            ),
+        ),
+        named_wall_specification(
+            "Wall materials and places",
+            &format!(
+                "<material><value>{concrete_or_steel}</value></material><classification><value><simpleValue>EF_30</simpleValue></value><system><simpleValue>Uniclass</simpleValue></system></classification><partOf relation=\"IFCRELCONTAINEDINSPATIALSTRUCTURE\"><entity><name><simpleValue>IFCBUILDINGSTOREY</simpleValue></name></entity></partOf>"
+            ),
+        ),
+        named_wall_specification(
+            "Wall kinds",
+            &format!(
+                "<property><propertySet>{}</propertySet><baseName><simpleValue>Count</simpleValue></baseName><value><simpleValue>7</simpleValue></value></property>{}<entity><name><simpleValue>IFCWALL</simpleValue></name><predefinedType><simpleValue>SHEAR</simpleValue></predefinedType></entity>",
+                pattern("[PQ]"),
+                property("P", "Count", "cardinality=\"prohibited\"")
+            ),
+        ),
+    ]);
+    assert!(translation.is_complete(), "{:?}", reasons(&translation));
+    let names: Vec<&str> = translation
+        .ruleset
+        .root
+        .folders
+        .iter()
+        .map(|folder| folder.name.default.as_str())
+        .collect();
+    assert_eq!(
+        names,
+        [
+            "Wall names",
+            "Wall properties",
+            "Wall materials and places",
+            "Wall kinds"
+        ]
+    );
+    // The generated ids stay what tools key on: the rules still name the
+    // concepts the definitions declare.
+    let name_rule = &translation.ruleset.root.folders[0].rules[0];
+    assert_eq!(
+        name_rule.parameters["property"],
+        ParameterValue::PropertyReference {
+            property: "ids:test.attribute-1".into(),
+            property_set: Some(axioval::ir::ATTRIBUTE_SET.into()),
+        }
+    );
+    let report = run(&translation, PROJECT_MODEL);
+    assert!(
+        report.not_evaluated().is_empty(),
+        "{:?}",
+        report.not_evaluated()
+    );
+    let findings: Vec<(String, String, String)> = report
+        .findings()
+        .iter()
+        .map(|finding| {
+            (
+                finding.rule_id.to_string(),
+                finding
+                    .object_id()
+                    .expect("an object finding")
+                    .local_id
+                    .clone(),
+                finding.message.clone(),
+            )
+        })
+        .collect();
+    assert_eq!(findings, facet_findings());
+}
+
+/// What `findings_name_the_facets_the_ids_states` reports: rule, object
+/// and message.
+#[allow(clippy::too_many_lines)] // One line per expected finding.
+fn facet_findings() -> Vec<(String, String, String)> {
+    let expected = [
+        (
+            "spec1.facet1",
+            "#10",
+            "attribute Name is \"W1\", which matches no required pattern",
+        ),
+        (
+            "spec1.facet1",
+            "#11",
+            "attribute Name is \"W2\", which matches no required pattern",
+        ),
+        ("spec1.facet1", "#12", "missing required attribute Name"),
+        (
+            "spec1.facet2",
+            "#11",
+            "forbidden value: attribute ObjectType is `CUSTOM`, which is not empty (requirement row 0)",
+        ),
+        (
+            "spec2.facet1",
+            "#10",
+            "property P.Count is 1234, not one of the required values",
+        ),
+        ("spec2.facet1", "#11", "missing required property P.Count"),
+        ("spec2.facet1", "#12", "missing required property P.Count"),
+        (
+            "spec2.facet2",
+            "#10",
+            "missing required property Pset_WallCommon.FireRating",
+        ),
+        (
+            "spec2.facet2",
+            "#11",
+            "missing required property Pset_WallCommon.FireRating",
+        ),
+        (
+            "spec2.facet2",
+            "#12",
+            "missing required property Pset_WallCommon.FireRating",
+        ),
+        (
+            "spec3.facet1",
+            "#10",
+            "does not meet the IDS requirement that it has a material named one of Beton, Stahl: \
+             material [`Concrete`]",
+        ),
+        (
+            "spec3.facet1",
+            "#11",
+            "material has no value to compare with the agreed list",
+        ),
+        (
+            "spec3.facet1",
+            "#12",
+            "material has no value to compare with the agreed list",
+        ),
+        (
+            "spec3.facet2",
+            "#10",
+            "no classification meets the requirement (system Uniclass, code EF_30); \
+             classified as Uniclass EF_25_10",
+        ),
+        (
+            "spec3.facet2",
+            "#11",
+            "the object has no classification; required: system Uniclass, code EF_30",
+        ),
+        (
+            "spec3.facet2",
+            "#12",
+            "the object has no classification; required: system Uniclass, code EF_30",
+        ),
+        (
+            "spec3.facet3",
+            "#12",
+            "does not meet the IDS requirement that it is part of entity IFCBUILDINGSTOREY \
+             through IFCRELCONTAINEDINSPATIALSTRUCTURE",
+        ),
+        (
+            "spec4.facet1",
+            "#10",
+            "property P.Count is 1234, not one of the required values",
+        ),
+        (
+            "spec4.facet1",
+            "#11",
+            "missing required property /[PQ]/./Count/: no property matches",
+        ),
+        (
+            "spec4.facet2",
+            "#10",
+            "forbidden value: P.Count is 1234, which is not empty (requirement row 0)",
+        ),
+        (
+            "spec4.facet3",
+            "#11",
+            "does not meet the IDS requirement that it is entity IFCWALL with predefined type \
+             SHEAR: type attribute PredefinedType absent, type attribute ElementType absent, \
+             type attribute ProcessType absent, attribute PredefinedType `USERDEFINED`, \
+             attribute ObjectType `CUSTOM`",
+        ),
+        (
+            "spec4.facet3",
+            "#12",
+            "does not meet the IDS requirement that it is entity IFCWALL with predefined type \
+             SHEAR: type attribute PredefinedType `PARTITIONING`, type attribute ElementType \
+             absent, type attribute ProcessType absent, attribute PredefinedType `NOTDEFINED`, \
+             attribute ObjectType absent",
+        ),
+    ];
+    expected
+        .iter()
+        .map(|(rule, object, message)| {
+            (
+                (*rule).to_owned(),
+                (*object).to_owned(),
+                (*message).to_owned(),
+            )
+        })
+        .collect()
 }

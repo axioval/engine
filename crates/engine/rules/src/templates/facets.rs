@@ -31,7 +31,9 @@ use axioval_ir::{
     Date, DateTime, Evidence, Finding, Object, Property, PropertyValue, Severity, TemporalPrecision,
 };
 
-use crate::support::{Tolerance, Unavailable, invalid as refused, temporal_order};
+use crate::support::{
+    Tolerance, Unavailable, invalid as refused, property_subject, temporal_order,
+};
 use axioval_engine::comparison::{self as shared, Order};
 
 use crate::selection::{
@@ -312,10 +314,11 @@ fn check_exact(
             return;
         }
     };
+    let subject = property_subject(request.property_set(), request.property());
     match service.resolve(&request) {
         Ok(PropertyResolution::Present(resolved)) => {
             let property = resolved.property();
-            match judge(property, name, constraints) {
+            match judge(property, &subject, constraints) {
                 Verdict::Meets => {}
                 Verdict::Fails(message) => evaluation.push_finding(finding(
                     rule,
@@ -333,13 +336,13 @@ fn check_exact(
                 evaluation.push_finding(finding(
                     rule,
                     object,
-                    format!("missing required property {name}"),
+                    format!("missing required {subject}"),
                     vec![proof.evidence().clone()],
                 ));
             }
         }
         Err(PropertyResolutionError::UnreadableValue(unreadable)) => {
-            match judge_unreadable(&unreadable, name, constraints) {
+            match judge_unreadable(&unreadable, &subject, constraints) {
                 Verdict::Meets => {}
                 Verdict::Fails(message) => evaluation.push_finding(finding(
                     rule,
@@ -365,19 +368,19 @@ fn check_exact(
 /// type alone are met, since a value is stated.
 fn judge_unreadable(
     unreadable: &UnreadableValue,
-    name: &str,
+    subject: &str,
     constraints: &Constraints<'_>,
 ) -> Verdict {
     let actual = unreadable.data_type();
     if let Some(expected) = constraints.data_type
         && !actual.eq_ignore_ascii_case(expected)
     {
-        return Verdict::Fails(format!("property {name} is {actual}, not {expected}"));
+        return Verdict::Fails(format!("{subject} is {actual}, not {expected}"));
     }
     if constraints.constrains_value() {
         return Verdict::Inapplicable(
             NotEvaluatedReason::IncompleteEvidence,
-            format!("property {name}: {}", unreadable.reason()),
+            format!("{subject}: {}", unreadable.reason()),
         );
     }
     Verdict::Meets
@@ -431,7 +434,7 @@ fn check_matched(
         }
     }
     for property in enumeration.properties() {
-        let label = format!("{}.{}", property.property_set, property.name);
+        let label = property_subject(Some(&property.property_set), &property.name);
         match judge(property, &label, constraints) {
             Verdict::Meets => {}
             Verdict::Fails(message) => {
@@ -447,25 +450,23 @@ fn check_matched(
 }
 
 /// The verdict on a present property: emptiness, declared type, then value.
-fn judge(property: &Property, name: &str, constraints: &Constraints<'_>) -> Verdict {
+fn judge(property: &Property, subject: &str, constraints: &Constraints<'_>) -> Verdict {
     let value = &property.value;
     if constraints.optional && matches!(value, PropertyValue::Null) {
         return Verdict::Meets;
     }
     if !constraints.optional && is_empty(value) {
-        return Verdict::Fails(format!("missing required property {name}"));
+        return Verdict::Fails(format!("missing required {subject}"));
     }
     // A complex property is present but holds no value of any type: its
     // presence meets the rule, any type or value it must have fails it.
     if matches!(value, PropertyValue::Complex) {
         if let Some(expected) = constraints.data_type {
-            return Verdict::Fails(format!(
-                "property {name} is a complex property, not {expected}"
-            ));
+            return Verdict::Fails(format!("{subject} is a complex property, not {expected}"));
         }
         if constraints.constrains_value() {
             return Verdict::Fails(format!(
-                "property {name} is a complex property, which holds no value"
+                "{subject} is a complex property, which holds no value"
             ));
         }
         return Verdict::Meets;
@@ -479,12 +480,12 @@ fn judge(property: &Property, name: &str, constraints: &Constraints<'_>) -> Verd
         ) {
             (Some(actual), _) if actual.eq_ignore_ascii_case(expected) => {}
             (Some(actual), _) => {
-                return Verdict::Fails(format!("property {name} is {actual}, not {expected}"));
+                return Verdict::Fails(format!("{subject} is {actual}, not {expected}"));
             }
             // A table whose columns differ: the cells of the expected type
             // are its values.
             (None, Some(cells)) if cells.is_empty() => {
-                return Verdict::Fails(format!("property {name} has no column of type {expected}"));
+                return Verdict::Fails(format!("{subject} has no column of type {expected}"));
             }
             (None, Some(cells)) => {
                 typed = PropertyValue::List(cells.into_iter().cloned().collect());
@@ -493,15 +494,15 @@ fn judge(property: &Property, name: &str, constraints: &Constraints<'_>) -> Verd
             (None, None) => {
                 return Verdict::Inapplicable(
                     NotEvaluatedReason::IncompleteEvidence,
-                    format!("the source does not report the type of property {name}"),
+                    format!("the source does not report the type of {subject}"),
                 );
             }
         }
     }
     match verdict(value, constraints) {
-        Verdict::Fails(why) => Verdict::Fails(format!("property {name} {why}")),
+        Verdict::Fails(why) => Verdict::Fails(format!("{subject} {why}")),
         Verdict::Inapplicable(reason, message) => {
-            Verdict::Inapplicable(reason, format!("property {name}: {message}"))
+            Verdict::Inapplicable(reason, format!("{subject}: {message}"))
         }
         Verdict::Meets => Verdict::Meets,
     }

@@ -768,7 +768,7 @@
         }
       ],
       "id": "99d90860-3c6e-5108-a932-76894324b4a0",
-      "message": "axioval:attributes.axioval:parity.public.judges.description has no value to compare with the agreed list",
+      "message": "attribute Description has no value to compare with the agreed list",
       "object_id": {
         "local_id": "#79",
         "source": {
@@ -791,7 +791,7 @@
         }
       ],
       "id": "bc6331b2-0aba-5036-9e76-04fad933a767",
-      "message": "axioval:attributes.axioval:parity.public.judges.description has no value to compare with the agreed list",
+      "message": "attribute Description has no value to compare with the agreed list",
       "object_id": {
         "local_id": "#81",
         "source": {

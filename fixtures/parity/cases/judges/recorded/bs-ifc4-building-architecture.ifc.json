@@ -2096,7 +2096,7 @@
         }
       ],
       "id": "49b60396-b18a-5692-9280-20c61ce11cd7",
-      "message": "[slab on grade] wrong value: axioval:parity.public.judges.slab-common.axioval:parity.public.judges.fire-rating is `REI30` on 1 object; required one of `F30`, `F60`, `F90` (requirement row 0)",
+      "message": "[slab on grade] wrong value: Pset_SlabCommon.FireRating is `REI30` on 1 object; required one of `F30`, `F60`, `F90` (requirement row 0)",
       "object_id": {
         "local_id": "#53",
         "source": {
@@ -2150,7 +2150,7 @@
         }
       ],
       "id": "f00c8979-f5e2-5de4-998f-bf0f70ff6a9b",
-      "message": "wrong value: axioval:attributes.axioval:parity.public.judges.name is `house - outer wall - house right front`; required like `Basic Wall*` (requirement row 5)",
+      "message": "wrong value: attribute Name is `house - outer wall - house right front`; required like `Basic Wall*` (requirement row 5)",
       "object_id": {
         "local_id": "#158",
         "source": {
@@ -2204,7 +2204,7 @@
         }
       ],
       "id": "ec83ba6e-44ab-51a7-8670-5d5f8f337adc",
-      "message": "wrong value: axioval:attributes.axioval:parity.public.judges.name is `house - outer wall - house right back`; required like `Basic Wall*` (requirement row 5)",
+      "message": "wrong value: attribute Name is `house - outer wall - house right back`; required like `Basic Wall*` (requirement row 5)",
       "object_id": {
         "local_id": "#182",
         "source": {
@@ -2258,7 +2258,7 @@
         }
       ],
       "id": "27af1bca-0f7f-5212-acca-a68deaf1ca28",
-      "message": "wrong value: axioval:attributes.axioval:parity.public.judges.name is `house - outer wall - house left`; required like `Basic Wall*` (requirement row 5)",
+      "message": "wrong value: attribute Name is `house - outer wall - house left`; required like `Basic Wall*` (requirement row 5)",
       "object_id": {
         "local_id": "#201",
         "source": {
@@ -2312,7 +2312,7 @@
         }
       ],
       "id": "21787024-80f8-542a-8bdd-45da554c583c",
-      "message": "wrong value: axioval:attributes.axioval:parity.public.judges.name is `plumbing wall`; required like `Basic Wall*` (requirement row 5)",
+      "message": "wrong value: attribute Name is `plumbing wall`; required like `Basic Wall*` (requirement row 5)",
       "object_id": {
         "local_id": "#228",
         "source": {
@@ -2535,7 +2535,7 @@
         }
       ],
       "id": "7b56b275-b0d0-56d5-a371-5c0c093376df",
-      "message": "missing required property axioval:parity.public.judges.is-external",
+      "message": "missing required property Pset_SlabCommon.IsExternal",
       "object_id": {
         "local_id": "#261",
         "source": {
@@ -2558,7 +2558,7 @@
         }
       ],
       "id": "7d803b1c-d82c-56da-8fd1-58d91fce6803",
-      "message": "missing required property axioval:parity.public.judges.is-external",
+      "message": "missing required property Pset_SlabCommon.IsExternal",
       "object_id": {
         "local_id": "#285",
         "source": {
@@ -2581,7 +2581,7 @@
         }
       ],
       "id": "b6d1cf44-df68-52fb-8074-69139d7c8e85",
-      "message": "property axioval:parity.public.judges.is-external is true, not one of the required values",
+      "message": "property Pset_SlabCommon.IsExternal is true, not one of the required values",
       "object_id": {
         "local_id": "#53",
         "source": {
@@ -2604,7 +2604,7 @@
         }
       ],
       "id": "6161c702-43b0-5a5d-882a-8662e1e87fe5",
-      "message": "property axioval:parity.public.judges.name is \"house - outer wall - house right front\", which matches no required pattern",
+      "message": "attribute Name is \"house - outer wall - house right front\", which matches no required pattern",
       "object_id": {
         "local_id": "#158",
         "source": {
@@ -2627,7 +2627,7 @@
         }
       ],
       "id": "1bee62cc-18cf-5326-b82a-806bdf10af85",
-      "message": "property axioval:parity.public.judges.name is \"house - outer wall - house right back\", which matches no required pattern",
+      "message": "attribute Name is \"house - outer wall - house right back\", which matches no required pattern",
       "object_id": {
         "local_id": "#182",
         "source": {
@@ -2650,7 +2650,7 @@
         }
       ],
       "id": "b08c8e9e-f8bb-5b8d-a58a-5fd29e4e9787",
-      "message": "property axioval:parity.public.judges.name is \"house - outer wall - house left\", which matches no required pattern",
+      "message": "attribute Name is \"house - outer wall - house left\", which matches no required pattern",
       "object_id": {
         "local_id": "#201",
         "source": {
@@ -2673,7 +2673,7 @@
         }
       ],
       "id": "770a76ef-1ff6-57cb-a403-c48a7de09182",
-      "message": "property axioval:parity.public.judges.name is \"plumbing wall\", which matches no required pattern",
+      "message": "attribute Name is \"plumbing wall\", which matches no required pattern",
       "object_id": {
         "local_id": "#228",
         "source": {
@@ -2696,7 +2696,7 @@
         }
       ],
       "id": "fcd221fe-6186-54b7-b0cd-42fce707ac9f",
-      "message": "property axioval:parity.public.judges.width is 0.024, not >= 0.1",
+      "message": "property Qto_WallBaseQuantities.Width is 0.024, not >= 0.1",
       "object_id": {
         "local_id": "#228",
         "source": {
@@ -2888,7 +2888,7 @@
         }
       ],
       "id": "67a953dd-113a-5b81-b85a-d7123e32c387",
-      "message": "axioval:attributes.axioval:parity.public.judges.description has no value to compare with the agreed list",
+      "message": "attribute Description has no value to compare with the agreed list",
       "object_id": {
         "local_id": "#301",
         "source": {
@@ -2911,7 +2911,7 @@
         }
       ],
       "id": "6bae4b33-7e94-55f6-b3de-8b5fc468c192",
-      "message": "axioval:attributes.axioval:parity.public.judges.description has no value to compare with the agreed list",
+      "message": "attribute Description has no value to compare with the agreed list",
       "object_id": {
         "local_id": "#303",
         "source": {
@@ -2934,7 +2934,7 @@
         }
       ],
       "id": "71ee9ab6-2469-5776-926a-2945d11993d9",
-      "message": "axioval:parity.public.judges.slab-common.axioval:parity.public.judges.is-external has no value to compare with the agreed list",
+      "message": "Pset_SlabCommon.IsExternal has no value to compare with the agreed list",
       "object_id": {
         "local_id": "#261",
         "source": {
@@ -2957,7 +2957,7 @@
         }
       ],
       "id": "409bb6e4-ab94-58d8-94d6-720a68b3f173",
-      "message": "axioval:parity.public.judges.slab-common.axioval:parity.public.judges.is-external has no value to compare with the agreed list",
+      "message": "Pset_SlabCommon.IsExternal has no value to compare with the agreed list",
       "object_id": {
         "local_id": "#285",
         "source": {
@@ -2980,7 +2980,7 @@
         }
       ],
       "id": "03f60b34-a452-544b-852b-7bb1ab0cf216",
-      "message": "is not agreed: axioval:parity.public.judges.slab-common.axioval:parity.public.judges.is-external true",
+      "message": "is not agreed: Pset_SlabCommon.IsExternal true",
       "object_id": {
         "local_id": "#53",
         "source": {
@@ -3011,7 +3011,7 @@
         }
       ],
       "id": "f86cae59-c419-5642-832f-8c9b26639cd3",
-      "message": "does not match any agreed combination of values: axioval:attributes.axioval:parity.public.judges.name `entry hall`, axioval:attributes.axioval:parity.public.judges.long-name `entry hall`",
+      "message": "does not match any agreed combination of values: attribute Name `entry hall`, attribute LongName `entry hall`",
       "object_id": {
         "local_id": "#135",
         "source": {
@@ -3042,7 +3042,7 @@
         }
       ],
       "id": "d4529821-b2df-52c7-a31f-70dae107f0f7",
-      "message": "does not match any agreed combination of values: axioval:attributes.axioval:parity.public.judges.name `living room`, axioval:attributes.axioval:parity.public.judges.long-name `living room`",
+      "message": "does not match any agreed combination of values: attribute Name `living room`, attribute LongName `living room`",
       "object_id": {
         "local_id": "#85",
         "source": {
@@ -3073,7 +3073,7 @@
         }
       ],
       "id": "6ce873b6-92d5-5a19-ae1e-1f1e95e1ba50",
-      "message": "does not match any agreed combination of values: axioval:attributes.axioval:parity.public.judges.object-type `solidwall`, axioval:attributes.axioval:parity.public.judges.name `house - outer wall - house right front`",
+      "message": "does not match any agreed combination of values: attribute ObjectType `solidwall`, attribute Name `house - outer wall - house right front`",
       "object_id": {
         "local_id": "#158",
         "source": {
@@ -3104,7 +3104,7 @@
         }
       ],
       "id": "2ef149eb-3a06-585c-843e-440d2dddb04a",
-      "message": "does not match any agreed combination of values: axioval:attributes.axioval:parity.public.judges.object-type `solidwall`, axioval:attributes.axioval:parity.public.judges.name `house - outer wall - house right back`",
+      "message": "does not match any agreed combination of values: attribute ObjectType `solidwall`, attribute Name `house - outer wall - house right back`",
       "object_id": {
         "local_id": "#182",
         "source": {
@@ -3135,7 +3135,7 @@
         }
       ],
       "id": "c864f9a7-11bd-56aa-bb0a-5761614ae347",
-      "message": "does not match any agreed combination of values: axioval:attributes.axioval:parity.public.judges.object-type `solidwall`, axioval:attributes.axioval:parity.public.judges.name `house - outer wall - house left`",
+      "message": "does not match any agreed combination of values: attribute ObjectType `solidwall`, attribute Name `house - outer wall - house left`",
       "object_id": {
         "local_id": "#201",
         "source": {
@@ -3166,7 +3166,7 @@
         }
       ],
       "id": "c76d12a7-97ea-52fe-9c50-5b1778c8f2dc",
-      "message": "does not match any agreed combination of values: axioval:attributes.axioval:parity.public.judges.object-type `plumbingwall`, axioval:attributes.axioval:parity.public.judges.name `plumbing wall`",
+      "message": "does not match any agreed combination of values: attribute ObjectType `plumbingwall`, attribute Name `plumbing wall`",
       "object_id": {
         "local_id": "#228",
         "source": {
@@ -3180,7 +3180,7 @@
   ],
   "not_evaluated": [
     {
-      "message": "property axioval:parity.public.judges.width: comparing a quantity needs its unit; declare `si_units` to read literals in SI",
+      "message": "property Qto_WallBaseQuantities.Width: comparing a quantity needs its unit; declare `si_units` to read literals in SI",
       "object_id": {
         "local_id": "#158",
         "source": {
@@ -3192,7 +3192,7 @@
       "rule_id": "pv-wall-width-unitless"
     },
     {
-      "message": "property axioval:parity.public.judges.width: comparing a quantity needs its unit; declare `si_units` to read literals in SI",
+      "message": "property Qto_WallBaseQuantities.Width: comparing a quantity needs its unit; declare `si_units` to read literals in SI",
       "object_id": {
         "local_id": "#182",
         "source": {
@@ -3204,7 +3204,7 @@
       "rule_id": "pv-wall-width-unitless"
     },
     {
-      "message": "property axioval:parity.public.judges.width: comparing a quantity needs its unit; declare `si_units` to read literals in SI",
+      "message": "property Qto_WallBaseQuantities.Width: comparing a quantity needs its unit; declare `si_units` to read literals in SI",
       "object_id": {
         "local_id": "#201",
         "source": {
@@ -3216,7 +3216,7 @@
       "rule_id": "pv-wall-width-unitless"
     },
     {
-      "message": "property axioval:parity.public.judges.width: comparing a quantity needs its unit; declare `si_units` to read literals in SI",
+      "message": "property Qto_WallBaseQuantities.Width: comparing a quantity needs its unit; declare `si_units` to read literals in SI",
       "object_id": {
         "local_id": "#228",
         "source": {

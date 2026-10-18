@@ -13,7 +13,9 @@ use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, ObjectId};
 
 use crate::selection::{Selection, select_objects, selector_matches};
-use crate::support::{Parameters, PropertyRef, display, finding, resolve, undefined, value_key};
+use crate::support::{
+    Parameters, PropertyRef, bound_label, display, finding, resolve, undefined, value_key,
+};
 
 /// Checks each selected object against a `requirement` selector.
 ///
@@ -113,8 +115,10 @@ impl RuleCapability for SelectorConformance {
                         evidence.extend(answer.evidence());
                     }
                     if answers.iter().all(|answer| undefined(answer.value())) {
-                        let names: Vec<String> =
-                            consulted.iter().map(ToString::to_string).collect();
+                        let names: Vec<String> = consulted
+                            .iter()
+                            .map(|property| bound_label(context, object, *property))
+                            .collect();
                         evaluation.push_finding(finding(
                             rule,
                             &object.id,
@@ -139,7 +143,11 @@ impl RuleCapability for SelectorConformance {
                             .iter()
                             .zip(&answers)
                             .map(|(property, answer)| {
-                                format!("{property} {}", display(answer.value()))
+                                format!(
+                                    "{} {}",
+                                    bound_label(context, object, *property),
+                                    display(answer.value())
+                                )
                             })
                             .collect::<Vec<_>>()
                             .join(", "),

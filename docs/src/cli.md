@@ -1122,7 +1122,7 @@ status: findings · 281 finding(s) · 0 not evaluated · 95 integrity issue(s)
 
 finding:
      281  error    wall-reference-required
-          missing exact property axioval:example.ifc.reference
+          missing exact property Pset_WallCommon.Reference
           e.g. #100410 IFCWALLSTANDARDCASE 2bGFZmGyf7awtvk0MxsCrc; …; +278 more
 
 integrity:
@@ -1194,7 +1194,7 @@ JSON keeps them in full.
 
 ```text
 [finding] error wall-reference-required  #101 IFCWALL 0000000000000000000011
-    missing exact property axioval:example.ifc.reference
+    missing exact property Pset_WallCommon.Reference
     id: 5c1f0c9e-6a0b-5d53-9a8e-2f3b8f6c1d20
     decision: accepted by A. Reviewer on 2026-09-27T08:00:00Z: agreed with the architect
 ```

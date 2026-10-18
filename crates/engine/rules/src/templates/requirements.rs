@@ -23,8 +23,9 @@ use crate::selection::{
 };
 use crate::support::table::{Matched, Row, RowSelection, RowTest, TextPattern, match_rows};
 use crate::support::{
-    MAX_DECIMALS, Parameters, PropertyRef, Unavailable, category_prefix, display, exact_f64,
-    finding, invalid, resolve, round_decimal, si_quantity, temporal_order, undefined, value_key,
+    MAX_DECIMALS, Parameters, PropertyRef, Unavailable, bound_label, category_prefix, display,
+    exact_f64, finding, invalid, resolve, round_decimal, si_quantity, temporal_order, undefined,
+    value_key,
 };
 
 /// Checks a rule's requirements table as the capability checked it: every
@@ -866,8 +867,9 @@ fn check(
                     name,
                 };
                 (
-                    check_row(context, declared, subject, row, property)
-                        .map(|failure| failure.map(|failure| (property.to_string(), failure))),
+                    check_row(context, declared, subject, row, property).map(|failure| {
+                        failure.map(|failure| (bound_label(context, subject, property), failure))
+                    }),
                     set.as_deref().map(|set| (NameSpec::Exact(set), set)),
                 )
             }

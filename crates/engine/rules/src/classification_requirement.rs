@@ -185,29 +185,56 @@ fn judge(
     match holds {
         Some(true) => Judgement::Holds,
         None => Judgement::Undecided,
-        Some(false) if prohibited => {
-            Judgement::Violation("the object carries a prohibited classification".to_owned())
-        }
-        Some(false) if assignments.is_empty() => {
-            Judgement::Violation("the object has no classification".to_owned())
-        }
-        Some(false) => {
-            let mut systems: Vec<&str> = assignments
-                .iter()
-                .filter_map(|assignment| assignment.system.as_deref())
-                .collect();
-            systems.sort_unstable();
-            systems.dedup();
-            let systems = if systems.is_empty() {
-                "none stated".to_owned()
-            } else {
-                systems.join(", ")
-            };
-            Judgement::Violation(format!(
-                "no classification meets the requirement (systems: {systems})"
-            ))
-        }
+        Some(false) if prohibited => Judgement::Violation(format!(
+            "the object carries a prohibited classification ({}): {}",
+            required(code, system),
+            classified(assignments)
+        )),
+        Some(false) if assignments.is_empty() => Judgement::Violation(format!(
+            "the object has no classification; required: {}",
+            required(code, system)
+        )),
+        Some(false) => Judgement::Violation(format!(
+            "no classification meets the requirement ({}); classified as {}",
+            required(code, system),
+            classified(assignments)
+        )),
     }
+}
+
+/// What the rule requires, as its author stated it: `system Uniclass, code
+/// EF_25`, a pattern between slashes.
+fn required(code: &Matcher, system: &Matcher) -> String {
+    let mut parts = Vec::new();
+    if !system.is_none() {
+        parts.push(format!("system {}", system.shown()));
+    }
+    if !code.is_none() {
+        parts.push(format!("code {}", code.shown()));
+    }
+    if parts.is_empty() {
+        "any classification".to_owned()
+    } else {
+        parts.join(", ")
+    }
+}
+
+/// The object's assignments, each as its system and assigned code, distinct
+/// and sorted: `Uniclass EF_25_10`.
+fn classified(assignments: &[ClassificationAssignment]) -> String {
+    let mut shown: Vec<String> = assignments
+        .iter()
+        .map(|assignment| {
+            let system = assignment.system.as_deref().unwrap_or("no system");
+            match assignment.codes.first().cloned().flatten() {
+                Some(code) => format!("{system} {code}"),
+                None => format!("{system} without a code"),
+            }
+        })
+        .collect();
+    shown.sort_unstable();
+    shown.dedup();
+    shown.join(", ")
 }
 
 /// Three-valued disjunction.
@@ -223,6 +250,8 @@ fn or(left: Option<bool>, right: Option<bool>) -> Option<bool> {
 struct Matcher {
     literals: Vec<String>,
     patterns: Vec<Regex>,
+    /// The patterns as written.
+    written: Vec<String>,
 }
 
 impl Matcher {
@@ -231,7 +260,8 @@ impl Matcher {
             Some(ParameterValue::StringList { value }) => value.clone(),
             _ => Vec::new(),
         };
-        let patterns = list(patterns)
+        let written = list(patterns);
+        let patterns = written
             .iter()
             .map(|pattern| {
                 xsd_pattern::compile(pattern).map_err(|error| format!("{pattern:?}: {error}"))
@@ -240,7 +270,25 @@ impl Matcher {
         Ok(Self {
             literals: list(literals),
             patterns,
+            written,
         })
+    }
+
+    /// The literals one of which, and the patterns one of which, a text
+    /// must meet: `EF_25 or EF_30`, `/EF_.*/`.
+    fn shown(&self) -> String {
+        let literals = self.literals.join(" or ");
+        let patterns = self
+            .written
+            .iter()
+            .map(|pattern| format!("/{pattern}/"))
+            .collect::<Vec<_>>()
+            .join(" or ");
+        match (literals.is_empty(), patterns.is_empty()) {
+            (false, false) => format!("{literals} matching {patterns}"),
+            (true, _) => patterns,
+            (false, true) => literals,
+        }
     }
 
     fn is_none(&self) -> bool {

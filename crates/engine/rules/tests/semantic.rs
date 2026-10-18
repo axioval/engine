@@ -115,8 +115,7 @@ mod conformance {
             findings(&evaluation),
             [(
                 "s2".into(),
-                "unknown space: axioval:attributes.LongName `Office`, axioval:attributes.Name `201`"
-                    .into()
+                "unknown space: attribute LongName `Office`, attribute Name `201`".into()
             )]
         );
         assert_eq!(
@@ -143,26 +142,26 @@ mod conformance {
             [
                 (
                     "s6".into(),
-                    "axioval:attributes.LongName, axioval:attributes.Name has no value to \
+                    "attribute LongName, attribute Name has no value to \
                      compare with the agreed list"
                         .into()
                 ),
                 (
                     "s4".into(),
                     "does not match any agreed combination of values: \
-                     axioval:attributes.LongName `Kitchen`, axioval:attributes.Name absent"
+                     attribute LongName `Kitchen`, attribute Name absent"
                         .into()
                 ),
                 (
                     "s2".into(),
                     "does not match any agreed combination of values: \
-                     axioval:attributes.LongName `Office`, axioval:attributes.Name `201`"
+                     attribute LongName `Office`, attribute Name `201`"
                         .into()
                 ),
                 (
                     "s7".into(),
                     "does not match any agreed combination of values: \
-                     axioval:attributes.LongName `kitchen`, axioval:attributes.Name absent"
+                     attribute LongName `kitchen`, attribute Name absent"
                         .into()
                 ),
             ]

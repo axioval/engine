@@ -14853,14 +14853,14 @@ fn enumerated_bounded_and_table_values_are_checked_value_by_value() {
             (
                 "span-within".to_owned(),
                 "#2".to_owned(),
-                "property axioval:example.ifc.Span is [range from 1 m, open above], open above, \
+                "property Pset_Kinds.Span is [range from 1 m, open above], open above, \
                  so not all its values meet the upper bound"
                     .to_owned()
             ),
             (
                 "status-new".to_owned(),
                 "#2".to_owned(),
-                "property axioval:example.ifc.Status is [`EXISTING`, `DEMOLISH`], and none of \
+                "property Pset_Kinds.Status is [`EXISTING`, `DEMOLISH`], and none of \
                  its values meets the constraints"
                     .to_owned()
             ),
@@ -14916,19 +14916,19 @@ fn a_table_whose_columns_differ_is_checked_by_the_cells_of_the_declared_type() {
             (
                 "load-length".to_owned(),
                 "#1".to_owned(),
-                "property axioval:example.ifc.Load is [1 m, 2 m], and none of its values \
+                "property Pset_Kinds.Load is [1 m, 2 m], and none of its values \
                  meets the constraints"
                     .to_owned()
             ),
             (
                 "load-real".to_owned(),
                 "#1".to_owned(),
-                "property axioval:example.ifc.Load has no column of type IFCREAL".to_owned()
+                "property Pset_Kinds.Load has no column of type IFCREAL".to_owned()
             ),
             (
                 "load-real".to_owned(),
                 "#2".to_owned(),
-                "missing required property axioval:example.ifc.Load".to_owned()
+                "missing required property Pset_Kinds.Load".to_owned()
             ),
         ],
         "{result:#}"
@@ -18466,7 +18466,7 @@ fn with_geometry_a_stated_side_area_is_divided_by_the_measured_face() {
         finding_messages(&result),
         [(
             "#26".to_owned(),
-            "wrong value: axioval:example.ifc.qto-wall.axioval:example.ifc.net-side-area is \
+            "wrong value: Qto_WallBaseQuantities.NetSideArea is \
              15 m² (1.25 m² per m² of measured face area); required between 0.99 and 1.01 m2 per m² of measured face \
              area (requirement row 0)"
                 .to_owned()

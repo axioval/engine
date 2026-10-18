@@ -67,6 +67,22 @@ it against those ids and the tree's depth, and
 evaluation passes it through unchanged. In `axioval:measured` it is one of
 the engine's measured names (`extent_z`, `bottom`, …).
 
+## Names in messages
+
+A concept id is the package's own key, so a finding never shows it where
+the source has a name for the concept. `property-exists`,
+`property-required`, `property-data-type`, `property-value`, the exact rows
+of `property-requirements` and the values `selector-conformance` names
+show a property by the names it binds to in the checked object's source:
+`property Pset_WallCommon.FireRating is IFCTEXT, not IFCLABEL`, not
+`property axioval:fire.rating is …`. A property of a reserved set reads as
+the field it is: `attribute Name`, `type attribute Name`, `material Kind`,
+and `material` for the list of every name the material goes by
+(`axioval:material.Names`). A reference that cannot be bound keeps the names
+it was written with, and the object is not evaluated for it anyway. Rule
+parameters, concept ids and rule ids are unchanged; only what a reader
+reads is.
+
 ## Name patterns
 
 A property set or property named by a pattern (a `propertyPattern`

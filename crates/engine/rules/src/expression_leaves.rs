@@ -738,6 +738,7 @@ impl<'a> ObjectLeaves<'a> {
                 source: source.clone(),
                 locator,
                 exact,
+                witness: None,
             }]
         };
         match member.fields.get(name) {

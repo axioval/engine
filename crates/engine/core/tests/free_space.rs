@@ -740,6 +740,7 @@ fn support_proof_must_be_exact_and_reviewable() {
         source: SourceId::new("test", "geometry").unwrap(),
         locator: "support".into(),
         exact: false,
+        witness: None,
     };
     assert_eq!(
         CompleteSupportEvidence::try_new(

@@ -725,6 +725,7 @@ fn discipline_matches(
                     source: object.id.source.clone(),
                     locator,
                     exact: false,
+                    witness: None,
                 });
             }
             Selection::Match

@@ -746,6 +746,7 @@ impl ProximityService for Touching {
                 source: source(),
                 locator: format!("contact:{counterpart}"),
                 exact: fidelity.is_exact(),
+                witness: None,
             },
         )
     }

@@ -92,6 +92,7 @@ pub(crate) fn measure(
                 request.host()
             ),
             exact: fidelity.is_exact(),
+            witness: None,
         },
     )
 }

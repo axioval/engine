@@ -698,6 +698,7 @@ impl Witness {
                 point(self.to)
             ),
             exact: false,
+            witness: None,
         }
     }
 }
@@ -1278,6 +1279,7 @@ impl Projection<'_> {
                 source: source.clone(),
                 locator: format!("comparison:{matcher}:{identity}"),
                 exact: true,
+                witness: None,
             }],
             location: None,
             categories: Vec::new(),
@@ -1379,6 +1381,7 @@ impl Projection<'_> {
                                 source: object.source.clone(),
                                 locator: format!("comparison:exact-boundary:{object}"),
                                 exact: true,
+                                witness: None,
                             })
                         })
                         .into_iter()

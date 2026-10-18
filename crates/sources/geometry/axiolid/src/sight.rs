@@ -113,6 +113,7 @@ impl SightService for AxiolidSightService {
             source: target.source.clone(),
             locator: locator(what),
             exact: deviation <= 0.0,
+            witness: None,
         };
         if request
             .within_metres()
@@ -235,6 +236,7 @@ impl SightService for AxiolidSightService {
                 request.half_width()
             ),
             exact: true,
+            witness: None,
         };
         SkyObstruction::try_new(angle, highest, evidence)
     }

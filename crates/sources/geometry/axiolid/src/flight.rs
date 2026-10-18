@@ -271,6 +271,7 @@ pub(crate) fn measure_framed(
         source: object.source.clone(),
         locator: format!("tread-flight:{object}"),
         exact: exact && deviation == 0.0,
+        witness: None,
     };
     // The riser above the last tread, should the flight end in one.
     let last = regions.len() - 1;

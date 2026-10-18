@@ -272,6 +272,7 @@ pub(crate) fn measure(
             source: service.source().clone(),
             locator,
             exact,
+            witness: None,
         },
     )
 }

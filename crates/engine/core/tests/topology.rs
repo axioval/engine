@@ -113,6 +113,7 @@ fn inexact_connection_is_rejected() {
         source: source("topology"),
         locator: "candidate-only".into(),
         exact: false,
+        witness: None,
     };
 
     assert_eq!(
@@ -188,6 +189,7 @@ fn incomplete_topology_coverage_cannot_construct_a_graph() {
         source: source("topology"),
         locator: "partial-projection".into(),
         exact: false,
+        witness: None,
     };
     assert_eq!(
         CompleteTopologyEvidence::try_new(evidence),

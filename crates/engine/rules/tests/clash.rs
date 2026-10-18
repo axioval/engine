@@ -177,6 +177,7 @@ impl ProximityService for Stub {
                 source: source(),
                 locator: format!("proximity:{a}:{b}"),
                 exact: fidelity.is_exact(),
+                witness: None,
             },
         )?;
         let measured = match pair.certified {

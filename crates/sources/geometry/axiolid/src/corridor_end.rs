@@ -136,6 +136,7 @@ pub(crate) fn corridor_ends(
             source: named.source.clone(),
             locator,
             exact: false,
+            witness: None,
         },
     )
 }
@@ -434,6 +435,7 @@ fn contact(
                 source: subject.source.clone(),
                 locator,
                 exact: false,
+                witness: None,
             },
         )
     };

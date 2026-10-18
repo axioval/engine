@@ -246,6 +246,7 @@ pub(crate) fn measure(
             source: subject.source.clone(),
             locator,
             exact,
+            witness: None,
         },
     )?;
     let footprint = PlanArea::try_new(

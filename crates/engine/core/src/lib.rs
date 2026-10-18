@@ -1281,7 +1281,7 @@ pub use proximity::{
     ProximityProjection, ProximityRequest, ProximityService, ProximityServiceHandle,
     RegionDistanceEvidence, RegionDistanceRequest, SubjectSurface, SurfaceBasis, SurfaceDirection,
     SurfaceDistanceEvidence, SurfaceDistanceRequest, VerticalDirection, VerticalSurfaces,
-    VolumeInterval,
+    VolumeInterval, WITNESS_ROUNDING_METRES,
 };
 pub use refinement::{
     Deviation, LocationMethod, LocationPolicy, OutcomeRefiner, Refining, RuleRefinement,

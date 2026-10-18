@@ -129,6 +129,73 @@ explicit in the contract:
   shell's and their sum, and what lies outside the other body between the
   largest shell's outside part and the sum of them (#312).
 
+### Where a pair meets
+
+A finding naming two objects and a locator does not say where they meet:
+a viewer framing a 15 m wall and the duct through it frames the wall. So
+the evidence of a measurement in space may carry its **witness**
+(`Evidence::witness`, an `axioval_ir::Witness`, #388), and every finding
+citing that evidence (a clash, a clearance shortfall, a distance) carries
+it in its report:
+
+- `kind` says what the two points stand for. `separation` is the closest
+  pair of the measured surfaces, `point_a` on the subject and `point_b` on
+  the counterpart, as far apart as the measured separation.
+  `penetration_into_counterpart` is the deepest point of the subject found
+  inside the counterpart (`point_a`) and the nearest point of the
+  counterpart's surface (`point_b`), where the subject leaves it;
+  `penetration_into_subject` the same the other way round, `point_a` still
+  on the subject's side. Their distance is the witnessed depth, a lower
+  bound on the true one. Bodies sharing volume are witnessed by their
+  penetration, bodies apart (or merely touching) by their closest pair.
+- Each point carries `deviation_metres`: the true geometry it stands for
+  lies within that distance of it. Zero for exact bodies (up to the
+  rounding of the coordinates, as every exact value), the body's chord
+  deviation for a tessellation, widened by the rounding of the conversion
+  into model coordinates.
+- `extent`, for bodies sharing anything, brackets the box of the shared
+  region: `outer` is sure to contain it (the overlap of the bodies' own
+  boxes), `inner` is spanned by points witnessed in it (where an edge of
+  either crosses the other's surface, vertices of either inside the other),
+  shrunk by the deviations, so the region's own box contains it. For
+  polyhedra the two coincide; an `inner` box nothing was witnessed for is
+  left out, never guessed.
+
+Coordinates are the source's model coordinates in metres, as every
+position the engine reports: a [local frame](./adapters.md#axiolid) the bodies
+were measured in has been undone. The closest pair of two parallel faces
+is not unique, so a witness is one pair realizing the value, not the only
+one. In a report:
+
+```json
+"witness": {
+  "kind": "penetration_into_counterpart",
+  "point_a": {"metres": [2.0, -0.1, 1.5], "deviation_metres": 0.0},
+  "point_b": {"metres": [2.1, -0.1, 1.5], "deviation_metres": 0.0},
+  "extent": {
+    "inner": {"min": [1.9, -0.1, 0.0], "max": [2.1, 0.1, 3.0]},
+    "outer": {"min": [1.9, -0.1, 0.0], "max": [2.1, 0.1, 3.0]}
+  }
+}
+```
+
+(two walls 0.2 m thick crossing at right angles, over their 3 m height).
+
+A witness is geometry evidence and is checked against the measurement it
+witnesses. `ProximityEvidence::with_witness` refuses a pair not as far
+apart as the separation or witnessed depth (to `WITNESS_ROUNDING_METRES`,
+a micrometre, and the points' deviations), a separation witness of bodies
+sharing volume, a penetration witness without a positive depth, an extent
+of bodies sharing nothing, and an outer box narrower or an inner box wider
+than the measured `OverlapExtents`; evidence handed to `try_new` with a
+witness already on it is refused, so none escapes the check.
+`ProjectedDistanceEvidence::with_witness` takes only a closest pair, only
+for `Minimum3d`, and only one inside the distance interval;
+`from_proximity` keeps a separation witness. No other projection's
+distance is witnessed by a pair of points in space, so it carries none.
+A service that cannot find the spot leaves the witness out: the
+measurement stands, the spot is never estimated.
+
 ### Extents along the bodies' own axes
 
 `measure_overlap_along(request)` answers what world axes cannot: how far the
@@ -233,7 +300,10 @@ primitives:
 
 - **Separation** folds `closest_points_on_triangles` over triangle pairs. It
   skips pairs whose triangle boxes are already farther apart than the best
-  distance found, a skip that loses nothing.
+  distance found, a skip that loses nothing. The first pair found at the
+  separation gives its [witness](#where-a-pair-meets), the kernel's closest
+  points on those two triangles, in the same pass; a pair including a
+  zero-area triangle, measured as its edges, leaves the witness out.
 - **Plan overlap** intersects the projected, uniformly oriented triangle soups
   with `axiolid-overlay`. The overlay refuses a whole input over one ring
   with two corners within its tolerance or an area within its square, and
@@ -269,7 +339,9 @@ primitives:
   door), so each is taken only when the body's own winding number places it
   inside, clear of its surface by more than rounding. A door filling a hole
   already cut in its wall therefore only touches it, and a duplicate ring is
-  witnessed half its thickness deep.
+  witnessed half its thickness deep. The deepest sample found inside, with
+  the nearest point of the other surface to it, is the penetration's
+  witness; the subject's side wins a tie.
 
 - **Overlap extents** span points witnessed in both bodies: every point
   where an edge of either body crosses the other's surface, and the
@@ -280,7 +352,9 @@ primitives:
   each axis, and a side stops at the first vertex inside or the first that
   would not widen the box, so the winding test runs only where it can move
   the answer. A tessellation lowers the witnessed extent by twice the
-  combined deviation and grows each box by its own deviation.
+  combined deviation and grows each box by its own deviation. The same
+  spans give the witness's `extent`: the witnessed box, each side moved in
+  by the combined deviation, and the overlap of the bodies' grown boxes.
 - **Extents along stated directions** reuse the same witnesses: each
   crossing and inside vertex is projected onto the direction, and the upper
   bound is the overlap of the two bodies' own ranges along it (the

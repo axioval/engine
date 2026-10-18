@@ -264,6 +264,7 @@ pub(crate) fn sloped_runs(
         source: object.source.clone(),
         locator: format!("sloped-runs:{object}"),
         exact,
+        witness: None,
     };
     SlopedSurface::try_new(object.clone(), runs, evidence)
 }
@@ -431,6 +432,7 @@ pub(crate) fn headroom(
         source: subject.source.clone(),
         locator: format!("headroom:{subject}"),
         exact: false,
+        witness: None,
     };
     Headroom::try_new(request.clone(), least, governing, evidence)
 }
@@ -596,6 +598,7 @@ impl WalkingSurfaceService for AxiolidWalkingSurfaceService {
             source: subject.source.clone(),
             locator: format!("landing:{subject}"),
             exact,
+            witness: None,
         };
         LandingEvidence::try_new(request.clone(), end.direction, end.edge, landing, evidence)
     }
@@ -687,6 +690,7 @@ impl WalkingSurfaceService for AxiolidWalkingSurfaceService {
             source: subject.source.clone(),
             locator: format!("clearance-below:{subject}"),
             exact: false,
+            witness: None,
         };
         ClearanceBelow::try_new(request.clone(), least, governing, evidence)
     }

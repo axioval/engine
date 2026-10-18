@@ -19,6 +19,12 @@ Keep this crate serializable and deterministic. It must not depend on a source f
   `docs/src/block-editors.md` in step. A block tree is data: never map a
   block onto anything that runs code.
 
+- `witness.rs` holds where a measurement between two bodies happens
+  (`Evidence::witness`, #388): witness points with their deviation and the
+  bracket of an overlap's box, in model coordinates. Every part is
+  validated on construction and on reading (`try_from` wires), so its `Eq`
+  is sound; the engine checks a witness against its measurement. Never add
+  a witness to an identity or decision key.
 - `identity.rs` derives `FindingId`s: UUIDv5 over rule, the objects' aliases
   in a host-named stable scheme (source-qualified id without one), scope kind
   and message, qualified by sources only when a key repeats. The BCF sink's

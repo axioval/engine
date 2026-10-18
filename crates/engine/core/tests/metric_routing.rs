@@ -104,6 +104,7 @@ fn blocked_route_requires_exact_complete_metric_evidence() {
         source: source("geometry"),
         locator: "partial-obstacles".into(),
         exact: false,
+        witness: None,
     };
     assert_eq!(
         CompleteMetricEvidence::try_new(approximate),
@@ -527,6 +528,7 @@ fn a_trace_answers_each_object_and_none_longer_than_the_path() {
                 source: source("geometry"),
                 locator: "trace".into(),
                 exact: false,
+                witness: None,
             }
         ),
         Err(MetricRoutingError::InexactRouteEvidence)

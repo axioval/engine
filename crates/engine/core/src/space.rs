@@ -934,6 +934,7 @@ mod tests {
                     source: source(),
                     locator: "h".into(),
                     exact: false,
+                    witness: None,
                 },
             ),
             Err(SpaceError::InexactEvidence)

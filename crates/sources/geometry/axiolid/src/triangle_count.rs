@@ -44,6 +44,7 @@ impl TriangleCountService for AxiolidTriangleCountService {
                 self.geometry.body_note(&[object])
             ),
             exact,
+            witness: None,
         };
         // A bodiless object has no mesh, so none of its triangles; an
         // unmeasured one has a mesh nobody produced, whose count is unknown.

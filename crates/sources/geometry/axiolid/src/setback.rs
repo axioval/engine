@@ -303,6 +303,7 @@ pub(crate) fn measure(
             source: object.source.clone(),
             locator,
             exact,
+            witness: None,
         },
     )
 }

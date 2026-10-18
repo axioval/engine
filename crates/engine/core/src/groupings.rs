@@ -662,6 +662,7 @@ impl PlanAreaService for GroupAreas {
             source: object.source.clone(),
             locator,
             exact,
+            witness: None,
         };
         PlanArea::try_new(lower, upper, evidence)
     }

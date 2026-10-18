@@ -41,9 +41,24 @@
 
 use std::sync::Arc;
 
-use axioval_ir::{Evidence, ObjectId};
+use axioval_ir::{Evidence, ObjectId, Witness, WitnessKind};
 
 use crate::{ConvexPlanRegion, LengthInterval, MetricDirection, PointBox, SignedDistanceInterval};
+
+/// How far a witness pair's distance may differ from the value it
+/// witnesses, beyond the two points' own deviations: a micrometre, above
+/// the rounding of building coordinates and of the tolerance below which an
+/// adapter takes two surfaces to meet, and far below any tolerance a rule
+/// states.
+pub const WITNESS_ROUNDING_METRES: f64 = 1e-6;
+
+/// Whether `witness`'s two points lie as far apart as `value` metres, to
+/// [`WITNESS_ROUNDING_METRES`] and the points' deviations.
+fn witnesses(witness: &Witness, value: f64) -> bool {
+    let (a, b) = (witness.point_a(), witness.point_b());
+    let slack = WITNESS_ROUNDING_METRES + a.deviation_metres() + b.deviation_metres();
+    (a.distance(&b) - value).abs() <= slack
+}
 
 /// Why a proximity measurement could not be produced.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
@@ -1238,6 +1253,11 @@ impl ProximityEvidence {
         if evidence.exact != fidelity.is_exact() || evidence.locator.trim().is_empty() {
             return Err(ProximityError::EvidenceFidelityMismatch);
         }
+        // A witness is checked against the measurement it witnesses, so it
+        // is attached only through `with_witness`.
+        if evidence.witness.is_some() {
+            return Err(ProximityError::InvalidMeasurement);
+        }
         // Penetration and containment are questions in space.
         if request.projection() != ProximityProjection::Minimum3d {
             return Err(ProximityError::UnsupportedProjection);
@@ -1341,6 +1361,57 @@ impl ProximityEvidence {
         Ok(self)
     }
 
+    /// Adds where the measurement happened (#388) to its evidence: the
+    /// closest pair of the measured surfaces, or the deepest witnessed
+    /// point of one body inside the other with the nearest point of the
+    /// other's surface, and the extent of the shared region.
+    ///
+    /// Refused, so that no consumer frames a spot the measurement does not
+    /// support, when the pair does not lie as far apart as the value it
+    /// witnesses ([`WITNESS_ROUNDING_METRES`] and the points' deviations
+    /// aside): a separation witness for bodies sharing volume, a
+    /// penetration witness without a positive witnessed depth, or an
+    /// extent for bodies sharing nothing or without measured
+    /// [`OverlapExtents`] it cannot be narrower or wider than.
+    /// Attach it after the overlap extents.
+    pub fn with_witness(mut self, witness: Witness) -> Result<Self, ProximityError> {
+        let penetration = self.penetration_metres.filter(|depth| *depth > 0.0);
+        let coherent = match witness.kind() {
+            WitnessKind::Separation => {
+                penetration.is_none() && witnesses(&witness, self.separation_metres)
+            }
+            WitnessKind::PenetrationIntoCounterpart | WitnessKind::PenetrationIntoSubject => {
+                penetration.is_some_and(|depth| witnesses(&witness, depth))
+            }
+        };
+        let extent_coherent = match (witness.extent(), self.overlap_extents) {
+            (None, _) => true,
+            (Some(_), None) => false,
+            (Some(extent), Some(extents)) => {
+                let disjoint = self.separation_metres > 0.0 && self.containment.is_none();
+                let slack = WITNESS_ROUNDING_METRES;
+                let outer = extent.outer().size();
+                let inner = extent.inner().map(|inner| inner.size());
+                !disjoint
+                    && extents.axes.iter().enumerate().all(|(axis, interval)| {
+                        outer[axis] + slack >= interval.lower_metres()
+                            && inner
+                                .is_none_or(|inner| inner[axis] <= interval.upper_metres() + slack)
+                    })
+            }
+        };
+        if !coherent || !extent_coherent {
+            return Err(ProximityError::InvalidMeasurement);
+        }
+        self.evidence.witness = Some(Box::new(witness));
+        Ok(self)
+    }
+
+    /// Where the measurement happened, when the service found the spot.
+    pub fn witness(&self) -> Option<&Witness> {
+        self.evidence.witness.as_deref()
+    }
+
     pub fn request(&self) -> &ProximityRequest {
         &self.request
     }
@@ -1440,6 +1511,7 @@ impl ProjectedDistanceEvidence {
             || !deviation.is_finite()
             || deviation < 0.0
             || (fidelity.is_exact() && lower_metres < upper_metres)
+            || evidence.witness.is_some()
         {
             return Err(ProximityError::InvalidMeasurement);
         }
@@ -1455,16 +1527,53 @@ impl ProjectedDistanceEvidence {
         })
     }
 
-    /// The distance interval of a measurement in space.
+    /// The distance interval of a measurement in space, with its witness
+    /// where it is a separation's.
     pub fn from_proximity(measured: &ProximityEvidence) -> Result<Self, ProximityError> {
         let (lower, upper) = measured.separation_interval_metres();
-        Self::try_new(
+        let mut evidence = measured.evidence().clone();
+        let witness = evidence.witness.take();
+        let projected = Self::try_new(
             measured.request().clone(),
             lower,
             upper,
             measured.fidelity(),
-            measured.evidence().clone(),
-        )
+            evidence,
+        )?;
+        match witness.filter(|witness| witness.kind() == WitnessKind::Separation) {
+            Some(witness) => projected.with_witness(*witness),
+            None => Ok(projected),
+        }
+    }
+
+    /// Adds the closest pair of the measured surfaces (#388), for a
+    /// distance in space.
+    ///
+    /// Refused for another projection, whose distance the pair does not
+    /// witness, for a penetration witness or an extent, and for a pair not
+    /// as far apart as some distance in the interval
+    /// ([`WITNESS_ROUNDING_METRES`] and the points' deviations aside).
+    pub fn with_witness(mut self, witness: Witness) -> Result<Self, ProximityError> {
+        if self.request.projection() != ProximityProjection::Minimum3d {
+            return Err(ProximityError::UnsupportedProjection);
+        }
+        let (a, b) = (witness.point_a(), witness.point_b());
+        let slack = WITNESS_ROUNDING_METRES + a.deviation_metres() + b.deviation_metres();
+        let distance = a.distance(&b);
+        if witness.kind() != WitnessKind::Separation
+            || witness.extent().is_some()
+            || distance + slack < self.lower_metres
+            || distance - slack > self.upper_metres
+        {
+            return Err(ProximityError::InvalidMeasurement);
+        }
+        self.evidence.witness = Some(Box::new(witness));
+        Ok(self)
+    }
+
+    /// The closest pair of the measured surfaces, when the service found it.
+    pub fn witness(&self) -> Option<&Witness> {
+        self.evidence.witness.as_deref()
     }
 
     pub fn request(&self) -> &ProximityRequest {
@@ -3521,6 +3630,7 @@ mod tests {
             source: SourceId::new("cad", "m").unwrap(),
             locator: "region".into(),
             exact,
+            witness: None,
         };
         assert!(
             RegionDistanceEvidence::try_new(
@@ -3645,6 +3755,147 @@ mod tests {
         assert_eq!(
             ProximityServiceHandle::new(Arc::new(Other(measured))).measure_overlap_along(&other),
             Err(ProximityError::InvalidMeasurement)
+        );
+    }
+
+    fn point(metres: [f64; 3]) -> axioval_ir::WitnessPoint {
+        axioval_ir::WitnessPoint::try_new(metres, 0.0).unwrap()
+    }
+
+    fn witness(kind: WitnessKind, a: [f64; 3], b: [f64; 3]) -> Witness {
+        Witness::new(kind, point(a), point(b))
+    }
+
+    /// A witness is held to the measurement it witnesses: a pair not as
+    /// far apart as the value, a kind the measurement does not have, or
+    /// an extent of bodies sharing nothing is refused rather than framed.
+    #[test]
+    fn a_witness_must_witness_its_measurement() {
+        let apart = || {
+            ProximityEvidence::try_new(
+                request(),
+                0.5,
+                Some(0.0),
+                None,
+                None,
+                GeometryFidelity::Exact,
+                exact(),
+            )
+            .unwrap()
+        };
+        let closest = witness(WitnessKind::Separation, [1.0, 0.0, 0.0], [1.5, 0.0, 0.0]);
+        let measured = apart().with_witness(closest).unwrap();
+        assert_eq!(measured.witness(), Some(&closest));
+        assert_eq!(measured.evidence().witness.as_deref(), Some(&closest));
+        let projected = ProjectedDistanceEvidence::from_proximity(&measured).unwrap();
+        assert_eq!(projected.witness(), Some(&closest));
+        let too_far = witness(WitnessKind::Separation, [1.0, 0.0, 0.0], [1.6, 0.0, 0.0]);
+        assert_eq!(
+            apart().with_witness(too_far),
+            Err(ProximityError::InvalidMeasurement)
+        );
+        let deep = witness(
+            WitnessKind::PenetrationIntoCounterpart,
+            [1.0, 0.0, 0.0],
+            [1.5, 0.0, 0.0],
+        );
+        assert_eq!(
+            apart().with_witness(deep),
+            Err(ProximityError::InvalidMeasurement)
+        );
+        let shared = axioval_ir::WitnessBox::try_new([0.0; 3], [1.0; 3]).unwrap();
+        let extent = axioval_ir::WitnessExtent::try_new(None, shared).unwrap();
+        assert_eq!(
+            apart().with_witness(closest.with_extent(extent)),
+            Err(ProximityError::InvalidMeasurement)
+        );
+        // Evidence naming a witness of its own is refused: it is checked
+        // only through `with_witness`.
+        assert_eq!(
+            ProximityEvidence::try_new(
+                request(),
+                0.5,
+                Some(0.0),
+                None,
+                None,
+                GeometryFidelity::Exact,
+                exact().with_witness(closest),
+            ),
+            Err(ProximityError::InvalidMeasurement)
+        );
+
+        let overlapping = ProximityEvidence::try_new(
+            request(),
+            0.0,
+            Some(0.25),
+            None,
+            None,
+            GeometryFidelity::Exact,
+            exact(),
+        )
+        .unwrap();
+        let exact_extent = |size: f64| LengthInterval::exact(size).unwrap();
+        let overlapping = overlapping
+            .with_overlap_extents(OverlapExtents::new(
+                exact_extent(1.0),
+                exact_extent(1.0),
+                exact_extent(1.0),
+            ))
+            .unwrap();
+        assert_eq!(
+            overlapping.clone().with_witness(closest),
+            Err(ProximityError::InvalidMeasurement)
+        );
+        let deep = witness(
+            WitnessKind::PenetrationIntoSubject,
+            [0.5, 0.5, 0.75],
+            [0.5, 0.5, 0.5],
+        )
+        .with_extent(axioval_ir::WitnessExtent::try_new(Some(shared), shared).unwrap());
+        assert_eq!(
+            overlapping.clone().with_witness(deep).unwrap().witness(),
+            Some(&deep)
+        );
+        // An outer box narrower than the measured extent cannot hold the
+        // region.
+        let narrow = axioval_ir::WitnessBox::try_new([0.0; 3], [0.5, 1.0, 1.0]).unwrap();
+        let narrow = deep.with_extent(axioval_ir::WitnessExtent::try_new(None, narrow).unwrap());
+        assert_eq!(
+            overlapping.with_witness(narrow),
+            Err(ProximityError::InvalidMeasurement)
+        );
+    }
+
+    /// Only a distance in space is witnessed by a pair of points in space.
+    #[test]
+    fn a_projected_witness_must_be_a_separation_in_space() {
+        let closest = witness(WitnessKind::Separation, [0.0; 3], [0.5, 0.0, 0.0]);
+        let space = ProjectedDistanceEvidence::try_new(
+            request(),
+            0.5,
+            0.5,
+            GeometryFidelity::Exact,
+            exact(),
+        )
+        .unwrap();
+        assert!(space.clone().with_witness(closest).is_ok());
+        let far = witness(WitnessKind::Separation, [0.0; 3], [0.7, 0.0, 0.0]);
+        assert_eq!(
+            space.with_witness(far),
+            Err(ProximityError::InvalidMeasurement)
+        );
+        let plan = ProjectedDistanceEvidence::try_new(
+            ProximityRequest::projected(id("pipe"), id("wall"), ProximityProjection::Horizontal)
+                .unwrap(),
+            0.5,
+            0.5,
+            GeometryFidelity::Exact,
+            exact(),
+        )
+        .unwrap();
+        assert_eq!(
+            plan.with_witness(closest),
+            Err(ProximityError::UnsupportedProjection)
         );
     }
 }

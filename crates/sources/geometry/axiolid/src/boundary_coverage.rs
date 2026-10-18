@@ -310,6 +310,7 @@ fn measure(
         source: space.source.clone(),
         locator: format!("axiolid:boundary-coverage:{space}"),
         exact: tally.exact,
+        witness: None,
     };
     BoundaryCoverage::try_new(request.clone(), areas, measured, overlaps, evidence)
 }

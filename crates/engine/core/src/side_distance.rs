@@ -367,6 +367,7 @@ mod tests {
             source: SourceId::new("cad", "m").unwrap(),
             locator: "test".into(),
             exact,
+            witness: None,
         }
     }
 

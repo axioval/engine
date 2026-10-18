@@ -105,6 +105,7 @@ fn evidence(locator: String) -> Evidence {
         source: source(),
         locator,
         exact: true,
+        witness: None,
     }
 }
 

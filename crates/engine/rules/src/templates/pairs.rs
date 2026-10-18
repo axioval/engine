@@ -737,6 +737,7 @@ fn cited(
             source: subject.source.clone(),
             locator: format!("{list}#{index}"),
             exact: member.exact,
+            witness: None,
         }]
     } else {
         std::mem::take(&mut member.evidence)

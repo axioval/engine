@@ -140,6 +140,7 @@ pub(crate) fn measure(
                 request.minimum_fall()
             ),
             exact: exact && analysis.decided,
+            witness: None,
         },
     )
 }

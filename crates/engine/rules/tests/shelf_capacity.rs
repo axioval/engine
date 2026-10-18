@@ -91,6 +91,7 @@ impl LinearQuantityService for StubQuantities {
                     source: common::source(),
                     locator: "shelf:estimate".into(),
                     exact: false,
+                    witness: None,
                 },
             ),
         }

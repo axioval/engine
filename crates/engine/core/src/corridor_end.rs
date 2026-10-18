@@ -288,6 +288,7 @@ mod tests {
             source: source(),
             locator: "corridor-ends:hall".into(),
             exact: false,
+            witness: None,
         }
     }
 

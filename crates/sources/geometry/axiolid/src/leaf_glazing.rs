@@ -364,6 +364,7 @@ impl LeafGlazingService for AxiolidLeafGlazingService {
             source: door.source.clone(),
             locator: format!("leaf-glazing:{door}"),
             exact,
+            witness: None,
         };
         DoorGlazing::try_new(door.clone(), measured, evidence)
     }

@@ -908,6 +908,7 @@ fn evidence(subject: &ObjectId) -> Evidence {
         source: subject.source.clone(),
         locator: format!("handrails:{subject}"),
         exact: false,
+        witness: None,
     }
 }
 

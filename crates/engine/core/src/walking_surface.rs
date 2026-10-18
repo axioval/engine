@@ -2557,6 +2557,7 @@ mod tests {
             source: source(),
             locator: "tread-flight:a".into(),
             exact,
+            witness: None,
         }
     }
 
@@ -2849,6 +2850,7 @@ mod tests {
             source: source(),
             locator: "handrails:a".into(),
             exact,
+            witness: None,
         };
         let measure = |rails: Vec<(ObjectId, RailMeasurement)>, exact: bool| {
             HandrailEvidence::try_new(
@@ -3134,6 +3136,7 @@ mod tests {
                 source: source(),
                 locator: "landing:a".into(),
                 exact,
+                witness: None,
             },
         )
     }

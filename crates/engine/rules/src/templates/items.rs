@@ -515,6 +515,7 @@ fn cited(scope: &Scope<'_, '_, '_>, listed: &[Evidence], object: &Object) -> Vec
                 scope.place.map_or(0, |(index, _)| index)
             ),
             exact: member.exact,
+            witness: None,
         });
     }
     evidence
@@ -1714,6 +1715,7 @@ fn judge_least(
             source: object.id.source.clone(),
             locator: scope.items.list.to_owned(),
             exact: member.exact,
+            witness: None,
         });
     }
     scope.named("unknown", unknown.join("; "));

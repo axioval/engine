@@ -197,6 +197,7 @@ fn a_changed_severity_or_evidence_is_flagged() {
         source: source("a"),
         locator: "contact:2".into(),
         exact: false,
+        witness: None,
     });
     second.apply_decisions(&decisions).unwrap();
     let decision = second.findings[0].decision.as_ref().unwrap();

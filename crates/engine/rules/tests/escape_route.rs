@@ -236,6 +236,7 @@ impl PlanAreaService for Geometry {
                 source: source(),
                 locator: format!("area:{}", object.local_id),
                 exact,
+                witness: None,
             },
         )
     }

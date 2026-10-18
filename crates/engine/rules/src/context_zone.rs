@@ -315,6 +315,7 @@ pub(crate) fn stands_in(
                     source: object.source.clone(),
                     locator: format!("{ZONE_LOCATOR_PREFIX};stands_in={kind};id={one}:{object}"),
                     exact,
+                    witness: None,
                 },
             )),
             ([], []) => Err((
@@ -366,6 +367,7 @@ pub(crate) fn statement(zone: &PlacedZone, source: &SourceId) -> Evidence {
         source: source.clone(),
         locator: zone.locator().to_owned(),
         exact: zone.is_exact(),
+        witness: None,
     }
 }
 
@@ -709,6 +711,7 @@ fn stated(
         source: object.source.clone(),
         locator: locator.clone(),
         exact: true,
+        witness: None,
     });
     Ok((
         interval(bounds, dimension, true, locator),
@@ -748,6 +751,7 @@ pub(crate) fn zone_statement(
             source: source.clone(),
             locator,
             exact: true,
+            witness: None,
         });
     };
     let Some(key) = value else {

@@ -182,6 +182,7 @@ impl Walls {
                                 side.name()
                             ),
                             exact: false,
+                            witness: None,
                         },
                     ],
                 });

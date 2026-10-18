@@ -33,6 +33,7 @@ fn length((lower, upper): (f64, f64), locator: &str) -> PlanLength {
             source: source(),
             locator: locator.into(),
             exact,
+            witness: None,
         },
     )
     .unwrap()

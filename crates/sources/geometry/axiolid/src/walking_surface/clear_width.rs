@@ -279,6 +279,7 @@ impl AxiolidWalkingSurfaceService {
                 source: subject.source.clone(),
                 locator: format!("clear-width:{subject}"),
                 exact: false,
+                witness: None,
             },
         )
     }
@@ -298,6 +299,7 @@ impl AxiolidWalkingSurfaceService {
             source: subject.source.clone(),
             locator: format!("landing-clear-width:{subject}"),
             exact: false,
+            witness: None,
         };
         let Some(found) = landing.landing() else {
             return LandingClearWidthEvidence::try_new(request.clone(), None, evidence);

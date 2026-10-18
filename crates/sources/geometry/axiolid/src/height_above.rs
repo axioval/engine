@@ -104,6 +104,7 @@ pub(crate) fn measure(
                 surfaces.join("+")
             ),
             exact: true,
+            witness: None,
         },
     )
 }

@@ -199,6 +199,7 @@ impl AxiolidPlanSpanService {
                 source: self.source.clone(),
                 locator,
                 exact: false,
+                witness: None,
             },
         )
     }
@@ -218,6 +219,7 @@ impl AxiolidPlanSpanService {
                 source: self.source.clone(),
                 locator,
                 exact,
+                witness: None,
             },
         )
     }
@@ -570,6 +572,7 @@ impl PlanSpanService for AxiolidPlanSpanService {
             source: object.source.clone(),
             locator,
             exact: slack == 0.0,
+            witness: None,
         };
         PlanCentre::try_new(
             object.clone(),
@@ -620,6 +623,7 @@ impl PlanSpanService for AxiolidPlanSpanService {
             source: object.source.clone(),
             locator,
             exact,
+            witness: None,
         };
         PlanRectangle::try_new(
             object.clone(),

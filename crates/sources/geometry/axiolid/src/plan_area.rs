@@ -251,6 +251,7 @@ impl AxiolidPlanAreaService {
             source: self.source.clone(),
             locator,
             exact: false,
+            witness: None,
         };
         PlanArea::try_new(
             (measured - slack).max(0.0),
@@ -382,6 +383,7 @@ impl PlanAreaService for AxiolidPlanAreaService {
             source: self.source.clone(),
             locator: format!("footprint-outline:{first}+{}", objects.len() - 1),
             exact: deviation == 0.0,
+            witness: None,
         };
         FootprintOutline::try_new(objects.to_vec(), rings, deviation, evidence)
     }
@@ -412,6 +414,7 @@ impl PlanAreaService for AxiolidPlanAreaService {
             source: self.source.clone(),
             locator,
             exact: false,
+            witness: None,
         };
         FootprintPerimeter::try_new(
             object.clone(),
@@ -522,6 +525,7 @@ impl PlanAreaService for AxiolidPlanAreaService {
                 source: self.source.clone(),
                 locator,
                 exact,
+                witness: None,
             },
         )
     }
@@ -607,6 +611,7 @@ impl PlanAreaService for AxiolidPlanAreaService {
                 source: self.source.clone(),
                 locator,
                 exact,
+                witness: None,
             },
         )
     }

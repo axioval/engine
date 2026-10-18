@@ -215,6 +215,7 @@ pub(crate) fn measure(
         source: object.source.clone(),
         locator: format!("thickness:{object}:[{},{},{}]", d[0], d[1], d[2]),
         exact: false,
+        witness: None,
     };
     Thickness::try_new(
         object.clone(),

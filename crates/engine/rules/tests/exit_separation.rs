@@ -42,6 +42,7 @@ fn interval(lower: f64, upper: f64, locator: String) -> Evidence {
         source: source(),
         locator,
         exact,
+        witness: None,
     }
 }
 

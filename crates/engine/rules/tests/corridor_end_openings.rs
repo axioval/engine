@@ -73,6 +73,7 @@ fn length(interval: (f64, f64), locator: String) -> PlanLength {
             source: source(),
             locator,
             exact,
+            witness: None,
         },
     )
     .unwrap()
@@ -132,6 +133,7 @@ impl PlanSpanService for Ends {
                 source: source(),
                 locator: format!("corridor-ends:{space}"),
                 exact: false,
+                witness: None,
             },
         )
     }

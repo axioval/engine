@@ -340,6 +340,7 @@ pub(crate) fn measure(
             source,
             locator,
             exact,
+            witness: None,
         },
     )
 }

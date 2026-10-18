@@ -132,6 +132,7 @@ fn wide_flight(object: &str, risers: &[f64], margin: f64, width: f64) -> TreadFl
         source: source(),
         locator: format!("tread-flight:{object}"),
         exact: margin == 0.0,
+        witness: None,
     };
     let top = treads.last().unwrap().elevation();
     TreadFlight::try_new(
@@ -313,6 +314,7 @@ impl WalkingSurfaceService for Stairs {
             source: source(),
             locator: format!("headroom:{}", request.subject().local_id),
             exact: false,
+            witness: None,
         };
         match least {
             None => Headroom::try_new(request.clone(), None, vec![], evidence),
@@ -370,6 +372,7 @@ impl WalkingSurfaceService for Stairs {
             source: source(),
             locator: format!("clearance-below:{}", request.subject().local_id),
             exact: false,
+            witness: None,
         };
         match least {
             None => ClearanceBelow::try_new(request.clone(), None, vec![], evidence),
@@ -415,6 +418,7 @@ impl WalkingSurfaceService for Stairs {
             source: source(),
             locator: format!("handrails:{}", subject.local_id),
             exact: false,
+            witness: None,
         };
         if let (WalkingStretch::Flight, Some(parts)) =
             (request.stretch(), self.turning.get(subject))
@@ -3099,6 +3103,7 @@ impl WalkingSurfaceService for Narrowed {
                 source: source(),
                 locator: format!("clear-width:{}", request.subject().local_id),
                 exact: false,
+                witness: None,
             },
         )
     }
@@ -3138,6 +3143,7 @@ impl WalkingSurfaceService for Narrowed {
                 source: source(),
                 locator: format!("landing-clear-width:{}", request.subject().local_id),
                 exact: false,
+                witness: None,
             },
         )
     }
@@ -3502,6 +3508,7 @@ impl ProximityService for Measured {
                 source: source(),
                 locator: format!("distance:{a}:{b}"),
                 exact: false,
+                witness: None,
             },
         )
     }
@@ -3663,6 +3670,7 @@ impl ProximityService for Footprints {
                 source: source(),
                 locator: format!("distance:{}:{}", pair.0, pair.1),
                 exact,
+                witness: None,
             },
         )
     }
@@ -3917,6 +3925,7 @@ fn a_tessellated_ramps_items_measure_inexactly() {
             source: source(),
             locator: "sloped-runs:gentle".into(),
             exact,
+            witness: None,
         };
         let surface = SlopedSurface::try_new(id("gentle"), vec![run], evidence).unwrap();
         let mut services = ServiceRegistry::new();

@@ -109,6 +109,7 @@ impl ProximityService for Stub {
                 source: source(),
                 locator: format!("distance:{a}:{b}"),
                 exact: fidelity.is_exact(),
+                witness: None,
             },
         )
     }

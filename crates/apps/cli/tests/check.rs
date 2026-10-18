@@ -1555,6 +1555,81 @@ fn with_geometry_a_clash_between_real_ifc_bodies_is_found() {
     );
 }
 
+/// A clash names where it happens (#388): the proximity evidence it cites
+/// carries the witness pair, in model coordinates, and the bracket of the
+/// box the two walls share, both exact for exact bodies.
+#[test]
+fn with_geometry_a_clash_reports_its_witness_points_and_shared_box() {
+    let case = Case::new("geometry-clash-witness");
+    let saved = case.path("result.json");
+    let output = case.clash_check(&["--geometry", "--report", saved.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result: Value = serde_json::from_str(&std::fs::read_to_string(&saved).unwrap()).unwrap();
+    let findings = result["report"]["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 1, "{result:#}");
+    let evidence = findings[0]["evidence"].as_array().unwrap();
+    let proximity: Vec<&Value> = evidence
+        .iter()
+        .filter(|item| {
+            item["locator"]
+                .as_str()
+                .unwrap()
+                .starts_with("axiolid:proximity:")
+        })
+        .collect();
+    assert_eq!(proximity.len(), 1, "{evidence:#?}");
+    let witness = &proximity[0]["witness"];
+    // No other evidence names a spot.
+    assert_eq!(
+        evidence
+            .iter()
+            .filter(|item| item.get("witness").is_some())
+            .count(),
+        1
+    );
+
+    // The walls share x 1.9..2.1, y -0.1..0.1 over their whole height, and
+    // each reaches 0.1 m into the other.
+    let close = |value: &Value, expected: f64| {
+        let value = value.as_f64().unwrap();
+        assert!((value - expected).abs() < 1e-9, "{value} != {expected}");
+    };
+    let outer = &witness["extent"]["outer"];
+    for (axis, (min, max)) in [(1.9, 2.1), (-0.1, 0.1), (0.0, 3.0)]
+        .into_iter()
+        .enumerate()
+    {
+        close(&outer["min"][axis], min);
+        close(&outer["max"][axis], max);
+    }
+    assert_eq!(witness["extent"]["inner"], *outer, "{witness:#}");
+
+    let kind = witness["kind"].as_str().unwrap();
+    assert!(kind.starts_with("penetration_into_"), "{kind}");
+    let point = |name: &str| -> [f64; 3] {
+        assert_eq!(witness[name]["deviation_metres"], 0.0, "{witness:#}");
+        [0, 1, 2].map(|axis| witness[name]["metres"][axis].as_f64().unwrap())
+    };
+    let (a, b) = (point("point_a"), point("point_b"));
+    let depth = (0..3)
+        .map(|axis| (a[axis] - b[axis]).powi(2))
+        .sum::<f64>()
+        .sqrt();
+    assert!((depth - 0.1).abs() < 1e-9, "depth {depth}");
+    for spot in [a, b] {
+        for axis in 0..3 {
+            let (min, max) = (
+                outer["min"][axis].as_f64().unwrap(),
+                outer["max"][axis].as_f64().unwrap(),
+            );
+            assert!(
+                (min - 1e-9..=max + 1e-9).contains(&spot[axis]),
+                "{spot:?} outside {outer}"
+            );
+        }
+    }
+}
+
 /// A product with no representation at all and one whose only
 /// representation is an `Axis` are unmeasured for different reasons: the
 /// first is model data, reported once as an integrity warning however many

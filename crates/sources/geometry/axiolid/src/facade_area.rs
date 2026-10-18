@@ -490,6 +490,7 @@ impl FacadeAreaService for AxiolidFacadeAreaService {
             source: object.source.clone(),
             locator: format!("facade-area:{object}:faces={faces}:partial={partial}"),
             exact: deviation.is_none() && partial == 0,
+            witness: None,
         };
         let (lower, upper) = ((certain - band).max(0.0), certain + possible + band);
         FacadeArea::try_new(object.clone(), lower, upper, evidence)
@@ -534,6 +535,7 @@ impl FacadeAreaService for AxiolidFacadeAreaService {
                 faces.len()
             ),
             exact: deviation.is_none(),
+            witness: None,
         };
         FacadeFaces::try_new(object.clone(), faces, evidence)
     }
@@ -610,6 +612,7 @@ impl FacadeAreaService for AxiolidFacadeAreaService {
                 )
             },
             exact,
+            witness: None,
         };
         EnclosedVolume::try_new(asked, lower, upper, evidence)
     }
@@ -651,6 +654,7 @@ impl FacadeAreaService for AxiolidFacadeAreaService {
                 source: object.source.clone(),
                 locator: format!("face-area:{object}:planes={planes}"),
                 exact: true,
+                witness: None,
             },
         )
     }

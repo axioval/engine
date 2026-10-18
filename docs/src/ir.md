@@ -96,6 +96,8 @@ A project can expose raw source views and composed views. This supports today's 
 
 Every imported fact and computed evidence can reference its source record, adapter, derivation and precision. Findings carry the provenance needed to explain or reproduce a decision.
 
+An `Evidence` names its `source`, a `locator` and whether it is `exact`. Evidence of a measurement between two bodies may also say where it happened: its `witness` (`axioval_ir::Witness`, #388), the two witness points in model coordinates with each point's deviation, and for an overlap the bracket of the shared region's box (see [Where a pair meets](./clash.md#where-a-pair-meets)). It is `None` and absent on the wire otherwise, so evidence without one serializes byte for byte as before; a witness is checked against the measurement it witnesses and never guessed. Every component refuses non-finite coordinates, negative deviations, inverted boxes and an inner box outside its outer one, on construction and when read.
+
 ## Reports
 
 `Report` keeps conclusive `findings` separate from `not_evaluated` outcomes, and both separate from the `tables` of measured values (see [Tables](#tables)). Every not-evaluated record identifies its rule and its scope, carries a typed reason, and includes a diagnostic. Runtime ordering is deterministic. An empty findings list is not a pass when not-evaluated outcomes exist.

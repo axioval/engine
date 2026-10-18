@@ -759,6 +759,7 @@ fn approximate_guard_edges_are_never_measured() {
         source: source(),
         locator: "guard:mesh".into(),
         exact: false,
+        witness: None,
     };
     assert!(matches!(
         GuardEvidence::try_new(vec![tall()], 1, approximate),

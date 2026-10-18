@@ -140,7 +140,9 @@ use axioval_engine::{
     BodySurface, DrainageEvidence, DrainageRequest, ExactBoundaryHandle, HeightAboveEvidence,
     HeightAboveRequest, SurfaceDistanceEvidence, SurfaceDistanceRequest,
 };
-use axioval_ir::{Evidence, ObjectId};
+use axioval_ir::{
+    Evidence, ObjectId, Witness, WitnessBox, WitnessExtent, WitnessKind, WitnessPoint,
+};
 
 use crate::exact_boundary::ExactBody;
 use crate::geometry::{AxiolidGeometry, Triangle, triangles};
@@ -582,9 +584,173 @@ impl AxiolidProximityService {
                     request.counterpart().object()
                 ),
                 exact: true,
+                witness: None,
             },
         )
         .map(Some)
+    }
+
+    /// The interval of a distance in space measured as `distance` on the
+    /// meshes: widened by the pair's chord deviation, narrowed by the
+    /// certified boundary distance where both bodies have one.
+    fn space_interval(
+        &self,
+        request: &ProximityRequest,
+        distance: f64,
+    ) -> Result<(f64, f64), ProximityError> {
+        let deviation = self
+            .fidelity(request.subject())?
+            .combined(self.fidelity(request.counterpart())?)
+            .deviation_metres();
+        narrow(
+            ((distance - deviation).max(0.0), distance + deviation),
+            self.boundaries(request.subject(), request.counterpart())?
+                .and_then(Boundaries::separation),
+        )
+    }
+
+    /// A local point of `object`'s body in model coordinates (#372), as a
+    /// witness point: within the body's chord deviation of its true
+    /// geometry, widened by the rounding of the conversion.
+    fn witness_point(
+        &self,
+        request: &ProximityRequest,
+        object: &ObjectId,
+        point: Point3,
+    ) -> Result<WitnessPoint, ProximityError> {
+        let ([x, y], rounding) = self
+            .geometry
+            .local_origin(&request.subject().source)
+            .to_model_bounded([point.x, point.y]);
+        WitnessPoint::try_new(
+            [x, y, point.z],
+            self.fidelity(object)?.deviation_metres() + rounding,
+        )
+        .map_err(|_| ProximityError::InvalidMeasurement)
+    }
+
+    /// The closest pair of a separation, `a` on the subject and `b` on the
+    /// counterpart, as a witness.
+    fn separation_witness(
+        &self,
+        request: &ProximityRequest,
+        (a, b): (Point3, Point3),
+    ) -> Result<Witness, ProximityError> {
+        Ok(Witness::new(
+            WitnessKind::Separation,
+            self.witness_point(request, request.subject(), a)?,
+            self.witness_point(request, request.counterpart(), b)?,
+        ))
+    }
+
+    /// Where a measurement in space happens (#388): the deepest witnessed
+    /// point of one body inside the other and the nearest point of the
+    /// other's surface where the bodies interpenetrate, the closest pair
+    /// otherwise, and the bracket of the shared region's box where they
+    /// share anything. `None` where the spot could not be found.
+    fn proximity_witness(
+        &self,
+        request: &ProximityRequest,
+        bodies: (&Body<'_>, &Body<'_>),
+        closest: Option<(Point3, Point3)>,
+        deepest: Option<Deepest>,
+        boxes: Option<OverlapBoxes>,
+    ) -> Result<Option<Witness>, ProximityError> {
+        let witness = match deepest {
+            Some(Deepest {
+                into_counterpart,
+                point,
+            }) => {
+                let (inside, other) = if into_counterpart {
+                    (request.subject(), bodies.1)
+                } else {
+                    (request.counterpart(), bodies.0)
+                };
+                let Some(leaving) = nearest_surface_point(point, other)? else {
+                    return Ok(None);
+                };
+                let deep = self.witness_point(request, inside, point)?;
+                if into_counterpart {
+                    Witness::new(
+                        WitnessKind::PenetrationIntoCounterpart,
+                        deep,
+                        self.witness_point(request, request.counterpart(), leaving)?,
+                    )
+                } else {
+                    Witness::new(
+                        WitnessKind::PenetrationIntoSubject,
+                        self.witness_point(request, request.subject(), leaving)?,
+                        deep,
+                    )
+                }
+            }
+            None => match closest {
+                Some(pair) => self.separation_witness(request, pair)?,
+                None => return Ok(None),
+            },
+        };
+        let extent = boxes.and_then(|boxes| self.witness_extent(request, boxes));
+        Ok(Some(match extent {
+            Some(extent) => witness.with_extent(extent),
+            None => witness,
+        }))
+    }
+
+    /// The bracket of the shared region's box in model coordinates, the
+    /// outer box grown and the inner one shrunk by the rounding of the
+    /// conversion; `None` for bodies sharing nothing.
+    fn witness_extent(
+        &self,
+        request: &ProximityRequest,
+        boxes: OverlapBoxes,
+    ) -> Option<WitnessExtent> {
+        let origin = self.geometry.local_origin(&request.subject().source);
+        let model = |(min, max): ([f64; 3], [f64; 3]), grow: f64| {
+            let (low, low_rounding) = origin.to_model_bounded([min[0], min[1]]);
+            let (high, high_rounding) = origin.to_model_bounded([max[0], max[1]]);
+            let margin = grow * low_rounding.max(high_rounding);
+            WitnessBox::try_new(
+                [low[0] - margin, low[1] - margin, min[2]],
+                [high[0] + margin, high[1] + margin, max[2]],
+            )
+            .ok()
+        };
+        let outer = model(boxes.outer?, 1.0)?;
+        let inner = boxes.inner.and_then(|inner| model(inner, -1.0));
+        WitnessExtent::try_new(inner.filter(|inner| outer.contains(inner)), outer).ok()
+    }
+
+    /// The certified volume the pair shares, with their own volumes: of a
+    /// composed body through its parts, else of the two meshes, else shell
+    /// by shell; `None` where none of them is measured.
+    fn pair_volume(
+        &self,
+        request: &ProximityRequest,
+        (subject, counterpart): (&Body<'_>, &Body<'_>),
+        disjoint: bool,
+    ) -> Result<Option<IntersectionVolume>, ProximityError> {
+        let composed = self.geometry.parts_of(request.subject()).is_some()
+            || self.geometry.parts_of(request.counterpart()).is_some();
+        if composed {
+            return Ok(self.composed_intersection(
+                request.subject(),
+                request.counterpart(),
+                disjoint,
+            ));
+        }
+        let subject_fidelity = self.fidelity(request.subject())?;
+        let counterpart_fidelity = self.fidelity(request.counterpart())?;
+        Ok(intersection(
+            subject,
+            counterpart,
+            disjoint,
+            subject_fidelity.deviation_metres(),
+            counterpart_fidelity.deviation_metres(),
+        )
+        .or_else(|| {
+            let exact = subject_fidelity.is_exact() && counterpart_fidelity.is_exact();
+            self.shells_intersection(request, (subject, counterpart), disjoint, exact)
+        }))
     }
 
     /// Measures the pair in the request's projection.
@@ -602,10 +768,9 @@ impl AxiolidProximityService {
         let widen = |distance: f64| ((distance - deviation).max(0.0), distance + deviation);
         let boundaries = self.boundaries(request.subject(), request.counterpart())?;
         Ok(match request.projection() {
-            ProximityProjection::Minimum3d => narrow(
-                widen(separation(&subject.soup, &counterpart.soup)?),
-                boundaries.and_then(Boundaries::separation),
-            )?,
+            ProximityProjection::Minimum3d => {
+                self.space_interval(request, separation(&subject.soup, &counterpart.soup)?)?
+            }
             ProximityProjection::Horizontal => narrow(
                 widen(plan_separation(subject, counterpart)?),
                 boundaries.and_then(Boundaries::plan_distance),
@@ -800,8 +965,19 @@ pub(crate) fn nearest<T>(
     second: &Indexed<T>,
     distance: impl Fn(&T, &T) -> Result<f64, ProximityError>,
 ) -> Result<f64, ProximityError> {
+    nearest_pair(first, second, distance).map(|(best, _)| best)
+}
+
+/// [`nearest`], with the indices of the first pair of items found at that
+/// distance (within [`LINEAR_TOLERANCE`] of it when the sets meet).
+pub(crate) fn nearest_pair<T>(
+    first: &Indexed<T>,
+    second: &Indexed<T>,
+    distance: impl Fn(&T, &T) -> Result<f64, ProximityError>,
+) -> Result<(f64, (usize, usize)), ProximityError> {
     let mut best = f64::INFINITY;
-    for (a, a_box) in first.items.iter().zip(&first.boxes) {
+    let mut pair = (0, 0);
+    for (a_index, (a, a_box)) in first.items.iter().zip(&first.boxes).enumerate() {
         if a_box.gap(&second.bounds) >= best {
             continue;
         }
@@ -819,14 +995,17 @@ pub(crate) fn nearest<T>(
             if !measured.is_finite() {
                 return Err(ProximityError::InvalidMeasurement);
             }
-            best = best.min(measured);
+            if measured < best {
+                best = measured;
+                pair = (a_index, index);
+            }
         }
         if best <= LINEAR_TOLERANCE {
-            return Ok(0.0);
+            return Ok((0.0, pair));
         }
     }
     if best.is_finite() {
-        Ok(best)
+        Ok((best, pair))
     } else {
         Err(ProximityError::Unavailable)
     }
@@ -838,6 +1017,22 @@ pub(crate) fn separation(
     second: &Indexed<Triangle>,
 ) -> Result<f64, ProximityError> {
     nearest(first, second, |a, b| triangle_pair_distance(*a, *b))
+}
+
+/// [`separation`], with the closest pair of points realizing it: a point
+/// of each set's surface. `None` for the pair when the nearest triangles
+/// include a zero-area one, measured as its edges: the spot is then left
+/// out rather than guessed.
+pub(crate) fn separation_with_witness(
+    first: &Indexed<Triangle>,
+    second: &Indexed<Triangle>,
+) -> Result<(f64, Option<(Point3, Point3)>), ProximityError> {
+    let (distance, (a, b)) = nearest_pair(first, second, |a, b| triangle_pair_distance(*a, *b))?;
+    let pair = closest_points_on_triangles(first.items[a], second.items[b])
+        .ok()
+        .map(|closest| (closest.point_a, closest.point_b))
+        .filter(|(a, b)| a.is_finite() && b.is_finite());
+    Ok((distance, pair))
 }
 
 /// One projected triangle: a triangle in the plan, or a segment when the
@@ -1544,7 +1739,10 @@ fn crossing_midpoints(
 /// surface, is therefore a lower bound on how far `body` reaches into
 /// `other`; a candidate that is not surely a point of `body` witnesses
 /// nothing, however deep it lies in `other`.
-fn deepest_inside(body: &Body<'_>, other: &Body<'_>) -> Result<f64, ProximityError> {
+fn deepest_inside(
+    body: &Body<'_>,
+    other: &Body<'_>,
+) -> Result<(f64, Option<Point3>), ProximityError> {
     // A point's depth is its distance to the other surface, which the index
     // answers cheaply; whether it is inside at all costs a winding number over
     // every triangle. So rank the candidates by depth and test them deepest
@@ -1598,11 +1796,42 @@ fn deepest_inside(body: &Body<'_>, other: &Body<'_>) -> Result<f64, ProximityErr
         }
         // A point too near a left-out zero-area triangle witnesses nothing.
         if winding.inside(point, || Ok(depth))? == Some(true) {
-            return Ok(depth);
+            return Ok((depth, Some(point)));
         }
     }
     // No sample lies inside by more than rounding: the bodies touch.
-    Ok(0.0)
+    Ok((0.0, None))
+}
+
+/// The point of `body`'s surface nearest to `point`, among its triangles
+/// with area; `None` when a zero-area triangle, measured as its edges, is
+/// nearer, so the spot is left out rather than guessed.
+fn nearest_surface_point(point: Point3, body: &Body<'_>) -> Result<Option<Point3>, ProximityError> {
+    let distance = surface_distance(point, body)?;
+    let probe =
+        Bounds3::try_new(point.to_array(), point.to_array())?.expanded(distance + LINEAR_TOLERANCE);
+    let mut best: Option<(f64, Point3)> = None;
+    for index in body.soup.near(&probe) {
+        let Ok(closest) = closest_point_on_triangle(point, body.soup.items[index]) else {
+            continue;
+        };
+        let to = closest.distance(point);
+        if best.is_none_or(|(least, _)| to < least) {
+            best = Some((to, closest));
+        }
+    }
+    Ok(best
+        .filter(|(to, closest)| (to - distance).abs() <= LINEAR_TOLERANCE && closest.is_finite())
+        .map(|(_, closest)| closest))
+}
+
+/// The deepest witnessed point of one body inside the other, as the pair
+/// of a penetration witness.
+#[derive(Clone, Copy)]
+struct Deepest {
+    /// Whether the point is the subject's, inside the counterpart.
+    into_counterpart: bool,
+    point: Point3,
 }
 
 /// Whether separated body `inner` lies inside `outer`.
@@ -1628,37 +1857,70 @@ fn penetration(
     counterpart: &Body<'_>,
     separation: f64,
 ) -> Result<(Option<f64>, Option<BodyContainment>), ProximityError> {
+    penetration_witnessed(subject, counterpart, separation)
+        .map(|(depth, containment, _)| (depth, containment))
+}
+
+/// What [`penetration`] measures, with the deepest witnessed point.
+type Penetration = (Option<f64>, Option<BodyContainment>, Option<Deepest>);
+
+/// [`penetration`], with the deepest witnessed point where the depth is
+/// positive.
+fn penetration_witnessed(
+    subject: &Body<'_>,
+    counterpart: &Body<'_>,
+    separation: f64,
+) -> Result<Penetration, ProximityError> {
+    let deepest = |into_counterpart: bool, (depth, point): (f64, Option<Point3>)| {
+        (
+            depth,
+            point.map(|point| Deepest {
+                into_counterpart,
+                point,
+            }),
+        )
+    };
     if !subject.solid && !counterpart.solid {
-        return Ok((None, None));
+        return Ok((None, None, None));
     }
     if separation > 0.0 {
         // Apart at the surface: one body is wholly inside the other or they
         // share nothing. Only a closed body can hold the other.
         if counterpart.solid && contained(subject, counterpart, separation)? {
+            let (depth, point) = deepest(true, deepest_inside(subject, counterpart)?);
             return Ok((
-                Some(deepest_inside(subject, counterpart)?),
+                Some(depth),
                 Some(BodyContainment::SubjectInsideCounterpart),
+                point,
             ));
         }
         if subject.solid && contained(counterpart, subject, separation)? {
+            let (depth, point) = deepest(false, deepest_inside(counterpart, subject)?);
             return Ok((
-                Some(deepest_inside(counterpart, subject)?),
+                Some(depth),
                 Some(BodyContainment::CounterpartInsideSubject),
+                point,
             ));
         }
-        return Ok((Some(0.0), None));
+        return Ok((Some(0.0), None, None));
     }
     let into_counterpart = if counterpart.solid {
-        deepest_inside(subject, counterpart)?
+        deepest(true, deepest_inside(subject, counterpart)?)
     } else {
-        0.0
+        (0.0, None)
     };
     let into_subject = if subject.solid {
-        deepest_inside(counterpart, subject)?
+        deepest(false, deepest_inside(counterpart, subject)?)
     } else {
-        0.0
+        (0.0, None)
     };
-    Ok((Some(into_counterpart.max(into_subject)), None))
+    // The deeper side witnesses the depth; a tie goes to the subject's.
+    let (depth, point) = if into_subject.0 > into_counterpart.0 {
+        into_subject
+    } else {
+        into_counterpart
+    };
+    Ok((Some(depth), None, point))
 }
 
 /// The certified volume two closed bodies share, with their own volumes,
@@ -1969,11 +2231,50 @@ fn body_range(body: &Body<'_>, direction: [f64; 3], deviation: f64) -> (f64, f64
 fn overlap_along(
     subject: &Body<'_>,
     counterpart: &Body<'_>,
-    (separation, containment): (f64, Option<BodyContainment>),
+    contact: (f64, Option<BodyContainment>),
     subject_fidelity: GeometryFidelity,
     counterpart_fidelity: GeometryFidelity,
     directions: &[[f64; 3]],
 ) -> Result<Vec<LengthInterval>, ProximityError> {
+    Ok(overlap_spans(
+        subject,
+        counterpart,
+        contact,
+        subject_fidelity,
+        counterpart_fidelity,
+        directions,
+    )?
+    .into_iter()
+    .map(|span| span.extent)
+    .collect())
+}
+
+/// How far the bodies' intersection reaches along one direction, and
+/// where.
+#[derive(Clone, Copy)]
+struct OverlapSpan {
+    /// Its extent, as [`overlap_along`] answers it.
+    extent: LengthInterval,
+    /// Positions spanned by witnessed points of the intersection, each end
+    /// moved inwards by the fidelity's deviation and the rounding: within
+    /// the true intersection's span. `None` when nothing was witnessed or
+    /// the deviation swallows the span.
+    inner: Option<(f64, f64)>,
+    /// The overlap of the true bodies' ranges, which holds the
+    /// intersection; `None` for bodies sharing nothing.
+    outer: Option<(f64, f64)>,
+}
+
+/// [`overlap_along`], with where the intersection lies along each
+/// direction.
+fn overlap_spans(
+    subject: &Body<'_>,
+    counterpart: &Body<'_>,
+    (separation, containment): (f64, Option<BodyContainment>),
+    subject_fidelity: GeometryFidelity,
+    counterpart_fidelity: GeometryFidelity,
+    directions: &[[f64; 3]],
+) -> Result<Vec<OverlapSpan>, ProximityError> {
     let mut witnessed = Witnessed::new(directions);
     // Bodies apart at the surface share nothing unless one holds the other.
     let shared = separation <= 0.0 || containment.is_some();
@@ -1999,7 +2300,12 @@ fn overlap_along(
         .enumerate()
         .map(|(index, direction)| {
             if !shared {
-                return LengthInterval::exact(0.0).map_err(|_| ProximityError::InvalidMeasurement);
+                return Ok(OverlapSpan {
+                    extent: LengthInterval::exact(0.0)
+                        .map_err(|_| ProximityError::InvalidMeasurement)?,
+                    inner: None,
+                    outer: None,
+                });
             }
             let a = body_range(subject, *direction, subject_fidelity.deviation_metres());
             let b = body_range(
@@ -2007,24 +2313,40 @@ fn overlap_along(
                 *direction,
                 counterpart_fidelity.deviation_metres(),
             );
-            let upper = (a.1.min(b.1) - a.0.max(b.0)).max(0.0);
+            let (from, to) = (a.0.max(b.0), a.1.min(b.1));
+            let upper = (to - from).max(0.0);
             // Each end of a tessellated extent may move by the deviation.
             let lower = (witnessed.extent(index) - 2.0 * deviation).max(0.0);
-            LengthInterval::try_new(lower.min(upper), upper)
-                .map_err(|_| ProximityError::InvalidMeasurement)
+            let inner = witnessed.spans[index]
+                .map(|span| {
+                    (
+                        (span.inner.1 + deviation).max(from),
+                        (span.inner.0 - deviation).min(to),
+                    )
+                })
+                .filter(|(least, greatest)| least <= greatest);
+            Ok(OverlapSpan {
+                extent: LengthInterval::try_new(lower.min(upper), upper)
+                    .map_err(|_| ProximityError::InvalidMeasurement)?,
+                inner,
+                outer: (from <= to).then_some((from, to)),
+            })
         })
         .collect()
 }
 
-/// Extents of the bodies' intersection along each world axis.
+/// Extents of the bodies' intersection along each world axis, with the
+/// boxes bracketing it in the local frame: the witnessed box within it
+/// (`None` when an axis witnessed nothing) and the box holding it (`None`
+/// for bodies sharing nothing).
 fn overlap_extents(
     subject: &Body<'_>,
     counterpart: &Body<'_>,
     contact: (f64, Option<BodyContainment>),
     subject_fidelity: GeometryFidelity,
     counterpart_fidelity: GeometryFidelity,
-) -> Result<OverlapExtents, ProximityError> {
-    let axes = overlap_along(
+) -> Result<(OverlapExtents, OverlapBoxes), ProximityError> {
+    let axes = overlap_spans(
         subject,
         counterpart,
         contact,
@@ -2032,7 +2354,26 @@ fn overlap_extents(
         counterpart_fidelity,
         &AXES,
     )?;
-    Ok(OverlapExtents::new(axes[0], axes[1], axes[2]))
+    let corners = |span: fn(&OverlapSpan) -> Option<(f64, f64)>| {
+        let [x, y, z] = [0, 1, 2].map(|axis| span(&axes[axis]));
+        Some(([x?.0, y?.0, z?.0], [x?.1, y?.1, z?.1]))
+    };
+    let boxes = OverlapBoxes {
+        inner: corners(|span| span.inner),
+        outer: corners(|span| span.outer),
+    };
+    Ok((
+        OverlapExtents::new(axes[0].extent, axes[1].extent, axes[2].extent),
+        boxes,
+    ))
+}
+
+/// The boxes bracketing two bodies' intersection, `(min, max)` in the
+/// local frame.
+#[derive(Clone, Copy)]
+struct OverlapBoxes {
+    inner: Option<([f64; 3], [f64; 3])>,
+    outer: Option<([f64; 3], [f64; 3])>,
 }
 
 /// Distance from `point` to one triangle.
@@ -2265,6 +2606,7 @@ impl ProximityService for AxiolidProximityService {
                     request.counterpart().object()
                 ),
                 exact: true,
+                witness: None,
             },
         )
     }
@@ -2282,7 +2624,7 @@ impl ProximityService for AxiolidProximityService {
             .fidelity(request.subject())?
             .combined(self.fidelity(request.counterpart())?);
 
-        let separation = separation(&subject.soup, &counterpart.soup)?;
+        let (separation, closest) = separation_with_witness(&subject.soup, &counterpart.soup)?;
         // No separation, penetration or containment rests on the plan
         // overlap, so an overlay refusing the footprints leaves it unknown
         // instead of the whole pair unmeasured. It costs an overlay per
@@ -2293,37 +2635,32 @@ impl ProximityService for AxiolidProximityService {
             None
         };
 
-        let (penetration, containment) = penetration(&subject, &counterpart, separation)?;
+        let (penetration, containment, deepest) =
+            penetration_witnessed(&subject, &counterpart, separation)?;
         let subject_fidelity = self.fidelity(request.subject())?;
         let counterpart_fidelity = self.fidelity(request.counterpart())?;
-        let extents = match penetration {
-            Some(_) => Some(overlap_extents(
-                &subject,
-                &counterpart,
-                (separation, containment),
-                subject_fidelity,
-                counterpart_fidelity,
-            )?),
-            None => None,
+        let (extents, boxes) = match penetration {
+            Some(_) => {
+                let (extents, boxes) = overlap_extents(
+                    &subject,
+                    &counterpart,
+                    (separation, containment),
+                    subject_fidelity,
+                    counterpart_fidelity,
+                )?;
+                (Some(extents), Some(boxes))
+            }
+            None => (None, None),
         };
+        let witness = self.proximity_witness(
+            request,
+            (&subject, &counterpart),
+            closest,
+            deepest.filter(|_| penetration.is_some_and(|depth| depth > 0.0)),
+            boxes,
+        )?;
         let disjoint = separation > 0.0 && containment.is_none();
-        let composed = self.geometry.parts_of(request.subject()).is_some()
-            || self.geometry.parts_of(request.counterpart()).is_some();
-        let volume = if composed {
-            self.composed_intersection(request.subject(), request.counterpart(), disjoint)
-        } else {
-            intersection(
-                &subject,
-                &counterpart,
-                disjoint,
-                subject_fidelity.deviation_metres(),
-                counterpart_fidelity.deviation_metres(),
-            )
-            .or_else(|| {
-                let exact = subject_fidelity.is_exact() && counterpart_fidelity.is_exact();
-                self.shells_intersection(request, (&subject, &counterpart), disjoint, exact)
-            })
-        };
+        let volume = self.pair_volume(request, (&subject, &counterpart), disjoint)?;
         let deviation = fidelity.deviation_metres();
         let (lower, upper) = hausdorff(&subject, &counterpart)?;
         let hausdorff = LengthInterval::try_new((lower - deviation).max(0.0), upper + deviation)
@@ -2362,6 +2699,7 @@ impl ProximityService for AxiolidProximityService {
                         .body_note(&[request.subject(), request.counterpart()])
                 ),
                 exact: fidelity.is_exact(),
+                witness: None,
             },
         )?;
         let measured = match certified.map(|(interval, _)| interval) {
@@ -2374,6 +2712,12 @@ impl ProximityService for AxiolidProximityService {
         let measured = measured.with_hausdorff(hausdorff)?;
         let measured = match extents {
             Some(extents) => measured.with_overlap_extents(extents)?,
+            None => measured,
+        };
+        // A witness the measurement does not support is left out, never
+        // reported in its stead.
+        let measured = match witness {
+            Some(witness) => measured.clone().with_witness(witness).unwrap_or(measured),
             None => measured,
         };
         match volume {
@@ -2426,6 +2770,7 @@ impl ProximityService for AxiolidProximityService {
                     request.counterpart()
                 ),
                 exact: fidelity.is_exact(),
+                witness: None,
             },
         )
     }
@@ -2466,6 +2811,7 @@ impl ProximityService for AxiolidProximityService {
                     self.geometry.body_note(&[object])
                 ),
                 exact: fidelity.is_exact(),
+                witness: None,
             },
         )
     }
@@ -2495,6 +2841,7 @@ impl ProximityService for AxiolidProximityService {
                     request.region().ring().len()
                 ),
                 exact: fidelity.is_exact(),
+                witness: None,
             },
         )
     }
@@ -2576,6 +2923,7 @@ impl ProximityService for AxiolidProximityService {
                     self.geometry.body_note(&[object])
                 ),
                 exact,
+                witness: None,
             },
         )
     }
@@ -2589,8 +2937,23 @@ impl ProximityService for AxiolidProximityService {
         let fidelity = self
             .fidelity(request.subject())?
             .combined(self.fidelity(request.counterpart())?);
-        let (lower, upper) = self.projected_interval(request, &subject, &counterpart)?;
-        ProjectedDistanceEvidence::try_new(
+        // A distance in space carries its closest pair (#388); no other
+        // projection's distance is witnessed by a pair of points in space.
+        let ((lower, upper), closest) = match request.projection() {
+            ProximityProjection::Minimum3d => {
+                let (distance, closest) =
+                    separation_with_witness(&subject.soup, &counterpart.soup)?;
+                (self.space_interval(request, distance)?, closest)
+            }
+            _ => (
+                self.projected_interval(request, &subject, &counterpart)?,
+                None,
+            ),
+        };
+        let witness = closest
+            .map(|pair| self.separation_witness(request, pair))
+            .transpose()?;
+        let measured = ProjectedDistanceEvidence::try_new(
             request.clone(),
             lower,
             upper,
@@ -2633,8 +2996,14 @@ impl ProximityService for AxiolidProximityService {
                     .geometry
                     .body_note(&[request.subject(), request.counterpart()]),
                 exact: fidelity.is_exact(),
+                witness: None,
             },
-        )
+        )?;
+        // A witness the interval does not support is left out.
+        Ok(match witness {
+            Some(witness) => measured.clone().with_witness(witness).unwrap_or(measured),
+            None => measured,
+        })
     }
 }
 

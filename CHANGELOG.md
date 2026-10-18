@@ -4,6 +4,36 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+### Added
+
+- **Proximity findings say where they happen**
+  ([#388](https://github.com/axioval/engine/issues/388)). A clash,
+  clearance or distance finding named its two objects and a locator, so a
+  viewer framed a 15 m wall rather than the duct through it. The evidence
+  of a measurement in space now carries its `witness`
+  (`axioval_ir::Witness`): `kind` `separation` with the closest pair of the
+  two surfaces, or `penetration_into_counterpart` /
+  `penetration_into_subject` with the deepest point of one body found
+  inside the other and the nearest point of the other's surface; `point_a`
+  on the subject's side and `point_b` on the counterpart's, each in model
+  coordinates (metres) with the `deviation_metres` the true geometry may
+  lie from it (zero for exact bodies, the chord deviation for a
+  tessellation); and for bodies sharing anything the `extent` of the
+  shared region as a bracket, an `outer` box sure to contain it and an
+  `inner` box spanned by points witnessed in it. Two walls 0.2 m thick
+  crossing at right angles report `point_a` `[2.0, -0.1, 1.5]`, `point_b`
+  `[2.1, -0.1, 1.5]` and the box `[1.9, -0.1, 0.0]`..`[2.1, 0.1, 3.0]`,
+  exact. `ProximityEvidence::with_witness` and
+  `ProjectedDistanceEvidence::with_witness` refuse a witness the
+  measurement does not support (a pair not as far apart as the value it
+  witnesses, to `WITNESS_ROUNDING_METRES` and its deviations, an extent of
+  bodies sharing nothing); the Axiolid service finds it in the
+  measurement's own pass and leaves it out where it cannot (a zero-area
+  triangle nearest), never estimating one. The field is additive and
+  omitted when absent, so reports without a witness serialize as before;
+  `Evidence::new` builds evidence without one. **Breaking** for code
+  building `Evidence` with a struct literal, which now names `witness`.
+
 ### Security
 
 - Moved to zip 9 and rust_xlsxwriter 0.100, past RUSTSEC-2026-0367, -0368

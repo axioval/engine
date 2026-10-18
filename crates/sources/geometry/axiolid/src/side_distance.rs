@@ -179,6 +179,7 @@ pub(crate) fn measure(
                     source: candidate.source.clone(),
                     locator: format!("plan-side-distance:{object}:{}:{candidate}", side.name()),
                     exact: false,
+                    witness: None,
                 },
             )?;
             distances.push(SideDistance::new(
@@ -197,6 +198,7 @@ pub(crate) fn measure(
             source: object.source.clone(),
             locator: format!("plan-side-distances:{object}:reach={reach}:inset={inset}"),
             exact: false,
+            witness: None,
         },
     )
 }

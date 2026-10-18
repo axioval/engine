@@ -50,6 +50,10 @@ pub use decision::{
 pub mod network;
 pub use network::{DistributionNetwork, FlowDirection, NetworkPort, PortConnection};
 
+/// Where a measurement between two bodies happens: witness points and extents.
+pub mod witness;
+pub use witness::{Witness, WitnessBox, WitnessError, WitnessExtent, WitnessKind, WitnessPoint};
+
 /// Named tables of measured values reported beside findings.
 pub mod table;
 pub use table::{
@@ -454,15 +458,32 @@ pub struct Evidence {
     pub source: SourceId,
     pub locator: String,
     pub exact: bool,
+    /// Where the measurement happened, for evidence of a measurement
+    /// between two bodies whose adapter found the spot (#388): its witness
+    /// points and the extent of an overlap. `None` (and absent on the wire)
+    /// otherwise, never a guessed spot.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub witness: Option<Box<Witness>>,
 }
 impl Evidence {
     /// Creates evidence asserted exact by its adapter.
     pub fn exact(source: SourceId, locator: impl Into<String>) -> Self {
+        Self::new(source, locator, true)
+    }
+    /// Creates evidence of the stated exactness, without a witness.
+    pub fn new(source: SourceId, locator: impl Into<String>, exact: bool) -> Self {
         Self {
             source,
             locator: locator.into(),
-            exact: true,
+            exact,
+            witness: None,
         }
+    }
+    /// The evidence with where its measurement happened.
+    #[must_use]
+    pub fn with_witness(mut self, witness: Witness) -> Self {
+        self.witness = Some(Box::new(witness));
+        self
     }
 }
 

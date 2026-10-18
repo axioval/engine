@@ -160,6 +160,7 @@ impl VerticalExtentService for AxiolidVerticalExtentService {
                 self.geometry.body_note(&[object])
             ),
             exact: tessellation.is_none(),
+            witness: None,
         };
         VerticalExtent::try_new(
             object.clone(),
@@ -228,6 +229,7 @@ impl VerticalExtentService for AxiolidVerticalExtentService {
                 axis[0], axis[1], axis[2]
             ),
             exact: margin.is_none(),
+            witness: None,
         };
         DirectionalExtent::try_new(
             object.clone(),

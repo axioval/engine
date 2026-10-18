@@ -252,6 +252,7 @@ fn flight(object: &str, count: usize, riser: f64, going: f64, margin: f64) -> Tr
         source: source(),
         locator: format!("tread-flight:{object}"),
         exact: margin == 0.0,
+        witness: None,
     };
     TreadFlight::try_new(
         TreadFlightRequest::new(id(object)),

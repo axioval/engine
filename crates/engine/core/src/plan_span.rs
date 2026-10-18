@@ -915,6 +915,7 @@ mod tests {
                 source: SourceId::new("cad", "m").unwrap(),
                 locator: "plan-rectangle:a".into(),
                 exact,
+                witness: None,
             },
         )
     }
@@ -1082,6 +1083,7 @@ mod tests {
             source: SourceId::new("cad", "m").unwrap(),
             locator: "plan-centre:a".into(),
             exact,
+            witness: None,
         };
         let centre = |radius, exact| {
             PlanCentre::try_new(

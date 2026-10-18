@@ -295,6 +295,7 @@ pub(crate) fn measure(
             }
         ),
         exact,
+        witness: None,
     };
     FaceNormals::try_new(object.clone(), face, normals, evidence)
 }
@@ -477,6 +478,7 @@ pub(crate) fn measure_pieces(
             }
         ),
         exact: tessellation.is_none(),
+        witness: None,
     };
     FacePieces::try_new(object.clone(), set, pieces, evidence)
 }
@@ -674,6 +676,7 @@ pub(crate) fn measure_edges(
         source: object.source.clone(),
         locator: format!("face-edges:{object}"),
         exact: tessellation.is_none(),
+        witness: None,
     };
     FaceEdges::try_new(object.clone(), lines, evidence)
 }

@@ -336,6 +336,7 @@ mod tests {
                 source: source(),
                 locator: "envelope:estimate".into(),
                 exact: false,
+                witness: None,
             },
         );
         assert_eq!(result, Err(EnvelopeMembershipError::InexactEvidence));

@@ -52,6 +52,7 @@ impl VerticalExtentService for Well {
                 source: source(),
                 locator: format!("extent:{object}"),
                 exact: exact(*bottom) && exact(*top),
+                witness: None,
             },
         )
     }
@@ -75,6 +76,7 @@ impl PlanSpanService for Well {
             source: source(),
             locator: locator.into(),
             exact,
+            witness: None,
         };
         let sides = (area.1 > 0.0).then(|| {
             (

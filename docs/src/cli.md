@@ -773,7 +773,8 @@ never depend on them.
 `--threads N` evaluates each rule's subjects (its spaces, its objects) on
 `N` threads (#405). Without it, the environment variable `AXIOVAL_THREADS`
 names the count, and without that the machine's available parallelism
-does; `AXIOVAL_THREADS` set to anything but a positive whole number fails
+does, up to 4 (more threads are taken only when asked for, until a check
+budgets its memory, #407); `AXIOVAL_THREADS` set to anything but a positive whole number fails
 the run (status 1). The result is the same on any number of threads, byte
 for byte: subjects are merged in their order, never in the order threads
 finish them, and a run whose expression budget runs out is run again on

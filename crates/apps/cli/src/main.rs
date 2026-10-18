@@ -333,8 +333,8 @@ struct CheckArgs {
     rule_timings: bool,
     /// Evaluate each rule's subjects on this many threads. Without it,
     /// `AXIOVAL_THREADS` names the count, and without that the machine's
-    /// available parallelism does. The result is the same on any number;
-    /// memory grows with the threads.
+    /// available parallelism does, up to 4. The result is the same on any
+    /// number; memory grows with the threads.
     #[arg(long, value_name = "N")]
     threads: Option<std::num::NonZeroUsize>,
     /// Print how long each phase took on stderr, each as it ends: compiling,
@@ -1373,8 +1373,15 @@ fn supply_inputs(plan: &mut ExecutionPlan, args: &CheckArgs) -> Result<Supplied,
 /// rule's subjects on when `--threads` does not.
 const THREADS_VARIABLE: &str = "AXIOVAL_THREADS";
 
+/// The most threads `check` uses when neither `--threads` nor
+/// [`THREADS_VARIABLE`] names a count. Memory grows with the threads, and
+/// four keep most of the speed-up: until a check budgets its memory (#407),
+/// more threads are asked for, not taken.
+const DEFAULT_THREADS: std::num::NonZeroUsize = std::num::NonZeroUsize::new(4).unwrap();
+
 /// How many threads `check` evaluates each rule's subjects on: `--threads`,
-/// else [`THREADS_VARIABLE`], else the machine's available parallelism.
+/// else [`THREADS_VARIABLE`], else the machine's available parallelism up
+/// to [`DEFAULT_THREADS`].
 ///
 /// # Errors
 ///
@@ -1390,7 +1397,10 @@ fn parallelism(
         Ok(value) => value.trim().parse().map(Parallelism::new).map_err(|_| {
             format!("{THREADS_VARIABLE}={value} is not a positive whole number of threads").into()
         }),
-        Err(std::env::VarError::NotPresent) => Ok(Parallelism::available()),
+        Err(std::env::VarError::NotPresent) => Ok(Parallelism::new(
+            std::thread::available_parallelism()
+                .map_or(DEFAULT_THREADS, |available| available.min(DEFAULT_THREADS)),
+        )),
         Err(std::env::VarError::NotUnicode(_)) => {
             Err(format!("{THREADS_VARIABLE} is not a positive whole number of threads").into())
         }

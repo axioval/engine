@@ -14,7 +14,7 @@ All notable changes are documented here. This project follows Semantic Versionin
   to a serial run; a panic surfaces as the serial run's would, and a run
   whose expression budget runs out is run again serially. `axioval check`
   takes `--threads N` (else `AXIOVAL_THREADS`, else the machine's available
-  parallelism); `Runtime::with_parallelism` sets it for a library host,
+  parallelism, up to 4); `Runtime::with_parallelism` sets it for a library host,
   which stays serial unless it does. The free-space service keeps its two
   placement scenes per searching thread. A free-floor rule over 157 spaces
   of a 29 MB model took 78.5 s on one thread, 24.6 s on four, 14.3 s on

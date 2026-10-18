@@ -177,8 +177,9 @@ axiolid-evaluate = "0.3.17"
 # axiolid-brep-boolean 0.1.10). 0.3.28 cuts curved walls whose openings
 # abut each other or the wall's ends, retrying at a finer tolerance and
 # classifying a point near a face boundary exactly (#332, through
-# axiolid-brep-boolean 0.1.11).
-axiolid-mesh-compile = "0.3.28"
+# axiolid-brep-boolean 0.1.11); 0.3.29 requires the axiolid-reference and
+# axiolid-evaluate releases it builds against (#337).
+axiolid-mesh-compile = "0.3.29"
 axiolid-exact-compile-contract = "0.3.1"
 # 0.3.3 adds `MeshClosure::OpenSolid` (#265).
 axiolid-mesh-compile-contract = "0.3.4"

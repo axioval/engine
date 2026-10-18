@@ -85,8 +85,8 @@ All notable changes are documented here. This project follows Semantic Versionin
   messages; only their `message` fields changed. See [IDS findings](docs/src/ids.md#findings) and
   [Names in messages](docs/src/concept-binding.md#names-in-messages).
 
-- Moved to axiolid-mesh-compile 0.3.28 (with axiolid-brep-boolean 0.1.11)
-  and axiolid-evaluate 0.3.17. The mesh compiler now bounds runs of
+- Moved to axiolid-mesh-compile 0.3.29 (with axiolid-brep-boolean 0.1.11
+  and axiolid-reference 0.3.9) and axiolid-evaluate 0.3.17. The mesh compiler now bounds runs of
   sections whose frames it reads by quadrature (axiolid/kernel#316): a
   deck sectioned along an offset beside a polyline, or along an offset
   beside an ellipse, is measured where it was unmeasured with "certifies

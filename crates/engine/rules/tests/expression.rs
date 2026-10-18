@@ -1189,6 +1189,38 @@ fn a_spent_evaluation_budget_leaves_the_rest_open_never_passed() {
     assert!(report.not_evaluated.is_empty());
 }
 
+/// #405: objects judged on several threads report what one thread reports,
+/// byte for byte, with the default budget and with one spent part way:
+/// which nodes a spent budget refuses depends on the order they are spent
+/// in, so that run is run again serially.
+#[test]
+fn objects_judged_on_several_threads_report_what_one_thread_reports() {
+    let package = vocabulary(&registry(), &[]);
+    let threads = |count: usize| {
+        axioval_engine::Parallelism::new(std::num::NonZeroUsize::new(count).unwrap())
+    };
+    for budget in [axioval_engine::expression::DEFAULT_EVALUATION_BUDGET, 20] {
+        let report = |parallelism: axioval_engine::Parallelism| {
+            let plan = plan(&registry(), &package, vec![cover_rule()]).unwrap();
+            let report = run(registry(), plan, &session(slabs()), |runtime| {
+                runtime
+                    .with_evaluation_budget(budget)
+                    .with_parallelism(parallelism)
+            })
+            .unwrap();
+            serde_json::to_string(&report).unwrap()
+        };
+        let serial = report(axioval_engine::Parallelism::SERIAL);
+        for count in [2, 8] {
+            assert_eq!(
+                report(threads(count)),
+                serial,
+                "{count} threads, budget {budget}"
+            );
+        }
+    }
+}
+
 /// A sum over no member is zero of the unit the compiler types its members'
 /// value in, a declared property's included, so a wall without openings
 /// meets a bound in square metres; `inUnit` shows a value in a unit.

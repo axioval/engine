@@ -17090,6 +17090,142 @@ fn with_geometry_an_overlapping_space_is_no_free_floor_obstacle() {
     assert_eq!(finding_messages(&result).len(), 2, "{result:#}");
 }
 
+/// `rooms` washrooms in rows of six, 4 m apart: space `#i00` (3 x 3 m,
+/// 2.5 m high) with WC `#i20` against its south side. Every third holds a
+/// vanity unit `#i40` in the WC's left transfer area, every fourth a
+/// wardrobe `#i60` taking the floor a turning circle needs, and every fifth
+/// a cabinet `#i80` crossing into the WC.
+fn washroom_rows(rooms: u32) -> String {
+    let space = "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,$,$)";
+    let wc = "IFCSANITARYTERMINAL('GID',$,$,$,$,PL,REP,$,.TOILETPAN.)";
+    let basin = "IFCSANITARYTERMINAL('GID',$,$,$,$,PL,REP,$,.WASHHANDBASIN.)";
+    let furniture = "IFCFURNITURE('GID',$,$,$,$,PL,REP,$,$)";
+    let mut data = String::new();
+    for room in 1..=rooms {
+        let first = room * 100;
+        let (x, y) = (f64::from(4 * (room % 6)), f64::from(4 * (room / 6)));
+        data.push_str(&placed_box(
+            first,
+            [x + 1.5, y + 1.5, 0.0],
+            [3.0, 3.0, 2.5],
+            space,
+        ));
+        data.push_str(&placed_box(
+            first + 20,
+            [x + 1.2, y + 0.35, 0.0],
+            [0.4, 0.7, 0.4],
+            wc,
+        ));
+        if room % 3 == 0 {
+            data.push_str(&placed_box(
+                first + 40,
+                [x + 0.45, y + 0.35, 0.8],
+                [0.3, 0.3, 0.2],
+                basin,
+            ));
+        }
+        if room % 4 == 1 {
+            data.push_str(&placed_box(
+                first + 60,
+                [x + 1.5, y + 2.0, 0.0],
+                [3.0, 2.0, 1.0],
+                furniture,
+            ));
+        }
+        if room % 5 == 2 {
+            data.push_str(&placed_box(
+                first + 80,
+                [x + 1.3, y + 0.6, 0.0],
+                [0.3, 0.3, 0.3],
+                furniture,
+            ));
+        }
+    }
+    model_with(&data)
+}
+
+/// #405: a rule's subjects evaluated on several threads report exactly
+/// what one thread reports, byte for byte: a free-floor search per space,
+/// a clash per element and a transfer area per WC, over 36 washrooms.
+#[test]
+fn with_geometry_a_check_on_many_threads_reports_what_one_thread_reports() {
+    let case = Case::new("geometry-threads");
+    case.write("model.ifc", &washroom_rows(36));
+    let types = [
+        ("space", "IfcSpace"),
+        ("terminal", "IfcSanitaryTerminal"),
+        ("furniture", "IfcFurniture"),
+        ("element", "IfcElement"),
+    ];
+    let not_a_space = json!({"kind": "not", "operand": entity("space")});
+    let rules = [
+        (
+            "axioval:capability.free-floor-circle",
+            entity("space"),
+            json!({
+                "diameter_metres": {"type": "number", "value": 1.5},
+                "height_metres": {"type": "number", "value": 2.0},
+            }),
+        ),
+        (
+            "axioval:capability.clash",
+            entity("element"),
+            json!({
+                "counterparts": {"type": "selector", "value": entity("element")},
+                "penetration_tolerance_metres": {"type": "number", "value": 0.01},
+            }),
+        ),
+        (
+            "axioval:capability.component-clearance",
+            entity("terminal"),
+            json!({
+                "side": {"type": "string", "value": "left"},
+                "front_axis": {"type": "string", "value": "forward"},
+                "width": {"type": "quantity", "value": 70, "unit": "cm"},
+                "depth": {"type": "quantity", "value": 90, "unit": "cm"},
+                "height": {"type": "quantity", "value": 2, "unit": "m"},
+                "align": {"type": "string", "value": "right"},
+                "height_reference": {"type": "string", "value": "floor"},
+                "space_path": {"type": "stringList",
+                               "value": ["axioval:derived.contained-in-space:forward"]},
+                "within_space": {"type": "boolean", "value": true},
+                "obstacles": {"type": "selector", "value": not_a_space},
+            }),
+        ),
+    ];
+    for (capability, applicability, parameters) in rules {
+        let report = |threads: &str| {
+            let (output, result) = case.geometry_rule_with(
+                &["model.ifc"],
+                &types,
+                (capability, &registry_signature(capability)),
+                applicability.clone(),
+                parameters.clone(),
+                &json!({}),
+                &["--threads", threads, "--rule-status"],
+            );
+            assert_eq!(
+                output.status.code(),
+                Some(3),
+                "{capability} on {threads}: {}",
+                stderr(&output)
+            );
+            assert!(
+                !finding_messages(&result).is_empty(),
+                "{capability} on {threads}: {result:#}"
+            );
+            std::fs::read(case.path("result.json")).unwrap()
+        };
+        let serial = report("1");
+        for threads in ["2", "8"] {
+            assert!(
+                report(threads) == serial,
+                "{capability}: {threads} threads report otherwise than one"
+            );
+        }
+    }
+}
+
 /// A disk of `radius` centred at (`x`, `y`), extruded `depth` up from `z`,
 /// as instances `#first` to `#first + 9`: a tessellated body, as round
 /// columns and ducts are. `PL` and `REP` in `product` become its placement

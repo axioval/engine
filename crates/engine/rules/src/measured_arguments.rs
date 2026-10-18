@@ -10,9 +10,8 @@
 //! state, of another kind or not realisable, or a selection whose objects
 //! cannot all be listed) leaves the value not evaluated, never a default.
 
-use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use axioval_engine::{NotEvaluatedReason, RuleContext};
 use axioval_ir::ObjectId;
@@ -34,18 +33,18 @@ pub(crate) struct Arguments {
     selector: Option<Selector>,
     /// What the rule's plan keeps of its measured names for every run.
     planned: Option<Arc<Planned>>,
-    selections: RefCell<BTreeMap<String, Result<Arc<MeasuredSelection>, Unavailable>>>,
+    selections: Mutex<BTreeMap<String, Result<Arc<MeasuredSelection>, Unavailable>>>,
     /// Each name read through [`Arguments::call`]: `None` where it is not
     /// prepared once for the rule (it names the anchor, binds nothing or
     /// does not parse), kept so it is parsed once.
-    calls: RefCell<BTreeMap<String, Prepared>>,
+    calls: Mutex<BTreeMap<String, Prepared>>,
     /// Each name naming a reference read through [`Arguments::anchored`],
     /// as a value (`[0]`) and as a list (`[1]`): the rule's parameters
     /// bound, the anchor left for each object.
-    anchored: RefCell<[BTreeMap<String, Anchored>; 2]>,
+    anchored: Mutex<[BTreeMap<String, Anchored>; 2]>,
     /// Each member list naming a selection, bound for the rule and shared
     /// by every object reading it ([`Arguments::planned_list`]).
-    lists: RefCell<BTreeMap<String, Option<Arc<MeasuredCall>>>>,
+    lists: Mutex<BTreeMap<String, Option<Arc<MeasuredCall>>>>,
 }
 
 /// What a template's bound plan keeps of each measured name its values and
@@ -298,16 +297,19 @@ impl Arguments {
                 None => return self,
             }
         }
-        self.selections.borrow_mut().insert(
-            axioval_engine::template::SELECTION.to_owned(),
-            Ok(Arc::new(MeasuredSelection {
-                parameter: axioval_engine::template::SELECTION.to_owned(),
-                matched: selected.iter().map(|object| object.id.clone()).collect(),
-                undecided,
-                first_undecided,
-                reasons,
-            })),
-        );
+        self.selections
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(
+                axioval_engine::template::SELECTION.to_owned(),
+                Ok(Arc::new(MeasuredSelection {
+                    parameter: axioval_engine::template::SELECTION.to_owned(),
+                    matched: selected.iter().map(|object| object.id.clone()).collect(),
+                    undecided,
+                    first_undecided,
+                    reasons,
+                })),
+            );
         self
     }
 
@@ -330,7 +332,12 @@ impl Arguments {
             Some(Kept::Parsed(call)) => Some(call),
             None => None,
         };
-        if let Some(bound) = self.calls.borrow().get(name) {
+        if let Some(bound) = self
+            .calls
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(name)
+        {
             return bound.clone();
         }
         let bound = match parsed {
@@ -340,7 +347,8 @@ impl Arguments {
                 .and_then(|call| Self::prepared(context, parameters, self, name, call)),
         };
         self.calls
-            .borrow_mut()
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
             .insert(name.to_owned(), bound.clone());
         bound
     }
@@ -404,7 +412,12 @@ impl Arguments {
             // Its selections bound once for the rule; one that does not bind
             // is read as before, to be refused there.
             Kept::Parsed(call) => {
-                if let Some(bound) = self.lists.borrow().get(name) {
+                if let Some(bound) = self
+                    .lists
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .get(name)
+                {
                     return bound.clone();
                 }
                 let mut bound = (*call).clone();
@@ -412,7 +425,8 @@ impl Arguments {
                     .ok()
                     .map(|()| Arc::new(bound));
                 self.lists
-                    .borrow_mut()
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
                     .insert(name.to_owned(), bound.clone());
                 bound
             }
@@ -450,7 +464,9 @@ impl Arguments {
             Some(Kept::Prepared(_)) | None => None,
         };
         let kind = usize::from(list);
-        if let Some(call) = self.anchored.borrow()[kind].get(name) {
+        if let Some(call) =
+            self.anchored.lock().unwrap_or_else(PoisonError::into_inner)[kind].get(name)
+        {
             return call.clone();
         }
         let call = match parsed {
@@ -460,7 +476,8 @@ impl Arguments {
         .map(|mut call| {
             bind_references(context, parameters, Some(self), None, &mut call).map(|()| call)
         });
-        self.anchored.borrow_mut()[kind].insert(name.to_owned(), call.clone());
+        self.anchored.lock().unwrap_or_else(PoisonError::into_inner)[kind]
+            .insert(name.to_owned(), call.clone());
         call
     }
 
@@ -482,12 +499,18 @@ impl Arguments {
         parameter: &str,
         selector: &Selector,
     ) -> Result<Arc<MeasuredSelection>, Unavailable> {
-        if let Some(read) = self.selections.borrow().get(parameter) {
+        if let Some(read) = self
+            .selections
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(parameter)
+        {
             return read.clone();
         }
         let read = selection_of_selected(parameter, select_shared(context, selector)).map(Arc::new);
         self.selections
-            .borrow_mut()
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
             .insert(parameter.to_owned(), read.clone());
         read
     }
@@ -915,7 +938,10 @@ mod tests {
             "no service",
         );
         let arguments = super::Arguments::default().selected(&[], &outcomes);
-        let selections = arguments.selections.borrow();
+        let selections = arguments
+            .selections
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let selection = selections[axioval_engine::template::SELECTION]
             .as_ref()
             .unwrap();

@@ -6,6 +6,21 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **A rule's spaces and objects are evaluated in parallel**
+  ([#405](https://github.com/axioval/engine/issues/405)). A template judging
+  objects one by one (free floor, clearance, clash and most built-in
+  capabilities) and an `expression` rule judge their subjects on several
+  threads, merged in the selection's order, so reports are byte-identical
+  to a serial run; a panic surfaces as the serial run's would, and a run
+  whose expression budget runs out is run again serially. `axioval check`
+  takes `--threads N` (else `AXIOVAL_THREADS`, else the machine's available
+  parallelism); `Runtime::with_parallelism` sets it for a library host,
+  which stays serial unless it does. The free-space service keeps its two
+  placement scenes per searching thread. A free-floor rule over 157 spaces
+  of a 29 MB model took 78.5 s on one thread, 24.6 s on four, 14.3 s on
+  eight and 8.7 s on twenty, its report the same byte for byte; peak memory
+  rose from 2.4 GB to 3.4, 4.7 and 8.3 GB.
+
 - **Proximity findings say where they happen**
   ([#388](https://github.com/axioval/engine/issues/388)). A clash,
   clearance or distance finding named its two objects and a locator, so a

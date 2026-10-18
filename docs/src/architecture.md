@@ -198,6 +198,20 @@ every template to the implementation it replaced.
    the run; nothing measured in one run answers another
    ([Template performance](./performance.md)). Other capabilities evaluate
    semantic facts and typed evidence directly.
+   With `Runtime::with_parallelism` (serial unless a host sets it; the CLI's
+   `--threads`), a template judging objects one by one, and an `expression`
+   rule, judge their subjects on several threads
+   (`Parallelism::map_ordered`): each thread takes the next chunk of
+   subjects, reads its measured values ahead and judges them, so no more
+   chunks are in flight than threads. Outcomes, table rows and expression
+   traces are merged in the selection's order, so the report is the serial
+   run's byte for byte; a panic surfaces as the serial loop's would, the
+   first subject's in order once every subject before it is judged. A form
+   judging members across objects stays serial. Which expression nodes the
+   run's budget refuses depends on the order they are spent in, so a run on
+   several threads whose budget ran out is run again serially and reports
+   that run. Host services are shared between the threads (`Send + Sync`),
+   their caches locked.
 7. Findings retain rule, source, object, evidence, precision and diagnostic
    provenance; an expression's findings carry an explanation of the path
    that decided them.

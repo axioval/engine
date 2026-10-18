@@ -1099,6 +1099,7 @@ mod metric_routing;
 mod network;
 mod object_frame;
 mod pairwise;
+pub mod parallel;
 mod path;
 mod plan_area;
 mod plan_region;
@@ -1256,6 +1257,7 @@ pub use object_frame::{
 pub use pairwise::{
     CandidatePair, CandidateSearchError, candidate_pairs, projected_candidate_pairs,
 };
+pub use parallel::Parallelism;
 pub use path::PathSegment;
 pub use plan_area::{
     ElevationCover, ElevationRequest, FootprintOutline, FootprintPerimeter, PlanArea,
@@ -1482,6 +1484,7 @@ pub struct Runtime {
     summaries: bool,
     timings: bool,
     evaluation_budget: u64,
+    parallelism: Parallelism,
     observer: Option<RuleObserver>,
     terrain: Option<TerrainServiceHandle>,
 }
@@ -1495,6 +1498,7 @@ impl Runtime {
             summaries: false,
             timings: false,
             evaluation_budget: expression::DEFAULT_EVALUATION_BUDGET,
+            parallelism: Parallelism::SERIAL,
             observer: None,
             terrain: None,
         }
@@ -1520,6 +1524,22 @@ impl Runtime {
     #[must_use]
     pub fn with_evaluation_budget(mut self, nodes: u64) -> Self {
         self.evaluation_budget = nodes;
+        self
+    }
+    /// Evaluates each rule's subjects on up to `parallelism` threads
+    /// ([`Parallelism`]); serial unless set. The report is the serial
+    /// run's, byte for byte: a capability merges its subjects' outcomes in
+    /// their order, never in the order threads finish them, and a panic is
+    /// raised as the serial loop raises it.
+    ///
+    /// Which expression nodes the evaluation budget refuses depends on the
+    /// order they are spent in, so a run whose budget ran out is run again
+    /// serially, its report that serial run's (the rule observer is told
+    /// of each rule again). Memory grows with the threads: each evaluates
+    /// one subject at a time, with what that subject's measurement holds.
+    #[must_use]
+    pub fn with_parallelism(mut self, parallelism: Parallelism) -> Self {
+        self.parallelism = parallelism;
         self
     }
     /// Reports per-rule counts and status ([`Report::rules`]): how many
@@ -1792,14 +1812,63 @@ impl Runtime {
             .collect()
     }
 
+    /// Runs `plan` at the runtime's parallelism; a run on several threads
+    /// whose evaluation budget ran out is run again serially, since which
+    /// nodes it refused depends on the order they were spent in.
     fn run_with_services(
         &self,
         project: &Project,
         services: &ServiceRegistry,
         type_systems: BTreeMap<axioval_ir::SourceId, Vec<Arc<str>>>,
-        (sources, disciplines, metadata): (SessionSources, SourceDisciplines, SourceMetadataIndex),
+        session: (SessionSources, SourceDisciplines, SourceMetadataIndex),
         plan: ExecutionPlan,
     ) -> Result<(Report, RuleOutcomes), EngineError> {
+        if self.parallelism.is_serial() {
+            return self
+                .run_at(
+                    project,
+                    services,
+                    (type_systems, session),
+                    plan,
+                    Parallelism::SERIAL,
+                )
+                .map(|(report, outcomes, _)| (report, outcomes));
+        }
+        let (report, outcomes, refused) = self.run_at(
+            project,
+            services,
+            (type_systems.clone(), session.clone()),
+            plan.clone(),
+            self.parallelism,
+        )?;
+        if !refused {
+            return Ok((report, outcomes));
+        }
+        drop((report, outcomes));
+        self.run_at(
+            project,
+            services,
+            (type_systems, session),
+            plan,
+            Parallelism::SERIAL,
+        )
+        .map(|(report, outcomes, _)| (report, outcomes))
+    }
+
+    /// Runs `plan` with each rule's subjects evaluated on `parallelism`
+    /// threads, and tells whether the evaluation budget refused a node.
+    #[allow(clippy::type_complexity, clippy::too_many_lines)]
+    fn run_at(
+        &self,
+        project: &Project,
+        services: &ServiceRegistry,
+        (type_systems, (sources, disciplines, metadata)): (
+            BTreeMap<axioval_ir::SourceId, Vec<Arc<str>>>,
+            (SessionSources, SourceDisciplines, SourceMetadataIndex),
+        ),
+        plan: ExecutionPlan,
+        parallelism: Parallelism,
+    ) -> Result<(Report, RuleOutcomes, bool), EngineError> {
         // Bindings are per run: they join this plan's package concepts to this
         // project's declared type systems, so they cannot be registered once by
         // a host. A host-registered `ConceptBindings` is overridden rather than
@@ -1813,6 +1882,9 @@ impl Runtime {
         services.replace(metadata);
         // So are the sources: a host copy could hide an empty source.
         services.replace(sources);
+        // So is the number of threads: the runtime's, whatever a host
+        // registered.
+        services.replace(parallelism);
         // The terrain is context the host gave the runtime.
         if let Some(terrain) = &self.terrain {
             services.replace(terrain.clone());
@@ -1922,9 +1994,13 @@ impl Runtime {
             );
             not_evaluated.extend(collapse_source_wide(&rule_id, evaluation.not_evaluated));
         }
+        let refused = services
+            .get::<Arc<expression::EvaluationBudget>>()
+            .is_some_and(|budget| budget.refused());
         Ok((
             assemble(findings, not_evaluated, tables, summaries, &services)?,
             outcomes,
+            refused,
         ))
     }
 }

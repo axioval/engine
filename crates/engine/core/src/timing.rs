@@ -10,6 +10,11 @@
 //! thread the runtime evaluates it on. A host call made from inside another
 //! (one service answering through another's handle) counts with the outer
 //! call only, so no time is counted twice.
+//!
+//! A rule evaluating its subjects on several threads
+//! ([`crate::parallel`]) times each worker's host calls on the worker's
+//! own account ([`worker`]) and adds it to the rule's clock once the
+//! worker is done ([`absorb`]).
 
 use std::{
     cell::RefCell,
@@ -71,6 +76,52 @@ pub(crate) fn host<T>(service: &'static str, call: impl FnOnce() -> T) -> T {
         }
     });
     answer
+}
+
+/// Whether a rule's clock runs on this thread outside any host call: then
+/// the host calls of the workers it fans out to are the rule's own, timed
+/// on each worker ([`worker`]) and added back ([`absorb`]). Inside a host
+/// call, the outer call already counts their time.
+pub(crate) fn fanning_out() -> bool {
+    CLOCK.with(|clock| {
+        clock
+            .borrow()
+            .as_ref()
+            .is_some_and(|accumulator| accumulator.depth == 0)
+    })
+}
+
+/// A worker thread's account of its host calls, to be added to the clock
+/// of the rule that fanned out ([`absorb`]).
+pub(crate) struct WorkerAccount(Option<Accumulator>);
+
+/// Calls `work` on a worker thread, timing its host calls on an account of
+/// its own when `timed` ([`fanning_out`] on the thread that fanned out).
+pub(crate) fn worker<T>(timed: bool, work: impl FnOnce() -> T) -> (T, WorkerAccount) {
+    if !timed {
+        return (work(), WorkerAccount(None));
+    }
+    // A clock of the worker's own, the one it replaced put back on every
+    // path out of `work`, a panic included.
+    let mut clock = RuleClock::start();
+    let answer = work();
+    (answer, WorkerAccount(clock.stop()))
+}
+
+/// Adds a worker's account to the clock running on this thread, if any.
+pub(crate) fn absorb(account: WorkerAccount) {
+    let Some(worker) = account.0 else {
+        return;
+    };
+    CLOCK.with(|clock| {
+        if let Some(accumulator) = clock.borrow_mut().as_mut() {
+            for (service, (calls, time)) in worker.services {
+                let entry = accumulator.services.entry(service).or_default();
+                entry.0 += calls;
+                entry.1 += time;
+            }
+        }
+    });
 }
 
 /// The clock of one rule, running from [`RuleClock::start`] until

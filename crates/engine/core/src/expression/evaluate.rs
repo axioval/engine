@@ -17,7 +17,7 @@
 //!   gives the same answer; a straddling one is not evaluated.
 use std::collections::BTreeMap;
 use std::fmt;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use axioval_ir::contract::{
     AggregateFunction, AggregateSource, Branch, Expression, ExpressionComparison, PropertyScope,
@@ -508,6 +508,10 @@ pub const DEFAULT_EVALUATION_BUDGET: u64 = 100_000_000;
 pub struct EvaluationBudget {
     remaining: AtomicU64,
     limit: u64,
+    /// Whether a node was refused: which nodes are depends on the order
+    /// they are spent in, so a run evaluating subjects on several threads
+    /// is run again serially when it is ([`crate::Runtime::with_parallelism`]).
+    refused: AtomicBool,
 }
 
 impl EvaluationBudget {
@@ -517,16 +521,29 @@ impl EvaluationBudget {
         Self {
             remaining: AtomicU64::new(limit),
             limit,
+            refused: AtomicBool::new(false),
         }
     }
 
     /// Spends one node; false once the budget is spent.
     pub fn spend(&self) -> bool {
-        self.remaining
+        let spent = self
+            .remaining
             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |left| {
                 left.checked_sub(1)
             })
-            .is_ok()
+            .is_ok();
+        if !spent {
+            self.refused.store(true, Ordering::Relaxed);
+        }
+        spent
+    }
+
+    /// Whether a node was refused: the budget ran out while something was
+    /// still to be evaluated.
+    #[must_use]
+    pub fn refused(&self) -> bool {
+        self.refused.load(Ordering::Relaxed)
     }
 
     /// The budget's size.

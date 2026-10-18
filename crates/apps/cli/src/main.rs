@@ -331,6 +331,12 @@ struct CheckArgs {
     /// status.
     #[arg(long)]
     rule_timings: bool,
+    /// Evaluate each rule's subjects on this many threads. Without it,
+    /// `AXIOVAL_THREADS` names the count, and without that the machine's
+    /// available parallelism does. The result is the same on any number;
+    /// memory grows with the threads.
+    #[arg(long, value_name = "N")]
+    threads: Option<std::num::NonZeroUsize>,
     /// Print how long each phase took on stderr, each as it ends: compiling,
     /// reading the models, each geometry phase, each rule, and writing the
     /// outputs. Never changes the result or the exit status.
@@ -1253,7 +1259,9 @@ fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     supplied.unsupplied.extend(placements);
     let stale = results::supply_revisions(&mut plan, &args, &session)?;
     supplied.unsupplied.extend(stale);
-    let runtime = check_runtime(registry, &args, &clock, supplied.terrain.take());
+    let parallelism = parallelism(args.threads)?;
+    let runtime = check_runtime(registry, &args, &clock, supplied.terrain.take())
+        .with_parallelism(parallelism);
     let unknown_pairs = axioval::engine::unknown_relation_objects(&plan, session.project());
     let mut result = runtime.run_session(&session, plan)?;
     clock.lap("run (all rules)");
@@ -1359,6 +1367,34 @@ fn supply_inputs(plan: &mut ExecutionPlan, args: &CheckArgs) -> Result<Supplied,
         terrain: terrain.service,
         unsupplied,
     })
+}
+
+/// The environment variable naming how many threads `check` evaluates a
+/// rule's subjects on when `--threads` does not.
+const THREADS_VARIABLE: &str = "AXIOVAL_THREADS";
+
+/// How many threads `check` evaluates each rule's subjects on: `--threads`,
+/// else [`THREADS_VARIABLE`], else the machine's available parallelism.
+///
+/// # Errors
+///
+/// [`THREADS_VARIABLE`] set to anything but a positive whole number.
+fn parallelism(
+    threads: Option<std::num::NonZeroUsize>,
+) -> Result<axioval::engine::Parallelism, Box<dyn Error>> {
+    use axioval::engine::Parallelism;
+    if let Some(threads) = threads {
+        return Ok(Parallelism::new(threads));
+    }
+    match std::env::var(THREADS_VARIABLE) {
+        Ok(value) => value.trim().parse().map(Parallelism::new).map_err(|_| {
+            format!("{THREADS_VARIABLE}={value} is not a positive whole number of threads").into()
+        }),
+        Err(std::env::VarError::NotPresent) => Ok(Parallelism::available()),
+        Err(std::env::VarError::NotUnicode(_)) => {
+            Err(format!("{THREADS_VARIABLE} is not a positive whole number of threads").into())
+        }
+    }
 }
 
 /// The runtime `check` runs its plan with: located, summarizing and timing

@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use axioval_engine::draft::{ExpressionTraces, ObjectTrace};
 use axioval_engine::{
-    CapabilityEvaluation, CompiledRule, Deviation, ParameterDescriptor, ParameterType,
+    CapabilityEvaluation, CompiledRule, Deviation, Parallelism, ParameterDescriptor, ParameterType,
     RuleCapability, RuleContext,
 };
 use axioval_ir::contract::{Expression, ParameterValue};
@@ -65,89 +65,110 @@ impl RuleCapability for ExpressionRequirement {
         };
         let (selected, mut evaluation) = select_objects(context, &rule.selector);
         let arguments = crate::measured_arguments::Arguments::default();
-        for object in selected {
-            let mut leaves = ObjectLeaves::new(context, object, Some(&rule.parameters))
-                .with_arguments(&arguments);
-            let result = evaluate(requirement, REQUIREMENT, &mut leaves);
-            if let Some(traces) = context.services.get::<ExpressionTraces>() {
-                traces.record(ObjectTrace {
-                    rule: rule.id.to_string(),
-                    object: object.id.clone(),
-                    verdict: match &result.outcome {
-                        Ok(Value::Boolean(true)) => "passed",
-                        Ok(Value::Boolean(false) | Value::Null) => "failed",
-                        _ => "notEvaluated",
-                    },
-                    trace: Explanation {
-                        entries: result.trace.clone(),
-                        truncated: false,
-                    },
-                });
+        // Each object judged on its own, on as many threads as the run
+        // has, and merged in the selection's order.
+        let judged = Parallelism::of(context.services).map_ordered(&selected, |object| {
+            judge(requirement, (context, &arguments), rule, object)
+        });
+        let traces = context.services.get::<ExpressionTraces>();
+        for (judged, trace) in judged {
+            if let (Some(traces), Some(trace)) = (traces, trace) {
+                traces.record(trace);
             }
-            match &result.outcome {
-                Ok(Value::Boolean(true)) => {}
-                Ok(Value::Boolean(false) | Value::Null) => {
-                    let (deciding, failed) = failing(requirement, REQUIREMENT, &result);
-                    let mut labelled = shown(&result);
-                    let mut cited = evidence(&result);
-                    let deviation = match rule.parameters.get(DEVIATION) {
-                        Some(ParameterValue::Expression { value }) => {
-                            let graded = evaluate(value, DEVIATION, &mut leaves);
-                            cited.extend(evidence(&graded));
-                            for (label, value) in shown(&graded) {
-                                labelled.entry(label).or_insert(value);
-                            }
-                            graded_deviation(&graded)
-                        }
-                        _ => None,
-                    };
-                    let message = match rule.parameters.get(MESSAGE) {
-                        Some(ParameterValue::String { value: template }) => {
-                            render(template, &labelled)
-                        }
-                        _ if result.outcome == Ok(Value::Null) => format!(
-                            "requirement cannot be confirmed: {failed} is null, as a value \
-                             it needs is stated absent{}",
-                            read_values(&result)
-                        ),
-                        _ => format!(
-                            "requirement does not hold: {failed} is false{}",
-                            read_values(&result)
-                        ),
-                    };
-                    // What the measured values bound from the rule were
-                    // measured against, as their providers cite it.
-                    let mut related = leaves.take_related();
-                    related.sort();
-                    related.dedup();
-                    let mut found = finding(rule, &object.id, message, cited, related);
-                    found.explanation = Some(result.explain(&deciding));
-                    evaluation.push_finding_deviating(found, deviation);
-                }
-                Ok(other) => evaluation.push_object_not_evaluated(
-                    object.id.clone(),
-                    NotEvaluatedReason::InvalidDeclaration,
-                    format!(
-                        "expression: the requirement is {}, not a truth",
-                        other.kind()
-                    ),
-                ),
-                Err(why) => {
-                    let reason = leaves
-                        .first_reason()
-                        .filter(|_| matches!(why.reason, Reason::Unreadable(_)))
-                        .unwrap_or_else(|| reason_of(why));
-                    evaluation.push_object_not_evaluated_explained(
-                        object.id.clone(),
-                        reason,
-                        format!("expression: {why}{}", read_values(&result)),
-                        result.explain(&why.path),
-                    );
-                }
-            }
+            evaluation.absorb(judged);
         }
         evaluation
     }
+}
+
+/// `requirement` judged for `object`: its outcomes, and its trace where the
+/// run records traces ([`ExpressionTraces`]).
+fn judge(
+    requirement: &Expression,
+    (context, arguments): (&RuleContext<'_>, &crate::measured_arguments::Arguments),
+    rule: &CompiledRule,
+    object: &axioval_ir::Object,
+) -> (CapabilityEvaluation, Option<ObjectTrace>) {
+    let mut evaluation = CapabilityEvaluation::default();
+    let mut leaves =
+        ObjectLeaves::new(context, object, Some(&rule.parameters)).with_arguments(arguments);
+    let result = evaluate(requirement, REQUIREMENT, &mut leaves);
+    let trace = context
+        .services
+        .get::<ExpressionTraces>()
+        .map(|_| ObjectTrace {
+            rule: rule.id.to_string(),
+            object: object.id.clone(),
+            verdict: match &result.outcome {
+                Ok(Value::Boolean(true)) => "passed",
+                Ok(Value::Boolean(false) | Value::Null) => "failed",
+                _ => "notEvaluated",
+            },
+            trace: Explanation {
+                entries: result.trace.clone(),
+                truncated: false,
+            },
+        });
+    match &result.outcome {
+        Ok(Value::Boolean(true)) => {}
+        Ok(Value::Boolean(false) | Value::Null) => {
+            let (deciding, failed) = failing(requirement, REQUIREMENT, &result);
+            let mut labelled = shown(&result);
+            let mut cited = evidence(&result);
+            let deviation = match rule.parameters.get(DEVIATION) {
+                Some(ParameterValue::Expression { value }) => {
+                    let graded = evaluate(value, DEVIATION, &mut leaves);
+                    cited.extend(evidence(&graded));
+                    for (label, value) in shown(&graded) {
+                        labelled.entry(label).or_insert(value);
+                    }
+                    graded_deviation(&graded)
+                }
+                _ => None,
+            };
+            let message = match rule.parameters.get(MESSAGE) {
+                Some(ParameterValue::String { value: template }) => render(template, &labelled),
+                _ if result.outcome == Ok(Value::Null) => format!(
+                    "requirement cannot be confirmed: {failed} is null, as a value \
+                     it needs is stated absent{}",
+                    read_values(&result)
+                ),
+                _ => format!(
+                    "requirement does not hold: {failed} is false{}",
+                    read_values(&result)
+                ),
+            };
+            // What the measured values bound from the rule were
+            // measured against, as their providers cite it.
+            let mut related = leaves.take_related();
+            related.sort();
+            related.dedup();
+            let mut found = finding(rule, &object.id, message, cited, related);
+            found.explanation = Some(result.explain(&deciding));
+            evaluation.push_finding_deviating(found, deviation);
+        }
+        Ok(other) => evaluation.push_object_not_evaluated(
+            object.id.clone(),
+            NotEvaluatedReason::InvalidDeclaration,
+            format!(
+                "expression: the requirement is {}, not a truth",
+                other.kind()
+            ),
+        ),
+        Err(why) => {
+            let reason = leaves
+                .first_reason()
+                .filter(|_| matches!(why.reason, Reason::Unreadable(_)))
+                .unwrap_or_else(|| reason_of(why));
+            evaluation.push_object_not_evaluated_explained(
+                object.id.clone(),
+                reason,
+                format!("expression: {why}{}", read_values(&result)),
+                result.explain(&why.path),
+            );
+        }
+    }
+    (evaluation, trace)
 }
 
 /// The deviation a `deviation` expression grades a finding by: its plain

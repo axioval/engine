@@ -33,8 +33,8 @@ use axioval_engine::template::{
     Template, TemplateValue, Term, UndecidedMembers,
 };
 use axioval_engine::{
-    CapabilityEvaluation, CompiledRule, Deviation, MeasuredValues, ParameterDescriptor,
-    ParameterType, RuleCapability, RuleContext,
+    CapabilityEvaluation, CompiledRule, Deviation, MeasuredValues, Parallelism,
+    ParameterDescriptor, ParameterType, RuleCapability, RuleContext,
 };
 use axioval_ir::contract::{AggregateSource, Expression, ParameterValue, ScalarValue, Selector};
 use axioval_ir::{
@@ -4165,6 +4165,61 @@ pub(crate) fn run(
     };
     let (batched, bound) = read_ahead(&plan, context, &arguments, selected.first().copied());
     let budget = context.services.get::<Arc<EvaluationBudget>>();
+    // Objects judged on several threads, each chunk read ahead and judged
+    // on one, merged below in the selection's order exactly as the serial
+    // loop pushes them. A form judging members keeps what it found of
+    // them across objects, so it is judged serially.
+    let parallelism = Parallelism::of(context.services);
+    if scope.is_none() && !parallelism.is_serial() && selected.len() > 1 {
+        let chunks: Vec<&[&Object]> = selected
+            .chunks(parallel_chunk(selected.len(), parallelism))
+            .collect();
+        let judged = parallelism.map_ordered(&chunks, |chunk| {
+            let prefetched = prefetch(context, &batched, chunk);
+            let bound_reads = prefetch_bound(context, &bound, chunk);
+            chunk
+                .iter()
+                .zip(prefetched)
+                .zip(bound_reads)
+                .map(|((object, prefetched), bound)| {
+                    judge_object(
+                        (&plan, &decision, None),
+                        (context, &arguments),
+                        rule,
+                        (object, &ran.once),
+                        Ahead {
+                            prefetched,
+                            bound,
+                            budget,
+                        },
+                    )
+                })
+                .collect::<Vec<_>>()
+        });
+        for (object, judgement) in selected.iter().zip(judged.into_iter().flatten()) {
+            let Judgement {
+                outcome,
+                row,
+                checks,
+            } = judgement;
+            if let (Some(table), Some(row)) = (&mut table, row) {
+                // Selected objects are distinct, so rows never collide.
+                let _ = table.push_row(object.id.clone(), row);
+            }
+            push_all(
+                &mut evaluation,
+                rule,
+                object,
+                checks.into_iter().chain([outcome]),
+                plan.form.joined,
+            );
+        }
+        judge_project(&plan, (context, &arguments), rule, &mut evaluation);
+        if let Some(table) = table {
+            evaluation.push_table(table);
+        }
+        return evaluation;
+    }
     for chunk in selected.chunks(BATCH) {
         let prefetched = prefetch(context, &batched, chunk);
         let bound_reads = prefetch_bound(context, &bound, chunk);
@@ -4333,6 +4388,17 @@ fn read_ahead(
 /// value's parsing and provider set-up, few enough that what is measured
 /// ahead stays small beside the run.
 const BATCH: usize = 32;
+
+/// How many objects each thread reads ahead and judges together when a
+/// rule's objects are judged on several threads: at most [`BATCH`], and
+/// few enough that every thread has several chunks to take, so one slow
+/// object does not hold the others' chunks. What an object reads ahead is
+/// what it would read alone, whatever the chunk.
+fn parallel_chunk(objects: usize, parallelism: Parallelism) -> usize {
+    objects
+        .div_ceil(parallelism.threads().saturating_mul(4))
+        .clamp(1, BATCH)
+}
 
 /// The measured values the plan reads directly, as `(set, name)`: each is
 /// read for a chunk of objects together. Any other read (a stated

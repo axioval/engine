@@ -12,6 +12,7 @@
 use std::cell::OnceCell;
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, PoisonError};
 
 use axiolid_core::{Point2, Point3, Vec2};
@@ -60,10 +61,38 @@ pub struct AxiolidFreeSpaceService {
     /// the smaller ones bracketing the largest that fits, #391), and its
     /// unions of obstacle footprints are most of a search.
     scenes: Mutex<Vec<KeptScene>>,
+    /// How many threads searched at once, at most: each searches its own
+    /// space, so [`KEPT_SCENES`] are kept for each.
+    searching: Searching,
 }
 
-/// How many placement scenes a service keeps.
+/// How many placement scenes a service keeps for each thread searching
+/// at once.
 const KEPT_SCENES: usize = 2;
+
+/// The threads searching now, and the most that searched at once.
+#[derive(Default)]
+struct Searching {
+    now: AtomicUsize,
+    most: AtomicUsize,
+}
+
+/// One thread's search, counted while it lasts.
+struct Searcher<'a>(&'a Searching);
+
+impl<'a> Searcher<'a> {
+    fn start(searching: &'a Searching) -> Self {
+        let now = searching.now.fetch_add(1, Ordering::Relaxed) + 1;
+        searching.most.fetch_max(now, Ordering::Relaxed);
+        Self(searching)
+    }
+}
+
+impl Drop for Searcher<'_> {
+    fn drop(&mut self) {
+        self.0.now.fetch_sub(1, Ordering::Relaxed);
+    }
+}
 
 /// What a placement scene is built from: everything of the request but
 /// the shape's footprint, its domain and its entrance reach.
@@ -176,6 +205,7 @@ impl AxiolidFreeSpaceService {
             footprints: Mutex::new(BTreeMap::new()),
             columns: Mutex::new(BTreeMap::new()),
             scenes: Mutex::new(Vec::new()),
+            searching: Searching::default(),
         }
     }
 
@@ -640,7 +670,8 @@ impl AxiolidFreeSpaceService {
         let mut kept = self.scenes.lock().unwrap_or_else(PoisonError::into_inner);
         kept.retain(|kept| kept.key != key);
         kept.push(KeptScene::of(key, &scene, floor));
-        if kept.len() > KEPT_SCENES {
+        let threads = self.searching.most.load(Ordering::Relaxed).max(1);
+        if kept.len() > KEPT_SCENES.saturating_mul(threads) {
             kept.remove(0);
         }
         Ok((scene, floor))
@@ -1396,6 +1427,7 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
         &self,
         request: &PlacementRequest,
     ) -> Result<PlacementOutcome, FreeSpaceError> {
+        let _search = Searcher::start(&self.searching);
         let tolerance = tolerance()?;
         // The scope's own floor is the only support measured: every centre
         // the search accepts keeps the whole base inside the scope
@@ -1545,6 +1577,7 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
         &self,
         request: &PlacementRequest,
     ) -> Result<LargestDiscEstimate, FreeSpaceError> {
+        let _search = Searcher::start(&self.searching);
         let tolerance = tolerance()?;
         let (scene, _) = self.placement_scene(request, tolerance)?;
         let estimate = scene.inscribed(false).zip(scene.inscribed(true));

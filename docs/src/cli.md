@@ -93,7 +93,7 @@ axioval check --model building.ifc[:DISCIPLINE] [--model other.ifc[:DISCIPLINE] 
   [--zones [ACCURACY=]FILE ...] \
   [--terrain KIND@ACCURACY=FILE[#SURFACE] ... --terrain-in model|map] \
   [--geometry [--no-exact-boundaries]] [--locate storeys|containers|geometry] \
-  [--rule-status] [--rule-timings] [--timings] [--report result.json] \
+  [--rule-status] [--rule-timings] [--timings] [--threads N] [--report result.json] \
   [--decisions decisions.json | --decisions-from reviewed.bcfzip] \
   [--summary [--top N]] [--bcf issues.bcfzip] [--xlsx report.xlsx] \
   [--html report.html [--html-template template.html] [--html-title TEXT]] \
@@ -769,6 +769,19 @@ slowest rules:
 Timings are diagnostics: without the `timing` fields the result is the one
 `--rule-status` writes, and findings, their identities and the exit status
 never depend on them.
+
+`--threads N` evaluates each rule's subjects (its spaces, its objects) on
+`N` threads (#405). Without it, the environment variable `AXIOVAL_THREADS`
+names the count, and without that the machine's available parallelism
+does; `AXIOVAL_THREADS` set to anything but a positive whole number fails
+the run (status 1). The result is the same on any number of threads, byte
+for byte: subjects are merged in their order, never in the order threads
+finish them, and a run whose expression budget runs out is run again on
+one thread (see [Execution](./architecture.md#execution)). Memory grows
+with the threads, each holding one subject's measurement at a time; a
+memory-bound host lowers `--threads`. Rule timings count every thread's
+host calls, so the time a rule spent in a service may exceed its wall
+time; its host time is never stated above its wall time.
 
 Every finding has an `id`, its stable identity over GlobalIds (see
 [Review decisions](./decisions.md#finding-identity)), equal to its BCF topic

@@ -95,6 +95,18 @@ All notable changes are documented here. This project follows Semantic Versionin
   (`stationed sections: a cell beside a mitred seam on a curved piece`),
   no longer for uncertified frames.
 
+- Moved to ifc-geometry 0.29.0 and openbim-ifc 0.36.0, which builds on it.
+  An `IfcEdgeCurve` without a p-curve is trimmed at its vertices and one
+  whose `SameSense` is `.F.` runs from its end to its start
+  (openbimrs/ifc#509), so an advanced B-rep whose line, circle or ellipse
+  edges cover only part of their curve is compiled; B-spline and polyline
+  edge curves that do not run vertex to vertex stay refused by name
+  (openbimrs/ifc#525, axiolid/kernel#333). Trimmed, composite, offset and
+  intrinsic curves come back as certified polylines (openbimrs/ifc#506).
+  The engine named neither removed item (`GeometryError::PolylineUnsupported`,
+  `compile::UnpolylinedCurve`); a remaining polyline refusal is
+  `CompilationRefused` with the kernel's reason.
+
 ### Fixed
 
 - **Curved walls whose openings abut are measured**

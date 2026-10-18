@@ -5579,6 +5579,142 @@ mod tests {
         }
     }
 
+    /// An annular-sector wall #29 about the origin (radii 6 to 6.25, 0 to
+    /// 60 degrees, 3 m high) voided by one opening per `(from, to)` pair of
+    /// angles: a wedge with radial sides from radius 5 to 7 and `z` 0.5 to
+    /// 2.5, each its own `IfcOpeningElement` in the order given.
+    fn curved_wall_with_a_row_of_openings(openings: &[(f64, f64)]) -> String {
+        use std::fmt::Write as _;
+        let at = |r: f64, angle: f64| format!("({:?},{:?})", r * angle.cos(), r * angle.sin());
+        let (from, to) = (0.0, std::f64::consts::FRAC_PI_3);
+        let middle = f64::midpoint(from, to);
+        let mut data = format!(
+            "#20=IFCCARTESIANPOINTLIST2D(({},{},{},{},{},{}),$);\n\
+             #21=IFCINDEXEDPOLYCURVE(#20,(IFCARCINDEX((1,2,3)),IFCLINEINDEX((3,4)),\
+             IFCARCINDEX((4,5,6)),IFCLINEINDEX((6,1))),.F.);\n\
+             #22=IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,#21);\n\
+             #25=IFCEXTRUDEDAREASOLID(#22,#2,#4,3.);\n\
+             #26=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#25));\n\
+             #27=IFCPRODUCTDEFINITIONSHAPE($,$,(#26));\n\
+             #29=IFCWALL('0000000000000000000029',$,$,$,$,#3,#27,$,$);\n\
+             #30=IFCCARTESIANPOINT((0.,0.,0.5));\n\
+             #31=IFCAXIS2PLACEMENT3D(#30,$,$);\n",
+            at(6.25, from),
+            at(6.25, middle),
+            at(6.25, to),
+            at(6.0, to),
+            at(6.0, middle),
+            at(6.0, from),
+        );
+        for (index, &(from, to)) in openings.iter().enumerate() {
+            let first = 100 + 10 * u32::try_from(index).unwrap();
+            let [list, curve, profile, solid, shape, product, opening, rel] =
+                [0, 1, 2, 3, 4, 5, 6, 7].map(|offset| first + offset);
+            write!(
+                data,
+                "#{list}=IFCCARTESIANPOINTLIST2D(({},{},{},{}),$);\n\
+                 #{curve}=IFCINDEXEDPOLYCURVE(#{list},(IFCLINEINDEX((1,2,3,4,1))),.F.);\n\
+                 #{profile}=IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,#{curve});\n\
+                 #{solid}=IFCEXTRUDEDAREASOLID(#{profile},#31,#4,2.);\n\
+                 #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{solid}));\n\
+                 #{product}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n\
+                 #{opening}=IFCOPENINGELEMENT('{opening:022}',$,$,$,$,#3,#{product},$,.OPENING.);\n\
+                 #{rel}=IFCRELVOIDSELEMENT('{rel:022}',$,$,$,#29,#{opening});\n",
+                at(5.0, from),
+                at(7.0, from),
+                at(7.0, to),
+                at(5.0, to),
+            )
+            .unwrap();
+        }
+        format!(
+            "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+             #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+             #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+             #3=IFCLOCALPLACEMENT($,#2);\n\
+             #4=IFCDIRECTION((0.,0.,1.));\n\
+             #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+             #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+             #7=IFCUNITASSIGNMENT((#6));\n\
+             #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+             {data}ENDSEC;\nEND-ISO-10303-21;\n"
+        )
+    }
+
+    /// engine#417 (axiolid/kernel#332): a curved wall whose openings abut,
+    /// each side reaching 15 µm or 0.6 mm past its neighbour's (the
+    /// kernel's own configuration), or reach a few micrometres past the
+    /// wall's ends, was unmeasured: the exact boolean the deviation is
+    /// measured against met "a point too close to a face boundary to
+    /// classify", so the mesh had no certified bound. Since
+    /// axiolid-mesh-compile 0.3.28 the boolean is cut again at a finer
+    /// tolerance and such points are classified exactly, and the wall is
+    /// measured within a certified bound under the millimetre. Its volume,
+    /// within the surface that bound allows, holds the sectors' closed
+    /// form.
+    #[test]
+    fn a_curved_wall_with_abutting_openings_is_measured_within_a_certified_bound() {
+        let ring = |sweep: f64, height: f64| 0.5 * sweep * (6.25 * 6.25 - 6.0 * 6.0) * height;
+        let wall = ring(std::f64::consts::FRAC_PI_3, 3.0);
+        let deg = f64::to_radians;
+        // Angles 2.5e-6 and 1e-4 are 15 µm and 0.6 mm at the wall.
+        let (drift, near) = (2.5e-6, 1e-4);
+        for (name, openings, removed) in [
+            (
+                "abutting each other",
+                vec![
+                    (deg(20.0), deg(26.0)),
+                    (deg(14.0), deg(20.0) + drift),
+                    (deg(8.0), deg(14.0) + drift),
+                    (deg(26.0) - near, deg(32.0)),
+                    (deg(40.0), deg(48.0)),
+                ],
+                deg(24.0) + deg(8.0),
+            ),
+            (
+                "past the wall's ends",
+                vec![
+                    (-drift, deg(6.0)),
+                    (deg(6.0) - drift, deg(12.0)),
+                    (deg(52.0), deg(60.0) + drift),
+                ],
+                deg(12.0) + deg(8.0),
+            ),
+        ] {
+            let model = axioval_ifc::read_ifc_step(
+                curved_wall_with_a_row_of_openings(&openings).as_bytes(),
+            )
+            .unwrap();
+            let units = ifc_geometry::units::resolve(&model);
+            let backend = ifc_geometry::compile::default_backend();
+            let body = super::mesh(
+                &backend,
+                &model,
+                &units,
+                &super::Linear::default(),
+                ifc_model::EntityId(29),
+                false,
+                super::NetOptions::default(),
+            )
+            .unwrap_or_else(|reason| panic!("{name}: {reason}"))
+            .unwrap_or_else(|| panic!("{name}: no body"));
+            let super::Fit::Within(bound) = body.fit else {
+                panic!("{name}: a curved wall measured as exact");
+            };
+            assert!(
+                bound > 0.0 && bound < super::TOLERANCE.linear(),
+                "{name}: {bound}"
+            );
+            let exact = wall - ring(removed, 2.0);
+            let (volume, area) = enclosed_volume_and_area(&body.mesh);
+            let slack = area * bound + 1e-9;
+            assert!(
+                (volume - exact).abs() <= slack,
+                "{name}: {volume} m3 against {exact} m3 within {slack}"
+            );
+        }
+    }
+
     /// engine#224, openbimrs/ifc#355: a product on a linear placement with
     /// a positive `OffsetLateral` lies to the LEFT of the basis curve's
     /// direction, and its local Z is up. The curve runs along +Y, so left

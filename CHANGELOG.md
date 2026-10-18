@@ -95,6 +95,20 @@ All notable changes are documented here. This project follows Semantic Versionin
   (`stationed sections: a cell beside a mitred seam on a curved piece`),
   no longer for uncertified frames.
 
+### Fixed
+
+- **Curved walls whose openings abut are measured**
+  ([#417](https://github.com/axioval/engine/issues/417)). A curved wall
+  whose openings abut each other, one side reaching micrometres to just
+  under a millimetre past its neighbour's, or reach just past the wall's
+  ends, was unmeasured ("exact boolean with a point too close to a face
+  boundary to classify"), so rooms beside it were left not evaluated by
+  the turning-circle and free-floor rules, or decided around its uncut
+  body. With axiolid-mesh-compile 0.3.28 the exact boolean is cut again
+  at a finer tolerance and classifies such points exactly
+  (axiolid/kernel#332), and the wall is measured within its certified
+  deviation, under 1 mm.
+
 ### Security
 
 - Moved to zip 9 and rust_xlsxwriter 0.100, past RUSTSEC-2026-0367, -0368

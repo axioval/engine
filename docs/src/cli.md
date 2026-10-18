@@ -1582,7 +1582,13 @@ with its curved face (a niche on the inner face, an opening through the
 whole thickness, or one a unit in the last place off it) is no longer
 refused: the exact boolean reads the coincident faces as one surface within
 tolerance (axiolid/kernel#324) and the wall is measured within its
-certified deviation (#403).
+certified deviation (#403). Since axiolid-mesh-compile 0.3.28 a curved wall
+whose openings abut each other, one side reaching micrometres to just under
+a millimetre past its neighbour's, or reach just past the wall's ends, is
+no longer refused as an "exact boolean with a point too close to a face
+boundary to classify": the boolean is cut again at a finer tolerance and
+such points are classified exactly (axiolid/kernel#332), and the wall is
+measured within its certified deviation (#417).
 
 The kernel keeps every surface point of a revolution (tapered too), a sphere,
 a torus and a sweep along one circle or ellipse arc within the 1 mm of its

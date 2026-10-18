@@ -17673,6 +17673,117 @@ fn with_geometry_a_curved_wall_with_a_flush_niche_is_measured() {
     }
 }
 
+/// An annular-sector wall #29 about the origin (radii 6 to 6.25, 0 to 60
+/// degrees, 3 m high) less five wedge openings with radial sides (radius
+/// 5 to 7, z 0.5 to 2.5), the configuration of axiolid/kernel#332: three
+/// abut between 8 and 26 degrees, each side reaching 15 µm past its
+/// neighbour's, one reaches 0.6 mm past the 26 degree side, and one stands
+/// alone from 40 to 48 degrees.
+fn curved_wall_with_abutting_openings() -> String {
+    let at = |r: f64, angle: f64| format!("({:?},{:?})", r * angle.cos(), r * angle.sin());
+    let deg = f64::to_radians;
+    let (drift, near) = (2.5e-6, 1e-4);
+    let (from, to) = (0.0, std::f64::consts::FRAC_PI_3);
+    let middle = f64::midpoint(from, to);
+    let mut data = format!(
+        "#20=IFCCARTESIANPOINTLIST2D(({},{},{},{},{},{}),$);\n\
+         #21=IFCINDEXEDPOLYCURVE(#20,(IFCARCINDEX((1,2,3)),IFCLINEINDEX((3,4)),\
+         IFCARCINDEX((4,5,6)),IFCLINEINDEX((6,1))),.F.);\n\
+         #22=IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,#21);\n\
+         #25=IFCEXTRUDEDAREASOLID(#22,#2,#4,3.);\n\
+         #26=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#25));\n\
+         #27=IFCPRODUCTDEFINITIONSHAPE($,$,(#26));\n\
+         #29=IFCWALL('0000000000000000000029',$,$,$,$,#3,#27,$,$);\n\
+         #30=IFCCARTESIANPOINT((0.,0.,0.5));\n\
+         #31=IFCAXIS2PLACEMENT3D(#30,$,$);\n",
+        at(6.25, from),
+        at(6.25, middle),
+        at(6.25, to),
+        at(6.0, to),
+        at(6.0, middle),
+        at(6.0, from),
+    );
+    let openings = [
+        (deg(20.0), deg(26.0)),
+        (deg(14.0), deg(20.0) + drift),
+        (deg(8.0), deg(14.0) + drift),
+        (deg(26.0) - near, deg(32.0)),
+        (deg(40.0), deg(48.0)),
+    ];
+    for (first, (from, to)) in (100..).step_by(10).zip(openings) {
+        let [list, curve, profile, solid, shape, product, opening, rel] =
+            [0, 1, 2, 3, 4, 5, 6, 7].map(|offset| first + offset);
+        write!(
+            data,
+            "#{list}=IFCCARTESIANPOINTLIST2D(({},{},{},{}),$);\n\
+             #{curve}=IFCINDEXEDPOLYCURVE(#{list},(IFCLINEINDEX((1,2,3,4,1))),.F.);\n\
+             #{profile}=IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,#{curve});\n\
+             #{solid}=IFCEXTRUDEDAREASOLID(#{profile},#31,#4,2.);\n\
+             #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{solid}));\n\
+             #{product}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n\
+             #{opening}=IFCOPENINGELEMENT('{opening:022}',$,$,$,$,#3,#{product},$,.OPENING.);\n\
+             #{rel}=IFCRELVOIDSELEMENT('{rel:022}',$,$,$,#29,#{opening});\n",
+            at(5.0, from),
+            at(7.0, from),
+            at(7.0, to),
+            at(5.0, to),
+        )
+        .unwrap();
+    }
+    data
+}
+
+/// #417: a curved wall whose openings abut each other was unmeasured (the
+/// exact boolean met "a point too close to a face boundary to classify",
+/// so its mesh had no certified bound), leaving a room it crosses not
+/// evaluated. Since axiolid-mesh-compile 0.3.28 (axiolid/kernel#332) the
+/// wall is measured, so both rooms are decided: one inside the ring that
+/// the wall's box reaches holds the circle, and one the wall crosses at 20
+/// degrees, through the abutting openings, whose 0.5 m sill stands in the
+/// 2 m band, leaves no 1.5 m circle on either side of it.
+#[test]
+fn with_geometry_a_curved_wall_with_abutting_openings_is_measured() {
+    let case = Case::new("geometry-free-floor-abutting-openings");
+    let space = "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,$,$)";
+    let room = |[x, y]: [f64; 2], side: f64| {
+        model_with(&format!(
+            "{}{}",
+            placed_box(10, [x, y, 0.0], [side, side, 3.0], space),
+            curved_wall_with_abutting_openings(),
+        ))
+    };
+    for args in [&[][..], &["--no-exact-boundaries"][..]] {
+        // x and y 0.5 to 3.5, its far corner 4.95 m out; and a 2 m room
+        // centred on the wall at 20 degrees.
+        for (centre, side, code) in [([2.0, 2.0], 3.0, 0), ([5.76, 2.09], 2.0, 3)] {
+            let (output, result) = turning_circle(&case, &room(centre, side), args);
+            assert_eq!(
+                output.status.code(),
+                Some(code),
+                "{args:?} {centre:?}: {}",
+                stderr(&output)
+            );
+            let reasons = unmeasured_reasons(&result);
+            assert!(reasons.is_empty(), "{args:?} {centre:?}: {reasons:?}");
+            assert_eq!(
+                not_evaluated_messages(&result),
+                Vec::<String>::new(),
+                "{args:?} {centre:?}: {result:#}"
+            );
+            let findings = finding_messages(&result);
+            assert!(
+                if code == 0 {
+                    findings.is_empty()
+                } else {
+                    findings.len() == 1
+                        && findings[0].1.starts_with("NO_FREE_FLOOR_SPACE_FOR_CIRCLE")
+                },
+                "{args:?} {centre:?}: {findings:?}"
+            );
+        }
+    }
+}
+
 /// The largest free circle's bracket and centre, read from the evidence a
 /// failed free-floor finding cites (#391).
 fn largest(finding: &Value) -> (f64, f64, Vec<f64>) {

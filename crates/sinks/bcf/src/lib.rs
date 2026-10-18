@@ -65,6 +65,13 @@
 //! missing bound leaves the viewpoint without a camera rather than a guessed
 //! one, and the object is listed in [`Export::unframed`].
 //!
+//! With [`Options::frame_witness`], a finding whose evidence says where it
+//! happens (an [`axioval_ir::Witness`]: the closest pair of a clearance,
+//! the deepest point of a clash, the box two bodies share) is framed at
+//! that spot instead, a 15 m wall and the duct through it at the duct, and
+//! its description lists each witness. The spot is the report's own
+//! evidence, so such a finding needs no bounds.
+//!
 //! # Colouring
 //!
 //! With [`Options::colors`], every viewpoint colours the finding's subject in
@@ -102,14 +109,14 @@
 //! the export is refused with [`ExportError::MissingCamera`].
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::fmt;
+use std::fmt::{self, Write as _};
 use std::str::FromStr;
 
 use axioval_ir::contract::{RuleFolder, RuleSetPackage};
 use axioval_ir::{
     DecisionStatus, EvidenceCheck, Finding, FindingDecision, IdentityError, Location, NotEvaluated,
-    NotEvaluatedReason, ObjectId, Place, Project, Report, Scope, Severity, finding_ids,
-    not_evaluated_ids,
+    NotEvaluatedReason, ObjectId, Place, Project, Report, Scope, Severity, Witness, WitnessPoint,
+    finding_ids, not_evaluated_ids,
 };
 use openbim_bcf::Component;
 use openbim_bcf::write::{
@@ -316,6 +323,7 @@ impl Bounds {
 
 /// What the caller decides about every topic.
 #[derive(Clone, Debug, PartialEq)]
+#[allow(clippy::struct_excessive_bools)] // Each is one independent switch.
 pub struct Options {
     /// `CreationAuthor` of every topic, e.g. the checking tool or its operator.
     pub author: String,
@@ -351,6 +359,14 @@ pub struct Options {
     /// Without bounds no viewpoint is clipped. `false` writes no clipping
     /// planes, exactly as before.
     pub section_box: bool,
+    /// Whether a finding whose evidence says where it happens (an
+    /// [`axioval_ir::Witness`], #388) is framed at that spot: its cameras
+    /// fit the union of its witnesses' frames instead of its objects'
+    /// bounds, which it then needs none of, its section box boxes the
+    /// spot, and its description lists each witness. Findings without a
+    /// witness are framed as before. `false` writes every topic exactly as
+    /// before witnesses existed.
+    pub frame_witness: bool,
 }
 
 impl Options {
@@ -367,6 +383,7 @@ impl Options {
             colors: None,
             isolate: false,
             section_box: false,
+            frame_witness: false,
         }
     }
 }
@@ -571,6 +588,11 @@ struct Entry {
     selection: Vec<Component>,
     /// Every object a camera frames: the subject and related objects.
     framed: Vec<ObjectId>,
+    /// The union of the frames of the witnesses the finding's evidence
+    /// carries, `None` without any.
+    witness: Option<Bounds>,
+    /// One description line per witness, for [`Options::frame_witness`].
+    witness_lines: Vec<String>,
     unanchored: Vec<ObjectId>,
 }
 
@@ -582,6 +604,36 @@ enum Uncamered {
     NoBounds,
     /// The host supplied bounds, but none for this object.
     Unbounded(ObjectId),
+}
+
+/// A witness as one description line: what its points stand for, each
+/// point in model coordinates with its deviation, and the outer box of the
+/// shared region.
+fn witness_line(witness: &Witness) -> String {
+    let point = |point: WitnessPoint| {
+        let [x, y, z] = point.metres();
+        let deviation = point.deviation_metres();
+        if deviation == 0.0 {
+            format!("({x:.4}, {y:.4}, {z:.4})")
+        } else {
+            format!("({x:.4}, {y:.4}, {z:.4}) ± {deviation:.4} m")
+        }
+    };
+    let mut line = format!(
+        "Witness ({}): {} to {}",
+        witness.kind().name(),
+        point(witness.point_a()),
+        point(witness.point_b())
+    );
+    if let Some(extent) = witness.extent() {
+        let [x0, y0, z0] = extent.outer().min();
+        let [x1, y1, z1] = extent.outer().max();
+        let _ = write!(
+            line,
+            "; shared region within ({x0:.4}, {y0:.4}, {z0:.4}) to ({x1:.4}, {y1:.4}, {z1:.4})"
+        );
+    }
+    line
 }
 
 /// The deciding path of an expression rule's explanation, one line per
@@ -621,6 +673,21 @@ impl Entry {
             let exactness = if evidence.exact { "exact" } else { "inexact" };
             description.push(format!("Evidence ({exactness}): {}", evidence.locator));
         }
+        let witnesses: Vec<&Witness> = finding
+            .evidence
+            .iter()
+            .filter_map(|evidence| evidence.witness.as_deref())
+            .collect();
+        let witness = witnesses
+            .iter()
+            .map(|witness| {
+                let frame = witness.frame();
+                Bounds {
+                    min: frame.min(),
+                    max: frame.max(),
+                }
+            })
+            .reduce(|union, frame| union.union(&frame));
         Ok(Self {
             title: title(&finding.message, &finding.rule_id.to_string()),
             topic_type: severity(&finding.severity).to_owned(),
@@ -630,6 +697,8 @@ impl Entry {
             decision: finding.decision.clone(),
             selection: resolved.selection,
             framed: objects.into_iter().cloned().collect(),
+            witness,
+            witness_lines: witnesses.into_iter().map(witness_line).collect(),
             unanchored: resolved.unanchored,
         })
     }
@@ -666,8 +735,19 @@ impl Entry {
             decision: None,
             selection: resolved.selection,
             framed: objects.into_iter().cloned().collect(),
+            witness: None,
+            witness_lines: Vec::new(),
             unanchored: resolved.unanchored,
         })
+    }
+
+    /// The description, with the witness lines when the spot is framed.
+    fn description(&self, options: &Options) -> String {
+        if options.frame_witness && !self.witness_lines.is_empty() {
+            format!("{}\n{}", self.description, self.witness_lines.join("\n"))
+        } else {
+            self.description.clone()
+        }
     }
 
     /// The topic, and whether a viewpoint of it has no camera.
@@ -691,7 +771,7 @@ impl Entry {
                 clipping_planes,
                 ..Viewpoint::default()
             };
-            match self.frame(options.bounds.as_ref()) {
+            match self.frame(options) {
                 Ok(frame) => {
                     let planes = if options.section_box {
                         frame.section_box()
@@ -750,7 +830,7 @@ impl Entry {
         let topic = Topic {
             guid: guid.to_string(),
             title: self.title.clone(),
-            description: Some(self.description.clone()),
+            description: Some(self.description(options)),
             topic_type: Some(self.topic_type.clone()),
             topic_status: Some(status),
             priority: priority.map(str::to_owned),
@@ -838,9 +918,13 @@ impl Entry {
         }
     }
 
-    /// A sphere around the union of the framed objects' bounds.
-    fn frame(&self, bounds: Option<&BTreeMap<ObjectId, Bounds>>) -> Result<Frame, Uncamered> {
-        let bounds = bounds.ok_or(Uncamered::NoBounds)?;
+    /// A sphere around the union of the framed objects' bounds, or around
+    /// the finding's witnesses when [`Options::frame_witness`] asks for it.
+    fn frame(&self, options: &Options) -> Result<Frame, Uncamered> {
+        if let Some(spot) = self.witness.filter(|_| options.frame_witness) {
+            return Ok(Frame::new(spot));
+        }
+        let bounds = options.bounds.as_ref().ok_or(Uncamered::NoBounds)?;
         let mut union: Option<Bounds> = None;
         for object in &self.framed {
             let found = bounds

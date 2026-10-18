@@ -33,6 +33,10 @@ All notable changes are documented here. This project follows Semantic Versionin
   omitted when absent, so reports without a witness serialize as before;
   `Evidence::new` builds evidence without one. **Breaking** for code
   building `Evidence` with a struct literal, which now names `witness`.
+  `--bcf-frame-witness` (`axioval_bcf::Options::frame_witness`) frames a
+  witnessed finding's BCF viewpoints at the spot instead of its objects'
+  bounds and lists each witness in its description; off by default, so
+  archives stay byte-identical.
 
 ### Security
 

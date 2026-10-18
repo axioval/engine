@@ -17807,6 +17807,51 @@ fn bcf_isolate_hides_everything_but_the_clashing_pair() {
     }
 }
 
+/// With `--bcf-frame-witness` the clash's viewpoints look at where the two
+/// walls cross (#388), at the spot the size of the crossing, not at the
+/// union of the walls.
+#[test]
+fn bcf_frame_witness_looks_at_where_the_walls_cross() {
+    let case = Case::new("bcf-frame-witness");
+    let number = |view: &str, after: &str, tag: &str| -> f64 {
+        let block = &view[view.find(after).expect(view)..];
+        let start = block.find(&format!("<{tag}>")).expect(view) + tag.len() + 2;
+        let end = block[start..].find('<').unwrap() + start;
+        block[start..end].parse().unwrap()
+    };
+    let orthogonal = |path: &std::path::Path| -> String {
+        bcf_viewpoints(path)
+            .into_iter()
+            .find(|view| view.contains("<OrthogonalCamera>"))
+            .expect("an orthogonal viewpoint")
+    };
+    let bcf = case.path("witnessed.bcfzip");
+    let output = case.clash_check(&[
+        "--geometry",
+        "--bcf",
+        bcf.to_str().unwrap(),
+        "--bcf-frame-witness",
+    ]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(bcf_viewpoints(&bcf).len(), 2);
+    let spot = orthogonal(&bcf);
+    // The walls cross at x 1.9..2.1, y -0.1..0.1 over their height 0..3:
+    // the camera looks at the middle of that.
+    let eye = ["X", "Y", "Z"].map(|axis| number(&spot, "<CameraViewPoint>", axis));
+    let sight = ["X", "Y", "Z"].map(|axis| number(&spot, "<CameraDirection>", axis));
+    let along = (1.5 - eye[2]) / sight[2];
+    let (x, y) = (eye[0] + along * sight[0], eye[1] + along * sight[1]);
+    assert!((x - 2.0).abs() < 1e-6 && y.abs() < 1e-6, "{x} {y}");
+
+    let plain = case.path("plain.bcfzip");
+    let output = case.clash_check(&["--geometry", "--bcf", plain.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // The spot spans 0.2 x 0.2 x 3, the walls together 4 x 4 x 3.
+    let scale = |view: &str| number(view, "<OrthogonalCamera>", "ViewToWorldScale");
+    let (spot, walls) = (scale(&spot), scale(&orthogonal(&plain)));
+    assert!(spot < walls / 1.5, "spot {spot}, walls {walls}");
+}
+
 #[test]
 fn bcf_section_box_cuts_framed_viewpoints_only() {
     let case = Case::new("bcf-section-box");

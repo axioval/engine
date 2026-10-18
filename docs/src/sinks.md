@@ -254,6 +254,22 @@ one. With bounds supplied, such objects are listed in `Export::unframed`;
 without any bounds (`None`, the default) viewpoints are written exactly as
 before.
 
+**A finding can be framed where it happens.** With `Options::frame_witness`
+a finding whose evidence carries a [witness](./clash.md#where-a-pair-meets)
+(a clash's deepest point, a clearance's closest pair, the box two bodies
+share) gets its cameras fitted to the union of its witnesses' frames (both
+points and the shared region's outer box) instead of its objects' bounds:
+a duct through a 15 m wall is shown at the duct. The witness is the
+report's own evidence, so such a finding needs no bounds, and the section
+box boxes the spot. Its description ends with one line per witness, kind,
+points (with any deviation) and the shared region:
+`Witness (penetration_into_counterpart): (2.1000, 0.1000, 1.1000) to
+(2.1000, 0.1000, 1.2000) ± 0.0020 m; shared region within ...`. A finding
+without a witness is framed as before. Off by default, and the archive is
+byte for byte the one written before witnesses existed; BCF writes no
+markers, so the spot is shown by the camera alone. The CLI sets it with
+`--bcf-frame-witness`.
+
 ## Colouring
 
 `Options::colors` colours every viewpoint: the finding's subject (or the

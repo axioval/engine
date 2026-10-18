@@ -556,6 +556,12 @@ struct BcfViewArgs {
     /// viewpoints without a camera are never clipped.
     #[arg(long = "bcf-section-box", requires = "bcf")]
     section_box: bool,
+    /// Frame each BCF viewpoint of a finding that says where it happens
+    /// (the witness of a clash, clearance or distance) at that spot rather
+    /// than at its objects' bounds, and list the witness in its
+    /// description. Findings without one are framed as before.
+    #[arg(long = "bcf-frame-witness", requires = "bcf")]
+    frame_witness: bool,
     /// Add a PNG snapshot to each BCF viewpoint with a camera, rendered
     /// from the meshed bodies. Illustrative, never evidence: every topic
     /// with one says so. Needs `--geometry`.
@@ -1648,6 +1654,7 @@ pub(crate) fn emit(
                 colors,
                 isolate: args.bcf_view.isolate,
                 section_box: args.bcf_view.section_box,
+                frame_witness: args.bcf_view.frame_witness,
                 bounds,
                 rule_labels,
                 ..bcf::Options::new(args.bcf_author, date)

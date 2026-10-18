@@ -99,7 +99,7 @@ axioval check --model building.ifc[:DISCIPLINE] [--model other.ifc[:DISCIPLINE] 
   [--html report.html [--html-template template.html] [--html-title TEXT]] \
   [--bcf-author NAME] [--bcf-date 2026-09-26T10:00:00Z] [--bcf-version 2.1|3.0] \
   [--bcf-subject-color HEX] [--bcf-related-color HEX] [--bcf-no-color] \
-  [--bcf-isolate] [--bcf-section-box] [--bcf-snapshots]
+  [--bcf-isolate] [--bcf-section-box] [--bcf-frame-witness] [--bcf-snapshots]
 ```
 
 Runs the ruleset over one or more IFC2X3, IFC4 or IFC4X3 STEP models. Each
@@ -664,6 +664,15 @@ boxing the topic's objects half a metre beyond their measured bounds. It
 needs `--geometry`: a viewpoint without a camera has no bounds and is never
 clipped.
 
+`--bcf-frame-witness` frames each viewpoint of a finding whose evidence says
+where it happens (a [witness](./clash.md#where-a-pair-meets): the closest
+pair of a clearance or distance, the deepest point of a clash and the box
+two bodies share) at that spot instead of at its objects' bounds, so a duct
+through a 15 m wall is shown at the duct; the section box then boxes the
+spot, and the description lists each witness with its points and
+deviations. Findings without a witness are framed as before. Without the
+flag the archive is byte for byte the same.
+
 `--bcf-snapshots` adds a PNG snapshot to each viewpoint with a camera,
 rendered from the meshed bodies (see [Snapshots](./sinks.md#snapshots)):
 the subject and related objects in their colours, the rest grey unless
@@ -968,7 +977,7 @@ axioval compare --base r1/model.ifc --revised r2/model.ifc \
   [--html report.html [--html-template template.html] [--html-title TEXT]] \
   [--bcf-author NAME] [--bcf-date 2026-09-26T10:00:00Z] [--bcf-version 2.1|3.0] \
   [--bcf-subject-color HEX] [--bcf-related-color HEX] [--bcf-no-color] \
-  [--bcf-isolate] [--bcf-section-box] [--bcf-snapshots]
+  [--bcf-isolate] [--bcf-section-box] [--bcf-frame-witness] [--bcf-snapshots]
 ```
 
 Compares two revisions of one IFC2X3, IFC4 or IFC4X3 model, each a STEP file

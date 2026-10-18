@@ -52,7 +52,11 @@ review decisions read back from them (`src/import.rs`).
   `Finding::categories`, then the location's, each once. Labels never enter the GUID key: relabelling a rule must not change
   its topics' GUIDs.
 - Never read the clock or invent GUIDs; the caller supplies author and date.
-- Cameras come only from host-supplied `Options::bounds`. A missing bound
+- Cameras come only from host-supplied `Options::bounds`, or, with
+  `Options::frame_witness` (off by default), from the witnesses a finding's
+  evidence carries (`axioval_ir::Witness::frame`): never from anything
+  estimated here. A finding without a witness falls back to the bounds;
+  without the switch the archive is byte-identical. A missing bound
   leaves the viewpoint without a camera (listed in `Export::unframed`),
   never a guessed one. The perspective viewpoint keeps the GUID of the
   camera-less viewpoint; the orthogonal one is derived beside it. Without

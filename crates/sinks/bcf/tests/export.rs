@@ -793,6 +793,81 @@ mod cameras {
             }
         );
     }
+
+    /// The report with the wall's finding witnessed where a duct, say,
+    /// reaches 0.1 m into it, inside the box 2.0..2.2 x 0.0..0.2 x 1.0..1.2.
+    fn witnessed() -> axioval_ir::Report {
+        use axioval_ir::{Witness, WitnessBox, WitnessExtent, WitnessKind, WitnessPoint};
+        let mut report = report("a.ifc", 1);
+        let shared = WitnessBox::try_new([2.0, 0.0, 1.0], [2.2, 0.2, 1.2]).unwrap();
+        let witness = Witness::new(
+            WitnessKind::PenetrationIntoCounterpart,
+            WitnessPoint::try_new([2.1, 0.1, 1.1], 0.0).unwrap(),
+            WitnessPoint::try_new([2.1, 0.1, 1.2], 0.002).unwrap(),
+        )
+        .with_extent(WitnessExtent::try_new(Some(shared), shared).unwrap());
+        let evidence = &mut report.findings[0].evidence[0];
+        *evidence = evidence.clone().with_witness(witness);
+        report
+    }
+
+    #[test]
+    fn a_witnessed_finding_is_framed_at_its_spot_when_asked() {
+        let options = Options {
+            frame_witness: true,
+            ..options()
+        };
+        let export = export(&witnessed(), &model("a.ifc", 1), &options).unwrap();
+        // No bounds were supplied: the spot is the report's own evidence.
+        assert!(export.unframed.is_empty());
+        let topic = &export.document.topics[0];
+        let [perspective, orthogonal] = topic.viewpoints.as_slice() else {
+            panic!("{:?}", topic.viewpoints);
+        };
+        let camera = orthogonal.camera.unwrap();
+        // The spot is smaller than the least frame.
+        assert_eq!(
+            camera.projection,
+            Projection::Orthogonal {
+                view_to_world_scale: 2.0 * MIN_FRAME_RADIUS_METRES
+            }
+        );
+        let camera = perspective.camera.unwrap();
+        let centre = [2.1, 0.1, 1.1];
+        let d = camera.direction;
+        let t = (centre[2] - camera.view_point.z) / d.z;
+        assert!(
+            (camera.view_point.x + t * d.x - centre[0]).abs() < 1e-6,
+            "{camera:?}"
+        );
+        assert!(
+            (camera.view_point.y + t * d.y - centre[1]).abs() < 1e-6,
+            "{camera:?}"
+        );
+        let description = topic.description.as_deref().unwrap();
+        assert!(
+            description.ends_with(
+                "Witness (penetration_into_counterpart): (2.1000, 0.1000, 1.1000) to \
+                 (2.1000, 0.1000, 1.2000) ± 0.0020 m; shared region within \
+                 (2.0000, 0.0000, 1.0000) to (2.2000, 0.2000, 1.2000)"
+            ),
+            "{description}"
+        );
+        // Every other topic keeps needing bounds.
+        assert!(
+            export.document.topics[1..]
+                .iter()
+                .flat_map(|topic| &topic.viewpoints)
+                .all(|viewpoint| viewpoint.camera.is_none())
+        );
+    }
+
+    #[test]
+    fn without_witness_framing_a_witness_changes_nothing() {
+        let plain = export(&report("a.ifc", 1), &model("a.ifc", 1), &options()).unwrap();
+        let witnessed = export(&witnessed(), &model("a.ifc", 1), &options()).unwrap();
+        assert_eq!(plain.to_bytes().unwrap(), witnessed.to_bytes().unwrap());
+    }
 }
 
 mod labels {

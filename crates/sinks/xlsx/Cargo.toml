@@ -14,7 +14,7 @@ repository.workspace = true
 # workbook through the deflate backend of `zip` the workspace already builds.
 [dependencies]
 axioval-ir.workspace = true
-rust_xlsxwriter = { version = "0.99.1", default-features = false }
+rust_xlsxwriter = { version = "0.100.0", default-features = false }
 thiserror.workspace = true
 
 [dev-dependencies]

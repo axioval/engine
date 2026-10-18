@@ -4,6 +4,12 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+### Security
+
+- Moved to zip 9 and rust_xlsxwriter 0.100, past RUSTSEC-2026-0367, -0368
+  and -0369 in zip 8's `extract`, which the engine does not call. An entry
+  name that does not decode is now an unreadable archive.
+
 ## [0.7.0] - 2026-10-16
 
 Clipped and curved bodies are measured. Every polygonal bounded half-space

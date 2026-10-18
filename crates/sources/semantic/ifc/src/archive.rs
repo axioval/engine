@@ -119,7 +119,10 @@ pub fn read_ifc_zip(bytes: &[u8]) -> Result<IfcZipMember, IfcZipError> {
         let file = archive
             .by_index_raw(index)
             .map_err(|error| IfcZipError::Archive(error.to_string()))?;
-        let name = file.name().to_owned();
+        let name = file
+            .name()
+            .map_err(|error| IfcZipError::Archive(error.to_string()))?
+            .into_owned();
         if !is_safe(&name) || file.enclosed_name().is_none() || file.is_symlink() {
             return Err(IfcZipError::UnsafePath(name));
         }

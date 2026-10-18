@@ -8860,7 +8860,7 @@ fn bcf_topic_count(path: &Path) -> usize {
     let archive = zip::ZipArchive::new(std::fs::File::open(path).unwrap()).unwrap();
     archive
         .file_names()
-        .filter(|name| name.ends_with("markup.bcf"))
+        .filter(|name| name.as_ref().unwrap().ends_with("markup.bcf"))
         .count()
 }
 
@@ -17565,7 +17565,7 @@ fn bcf_viewpoints(path: &Path) -> Vec<String> {
     let mut texts = Vec::new();
     for index in 0..archive.len() {
         let mut entry = archive.by_index(index).unwrap();
-        if Path::new(entry.name())
+        if Path::new(entry.name().unwrap().as_ref())
             .extension()
             .is_some_and(|extension| extension.eq_ignore_ascii_case("bcfv"))
         {

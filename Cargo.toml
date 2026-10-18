@@ -283,7 +283,7 @@ ifc-systems = "0.5.0"
 regex = "1.11.2"
 sha2 = "0.11.0"
 # ifcZIP archives; deflate is the only compression method they use.
-zip = { version = "8.6", default-features = false }
+zip = { version = "9.0", default-features = false }
 # Raw deflate members of `.mcs` archives, read by `axioval-mcs` through the
 # zlib-rs backend `zip` already builds.
 flate2 = { version = "1.1.10", default-features = false, features = ["zlib-rs"] }

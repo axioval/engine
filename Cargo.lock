@@ -635,7 +635,7 @@ dependencies = [
  "serde_json",
  "thiserror",
  "uuid",
- "zip",
+ "zip 9.0.5",
 ]
 
 [[package]]
@@ -659,7 +659,7 @@ dependencies = [
  "axioval-ir",
  "flate2",
  "openbim-bcf",
- "zip",
+ "zip 9.0.5",
 ]
 
 [[package]]
@@ -684,7 +684,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
- "zip",
+ "zip 9.0.5",
 ]
 
 [[package]]
@@ -702,7 +702,7 @@ dependencies = [
  "thiserror",
  "tracing",
  "uuid",
- "zip",
+ "zip 9.0.5",
 ]
 
 [[package]]
@@ -795,7 +795,7 @@ dependencies = [
  "sha2",
  "thiserror",
  "yoke",
- "zip",
+ "zip 9.0.5",
 ]
 
 [[package]]
@@ -858,7 +858,7 @@ dependencies = [
  "axioval-ir",
  "rust_xlsxwriter",
  "thiserror",
- "zip",
+ "zip 9.0.5",
 ]
 
 [[package]]
@@ -971,6 +971,12 @@ name = "cfg-if"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
+
+[[package]]
+name = "cfg_aliases"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f079e83a288787bcd14a6aea84cee5c87a67c5a3e660c30f557a3d24761b3527"
 
 [[package]]
 name = "clap"
@@ -1909,6 +1915,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "nix"
+version = "0.31.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf20d2fde8ff38632c426f1165ed7436270b44f199fc55284c38276f9db47c3d"
+dependencies = [
+ "bitflags",
+ "cfg-if",
+ "cfg_aliases",
+ "libc",
+]
+
+[[package]]
 name = "num"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2022,7 +2040,7 @@ checksum = "3e022487a1d82efce02d0853082f0d08d8e4fdb4efcec5ed41f0628276c49db4"
 dependencies = [
  "openbim-core",
  "quick-xml",
- "zip",
+ "zip 8.6.0",
 ]
 
 [[package]]
@@ -2375,11 +2393,11 @@ dependencies = [
 
 [[package]]
 name = "rust_xlsxwriter"
-version = "0.99.1"
+version = "0.100.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "34f2d2cda7223168a14fb86bc7411dbc3379bd7d49749ecc53b91ed98585b6b0"
+checksum = "c44904ffb6c57b148ffcc8ce3011c28bc49b97e1a8343b2d632283cd566e1393"
 dependencies = [
- "zip",
+ "zip 9.0.5",
 ]
 
 [[package]]
@@ -3108,6 +3126,20 @@ dependencies = [
  "flate2",
  "indexmap",
  "memchr",
+ "typed-path",
+]
+
+[[package]]
+name = "zip"
+version = "9.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e04976da629d3b04204ba8105b396a193af8ad2583b2c79bfb3ab8af580a11e"
+dependencies = [
+ "crc32fast",
+ "flate2",
+ "indexmap",
+ "memchr",
+ "nix",
  "typed-path",
  "zopfli",
 ]

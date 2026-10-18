@@ -113,13 +113,14 @@ fn pngs(bytes: &[u8]) -> BTreeMap<String, Vec<u8>> {
     let mut found = BTreeMap::new();
     for index in 0..archive.len() {
         let mut entry = archive.by_index(index).unwrap();
-        if std::path::Path::new(entry.name())
+        let name = entry.name().unwrap().into_owned();
+        if std::path::Path::new(&name)
             .extension()
             .is_some_and(|extension| extension.eq_ignore_ascii_case("png"))
         {
             let mut data = Vec::new();
             entry.read_to_end(&mut data).unwrap();
-            found.insert(entry.name().to_owned(), data);
+            found.insert(name, data);
         }
     }
     found

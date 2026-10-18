@@ -22702,9 +22702,10 @@ fn with_geometry_a_faceted_prism_with_a_nearly_collinear_corner_is_a_closed_soli
 
 /// A deck sectioned along an `IfcOffsetCurve2D` (#90) 1.5 m beside a
 /// polyline. Since ifc-geometry 0.20 (openbimrs/ifc#414) stations lower on
-/// such an offset basis, where they were refused by name: the deck reaches
-/// the mesh compiler, which certifies no bound between stations, and is
-/// unmeasured for that.
+/// such an offset basis, where they were refused by name, and since
+/// axiolid-mesh-compile 0.3.28 the mesh compiler certifies the deviation
+/// between stations whose frames it reads by quadrature, beside a line
+/// among them (axiolid/kernel#316): the deck is measured as tessellated.
 #[test]
 fn with_geometry_stations_on_an_offset_basis_lower() {
     let deck = "#86=IFCCARTESIANPOINT((20.,0.));\n\
@@ -22728,20 +22729,20 @@ fn with_geometry_stations_on_an_offset_basis_lower() {
         crossing_walls_with(deck).replace("FILE_SCHEMA(('IFC4'))", "FILE_SCHEMA(('IFC4X3_ADD2'))");
     let (output, result) = case.wall_clash(&model, &json!({}));
     assert!(output.status.code().is_some(), "{}", stderr(&output));
-    let reason = unmeasured_reasons(&result)
-        .remove("#53")
-        .unwrap_or_else(|| panic!("{result:#}"));
-    assert!(
-        reason.contains("certifies no bound") && reason.contains("stationed sections"),
-        "{reason}"
+    assert_eq!(
+        unmeasured_reasons(&result).remove("#53"),
+        None,
+        "{result:#}"
     );
+    assert_eq!(result["geometry"]["tessellated"], 1, "{result:#}");
 }
 
 /// A deck sectioned along an `IfcOffsetCurve2D` beside an `IfcEllipse`.
 /// Since ifc-geometry 0.23 a run of sections along such a basis lowers with
-/// seam windows (openbimrs/ifc#429), where it was refused by name: the deck
-/// reaches the mesh compiler, which certifies no bound between stations, so
-/// it is unmeasured for that and never bounded.
+/// seam windows (openbimrs/ifc#429), where it was refused by name, and
+/// since axiolid-mesh-compile 0.3.28 the mesh compiler bounds its cells
+/// against the exact frame law read by quadrature (axiolid/kernel#316):
+/// the deck is measured as tessellated.
 #[test]
 fn with_geometry_a_run_along_an_offset_ellipse_lowers() {
     let deck = "#86=IFCCARTESIANPOINT((30.,0.));\n\
@@ -22765,13 +22766,12 @@ fn with_geometry_a_run_along_an_offset_ellipse_lowers() {
         crossing_walls_with(deck).replace("FILE_SCHEMA(('IFC4'))", "FILE_SCHEMA(('IFC4X3_ADD2'))");
     let (output, result) = case.wall_clash(&model, &json!({}));
     assert!(output.status.code().is_some(), "{}", stderr(&output));
-    let reason = unmeasured_reasons(&result)
-        .remove("#53")
-        .unwrap_or_else(|| panic!("{result:#}"));
-    assert!(
-        reason.contains("certifies no bound") && reason.contains("stationed sections"),
-        "{reason}"
+    assert_eq!(
+        unmeasured_reasons(&result).remove("#53"),
+        None,
+        "{result:#}"
     );
+    assert_eq!(result["geometry"]["tessellated"], 1, "{result:#}");
 }
 
 /// A deck sectioned along an `IfcOffsetCurveByDistances` beside an
@@ -22779,8 +22779,11 @@ fn with_geometry_a_run_along_an_offset_ellipse_lowers() {
 /// windows (openbimrs/ifc#443), where they fell to a wrong reason. Since
 /// axiolid-mesh-compile 0.3.25 the kernel certifies the length of a varying
 /// offset along an ellipse (axiolid/kernel#307), so the deck reaches the
-/// mesh compiler, which has no certified derivative bounds for a frame read
-/// by quadrature on an ellipse: unmeasured by that name, never bounded.
+/// mesh compiler. Since axiolid-mesh-compile 0.3.28 it certifies frames
+/// read by quadrature on an ellipse and offsets by distances beside it
+/// (axiolid/kernel#316); what it still certifies no bound for is the cell
+/// beside the mitre at the corner the widening offset makes at station 2,
+/// on a curved piece: unmeasured by that name, never bounded.
 #[test]
 fn with_geometry_a_run_along_offsets_by_distances_of_an_ellipse_reaches_the_mesh_compiler() {
     let deck = "#86=IFCCARTESIANPOINT((30.,0.));\n\
@@ -22811,7 +22814,7 @@ fn with_geometry_a_run_along_offsets_by_distances_of_an_ellipse_reaches_the_mesh
         .remove("#53")
         .unwrap_or_else(|| panic!("{result:#}"));
     assert!(
-        reason.contains("certifies no bound") && reason.contains("no certified derivative bounds"),
+        reason.contains("certifies no bound") && reason.contains("mitred seam"),
         "{reason}"
     );
 }

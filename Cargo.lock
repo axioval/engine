@@ -117,9 +117,9 @@ dependencies = [
 
 [[package]]
 name = "axiolid-brep-boolean"
-version = "0.1.10"
+version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d837fb628fad441d6de4865c008323ccd247fe0040b5d5ac8cb229f0c3fe93e5"
+checksum = "c990eb932389a0c71507ce6da710661cd3fbc97283ad5228bc44a6e0e754c79d"
 dependencies = [
  "axiolid-brep",
  "axiolid-core",
@@ -202,9 +202,9 @@ dependencies = [
 
 [[package]]
 name = "axiolid-evaluate"
-version = "0.3.16"
+version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a7bcd72c70819fc47e2634aa1a083995ee0a8be420cbba188ad8abe8661a363"
+checksum = "1b0bb46cc8b139bb8aab42ef7ae98ea5c2c214a756be85a5344992e813d222fd"
 dependencies = [
  "axiolid-contracts",
  "axiolid-core",
@@ -335,9 +335,9 @@ dependencies = [
 
 [[package]]
 name = "axiolid-mesh-compile"
-version = "0.3.27"
+version = "0.3.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ca1fe4f7a0c858e13a40264632f7aec989d10e1a412a63cf4a296965ea2d54b"
+checksum = "87d1b082f54c2e8c0eefbcdde33b389b471ba0e6feabe00a15e4160309587763"
 dependencies = [
  "axiolid-brep",
  "axiolid-brep-boolean",

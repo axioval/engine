@@ -85,6 +85,16 @@ All notable changes are documented here. This project follows Semantic Versionin
   messages; only their `message` fields changed. See [IDS findings](docs/src/ids.md#findings) and
   [Names in messages](docs/src/concept-binding.md#names-in-messages).
 
+- Moved to axiolid-mesh-compile 0.3.28 (with axiolid-brep-boolean 0.1.11)
+  and axiolid-evaluate 0.3.17. The mesh compiler now bounds runs of
+  sections whose frames it reads by quadrature (axiolid/kernel#316): a
+  deck sectioned along an offset beside a polyline, or along an offset
+  beside an ellipse, is measured where it was unmeasured with "certifies
+  no bound". A deck along offsets by distances beside an ellipse is still
+  unmeasured, now for the cell beside the mitre its widening offset makes
+  (`stationed sections: a cell beside a mitred seam on a curved piece`),
+  no longer for uncertified frames.
+
 ### Security
 
 - Moved to zip 9 and rust_xlsxwriter 0.100, past RUSTSEC-2026-0367, -0368

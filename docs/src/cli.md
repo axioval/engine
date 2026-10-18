@@ -1794,11 +1794,15 @@ stations (openbimrs/ifc#307). Since axiolid-mesh-compile 0.3.24
 stations wherever the frame law along the basis has certified derivative
 bounds (lines, polylines, circles, elevated and banked curves with line or
 circle plans), refining the stations until the bound fits the chord
-tolerance, so such a sectioned solid is measured. Elsewhere it stays
-unmeasured with the reason that the compiler certifies no bound: along a
-numerically framed basis (offsets, spirals, B-splines, ellipses), and in a
-cell beside a mitre on a curved piece or with a section that changes across
-a mitre. Since `ifc-geometry` 0.18 (openbimrs/ifc#346) stations also
+tolerance, so such a sectioned solid is measured. Since
+axiolid-mesh-compile 0.3.28 it also bounds runs whose frames it reads by
+quadrature, against their exact frame law (axiolid/kernel#316): along an
+ellipse or a B-spline, and along an offset beside a line, a circle, an
+ellipse or a B-spline, constant or by distances. Elsewhere it stays
+unmeasured with the reason that the compiler certifies no bound: along
+spirals and other intrinsic curves, chains and offsets beside them, skewed
+circles and steep tangents, and in a cell beside a mitre on a curved piece
+or with a section that changes across a mitre. Since `ifc-geometry` 0.18 (openbimrs/ifc#346) stations also
 lower on a plain `IfcCompositeCurve`, an `IfcTrimmedCurve` and a
 station-placed composite basis, and one on a joint or tangent
 discontinuity reads the incoming segment, as IFC4.3 ADD2 8.9.3.48.3
@@ -1811,13 +1815,15 @@ placement at a station (openbimrs/ifc#311). Since `ifc-geometry` 0.20
 stations also lower on an offset basis (`IfcOffsetCurve2D`,
 `IfcOffsetCurve3D` and `IfcOffsetCurveByDistances` beside lines, polylines
 and in-plane circles, openbimrs/ifc#414; `tests/check.rs`
-`with_geometry_stations_on_an_offset_basis_lower`). Since `ifc-geometry`
+`with_geometry_stations_on_an_offset_basis_lower`, measured since
+axiolid-mesh-compile 0.3.28). Since `ifc-geometry`
 0.22 a single station on an offset of a gradient, spiral, B-spline or ellipse
 basis lowers too, with Axiolid's seam window, so the kernel snaps it onto
 its certified joint (openbimrs/ifc#423). Since `ifc-geometry` 0.23 a run of
 sections along such a basis lowers with seam windows, mitred at its joints
 (openbimrs/ifc#429; `tests/check.rs`
-`with_geometry_a_run_along_an_offset_ellipse_lowers`), and a linear
+`with_geometry_a_run_along_an_offset_ellipse_lowers`, measured since
+axiolid-mesh-compile 0.3.28), and a linear
 placement derived on one works through open-ended path pieces
 (openbimrs/ifc#427). Since `ifc-geometry` 0.24 an
 `IfcOffsetCurveByDistances` along such a basis lowers as a curve, continued
@@ -1828,8 +1834,9 @@ derives through bounded path pieces (openbimrs/ifc#436). Since `ifc-geometry`
 with seam windows (openbimrs/ifc#443), and since axiolid-mesh-compile
 0.3.25 the kernel certifies the length of a varying offset along an ellipse
 or B-spline (axiolid/kernel#307); the solid then reaches the mesh compiler,
-which has no certified derivative bounds for a frame read by quadrature on
-such a basis, so it is unmeasured with that reason (`tests/check.rs`
+which since 0.3.28 certifies its frames too (axiolid/kernel#316). The
+pinned deck there stays unmeasured only for the cell beside the mitre at
+the corner its widening offset makes at station 2 (`tests/check.rs`
 `with_geometry_a_run_along_offsets_by_distances_of_an_ellipse_reaches_the_mesh_compiler`).
 Still refused by name: a station given as `IfcParameterValue`, a station
 basis that is an offset of an offset curve (axiolid/kernel#289), a relation mixing

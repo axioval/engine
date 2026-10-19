@@ -629,3 +629,275 @@ fn an_adapter_derives_through_the_current_store_on_every_worker() {
     drop(entered);
     assert!(axioval_engine::derivation::current().is_none());
 }
+
+/// Eight bytes a value, of another kind than [`Eight`].
+struct OtherEight;
+
+impl DerivationKind for OtherEight {
+    const NAME: &'static str = "other-eight";
+    const VERSION: DerivationVersion = DerivationVersion::new(1, &[]);
+    type Key = u64;
+    type Value = u64;
+
+    fn build(key: &u64, _: &Inputs<'_>) -> Result<u64, DerivationError> {
+        Ok(*key)
+    }
+
+    fn size_hint(_: &u64) -> Option<usize> {
+        Some(8)
+    }
+}
+
+#[test]
+fn a_store_keeping_little_releases_the_values_read_least_recently_of_any_kind() {
+    let store = DerivationStore::keeping(16);
+    let services = ServiceRegistry::new();
+    store.derive::<Eight>(&services, &1).expect("no cycle");
+    store.derive::<OtherEight>(&services, &2).expect("no cycle");
+    // Reading 1 again makes the other kind's 2 the value read least
+    // recently, so the next one landing releases it.
+    store.derive::<Eight>(&services, &1).expect("no cycle");
+    store.derive::<Eight>(&services, &3).expect("no cycle");
+    assert!(store.held::<OtherEight>(&2).is_none());
+    assert!(store.held::<Eight>(&1).is_some() && store.held::<Eight>(&3).is_some());
+    // However small the bound, the value just built is kept until the
+    // next lands.
+    let tiny = DerivationStore::keeping(1);
+    for key in 1..=3 {
+        tiny.derive::<Eight>(&services, &key).expect("no cycle");
+    }
+    assert!(tiny.held::<Eight>(&3).is_some());
+    assert!(tiny.held::<Eight>(&1).is_none() && tiny.held::<Eight>(&2).is_none());
+    let eight = tiny
+        .statistics()
+        .into_iter()
+        .find(|kind| kind.kind == "eight")
+        .expect("counted");
+    assert_eq!((eight.builds, eight.evicted, eight.bytes), (3, 2, 8));
+    assert_eq!(eight.peak_bytes, 16);
+}
+
+/// Forty bytes a value.
+struct Forty;
+
+impl DerivationKind for Forty {
+    const NAME: &'static str = "forty";
+    const VERSION: DerivationVersion = DerivationVersion::new(1, &[]);
+    type Key = u64;
+    type Value = u64;
+
+    fn build(key: &u64, _: &Inputs<'_>) -> Result<u64, DerivationError> {
+        Ok(*key)
+    }
+
+    fn size_hint(_: &u64) -> Option<usize> {
+        Some(40)
+    }
+}
+
+#[test]
+fn kept_values_never_take_a_check_past_its_memory_budget() {
+    let budget = Arc::new(MemoryBudget::new(100));
+    let _entered = budget.enter();
+    let store = DerivationStore::new();
+    let services = ServiceRegistry::new();
+    for key in 1..=3 {
+        store.derive::<Forty>(&services, &key).expect("no cycle");
+        assert!(budget.in_use() <= 100, "{}", budget.in_use());
+    }
+    // The third did not fit beside the first two: the first gave way.
+    assert!(store.held::<Forty>(&1).is_none());
+    assert_eq!(budget.in_use(), 80);
+}
+
+#[test]
+fn a_step_needing_the_room_releases_kept_values_before_it_waits() {
+    ends(|| {
+        let budget = Arc::new(MemoryBudget::new(100));
+        let _entered = budget.enter();
+        let store = DerivationStore::new();
+        budget.reclaim_from(store.reclaimer());
+        let services = ServiceRegistry::new();
+        for key in 1..=2 {
+            store.derive::<Forty>(&services, &key).expect("no cycle");
+        }
+        assert_eq!(budget.in_use(), 80);
+        // A step of 20 fits beside them; another thread's step of 50 more
+        // would wait for it unless kept values gave way.
+        let running = budget.admit(20).expect("within the budget");
+        std::thread::scope(|scope| {
+            scope
+                .spawn(|| {
+                    let step = budget.admit(50).expect("within the budget");
+                    assert!(budget.in_use() <= 100, "{}", budget.in_use());
+                    drop(step);
+                })
+                .join()
+                .expect("admitted without waiting");
+        });
+        drop(running);
+        // The value read least recently gave way, then the other.
+        assert!(store.held::<Forty>(&1).is_none());
+        assert!(store.held::<Forty>(&2).is_none());
+        let usage = budget.usage();
+        assert_eq!((usage.reclaimed, usage.waited), (80, 0), "{usage:?}");
+        assert_eq!(budget.in_use(), 0);
+        // A budget outliving its check's store asks nothing of it.
+        store.derive::<Forty>(&services, &3).expect("no cycle");
+        drop(store);
+        assert_eq!(budget.in_use(), 0);
+        drop(budget.admit(100).expect("within the budget"));
+    });
+}
+
+/// A service a rule may ask, by its type.
+struct Asked;
+
+/// A kind read through [`Asked`] only.
+struct ReadThroughAsked;
+
+impl DerivationKind for ReadThroughAsked {
+    const NAME: &'static str = "read through asked";
+    const VERSION: DerivationVersion = DerivationVersion::new(1, &[]);
+    type Key = u64;
+    type Value = u64;
+
+    fn build(key: &u64, _: &Inputs<'_>) -> Result<u64, DerivationError> {
+        Ok(*key)
+    }
+
+    fn read_through() -> Option<Vec<std::any::TypeId>> {
+        Some(vec![std::any::TypeId::of::<Asked>()])
+    }
+}
+
+#[test]
+fn values_whose_services_no_rule_still_asks_are_released() {
+    let store = DerivationStore::new();
+    let services = ServiceRegistry::new();
+    store
+        .derive::<ReadThroughAsked>(&services, &1)
+        .expect("no cycle");
+    store.derive::<Eight>(&services, &1).expect("no cycle");
+    let asked = std::any::TypeId::of::<Asked>();
+    // A rule still to run asks the service: both are kept.
+    assert_eq!(store.release_unread(|service| service != asked), 0);
+    // None does: the kind read through it is released, the kind whose
+    // readers cannot be told is kept.
+    assert_eq!(store.release_unread(|_| true), 1);
+    assert!(store.held::<ReadThroughAsked>(&1).is_none());
+    assert!(store.held::<Eight>(&1).is_some());
+    let retired = store
+        .statistics()
+        .into_iter()
+        .find(|kind| kind.kind == "read through asked")
+        .expect("counted");
+    assert_eq!((retired.released, retired.evicted), (1, 0));
+}
+
+mod planned {
+    use std::any::TypeId;
+    use std::sync::Mutex;
+
+    use axioval_engine::{
+        CapabilityEvaluation, CapabilityRegistry, CompiledRule, DerivationStore, ExecutionPlan,
+        GeometryReach, ParameterDescriptor, ParameterType, RuleCapability, RuleContext, Runtime,
+        compile,
+    };
+    use axioval_ir::{DefinitionPackage, Project, RuleSetPackage};
+
+    use super::{Asked, ReadThroughAsked};
+
+    /// Whether each rule found the value kept that an earlier rule built,
+    /// by rule id.
+    static FOUND: Mutex<Vec<(String, bool)>> = Mutex::new(Vec::new());
+
+    /// Every rule notes whether the value is kept, then reads it. Rules
+    /// whose id ends in `-asks` ask the service it is read through; the
+    /// others ask no geometry.
+    struct Reader;
+
+    impl RuleCapability for Reader {
+        fn id(&self) -> &'static str {
+            "axioval:capability.property-exists"
+        }
+        fn parameters(&self) -> Vec<ParameterDescriptor> {
+            vec![ParameterDescriptor::required(
+                "property",
+                ParameterType::PropertyReference,
+            )]
+        }
+        fn geometry_reach(&self, rule: &CompiledRule) -> GeometryReach {
+            if rule.id.to_string().ends_with("-asks") {
+                GeometryReach::Selected {
+                    selectors: vec![],
+                    services: vec![TypeId::of::<Asked>()],
+                }
+            } else {
+                GeometryReach::None
+            }
+        }
+        fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
+            let store = context
+                .services
+                .get::<DerivationStore>()
+                .expect("the run's store");
+            let kept = store.held::<ReadThroughAsked>(&7).is_some();
+            FOUND.lock().unwrap().push((rule.id.to_string(), kept));
+            if rule.id.to_string().ends_with("-asks") {
+                store
+                    .derive::<ReadThroughAsked>(context.services, &7)
+                    .expect("no cycle");
+            }
+            CapabilityEvaluation::evaluated(vec![])
+        }
+    }
+
+    /// The fixture's rule as `ids`, in that order.
+    fn plan(ids: &[&str]) -> ExecutionPlan {
+        let definitions: DefinitionPackage = serde_json::from_str(include_str!(
+            "../../../../fixtures/schema-v0.1.0/definitions.json"
+        ))
+        .unwrap();
+        let mut rules: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../../fixtures/schema-v0.1.0/ruleset.json"
+        ))
+        .unwrap();
+        let rule = rules["root"]["rules"][0].clone();
+        rules["root"]["rules"] = ids
+            .iter()
+            .map(|id| {
+                let mut rule = rule.clone();
+                rule["id"] = serde_json::Value::from(*id);
+                rule
+            })
+            .collect();
+        let rules: RuleSetPackage = serde_json::from_value(rules).unwrap();
+        let registry = CapabilityRegistry::new().register(Reader).unwrap();
+        compile(&registry, &[definitions], &rules).unwrap()
+    }
+
+    #[test]
+    fn a_derivation_is_released_after_the_last_rule_asking_its_service() {
+        let registry = CapabilityRegistry::new().register(Reader).unwrap();
+        let project = Project::new(vec![]).unwrap();
+        for (ids, kept) in [
+            // The second rule asks the service too: the value waits for it.
+            (["a-asks", "b-asks", "c-none"], [false, true, false]),
+            // No rule after the first asks it: released before the second.
+            (["a-asks", "b-none", "c-none"], [false, false, false]),
+        ] {
+            FOUND.lock().unwrap().clear();
+            Runtime::new(registry.clone())
+                .run(&project, plan(&ids))
+                .unwrap();
+            let found = FOUND.lock().unwrap().clone();
+            let expected: Vec<(String, bool)> = ids
+                .iter()
+                .zip(kept)
+                .map(|(id, kept)| ((*id).to_owned(), kept))
+                .collect();
+            assert_eq!(found, expected);
+        }
+    }
+}

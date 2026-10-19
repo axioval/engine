@@ -30,7 +30,9 @@ use axioval_ir::{MEASURED_SET, Object, ObjectId, SourceId};
 
 use crate::concepts::ConceptBindings;
 use crate::derived_relationships::DERIVED_RELATIONSHIP_PREFIX;
-use crate::{CapabilityRegistry, EvidenceSession, ExecutionPlan, TypeHierarchyServiceHandle};
+use crate::{
+    CapabilityRegistry, CompiledRule, EvidenceSession, ExecutionPlan, TypeHierarchyServiceHandle,
+};
 
 /// What one rule may ask of a host's geometry, as its capability states it
 /// ([`crate::RuleCapability::geometry_reach`]).
@@ -83,22 +85,66 @@ fn writes_geometry(value: &impl serde::Serialize) -> bool {
     serde_json::to_string(value).map_or(true, |text| reads_geometry(&text))
 }
 
-/// Whether anything of `plan` beside its rules' capabilities (its values,
-/// classifications, groupings, relations, refinements, and every rule's
-/// selector and parameters) may read geometry.
-fn plan_reads_geometry(plan: &ExecutionPlan) -> bool {
+/// Whether anything of `plan` that every rule may come to read (its
+/// values, classifications, groupings and relations) may read geometry.
+fn plan_wide_reads_geometry(plan: &ExecutionPlan) -> bool {
     writes_geometry(plan.values.as_ref())
         || writes_geometry(&plan.classifications)
         || writes_geometry(&plan.groupings)
         || writes_geometry(&plan.relations)
-        || plan.refinements.values().any(|refinement| {
+}
+
+/// Whether `rule`'s own selector, parameters or refinement may read
+/// geometry.
+fn rule_reads_geometry(plan: &ExecutionPlan, rule: &CompiledRule) -> bool {
+    writes_geometry(&(&rule.selector, &rule.parameters))
+        || plan.refinements.get(&rule.id).is_some_and(|refinement| {
             writes_geometry(&refinement.severity_overrides)
                 || writes_geometry(&refinement.categories)
         })
+}
+
+/// Whether anything of `plan` beside its rules' capabilities (its values,
+/// classifications, groupings, relations, refinements, and every rule's
+/// selector and parameters) may read geometry.
+fn plan_reads_geometry(plan: &ExecutionPlan) -> bool {
+    plan_wide_reads_geometry(plan)
         || plan
             .rules
             .iter()
-            .any(|rule| writes_geometry(&(&rule.selector, &rule.parameters)))
+            .any(|rule| rule_reads_geometry(plan, rule))
+}
+
+/// The host service handles (their types) each rule of `plan` may ask, in
+/// the plan's order, as `registry`'s capabilities state it
+/// ([`crate::RuleCapability::geometry_reach`]): none for
+/// [`GeometryReach::None`], the stated ones for
+/// [`GeometryReach::Selected`], and `None` (any service) for an unknown
+/// capability, [`GeometryReach::Unbounded`], or a rule whose selector,
+/// parameters or refinement, or the plan's values, classifications,
+/// groupings or relations, name a measured value or a derived
+/// relationship. The run releases a derivation after the last rule that
+/// may ask a service it is read through (#440); being conservative here
+/// only keeps a value longer.
+#[must_use]
+pub fn services_asked(
+    plan: &ExecutionPlan,
+    registry: &CapabilityRegistry,
+) -> Vec<Option<BTreeSet<TypeId>>> {
+    let everywhere = plan_wide_reads_geometry(plan);
+    plan.rules
+        .iter()
+        .map(|rule| {
+            if everywhere || rule_reads_geometry(plan, rule) {
+                return None;
+            }
+            match registry.get(&rule.capability)?.geometry_reach(rule) {
+                GeometryReach::None => Some(BTreeSet::new()),
+                GeometryReach::Selected { services, .. } => Some(services.into_iter().collect()),
+                GeometryReach::Unbounded => None,
+            }
+        })
+        .collect()
 }
 
 /// What `plan`'s rules may ask of the geometry a host attaches to

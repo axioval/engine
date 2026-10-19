@@ -6,6 +6,27 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Derivations released after their last reader and within the memory
+  budget** ([#440](https://github.com/axioval/engine/issues/440),
+  [ADR 0006](docs/src/adr-0006.md)). A derivation kind names the service
+  handles its values are read through (`DerivationKind::read_through`; the
+  Axiolid adapter's placement scenes the free-space service, its indexed
+  bodies the proximity service and the derived relationships), and the
+  runtime releases a kind's values before the first rule after the last
+  one that may ask any of those services, as `services_asked` reads the
+  rules' `geometry_reach` (`DerivationStore::release_unread`). The store
+  now evicts across kinds, the values read least recently first, whenever
+  what it keeps and the running steps' admissions would pass the check's
+  memory budget, and a step that does not fit beside kept values has them
+  released before it waits (`MemoryBudget::reclaim_from`, `Reclaim`,
+  `MemoryUsage::reclaimed`). `DerivationStore::keeping` and
+  `Runtime::with_kept_derivations` bound a store's bytes, all kinds
+  together; the determinism gate runs every case with a one-byte bound
+  (the hidden `check --keep-derivations`), and reports stay byte-identical.
+  `check --stats` counts a release after the last reader as `released`
+  and one to keep within a bound or the budget as `evicted`, and
+  `check --timings` prints the memory released for steps.
+
 - **`axioval check --stats`: a check's reuse per derivation kind**
   ([#442](https://github.com/axioval/engine/issues/442),
   [ADR 0006](docs/src/adr-0006.md#the-reuse-report)). At the end of the

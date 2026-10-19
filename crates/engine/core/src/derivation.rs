@@ -41,6 +41,24 @@
 //! runs every check with the store kept and forgetful, and requires the
 //! same bytes. [`crate::Runtime::without_reuse`] installs one.
 //!
+//! **Releasing** ([#440](https://github.com/axioval/engine/issues/440)).
+//! A kept value is memory held on purpose, so the store gives it up in
+//! three ways, each only ever costing time: a released value is built
+//! again when read again, to the same value, and every budget charges a
+//! read as if it built.
+//!
+//! - After its last reader: a kind names the services it is read through
+//!   ([`DerivationKind::read_through`]), and the runtime releases its
+//!   values once no rule still to run may ask them
+//!   ([`DerivationStore::release_unread`]).
+//! - Past a bound: a kind's own ([`DerivationKind::keep_bytes`]) and the
+//!   store's ([`DerivationStore::keeping`]), the values read least
+//!   recently first, of any kind for the store's.
+//! - For the memory budget: kept values never take the check past it
+//!   beside the steps it admitted, and a step that does not fit asks the
+//!   store to release them before it waits ([`DerivationStore::reclaimer`],
+//!   [`crate::MemoryBudget::reclaim_from`]).
+//!
 //! [ADR 0006]: https://github.com/axioval/engine/blob/main/docs/src/adr-0006.md
 
 use std::any::{Any, TypeId};
@@ -49,11 +67,11 @@ use std::collections::HashMap;
 use std::hash::Hash;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError, Weak};
 use std::time::{Duration, Instant};
 
 use crate::ServiceRegistry;
-use crate::memory::{self, Held};
+use crate::memory::{self, Held, Reclaim};
 
 mod key;
 
@@ -112,13 +130,28 @@ pub trait DerivationKind: 'static {
 
     /// The most bytes (as [`Self::size_hint`] states them) the store keeps
     /// of this kind's values at once, read when a value lands; `None`, the
-    /// default, keeps every value for the run. Past it, the values read
-    /// least recently are released, and built again when read again: what
-    /// the plan cannot yet release after a value's last reader
-    /// ([#440](https://github.com/axioval/engine/issues/440)), this bounds.
-    /// Releasing only ever costs time, never changes a value.
+    /// default, bounds the kind only by the store's own bound and the
+    /// check's memory budget. Past it, the values read least recently are
+    /// released, and built again when read again. Releasing only ever
+    /// costs time, never changes a value.
     #[must_use]
     fn keep_bytes() -> Option<u64> {
+        None
+    }
+
+    /// The host service handles (their types) through which a rule may
+    /// come to read this kind's values, so the plan releases them after
+    /// the last rule that may ask one of those services
+    /// ([`DerivationStore::release_unread`],
+    /// [#440](https://github.com/axioval/engine/issues/440)): a geometry
+    /// adapter's kind names the handles whose services build or read it.
+    /// `None`, the default, is a kind the plan cannot tell the readers of
+    /// (a measurement's memo), kept for the whole check within the bounds.
+    ///
+    /// A handle left out only costs time: a value released before a read
+    /// the plan did not foresee is built again, to the same value.
+    #[must_use]
+    fn read_through() -> Option<Vec<TypeId>> {
         None
     }
 }
@@ -190,10 +223,13 @@ pub struct DerivationStatistics {
     /// The time spent in the builds that ended with a value, summed over
     /// threads.
     pub build_time: Duration,
-    /// Values released by name ([`DerivationStore::release`]).
+    /// Values released by name ([`DerivationStore::release`]) or after
+    /// the last rule that may read them
+    /// ([`DerivationStore::release_unread`], #440).
     pub released: u64,
-    /// Values released to keep the kind within its bound
-    /// ([`DerivationKind::keep_bytes`]).
+    /// Values released to keep within a bound: the kind's
+    /// ([`DerivationKind::keep_bytes`]), the store's
+    /// ([`DerivationStore::keeping`]) or the check's memory budget (#440).
     pub evicted: u64,
     /// The bytes held now, as the kinds' [`DerivationKind::size_hint`]s
     /// state them.
@@ -216,6 +252,9 @@ struct Shared {
     ended: Condvar,
     /// Whether no value is kept once built ([`DerivationStore::forgetful`]).
     forgets: bool,
+    /// The most bytes the store keeps of all its kinds together
+    /// ([`DerivationStore::keeping`]).
+    keep: Option<u64>,
 }
 
 #[derive(Default)]
@@ -225,6 +264,9 @@ struct State {
     /// Each waiting caller (by a number of its own): the build it waits for
     /// and the builds it works within.
     waiting: HashMap<u64, Waiting, foldhash::fast::FixedState>,
+    /// Counts reads across every kind, so the value read least recently
+    /// is known store-wide.
+    clock: u64,
 }
 
 struct Waiting {
@@ -269,54 +311,115 @@ fn hold(bytes: u64) -> Option<Held> {
         .map(|budget| budget.hold(bytes))
 }
 
+/// A released value, dropped once the store is unlocked.
+type Released = Box<dyn Any + Send>;
+
+/// How a table is made: its kind's name, what the kind keeps at most, and
+/// the services its values are read through.
+#[derive(Clone, Copy)]
+pub(crate) struct Policy {
+    pub(crate) kind: &'static str,
+    pub(crate) version: Option<DerivationVersion>,
+    pub(crate) keep: Option<u64>,
+    pub(crate) through: fn() -> Option<Vec<TypeId>>,
+}
+
+impl Policy {
+    /// A table of `kind`, bounded only by the store and the budget, whose
+    /// readers the plan cannot tell.
+    pub(crate) fn unplanned(kind: &'static str) -> Self {
+        Self {
+            kind,
+            version: None,
+            keep: None,
+            through: || None,
+        }
+    }
+}
+
 struct Table<K, S> {
     /// Keys are shared with the build in flight, which finds its slot by
     /// them, so a key need not be cloned.
     entries: HashMap<Arc<K>, Slot<S>, foldhash::fast::RandomState>,
     statistics: DerivationStatistics,
-    /// Counts reads, so the value read least recently is known.
-    clock: u64,
+    /// The services the kind's values are read through
+    /// ([`DerivationKind::read_through`]).
+    through: Option<Vec<TypeId>>,
 }
 
-impl<K: Hash + Eq, S> Table<K, S> {
-    /// The next read's time.
-    fn tick(&mut self) -> u64 {
-        self.clock += 1;
-        self.clock
+impl<K: Hash + Eq, S: Send + 'static> Table<K, S> {
+    /// Counts `bytes` more held.
+    fn grew(&mut self, bytes: u64) {
+        self.statistics.bytes += bytes;
+        self.statistics.peak_bytes = self.statistics.peak_bytes.max(self.statistics.bytes);
     }
 
-    /// Releases the values read least recently, all but `kept`'s, until
-    /// the table holds at most `limit` bytes; handed back to be dropped
-    /// once the store is unlocked.
-    fn evict(&mut self, limit: u64, kept: &K) -> Vec<S> {
-        let mut evicted = Vec::new();
+    /// The value read least recently, read before `before`.
+    fn oldest_key(&self, before: u64) -> Option<(u64, Arc<K>)> {
+        self.entries
+            .iter()
+            .filter_map(|(key, slot)| match slot {
+                Slot::Ready { read, .. } if *read < before => Some((*read, Arc::clone(key))),
+                _ => None,
+            })
+            .min_by_key(|(read, _)| *read)
+    }
+
+    /// Releases the value held for `key`, its bytes returned to the budget
+    /// at once; the value, to be dropped once the store is unlocked.
+    fn remove(&mut self, key: &K) -> Option<S> {
+        if !matches!(self.entries.get(key), Some(Slot::Ready { .. })) {
+            return None;
+        }
+        let Some(Slot::Ready {
+            value, bytes, held, ..
+        }) = self.entries.remove(key)
+        else {
+            return None;
+        };
+        drop(held);
+        self.statistics.bytes -= bytes;
+        Some(value)
+    }
+
+    /// Releases the value held for `key` to keep within a bound.
+    fn evict_key(&mut self, key: &K) -> Option<S> {
+        let value = self.remove(key)?;
+        self.statistics.evicted += 1;
+        Some(value)
+    }
+
+    /// Releases the values read least recently, all read before `before`,
+    /// until the table holds at most `limit` bytes.
+    fn evict(&mut self, limit: u64, before: u64, released: &mut Vec<Released>) {
         while self.statistics.bytes > limit {
-            let oldest = self
-                .entries
-                .iter()
-                .filter(|(key, _)| ***key != *kept)
-                .filter_map(|(key, slot)| match slot {
-                    Slot::Ready { read, .. } => Some((*read, Arc::clone(key))),
-                    Slot::Building { .. } => None,
-                })
-                .min_by_key(|(read, _)| *read);
-            let Some((_, key)) = oldest else { break };
-            if let Some(Slot::Ready { value, bytes, .. }) = self.entries.remove(&*key) {
-                self.statistics.bytes -= bytes;
-                self.statistics.evicted += 1;
-                evicted.push(value);
+            let Some((_, key)) = self.oldest_key(before) else {
+                break;
+            };
+            if let Some(value) = self.evict_key(&key) {
+                released.push(Box::new(value));
             }
         }
-        evicted
     }
 }
 
 trait Kept: Send {
     fn as_any_mut(&mut self) -> &mut dyn Any;
     fn statistics(&self) -> DerivationStatistics;
+    /// The bytes held now.
+    fn bytes(&self) -> u64;
+    /// When the value read least recently, read before `before`, was read.
+    fn oldest(&self, before: u64) -> Option<u64>;
+    /// Releases the value read least recently, read before `before`, and
+    /// tells its bytes.
+    fn evict_oldest(&mut self, before: u64) -> Option<(u64, Released)>;
+    /// The services the kind's values are read through.
+    fn through(&self) -> Option<&[TypeId]>;
+    /// Releases every value held, after the last rule reading it.
+    fn retire(&mut self, released: &mut Vec<Released>);
 }
 
-impl<K: Send + Sync + 'static, S: Send + 'static> Kept for Table<K, S> {
+impl<K: Hash + Eq + Send + Sync + 'static, S: Send + 'static> Kept for Table<K, S> {
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
@@ -329,6 +432,43 @@ impl<K: Send + Sync + 'static, S: Send + 'static> Kept for Table<K, S> {
                 .filter(|slot| matches!(slot, Slot::Ready { .. }))
                 .count(),
             ..self.statistics.clone()
+        }
+    }
+
+    fn bytes(&self) -> u64 {
+        self.statistics.bytes
+    }
+
+    fn oldest(&self, before: u64) -> Option<u64> {
+        self.oldest_key(before).map(|(read, _)| read)
+    }
+
+    fn evict_oldest(&mut self, before: u64) -> Option<(u64, Released)> {
+        let (_, key) = self.oldest_key(before)?;
+        let bytes = match self.entries.get(&*key) {
+            Some(Slot::Ready { bytes, .. }) => *bytes,
+            _ => 0,
+        };
+        let value = self.evict_key(&key)?;
+        Some((bytes, Box::new(value)))
+    }
+
+    fn through(&self) -> Option<&[TypeId]> {
+        self.through.as_deref()
+    }
+
+    fn retire(&mut self, released: &mut Vec<Released>) {
+        let keys: Vec<Arc<K>> = self
+            .entries
+            .iter()
+            .filter(|(_, slot)| matches!(slot, Slot::Ready { .. }))
+            .map(|(key, _)| Arc::clone(key))
+            .collect();
+        for key in keys {
+            if let Some(value) = self.remove(&key) {
+                self.statistics.released += 1;
+                released.push(Box::new(value));
+            }
         }
     }
 }
@@ -429,11 +569,36 @@ impl DerivationStore {
         }))
     }
 
+    /// A store that keeps at most `bytes` of all its kinds' values
+    /// together (as their [`DerivationKind::size_hint`]s state them):
+    /// past it, the values read least recently, of any kind, are released
+    /// and built again when read again. The value just built is always
+    /// kept until another lands, so a bound of one byte releases nearly
+    /// everything: the determinism gate (#440, #441) runs a check so,
+    /// to show that releasing only ever costs time.
+    #[must_use]
+    pub fn keeping(bytes: u64) -> Self {
+        Self(Arc::new(Shared {
+            keep: Some(bytes),
+            ..Shared::default()
+        }))
+    }
+
     /// Whether the store keeps the values it builds (not
     /// [`Self::forgetful`]).
     #[must_use]
     pub fn keeps(&self) -> bool {
         !self.0.forgets
+    }
+
+    /// The store as a keeper the check's memory budget may ask to release
+    /// what it holds ([`crate::MemoryBudget::reclaim_from`]): a step that
+    /// does not fit beside the kept values then releases the values read
+    /// least recently before it waits.
+    #[must_use]
+    pub fn reclaimer(&self) -> Weak<dyn Reclaim> {
+        let shared: Arc<dyn Reclaim> = self.0.clone();
+        Arc::downgrade(&shared)
     }
 
     /// The value of `key` of kind `D`, built once: by this caller, or by
@@ -454,7 +619,12 @@ impl DerivationStore {
         key: &D::Key,
     ) -> Result<Arc<D::Value>, DerivationError> {
         self.get_or_build::<Typed<D>, D::Key, Arc<D::Value>, _>(
-            (D::NAME, Some(D::VERSION), D::keep_bytes()),
+            Policy {
+                kind: D::NAME,
+                version: Some(D::VERSION),
+                keep: D::keep_bytes(),
+                through: D::read_through,
+            },
             Keyed::Borrowed(key, D::Key::clone),
             || {
                 let value = D::build(
@@ -515,28 +685,40 @@ impl DerivationStore {
 
     /// States again the bytes the value held for `key` of kind `D` holds,
     /// where it has grown since it was built (a memo it keeps), so the
-    /// statistics count what is held. Whether a value is held.
+    /// statistics and the budget count what is held. Past the kind's, the
+    /// store's or the budget's bound, other values are released, the ones
+    /// read least recently first. Whether a value is held.
     pub fn resize<D: DerivationKind>(&self, key: &D::Key, bytes: usize) -> bool {
+        let mut released = Vec::new();
         let mut state = self.lock();
+        let now = state.tick();
         let Some(table) = state.existing::<Typed<D>, D::Key, Arc<D::Value>>() else {
             return false;
         };
-        if let Some(Slot::Ready {
+        let Some(Slot::Ready {
             bytes: counted,
             held,
+            read,
             ..
         }) = table.entries.get_mut(key)
-        {
-            let bytes = bytes as u64;
-            table.statistics.bytes = table.statistics.bytes - *counted + bytes;
-            table.statistics.peak_bytes = table.statistics.peak_bytes.max(table.statistics.bytes);
-            *counted = bytes;
-            // The bytes held before are returned as the new ones are held.
-            *held = hold(bytes);
-            true
-        } else {
-            false
+        else {
+            return false;
+        };
+        let bytes = bytes as u64;
+        let before = *counted;
+        *counted = bytes;
+        *read = now;
+        // The bytes held before are returned as the new ones are held.
+        *held = hold(bytes);
+        table.statistics.bytes -= before;
+        table.grew(bytes);
+        if let Some(limit) = D::keep_bytes() {
+            table.evict(limit, now, &mut released);
         }
+        state.enforce(self.0.keep, now, &mut released);
+        drop(state);
+        drop(released);
+        true
     }
 
     /// The value held for `key` of kind `D`, if one is built.
@@ -549,18 +731,36 @@ impl DerivationStore {
     /// builds it again, to the same value. Whether it was held.
     pub fn release<D: DerivationKind>(&self, key: &D::Key) -> bool {
         let mut state = self.lock();
-        let Some(table) = state.existing::<Typed<D>, D::Key, Arc<D::Value>>() else {
-            return false;
-        };
-        if let Some(Slot::Ready { bytes, .. }) = table.entries.get(key) {
-            let bytes = *bytes;
-            table.entries.remove(key);
-            table.statistics.released += 1;
-            table.statistics.bytes -= bytes;
-            true
-        } else {
-            false
+        let released = state
+            .existing::<Typed<D>, D::Key, Arc<D::Value>>()
+            .and_then(|table| {
+                let value = table.remove(key)?;
+                table.statistics.released += 1;
+                Some(value)
+            });
+        drop(state);
+        released.is_some()
+    }
+
+    /// Releases every value of every kind whose readers the plan can tell
+    /// ([`DerivationKind::read_through`]) and that no rule still to run
+    /// reads: every service it is read through is `unread`. The runtime
+    /// calls it before each rule and after the last (#440). A kind whose
+    /// readers the plan cannot tell is kept. The number of values
+    /// released.
+    pub fn release_unread(&self, unread: impl Fn(TypeId) -> bool) -> u64 {
+        let mut released = Vec::new();
+        let mut state = self.lock();
+        for table in state.tables.values_mut() {
+            if table
+                .through()
+                .is_some_and(|through| through.iter().all(|service| unread(*service)))
+            {
+                table.retire(&mut released);
+            }
         }
+        drop(state);
+        released.len() as u64
     }
 
     /// How each kind was reused so far, by kind name.
@@ -577,8 +777,7 @@ impl DerivationStore {
     }
 
     fn lock(&self) -> MutexGuard<'_, State> {
-        // A panic never leaves the state half-changed: builds run unlocked.
-        self.0.state.lock().unwrap_or_else(PoisonError::into_inner)
+        self.0.lock()
     }
 
     /// What `read` reads of the value held for `key` in `Marker`'s table,
@@ -594,8 +793,8 @@ impl DerivationStore {
         S: Send + 'static,
     {
         let mut state = self.lock();
+        let now = state.tick();
         let table = state.existing::<Marker, K, S>()?;
-        let now = table.tick();
         match table.entries.get_mut(key)? {
             Slot::Ready {
                 value, read: last, ..
@@ -619,8 +818,8 @@ impl DerivationStore {
             return;
         }
         let mut state = self.lock();
-        let table = state.table::<Marker, K, S>(kind, None);
-        let now = table.tick();
+        let now = state.tick();
+        let table = state.table::<Marker, K, S>(Policy::unplanned(kind));
         match table
             .entries
             .insert(Arc::new(key), Slot::ready(value, 0, now))
@@ -649,8 +848,8 @@ impl DerivationStore {
             return;
         }
         let mut state = self.lock();
-        let table = state.table::<Marker, K, S>(kind, None);
-        let now = table.tick();
+        let now = state.tick();
+        let table = state.table::<Marker, K, S>(Policy::unplanned(kind));
         let fresh = || Slot::ready(S::default(), 0, now);
         let slot = match table.entries.get_mut(&key) {
             Some(slot) => {
@@ -663,7 +862,8 @@ impl DerivationStore {
             }
             None => table.entries.entry(Arc::new(key)).or_insert_with(fresh),
         };
-        if let Slot::Ready { value, .. } = slot {
+        if let Slot::Ready { value, read, .. } = slot {
+            *read = now;
             change(value);
         }
     }
@@ -672,12 +872,11 @@ impl DerivationStore {
     /// by the caller already building it and waited for, or built here by
     /// `build` (with the bytes it holds) and held.
     ///
-    /// Past `keep` bytes held in the table, the values read least recently
-    /// are released when this one lands. The table is named `kind`, of
-    /// `version` where it is a kind's.
+    /// Past the kind's, the store's or the budget's bound, the values read
+    /// least recently are released when this one lands.
     pub(crate) fn get_or_build<Marker, K, S, R>(
         &self,
-        (kind, version, keep): (&'static str, Option<DerivationVersion>, Option<u64>),
+        policy: Policy,
         key: Keyed<'_, K>,
         build: impl FnOnce() -> Result<(S, u64), DerivationError>,
         read: impl FnOnce(&S) -> R,
@@ -687,10 +886,11 @@ impl DerivationStore {
         K: Hash + Eq + Send + Sync + 'static,
         S: Send + 'static,
     {
+        let kind = policy.kind;
         let mut state = self.lock();
         let (key, flight) = loop {
-            let table = state.table::<Marker, K, S>(kind, version);
-            let now = table.tick();
+            let now = state.tick();
+            let table = state.table::<Marker, K, S>(policy);
             let building = match table.entries.get_mut(key.get()) {
                 Some(Slot::Ready {
                     value, read: last, ..
@@ -714,7 +914,7 @@ impl DerivationStore {
             if state.blocks(building, &within) {
                 return Err(DerivationError::Cycle { kind });
             }
-            let table = state.table::<Marker, K, S>(kind, version);
+            let table = state.table::<Marker, K, S>(policy);
             table.statistics.waits += 1;
             if let Some(Slot::Building { waiters, .. }) = table.entries.get_mut(key.get()) {
                 *waiters += 1;
@@ -741,7 +941,7 @@ impl DerivationStore {
             store: self,
             key,
             flight,
-            keep,
+            keep: policy.keep,
             landed: false,
             marker: PhantomData,
         };
@@ -749,6 +949,33 @@ impl DerivationStore {
         let started = Instant::now();
         let (value, bytes) = build()?;
         Ok(landing.land(value, bytes, started.elapsed(), read))
+    }
+}
+
+impl Shared {
+    fn lock(&self) -> MutexGuard<'_, State> {
+        // A panic never leaves the state half-changed: builds run unlocked.
+        self.state.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
+/// The check's memory budget asks the store to release what it keeps when
+/// a step needs the room (#440): the values read least recently, of any
+/// kind, first. Each is built again when read again, to the same value.
+impl Reclaim for Shared {
+    fn reclaim(&self, bytes: u64) -> u64 {
+        let mut released = Vec::new();
+        let mut freed = 0;
+        let mut state = self.lock();
+        while freed < bytes {
+            let Some(bytes) = state.evict_oldest(u64::MAX, &mut released) else {
+                break;
+            };
+            freed += bytes;
+        }
+        drop(state);
+        drop(released);
+        freed
     }
 }
 
@@ -804,8 +1031,9 @@ where
         let answer = read(&value);
         self.landed = true;
         // Released values are dropped after the store is unlocked.
-        let mut evicted = Vec::new();
+        let mut released = Vec::new();
         let mut state = self.store.lock();
+        let now = state.tick();
         // A value put in its place meanwhile stays: the build keeps its own.
         if let Some(table) = state.existing::<Marker, K, S>()
             && let Some(slot) = table.entries.get_mut(&*self.key)
@@ -821,22 +1049,18 @@ where
                 }
                 return answer;
             }
-            *slot = Slot::ready(value, bytes, 0);
-            let now = table.tick();
-            if let Some(Slot::Ready { read, .. }) = table.entries.get_mut(&*self.key) {
-                *read = now;
-            }
-            table.statistics.bytes += bytes;
-            table.statistics.peak_bytes = table.statistics.peak_bytes.max(table.statistics.bytes);
+            *slot = Slot::ready(value, bytes, now);
+            table.grew(bytes);
             if let Some(limit) = self.keep {
-                evicted = table.evict(limit, &self.key);
+                table.evict(limit, now, &mut released);
             }
             if waiters > 0 {
                 self.store.0.ended.notify_all();
             }
+            state.enforce(self.store.0.keep, now, &mut released);
         }
         drop(state);
-        drop(evicted);
+        drop(released);
         answer
     }
 }
@@ -868,6 +1092,46 @@ where
 }
 
 impl State {
+    /// The next read's time, store-wide.
+    fn tick(&mut self) -> u64 {
+        self.clock += 1;
+        self.clock
+    }
+
+    /// Releases the value read least recently, of any kind, read before
+    /// `before`; its bytes.
+    fn evict_oldest(&mut self, before: u64, released: &mut Vec<Released>) -> Option<u64> {
+        let table = self
+            .tables
+            .values_mut()
+            .filter_map(|table| table.oldest(before).map(|read| (read, table)))
+            .min_by_key(|(read, _)| *read)
+            .map(|(_, table)| table)?;
+        let (bytes, value) = table.evict_oldest(before)?;
+        released.push(value);
+        Some(bytes)
+    }
+
+    /// Releases the values read least recently, all read before `before`,
+    /// while the store holds more than `keep` bytes, or while the memory
+    /// budget of the calling thread's check is passed by what is admitted
+    /// and held: what is kept never takes the room of a step, nor takes
+    /// the check past its budget.
+    fn enforce(&mut self, keep: Option<u64>, before: u64, released: &mut Vec<Released>) {
+        let budget = memory::current();
+        loop {
+            let over_keep = keep.is_some_and(|keep| {
+                self.tables.values().map(|table| table.bytes()).sum::<u64>() > keep
+            });
+            let over_budget = budget
+                .as_ref()
+                .is_some_and(|budget| budget.in_use() > budget.limit());
+            if !(over_keep || over_budget) || self.evict_oldest(before, released).is_none() {
+                break;
+            }
+        }
+    }
+
     fn existing<Marker: 'static, K, S>(&mut self) -> Option<&mut Table<K, S>>
     where
         K: Send + Sync + 'static,
@@ -879,15 +1143,10 @@ impl State {
             .downcast_mut::<Table<K, S>>()
     }
 
-    /// `Marker`'s table, made under `kind`'s name (and `version`) when it
-    /// has none.
-    fn table<Marker: 'static, K, S>(
-        &mut self,
-        kind: &'static str,
-        version: Option<DerivationVersion>,
-    ) -> &mut Table<K, S>
+    /// `Marker`'s table, made by `policy` when it has none.
+    fn table<Marker: 'static, K, S>(&mut self, policy: Policy) -> &mut Table<K, S>
     where
-        K: Send + Sync + 'static,
+        K: Hash + Eq + Send + Sync + 'static,
         S: Send + 'static,
     {
         self.tables
@@ -896,11 +1155,11 @@ impl State {
                 Box::new(Table::<K, S> {
                     entries: HashMap::default(),
                     statistics: DerivationStatistics {
-                        kind,
-                        version,
+                        kind: policy.kind,
+                        version: policy.version,
                         ..DerivationStatistics::default()
                     },
-                    clock: 0,
+                    through: (policy.through)(),
                 })
             })
             .as_any_mut()

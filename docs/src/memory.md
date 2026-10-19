@@ -81,13 +81,35 @@ them, while it keeps the value (#408): a placement scene by its regions'
 corners, an indexed body by its triangles. A kind may also bound what the
 store keeps of it (`DerivationKind::keep_bytes`); the Axiolid adapter's
 scenes and indexed bodies keep at most a quarter of the budget each, and
-past it the values read least recently are released. Held bytes,
-never refused and never waiting, they leave less room to the steps
-admitted beside them. `MemoryBudget::headroom` tells a keeper what is
-left before it evicts, and `MemoryBudget::check` refuses a step taken
-from a kept value exactly as building it would be, so a refusal never
-depends on what was kept. `MemoryBudget::usage` reports the most admitted
-and held at once, the largest step and how many steps waited; `check --timings` prints it.
+past it the values read least recently are released. Held bytes are never
+refused and never wait, and what they hold never takes a step's room
+([#440](https://github.com/axioval/engine/issues/440)):
+
+- **After the last reader.** A kind names the services it is read through
+  (`DerivationKind::read_through`), and the runtime releases its values
+  before the first rule after the last one that may ask any of them
+  (`DerivationStore::release_unread`), as the rules' capabilities state
+  what they may ask (#410). A free-floor rule asks the free-space service
+  alone, a property rule no geometry, so scenes are released once the last
+  free-floor or circulation rule has run, and body indexes once the last
+  rule that may measure a pair has. Where a capability does not state what
+  it asks, it may ask anything, and the values wait for it.
+- **Within the budget.** Whenever a value lands or grows, the store
+  releases the values read least recently, of any kind, while what it
+  keeps and what running steps were admitted with pass the check's budget.
+  The run registers its store with the budget (`MemoryBudget::reclaim_from`),
+  so a step that does not fit beside the kept values has them released
+  before it waits. A released value is built again when read again.
+
+`MemoryBudget::headroom` tells a keeper what is left before it evicts,
+and `MemoryBudget::check` refuses a step taken from a kept value exactly
+as building it would be, so a refusal never depends on what was kept.
+`MemoryBudget::usage` reports the most admitted and held at once, the
+largest step, how many steps waited and how much kept memory was released
+for them; `check --timings` prints it, and `check --stats` one line a
+derivation kind with the most it held at once, its values released (by
+name or after their last reader) and those evicted to stay within a bound
+or the budget.
 
 ## Returning memory
 

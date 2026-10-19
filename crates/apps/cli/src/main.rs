@@ -367,6 +367,13 @@ struct CheckArgs {
     /// result is the same, only slower.
     #[arg(long, hide = true)]
     no_reuse: bool,
+    /// Keep at most this much of what the run's derivation store builds,
+    /// all kinds together, such as `1` or `64M`: past it, the values read
+    /// least recently are released and built again when read again. A
+    /// diagnostic of the determinism gate (#440): the result is the same
+    /// under any bound, only slower.
+    #[arg(long, value_name = "SIZE", value_parser = axioval::engine::memory::parse_size, hide = true)]
+    keep_derivations: Option<u64>,
     /// How much memory the check's heavy geometry steps may take at once,
     /// such as `8G` or `512M` (powers of 1024), or `none`. A step that
     /// would pass it beside the ones running waits for one to finish; a
@@ -1699,6 +1706,9 @@ fn check_runtime(
     let mut runtime = Runtime::new(registry).with_parallelism(parallelism(args.threads)?);
     if args.no_reuse {
         runtime = runtime.without_reuse();
+    }
+    if let Some(bytes) = args.keep_derivations {
+        runtime = runtime.with_kept_derivations(bytes);
     }
     if let Some(budget) = budget {
         runtime = runtime.with_memory_budget(budget.clone());

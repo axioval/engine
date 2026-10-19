@@ -8,13 +8,14 @@
 //! pair, rule and thread reading it (single flight), within the bound the
 //! adapter's kinds keep ([`crate::derivations::keep_bytes`]).
 
+use std::any::TypeId;
 use std::sync::Arc;
 
 use axiolid_core::Tolerance;
 use axiolid_mesh::{TriMesh, audit_mesh};
 use axioval_engine::{
-    Bounds3, DerivationError, DerivationKind, DerivationStore, DerivationVersion, Inputs,
-    ProximityError,
+    Bounds3, DerivationError, DerivationKind, DerivationStore, DerivationVersion,
+    DerivedRelationshipServiceHandle, Inputs, ProximityError, ProximityServiceHandle,
 };
 use axioval_ir::ObjectId;
 
@@ -151,6 +152,15 @@ impl DerivationKind for IndexedBodies {
 
     fn keep_bytes() -> Option<u64> {
         Some(derivations::keep_bytes())
+    }
+
+    /// Bodies are indexed for the proximity service's pairs, and for the
+    /// relationships derived from geometry, which measure through it.
+    fn read_through() -> Option<Vec<TypeId>> {
+        Some(vec![
+            TypeId::of::<ProximityServiceHandle>(),
+            TypeId::of::<DerivedRelationshipServiceHandle>(),
+        ])
     }
 }
 

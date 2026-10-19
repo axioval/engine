@@ -6,9 +6,10 @@
 //! Each variant runs the real binary, `axioval check --rule-status`, with
 //! the hidden diagnostics `--rule-order` (`plan`, `reversed`,
 //! `shuffled:SEED`: the order wherever the rules' dependencies leave it
-//! free) and `--no-reuse` (a derivation store that keeps nothing, and
-//! geometry services that keep no placement scene or footprint) beside
-//! `--threads`. Every variant's standard output must be the first's. The
+//! free), `--no-reuse` (a derivation store that keeps nothing, and
+//! geometry services that keep no placement scene or footprint) and
+//! `--keep-derivations` (a store releasing what it keeps past a bound,
+//! #440) beside `--threads`. Every variant's standard output must be the first's. The
 //! harness knows nothing of what a variant changes: a switch added later
 //! (a memory budget that makes evaluation wait, a store on disk) is one
 //! more row of [`VARIANTS`].
@@ -60,6 +61,21 @@ const VARIANTS: &[(&str, &[&str])] = &[
     (
         "plan, 4 threads, a small memory budget",
         &["--threads", "4", "--memory-budget", "64M"],
+    ),
+    // A store keeping one byte (#440): every value is released as soon as
+    // another lands and built again when read again, scenes and indexes
+    // between the subjects of one rule and between rules, and each read
+    // is charged as if built.
+    (
+        "shuffled (seed 3), 4 threads, keeping one byte of derivations",
+        &[
+            "--threads",
+            "4",
+            "--rule-order",
+            "shuffled:3",
+            "--keep-derivations",
+            "1",
+        ],
     ),
 ];
 

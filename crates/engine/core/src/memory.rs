@@ -22,7 +22,13 @@
 //! Values kept on purpose between steps (a derivation store's, #440) are
 //! counted with [`MemoryBudget::hold`]: never refused and never waiting,
 //! they leave less room to the steps admitted beside them, and
-//! [`MemoryBudget::headroom`] tells a keeper what it may still keep.
+//! [`MemoryBudget::headroom`] tells a keeper what it may still keep. A
+//! keeper that can release what it keeps registers with the budget
+//! ([`MemoryBudget::reclaim_from`], [`Reclaim`]): a step that does not fit
+//! beside what is admitted and held asks the keepers to release what it
+//! lacks before it waits, so what is kept never makes a step wait or the
+//! check pass its budget. Releasing a kept value only ever costs time: it
+//! is built again when read again.
 //!
 //! A step admitted on a thread that already holds an admission is admitted
 //! at once: it is part of the step that thread is running, and waiting
@@ -32,8 +38,18 @@
 
 use std::cell::RefCell;
 use std::fmt;
-use std::sync::{Arc, Condvar, Mutex, PoisonError};
+use std::sync::{Arc, Condvar, Mutex, PoisonError, Weak};
 use std::thread::ThreadId;
+
+/// A keeper of values held against a budget ([`MemoryBudget::hold`]) that
+/// can release them when a step needs the room ([`MemoryBudget::reclaim_from`]).
+pub trait Reclaim: Send + Sync {
+    /// Releases values worth at least `bytes` where it keeps that much, the
+    /// ones read least recently first; the bytes it released. Called
+    /// without the budget locked; a released value's [`Held`] is dropped
+    /// before it returns.
+    fn reclaim(&self, bytes: u64) -> u64;
+}
 
 /// How much memory a check's heavy steps may be admitted with at once.
 #[derive(Debug)]
@@ -41,6 +57,8 @@ pub struct MemoryBudget {
     limit: u64,
     state: Mutex<State>,
     freed: Condvar,
+    /// The keepers that release held values for a step needing the room.
+    keepers: Mutex<Vec<Weak<dyn Reclaim>>>,
 }
 
 #[derive(Debug, Default)]
@@ -57,6 +75,8 @@ struct State {
     waited: u64,
     /// The largest estimate admitted.
     largest: u64,
+    /// The bytes keepers released for steps needing the room.
+    reclaimed: u64,
 }
 
 /// A step refused because its estimate alone is more than the budget.
@@ -93,6 +113,9 @@ pub struct MemoryUsage {
     /// The largest one step's estimate admitted, in bytes: a budget at
     /// least as large refuses none of the steps admitted.
     pub largest: u64,
+    /// The bytes kept values were released by for steps needing the room
+    /// ([`MemoryBudget::reclaim_from`]).
+    pub reclaimed: u64,
 }
 
 /// One step's admission, released when dropped.
@@ -156,6 +179,7 @@ impl MemoryBudget {
             limit,
             state: Mutex::new(State::default()),
             freed: Condvar::new(),
+            keepers: Mutex::new(Vec::new()),
         }
     }
 
@@ -203,7 +227,39 @@ impl MemoryBudget {
             most: state.most,
             waited: state.waited,
             largest: state.largest,
+            reclaimed: state.reclaimed,
         }
+    }
+
+    /// Asks `keeper` to release what it holds against this budget
+    /// whenever a step does not fit beside what is admitted and held,
+    /// before the step waits, for as long as the keeper lives (the budget
+    /// keeps it weakly, so a check's store ends with its check).
+    pub fn reclaim_from(&self, keeper: Weak<dyn Reclaim>) {
+        let mut keepers = self.keepers.lock().unwrap_or_else(PoisonError::into_inner);
+        keepers.retain(|kept| kept.strong_count() > 0);
+        keepers.push(keeper);
+    }
+
+    /// Asks the keepers to release `bytes`, read least recently first,
+    /// until they have; the bytes released. Called without the budget's
+    /// state locked.
+    fn reclaim(&self, bytes: u64) -> u64 {
+        let keepers: Vec<Arc<dyn Reclaim>> = self
+            .keepers
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .iter()
+            .filter_map(Weak::upgrade)
+            .collect();
+        let mut released = 0;
+        for keeper in keepers {
+            if released >= bytes {
+                break;
+            }
+            released += keeper.reclaim(bytes - released);
+        }
+        released
     }
 
     /// Whether a step estimated at `estimate` bytes is refused by this
@@ -239,6 +295,21 @@ impl MemoryBudget {
         let mut waited = false;
         loop {
             let nested = state.running.iter().any(|(running, _)| *running == thread);
+            let needed = state
+                .admitted
+                .saturating_add(state.held)
+                .saturating_add(estimate);
+            if needed > self.limit && state.held > 0 {
+                // What is kept gives way before the step waits or runs
+                // past the budget.
+                drop(state);
+                let released = self.reclaim(needed - self.limit);
+                state = self.lock();
+                state.reclaimed = state.reclaimed.saturating_add(released);
+                if released > 0 {
+                    continue;
+                }
+            }
             let fits = state
                 .admitted
                 .saturating_add(state.held)

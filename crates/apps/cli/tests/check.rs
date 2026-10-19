@@ -5927,7 +5927,9 @@ fn with_geometry_stats_report_each_derivation_kind_outside_the_result() {
     assert!(bodies[1].starts_with("1 (axiolid-core "), "{bodies:?}");
     assert_eq!(bodies[3], "2", "{bodies:?}");
     assert_ne!(bodies[6], "0", "{bodies:?}");
-    assert_eq!((&*bodies[7], &*bodies[8]), ("0", "0"), "{bodies:?}");
+    // Both are released after the last rule that may ask for them
+    // (#440), none evicted.
+    assert_eq!((&*bodies[7], &*bodies[8]), ("2", "0"), "{bodies:?}");
 
     let (timed, _) = check(&["--timings"]);
     assert!(stderr(&timed).contains("timing:"), "{}", stderr(&timed));

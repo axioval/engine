@@ -15,6 +15,7 @@
 //! (`planar::budget::Work`, #434), so no search decides otherwise for
 //! what another kept (#441).
 
+use std::any::TypeId;
 use std::cell::OnceCell;
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
@@ -23,7 +24,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use axiolid_overlay::Region;
 use axioval_engine::{
     DerivationError, DerivationKind, DerivationStore, DerivationVersion, ElevationBand,
-    FreeSpaceError, Inputs, SweptDoor, derivation,
+    FreeSpaceError, FreeSpaceServiceHandle, Inputs, SweptDoor, derivation,
 };
 use axioval_ir::ObjectId;
 
@@ -231,6 +232,12 @@ impl DerivationKind for PlacementScenes {
 
     fn keep_bytes() -> Option<u64> {
         Some(derivations::keep_bytes())
+    }
+
+    /// Scenes are read by the free-space service's searches, estimates and
+    /// circulation maps alone.
+    fn read_through() -> Option<Vec<TypeId>> {
+        Some(vec![TypeId::of::<FreeSpaceServiceHandle>()])
     }
 }
 

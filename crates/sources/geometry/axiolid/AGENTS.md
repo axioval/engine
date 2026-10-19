@@ -185,7 +185,10 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   kind) with any new input, by `changes_value` wherever the fixture can
   show it. A scene keeps what its searches took (`Derived::keep`:
   clear parts, discs, simple and coarse regions, found regions) and states
-  its bytes again (`DerivationStore::resize`).
+  its bytes again (`DerivationStore::resize`). Scenes are read through
+  `FreeSpaceServiceHandle` alone (`read_through`, #440), so the run
+  releases them after the last rule that may ask the free-space service;
+  a new service reading scenes is added there, or its rules rebuild them.
   `AxiolidFreeSpaceService::with_reuse(false)` keeps no scene, footprint
   or column, for the determinism gate (#441); every answer must stay the
   same either way.
@@ -732,7 +735,11 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   its build calls (`derivations.rs`: `AXIOLID_CORE` and the rest, at the
   versions the workspace locks; the key-completeness test fails on any
   other): on a kernel upgrade, state the new version there and bump each
-  kind naming it whose results can change. Measurements: separation from `closest_points_on_triangles`, plan overlap from
+  kind naming it whose results can change. Indexes are read through
+  `ProximityServiceHandle` and `DerivedRelationshipServiceHandle`
+  (`read_through`, #440: the derived relationships measure through a
+  proximity service of their own); a new service reading them is added
+  there. Measurements: separation from `closest_points_on_triangles`, plan overlap from
   the oriented footprint overlay in `planar.rs` (only when the request asks,
   `ProximityRequest::with_plan_overlap`: an overlay per pair), and penetration witnessed by
   sampling points (including midpoints between an edge's crossings of the

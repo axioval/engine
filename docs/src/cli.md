@@ -833,8 +833,10 @@ the budget named (`… its estimated 2.3 GiB is more than the check's memory
 budget of 2.0 GiB`), on any number of threads alike. No step the adapter's
 own per-step budgets admit is estimated past 6 GiB, so the default refuses
 none. `--timings` ends with a line `memory: budget …, at most … admitted
-at once, the largest step …, N steps waited`: a budget at least the
-largest step refuses none of that check's steps. The budget bounds the steps, not the process:
+at once, the largest step …, N steps waited, … kept released for them`: a
+budget at least the largest step refuses none of that check's steps, and
+the last figure is what the derivation store released so a step had room
+(#440). The budget bounds the steps, not the process:
 the models, their meshes and the session's caches come on top (see
 [Memory budget](./memory.md)).
 

@@ -58,17 +58,18 @@ impl Stopwatch {
 
     /// Prints how the check's memory budget was used, if timings are on
     /// and there is one: `memory: budget …, at most … admitted at once, the
-    /// largest step …, N steps waited`.
+    /// largest step …, N steps waited, … kept released for them`.
     pub fn memory(&self, budget: Option<&MemoryBudget>) {
         if let (true, Some(budget)) = (self.is_on(), budget) {
             let usage = budget.usage();
             eprintln!(
                 "memory: budget {}, at most {} admitted at once, the largest step {}, {} steps \
-                 waited",
+                 waited, {} kept released for them",
                 Size(usage.limit),
                 Size(usage.most),
                 Size(usage.largest),
-                usage.waited
+                usage.waited,
+                Size(usage.reclaimed)
             );
         }
     }

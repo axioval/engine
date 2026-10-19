@@ -3,6 +3,7 @@
 #![allow(missing_docs, clippy::missing_errors_doc)]
 
 use std::{
+    any::TypeId,
     collections::{BTreeMap, BTreeSet},
     sync::Arc,
 };
@@ -1274,7 +1275,9 @@ pub use free_space::{
     PlacementRequest, PlacementShape, SignedDistanceInterval, SupportCoverageEvidence,
     SupportCoverageOutcome, SupportCoverageRequest, SupportedPlacement,
 };
-pub use geometry_demand::{GeometryDemand, GeometryReach, geometry_demand, rule_selectors};
+pub use geometry_demand::{
+    GeometryDemand, GeometryReach, geometry_demand, rule_selectors, services_asked,
+};
 pub use groupings::{
     DerivedGroups, GROUP_RELATIONSHIP_PREFIX, Group, Grouping, Membership, PropertyRead, group_id,
 };
@@ -1565,6 +1568,7 @@ pub struct Runtime {
     derivations: Option<DerivationObserver>,
     terrain: Option<TerrainServiceHandle>,
     reuse: bool,
+    keep: Option<u64>,
 }
 impl Runtime {
     /// Creates a runtime from a host-controlled registry.
@@ -1582,6 +1586,7 @@ impl Runtime {
             derivations: None,
             terrain: None,
             reuse: true,
+            keep: None,
         }
     }
     /// Installs what a run's expressions need: the plan's derived values
@@ -1705,6 +1710,19 @@ impl Runtime {
     #[must_use]
     pub fn without_reuse(mut self) -> Self {
         self.reuse = false;
+        self
+    }
+    /// Keeps at most `bytes` of what a run's derivation store builds, all
+    /// kinds together ([`DerivationStore::keeping`]): past it, the values
+    /// read least recently are released and built again when read again.
+    /// The report is the same byte for byte, only slower, however small
+    /// the bound (#440): every value is a pure function of its key, and a
+    /// budget charges a reused value as if built. Without it, a store is
+    /// bounded by its kinds' own bounds and the check's memory budget, and
+    /// releases each value after the last rule that may read it.
+    #[must_use]
+    pub fn with_kept_derivations(mut self, bytes: u64) -> Self {
+        self.keep = Some(bytes);
         self
     }
     /// Tells `observer`, at the end of each run, how its derivation store
@@ -2021,6 +2039,9 @@ impl Runtime {
         // relationship every path reads like a stated one.
         network::install(&mut services);
         let refiner = self.refiner_for(&plan)?;
+        // Each derivation is released after the last rule that may read
+        // it (#440).
+        let readers = LastReaders::of(&geometry_demand::services_asked(&plan, &self.registry));
         let mut summaries: Vec<RuleSummary> = Vec::new();
         let mut findings = Vec::new();
         let mut tables: Vec<ReportTable> = Vec::new();
@@ -2034,12 +2055,17 @@ impl Runtime {
         services.replace(plan.zones.clone());
         // One derivation store per check: nothing built in one run answers
         // another, whatever a host registered.
-        let store = if self.reuse {
-            DerivationStore::new()
-        } else {
-            DerivationStore::forgetful()
+        let store = match (self.reuse, self.keep) {
+            (false, _) => DerivationStore::forgetful(),
+            (true, Some(bytes)) => DerivationStore::keeping(bytes),
+            (true, None) => DerivationStore::new(),
         };
         services.replace(store.clone());
+        // What the store keeps gives way to a step needing the room under
+        // the check's memory budget (#440).
+        if let Some(budget) = memory::current() {
+            budget.reclaim_from(store.reclaimer());
+        }
         // A geometry adapter's service methods read no registry, so they
         // reach the store as the check's current one, on this thread and on
         // every worker it fans out to (`derivation::current`).
@@ -2060,7 +2086,8 @@ impl Runtime {
         );
         // What every completed rule reported, for the rules that read it.
         let mut outcomes = RuleOutcomes::default();
-        for rule in plan.rules {
+        for (index, rule) in plan.rules.into_iter().enumerate() {
+            store.release_unread(readers.unread_from(index));
             let capability = self
                 .registry
                 .get(&rule.capability)
@@ -2131,6 +2158,7 @@ impl Runtime {
             );
             not_evaluated.extend(collapse_source_wide(&rule_id, evaluation.not_evaluated));
         }
+        store.release_unread(readers.unread_from(usize::MAX));
         let refused = services
             .get::<Arc<expression::EvaluationBudget>>()
             .is_some_and(|budget| budget.refused());
@@ -2142,6 +2170,42 @@ impl Runtime {
             outcomes,
             refused,
         ))
+    }
+}
+
+/// The last rule (by its index in the plan) that may ask each host
+/// service, so the run releases the derivations read through a service no
+/// rule still to run asks (#440).
+struct LastReaders {
+    /// The last rule that may ask each service it names.
+    named: BTreeMap<TypeId, usize>,
+    /// The last rule that may ask any service.
+    any: Option<usize>,
+}
+
+impl LastReaders {
+    fn of(asked: &[Option<BTreeSet<TypeId>>]) -> Self {
+        let mut named = BTreeMap::new();
+        let mut any = None;
+        for (index, services) in asked.iter().enumerate() {
+            match services {
+                Some(services) => {
+                    for service in services {
+                        named.insert(*service, index);
+                    }
+                }
+                None => any = Some(index),
+            }
+        }
+        Self { named, any }
+    }
+
+    /// Whether no rule from the `index`th on asks a service.
+    fn unread_from(&self, index: usize) -> impl Fn(TypeId) -> bool + '_ {
+        move |service| {
+            self.any.is_none_or(|last| last < index)
+                && self.named.get(&service).is_none_or(|last| *last < index)
+        }
     }
 }
 

@@ -118,6 +118,27 @@ All notable changes are documented here. This project follows Semantic Versionin
   raised to 20,000 corners and a larger floor is still refused by name.
   Reports are byte-identical.
 
+- **Free floors of up to 50,000 corners are searched for a disc**
+  ([#435](https://github.com/axioval/engine/issues/435)). Past 20,000
+  corners a whole disc search spent most of its time simplifying the
+  regions it erodes, about 12 s at 50,000 corners to leave out 16 of
+  them. A region whose simplification would keep more than three quarters
+  of its corners is now searched as built at once, as the rectangle
+  search's coarse proofs already were, counted before anything is built.
+  Where the room is the scope and every obstacle sure, both sides' free
+  floor is one difference, and a witness is checked against the obstacles
+  only where one lies within a millimetre of it. Round a 1 x 1 column
+  toothed 0.5 mm deep, a whole search (radii 0.4, 1.0 and 1.6 m, release)
+  took up to 0.46 s at 10,000 corners, 3.6 s at 20,000 and 21 s and
+  250 MB at 50,000, and now 0.3 s, 0.9 s and 60 MB, and 4.5 s and 130 MB;
+  a toothed room, whose witness check holds its 50,000-corner floor,
+  still takes 0.2 s, 0.7 s and 4.1 s. The bound is raised to 50,000
+  corners: at 100,000 a search takes 16 to 18 s, the overlay checking
+  each large ring against itself once per difference or witness check,
+  and a larger floor is still refused by name. Where a simplification is
+  skipped the search reaches the verdicts it reached over the simplified
+  regions; reports are byte-identical.
+
 - **Findings name the facet an IDS states, and every property by the names
   it binds to** ([#375](https://github.com/axioval/engine/issues/375)).
   With `check --ids`, findings named the concepts the translation

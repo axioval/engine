@@ -189,7 +189,10 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   (`placement::simplified`, `Scene::simple`: corners within
   `SIMPLIFY_WITHIN_METRES` of their neighbours' chord cut off for a
   witness's clear part and the sure obstacles, filled for the absence's
-  clear part and the obstacles, each checked on its side by the overlay),
+  clear part and the obstacles, each checked on its side by the overlay,
+  and none where it would keep more than three quarters of the corners,
+  counted before it is built, #435: building and checking it cost 12 s
+  at 50,000 corners for 16 fewer),
   and again over the regions as built only where that is undecided or
   refused; a disc morphology's cost grows faster than the edges,
   sub-millimetre ones included. Every disc morphology of the circle
@@ -198,10 +201,15 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   so inner stays inner for witnesses and outer outer for absences; never
   use a fast result on the other side, nor read a distance from it
   without adding `Region::excess`. A region past `MORPHOLOGY_POINTS`
-  (20,000) corners is refused by name (#394), never eroded; it is a
-  safety net (#402, #414), not a cost model, so raise it only with
+  (50,000) corners is refused by name (#394), never eroded; it is a
+  safety net (#402, #414, #435), not a cost model, so raise it only with
   timings of a hole lined by dense teeth (the whole search, not only the
-  morphology: past 20,000 the simplified regions cost most). Keep the pole first, which
+  morphology: past 50,000 the overlay's check of each large ring against
+  itself, quadratic in its corners, costs most, once per difference and
+  per witness check). `Scene::clear` takes one difference for both
+  sides where the room is the scope and every obstacle sure, and
+  `Scene::fits` asks no intersection where every obstacle's box lies
+  `APART_METRES` from the witness's. Keep the pole first, which
   needs no morphology. `any_rectangle` takes its first interval
   witness first, as it always did, then may end the search over every
   angle at once (#371): `Scene::fits_nowhere` (the clear part eroded by an

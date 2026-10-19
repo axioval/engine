@@ -53,6 +53,22 @@ pub(crate) const KNIFE_EDGE_METRES: f64 = 1.0e-6;
 /// Overlap areas below this are contact, not intersection.
 const CONTACT_AREA_M2: f64 = 1.0e-9;
 
+/// How far apart two rings' boxes lie, at least, for a witness check to
+/// take them as sharing nothing without asking the overlay
+/// ([`Scene::fits`]): far above its snapping.
+const APART_METRES: f64 = 1.0e-3;
+
+/// The least and greatest corner of `ring`'s box; `None` for no corners.
+fn ring_box(ring: &Ring) -> Option<(Point2, Point2)> {
+    let first = *ring.points.first()?;
+    Some(ring.points.iter().fold((first, first), |(low, high), p| {
+        (
+            Point2::new(low.x.min(p.x), low.y.min(p.y)),
+            Point2::new(high.x.max(p.x), high.y.max(p.y)),
+        )
+    }))
+}
+
 /// Fixed-orientation checks an any-orientation search may spend.
 const ANGLE_BUDGET: usize = 512;
 
@@ -469,7 +485,10 @@ impl Scene {
     /// The scope less the obstacles ([`clear_of`]): `scope` less
     /// `obstacles` for a witness, `room` less `sure` for an absence
     /// (`absence`). Taken once per scene; a refusal is not kept, so each
-    /// search asking for it is refused alike.
+    /// search asking for it is refused alike. Where every obstacle is
+    /// sure and the room is the scope, both are one difference, taken
+    /// once (#435): at 50,000 corners round a toothed hole it took about
+    /// 4 s each.
     fn clear(&self, absence: bool) -> Result<&Region, FreeSpaceError> {
         let (scope, obstacles) = if absence {
             (&self.room, &self.sure)
@@ -485,7 +504,11 @@ impl Scene {
         if let Some(clear) = cell.get() {
             return Ok(clear);
         }
-        let clear = clear_of(scope, obstacles, self.tolerance)?;
+        let alike = || self.scope == self.room && self.obstacles == self.sure;
+        let clear = match self.clear[usize::from(!absence)].get() {
+            Some(other) if alike() => other.clone(),
+            _ => clear_of(scope, obstacles, self.tolerance)?,
+        };
         Ok(cell.get_or_init(|| clear))
     }
 
@@ -493,7 +516,12 @@ impl Scene {
     /// ([`simplified`], #400) on the side the search may use it: the
     /// witnesses' clear part from inside (`0`), the absence's from around
     /// (`1`), the obstacles from around (`2`) and the sure ones from
-    /// inside (`3`). `None` where nothing simplifies. Taken once.
+    /// inside (`3`). `None` where nothing simplifies, or where it would
+    /// keep more than three quarters of the region's corners, as
+    /// [`Self::coarse`] does (#435): the search then costs about what it
+    /// does over the region as built, and building the simplification
+    /// and checking it by an overlay cost more than the search (12 s at
+    /// 50,000 corners for 16 fewer). Taken once.
     fn simple(&self, which: usize) -> Option<&Region> {
         self.simple[which]
             .get_or_init(|| {
@@ -503,7 +531,14 @@ impl Scene {
                     2 => (&self.obstacles, Side::Around),
                     _ => (&self.sure, Side::Inside),
                 };
-                simplified(region, SIMPLIFY_WITHIN_METRES, side, self.tolerance)
+                let most = 3 * region_points(region) / 4;
+                simplified(
+                    region,
+                    SIMPLIFY_WITHIN_METRES,
+                    side,
+                    self.tolerance,
+                    Some(most),
+                )
             })
             .as_ref()
     }
@@ -545,9 +580,11 @@ impl Scene {
             .ok()?;
         self.coarse[which]
             .get_or_init(|| {
-                simplified(region, COARSE_WITHIN_METRES, side, self.tolerance).filter(|coarse| {
-                    !coarse.is_empty() && 4 * region_points(coarse) <= 3 * region_points(region)
-                })
+                simplified(region, COARSE_WITHIN_METRES, side, self.tolerance, None).filter(
+                    |coarse| {
+                        !coarse.is_empty() && 4 * region_points(coarse) <= 3 * region_points(region)
+                    },
+                )
             })
             .as_ref()
     }
@@ -718,8 +755,10 @@ const SIMPLIFY_PASSES: usize = 8;
 /// the region (#400): for [`Side::Inside`] a corner whose removal cuts off
 /// the triangle it spans, for [`Side::Around`] one whose removal fills it,
 /// and only where no other corner of the region lies in that triangle, so
-/// no ring comes to cross another. `None` where nothing is left out, the
-/// overlay refuses the result or does not find it on its side.
+/// no ring comes to cross another. `None` where nothing is left out, where
+/// more than `most` corners are kept (known before the result is built and
+/// checked), or where the overlay refuses the result or does not find it on
+/// its side.
 ///
 /// A disc morphology's arrangement grows with every edge, however short,
 /// and overlay output along tessellated or flush bodies is jagged with
@@ -732,6 +771,7 @@ pub(crate) fn simplified(
     within: f64,
     side: Side,
     tolerance: Tolerance,
+    most: Option<usize>,
 ) -> Option<Region> {
     let cross =
         |o: Point2, a: Point2, b: Point2| (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
@@ -833,7 +873,7 @@ pub(crate) fn simplified(
             holes: rings,
         });
     }
-    if removed == 0 {
+    if removed == 0 || most.is_some_and(|most| corners.len() - removed > most) {
         return None;
     }
     let simple = Region::new(polygons, tolerance).ok()?;
@@ -1042,7 +1082,21 @@ impl Scene {
     }
 
     /// Whether `ring` lies in the scope and meets no obstacle, up to contact.
+    /// Obstacles whose box lies more than [`APART_METRES`] from the ring's
+    /// share nothing with it, so where every one does, no overlay is asked
+    /// (#435): each checks every ring of its operands against itself, and
+    /// a toothed column of 50,000 corners took it about 4 s a candidate.
     fn fits(&self, ring: Ring) -> Result<bool, FreeSpaceError> {
+        let near = ring_box(&ring).is_some_and(|(low, high)| {
+            self.obstacles.polygons().iter().any(|polygon| {
+                ring_box(&polygon.outer).is_none_or(|(a, b)| {
+                    a.x - APART_METRES <= high.x
+                        && low.x <= b.x + APART_METRES
+                        && a.y - APART_METRES <= high.y
+                        && low.y <= b.y + APART_METRES
+                })
+            })
+        });
         let body = Region::new(
             vec![Polygon {
                 outer: ring,
@@ -1057,6 +1111,9 @@ impl Scene {
             .area();
         if outside > CONTACT_AREA_M2 {
             return Ok(false);
+        }
+        if !near {
+            return Ok(true);
         }
         let blocked = body
             .intersection(&self.obstacles, self.tolerance)
@@ -1406,13 +1463,16 @@ const FAST: MorphologyMode = MorphologyMode::fast(1.0e-3);
 /// about its corners: around a 1 x 1 column whose sides are toothed
 /// 0.5 mm deep, an erosion by a disc of 0.4 m takes about 0.04 s at
 /// 10,000 corners, 0.08 s at 20,000 and 0.2 s at 50,000 (the exact one
-/// 14 to 36 s and 7.5 GB at 10,000). The rest of the search does not
-/// yet: a whole search takes up to 0.5 s at 10,000 corners, 3.6 s and
-/// 100 MB at 20,000, and 21 s and 250 MB at 50,000, where the regions
-/// simplified from around cost most. Teeth far deeper than they are
-/// apart fill no notch within the budget and still cost what the exact
-/// morphology does. A search past it is refused with the count.
-pub(crate) const MORPHOLOGY_POINTS: usize = 20_000;
+/// 14 to 36 s and 7.5 GB at 10,000). Since the search skips a
+/// simplification keeping nearly every corner (#435), a whole search
+/// round such a column takes up to 0.3 s at 10,000 corners, 0.9 s and
+/// 60 MB at 20,000, 4.5 s and 130 MB at 50,000 and 18 s at 100,000: the
+/// overlay checks each large ring against itself, in time growing with
+/// the square of its corners, once per difference or witness check.
+/// Teeth far deeper than they are apart fill no notch within the budget
+/// and still cost what the exact morphology does. A search past it is
+/// refused with the count.
+pub(crate) const MORPHOLOGY_POINTS: usize = 50_000;
 
 /// `region` where a disc search may erode or dilate it, else the refusal
 /// naming its corners ([`MORPHOLOGY_POINTS`]).
@@ -2471,29 +2531,109 @@ mod tests {
         assert!(matches!(circle(&deep, 0.4), Ok(Search::Found { .. })));
     }
 
-    /// A free floor of more corners than a disc search erodes (20,006) is
-    /// refused with their count (#394), not eroded until memory runs out; a disc
-    /// that fits at the floor's estimated pole is still found there.
+    /// A free floor of more corners than a disc search erodes (52,056:
+    /// a row of 26 posts 0.1 m wide along a 3 x 3 room's wall, each
+    /// toothed 0.5 mm deep every 0.1 mm) is refused with their count
+    /// (#394), not eroded until memory runs out; a disc that fits at the
+    /// floor's estimated pole is still found there.
     #[test]
     fn a_floor_past_the_corner_budget_is_refused_by_name() {
-        let mut scene = jagged_scene((0.0, 0.0), 0.001);
-        let column = Region::new(
-            vec![Polygon {
-                outer: jagged(1.0, 1.0, 1.0, 1.0e-4, 5.0e-4),
+        let mut scene = scene((0.0, 0.0), (3.0, 3.0), &[], &[]);
+        let posts: Vec<Polygon> = (0..26)
+            .map(|i| Polygon {
+                outer: jagged(0.05 + 0.11 * f64::from(i), 0.05, 0.1, 1.0e-4, 5.0e-4),
                 holes: Vec::new(),
-            }],
-            scene.tolerance,
-        )
-        .unwrap();
-        scene.obstacles = column.clone();
-        scene.sure = column;
+            })
+            .collect();
+        let posts = Region::new(posts, scene.tolerance).unwrap();
+        scene.obstacles = posts.clone();
+        scene.sure = posts;
         assert!(region_points(scene.clear(true).unwrap()) > MORPHOLOGY_POINTS);
-        let refused = circle(&scene, 1.0).expect_err("refused");
+        let refused = circle(&scene, 1.6).expect_err("refused");
         assert!(
-            refused.to_string().contains("corners, more than the 20000"),
+            refused.to_string().contains("corners, more than the 50000"),
             "{refused}"
         );
         assert!(matches!(circle(&scene, 0.4), Ok(Search::Found { .. })));
+    }
+
+    /// Round a column toothed every millimetre (2,002 corners), 0.5 mm
+    /// deep but for the first tenth of each side, 0.05 mm deep there,
+    /// simplifying leaves out only the shallow teeth, so the search skips
+    /// it (#435) and asks over the regions as built at once: it reaches
+    /// the verdicts it reached over the simplified regions, and those of
+    /// the search before #400, near the origin and far from it.
+    #[test]
+    fn a_search_skipping_a_simplification_that_keeps_nearly_every_corner_decides_alike() {
+        let corner = 2.0 - 2.0_f64.sqrt();
+        let kind = |search: Result<Search, FreeSpaceError>| match search {
+            Ok(Search::Found { .. }) => "found",
+            Ok(Search::Nowhere) => "nowhere",
+            Ok(Search::Undecided(_)) => "undecided",
+            Err(_) => "refused",
+        };
+        for offset in [(0.0, 0.0), (643_692.0, 5_649_156.0)] {
+            let toothed = || {
+                let mut scene = scene(offset, (3.0, 3.0), &[], &[]);
+                let mut outer = jagged(offset.0 + 1.0, offset.1 + 1.0, 1.0, 1.0e-3, 5.0e-4);
+                // The first 100 teeth of each side (of 500) are shallow.
+                for (k, point) in outer.points.iter_mut().enumerate() {
+                    let k = k % 1_001;
+                    if k % 2 == 1 && k < 200 {
+                        let base = if point.y < offset.1 + 1.5 { 1.0 } else { 2.0 };
+                        point.y = offset.1 + base + (point.y - offset.1 - base) / 10.0;
+                    }
+                }
+                let column = Region::new(
+                    vec![Polygon {
+                        outer,
+                        holes: Vec::new(),
+                    }],
+                    scene.tolerance,
+                )
+                .unwrap();
+                scene.obstacles = column.clone();
+                scene.sure = column;
+                scene
+            };
+            // The simplified regions as the search took them before.
+            let simplified_scene = || {
+                let scene = toothed();
+                let t = scene.tolerance;
+                for which in 0..4 {
+                    let (region, side) = match which {
+                        0 => (scene.clear(false).unwrap().clone(), Side::Inside),
+                        1 => (scene.clear(true).unwrap().clone(), Side::Around),
+                        2 => (scene.obstacles.clone(), Side::Around),
+                        _ => (scene.sure.clone(), Side::Inside),
+                    };
+                    let simple = simplified(&region, SIMPLIFY_WITHIN_METRES, side, t, None);
+                    scene.simple[which].set(simple).unwrap();
+                }
+                scene
+            };
+            let skipped = toothed();
+            let before = simplified_scene();
+            let clear = region_points(skipped.clear(true).unwrap());
+            let simple = before.simple(1).expect("simplified");
+            assert!(4 * region_points(simple) > 3 * clear, "{offset:?}");
+            assert!(region_points(simple) < clear, "{offset:?}");
+            assert!(skipped.simple(1).is_none(), "{offset:?}");
+            assert!(skipped.simple(3).is_none(), "{offset:?}");
+            for radius in [0.4, corner - 0.01, corner + 0.01, 1.0] {
+                let now = kind(circle(&toothed(), radius));
+                assert_eq!(
+                    now,
+                    kind(circle(&simplified_scene(), radius)),
+                    "{offset:?}, radius {radius}"
+                );
+                assert_eq!(
+                    now,
+                    kind(circle_before(&toothed(), radius)),
+                    "{offset:?}, radius {radius}"
+                );
+            }
+        }
     }
 
     /// The circle search as it ran before #400: the witness first, then

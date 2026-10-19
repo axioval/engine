@@ -3,10 +3,11 @@
 use std::sync::Arc;
 
 use axioval_engine::{
-    CompleteRelationshipEdges, CompleteRelationshipSelection, RELATIONSHIP_KIND_PREFIX,
-    RelationshipEdge, RelationshipEdgesRequest, RelationshipKind, RelationshipQuery,
-    RelationshipSelectionError, RelationshipSelectionRequest, RelationshipSelectionService,
-    RelationshipSelectionServiceHandle, SemanticRelationship, TraversalDirection,
+    CandidateUniverse, CompleteRelationshipEdges, CompleteRelationshipSelection,
+    RELATIONSHIP_KIND_PREFIX, RelationshipEdge, RelationshipEdgesRequest, RelationshipKind,
+    RelationshipQuery, RelationshipSelectionError, RelationshipSelectionRequest,
+    RelationshipSelectionService, RelationshipSelectionServiceHandle, SemanticRelationship,
+    TraversalDirection,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
@@ -106,6 +107,48 @@ fn candidates_and_universe_are_canonically_ordered() {
     assert_eq!(request.candidate_universe(), &[object("a"), object("z")]);
     let selection = exact_selection(request, vec![object("z"), object("a")]);
     assert_eq!(selection.candidates(), &[object("a"), object("z")]);
+}
+
+/// A universe built once binds every request to the same objects a request
+/// building its own would hold, and a federation's part of it is kept with
+/// it rather than copied per request.
+#[test]
+fn a_shared_universe_binds_requests_as_a_copied_one_does() {
+    let universe = CandidateUniverse::try_new(vec![object("z"), object("a"), other("b")]).unwrap();
+    assert_eq!(
+        universe.objects(),
+        &[object("a"), object("z"), other("b")][..]
+    );
+    let query = RelationshipQuery::Related {
+        relationship: SemanticRelationship::try_new("contains").unwrap(),
+        direction: TraversalDirection::Forward,
+        follow_chain: false,
+    };
+    let shared =
+        RelationshipSelectionRequest::within(object("checked"), universe.clone(), query.clone());
+    let copied = RelationshipSelectionRequest::try_new(
+        object("checked"),
+        vec![other("b"), object("z"), object("a")],
+        query,
+    )
+    .unwrap();
+    assert_eq!(shared, copied);
+    assert!(shared.universe().shares(&universe));
+    assert!(!copied.universe().shares(&universe));
+
+    let sources = std::collections::BTreeSet::from([source()]);
+    let part = universe.within_sources(&sources);
+    assert_eq!(part.objects(), &[object("a"), object("z")][..]);
+    assert!(universe.within_sources(&sources).shares(&part));
+    assert!(part.within_sources(&sources).shares(&part));
+    assert_eq!(
+        CandidateUniverse::try_new(vec![object("a"), object("a")]).err(),
+        Some(RelationshipSelectionError::DuplicateCandidate)
+    );
+}
+
+fn other(local_id: &str) -> ObjectId {
+    ObjectId::new(SourceId::new("test", "other").unwrap(), local_id).unwrap()
 }
 
 #[test]

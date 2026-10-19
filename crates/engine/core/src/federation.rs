@@ -169,17 +169,13 @@ impl RelationshipSelectionService for Router<RelationshipSelectionServiceHandle>
         // A member cannot relate objects it does not hold, so it is asked
         // over its own part of the universe and its answer is bound back to
         // the whole request.
-        let universe: Vec<ObjectId> = request
-            .candidate_universe()
-            .iter()
-            .filter(|candidate| sources.contains(&candidate.source))
-            .cloned()
-            .collect();
-        let narrowed = RelationshipSelectionRequest::try_new(
+        // The part is kept with the universe, so the many requests over one
+        // universe narrow it once per member.
+        let narrowed = RelationshipSelectionRequest::within(
             request.anchor().clone(),
-            universe,
+            request.universe().within_sources(sources),
             request.query().clone(),
-        )?
+        )
         .with_absent_ends(request.absent_ends());
         let selection = member.select(&narrowed)?;
         CompleteRelationshipSelection::try_new(

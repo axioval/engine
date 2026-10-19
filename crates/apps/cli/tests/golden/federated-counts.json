@@ -1,0 +1,1132 @@
+{
+  "report": {
+    "findings": [
+      {
+        "id": "8c9c064a-bc66-5ab4-a57d-e6d1b95b299d",
+        "rule_id": "outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "arch.ifc"
+          },
+          "local_id": "#10"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure then IfcRelDefinesByType; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "arch.ifc"
+            },
+            "locator": "ifc:sha256:c404e25973015e5b9b1bcfe23e744b7a4194a797d2bd583c95fc7f959f653195:relationship-scan:IfcRelContainedInSpatialStructure:3",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "8efc9f11-4d2a-5870-8880-c8f3c0bc4990",
+        "rule_id": "outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "arch.ifc"
+          },
+          "local_id": "#11"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure then IfcRelDefinesByType; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "arch.ifc"
+            },
+            "locator": "ifc:sha256:c404e25973015e5b9b1bcfe23e744b7a4194a797d2bd583c95fc7f959f653195:relationship-scan:IfcRelContainedInSpatialStructure:3",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "ce8490fe-9e4d-54a5-ad9b-0240722f48f6",
+        "rule_id": "outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "arch.ifc"
+          },
+          "local_id": "#12"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure then IfcRelDefinesByType; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "arch.ifc"
+            },
+            "locator": "ifc:sha256:c404e25973015e5b9b1bcfe23e744b7a4194a797d2bd583c95fc7f959f653195:relationship-scan:IfcRelContainedInSpatialStructure:3",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "9a762a79-c264-5282-9fe4-02fb9d19f903",
+        "rule_id": "outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "arch.ifc"
+          },
+          "local_id": "#13"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure then IfcRelDefinesByType; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "arch.ifc"
+            },
+            "locator": "ifc:sha256:c404e25973015e5b9b1bcfe23e744b7a4194a797d2bd583c95fc7f959f653195:relationship-scan:IfcRelContainedInSpatialStructure:3",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "f85a1680-baf2-560e-a0c6-3f133f48b1e5",
+        "rule_id": "outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "arch.ifc"
+          },
+          "local_id": "#14"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure then IfcRelDefinesByType; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "arch.ifc"
+            },
+            "locator": "ifc:sha256:c404e25973015e5b9b1bcfe23e744b7a4194a797d2bd583c95fc7f959f653195:relationship-scan:IfcRelContainedInSpatialStructure:3",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "fb08003f-e3f5-5c1a-a320-370c99b9cb21",
+        "rule_id": "outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "arch.ifc"
+          },
+          "local_id": "#15"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure then IfcRelDefinesByType; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "arch.ifc"
+            },
+            "locator": "ifc:sha256:c404e25973015e5b9b1bcfe23e744b7a4194a797d2bd583c95fc7f959f653195:relationship-scan:IfcRelContainedInSpatialStructure:3",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "ef5871a4-cbea-5fdd-9091-69ea8fe4ea4b",
+        "rule_id": "outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "arch.ifc"
+          },
+          "local_id": "#16"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure then IfcRelDefinesByType; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "arch.ifc"
+            },
+            "locator": "ifc:sha256:c404e25973015e5b9b1bcfe23e744b7a4194a797d2bd583c95fc7f959f653195:relationship-scan:IfcRelContainedInSpatialStructure:3",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "a15e34f6-8323-5a72-9830-8693bd4ae4a6",
+        "rule_id": "outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "arch.ifc"
+          },
+          "local_id": "#17"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure then IfcRelDefinesByType; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "arch.ifc"
+            },
+            "locator": "ifc:sha256:c404e25973015e5b9b1bcfe23e744b7a4194a797d2bd583c95fc7f959f653195:relationship-scan:IfcRelContainedInSpatialStructure:3",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "b185abf4-088b-5f8d-ad8a-914a86b9a255",
+        "rule_id": "outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "arch.ifc"
+          },
+          "local_id": "#18"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure then IfcRelDefinesByType; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "arch.ifc"
+            },
+            "locator": "ifc:sha256:c404e25973015e5b9b1bcfe23e744b7a4194a797d2bd583c95fc7f959f653195:relationship-scan:IfcRelContainedInSpatialStructure:3",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "654e45e7-0837-5fba-b603-e6d98b6b408f",
+        "rule_id": "outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "arch.ifc"
+          },
+          "local_id": "#19"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure then IfcRelDefinesByType; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "arch.ifc"
+            },
+            "locator": "ifc:sha256:c404e25973015e5b9b1bcfe23e744b7a4194a797d2bd583c95fc7f959f653195:relationship-scan:IfcRelContainedInSpatialStructure:3",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "74798b62-8fa1-5d1c-9fa1-a957e0233d9d",
+        "rule_id": "outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "arch.ifc"
+          },
+          "local_id": "#20"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure then IfcRelDefinesByType; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "arch.ifc"
+            },
+            "locator": "ifc:sha256:c404e25973015e5b9b1bcfe23e744b7a4194a797d2bd583c95fc7f959f653195:relationship-scan:IfcRelContainedInSpatialStructure:3",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "34ef763b-83d3-58db-8b7c-0e238cef0617",
+        "rule_id": "outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "arch.ifc"
+          },
+          "local_id": "#21"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure then IfcRelDefinesByType; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "arch.ifc"
+            },
+            "locator": "ifc:sha256:c404e25973015e5b9b1bcfe23e744b7a4194a797d2bd583c95fc7f959f653195:relationship-scan:IfcRelContainedInSpatialStructure:3",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "48dd3455-dad3-54ba-aecd-43276f19bc7a",
+        "rule_id": "outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "arch.ifc"
+          },
+          "local_id": "#22"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure then IfcRelDefinesByType; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "arch.ifc"
+            },
+            "locator": "ifc:sha256:c404e25973015e5b9b1bcfe23e744b7a4194a797d2bd583c95fc7f959f653195:relationship-scan:IfcRelContainedInSpatialStructure:3",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "f08b4fb0-5e5c-5563-8f8e-7657c64b23e4",
+        "rule_id": "outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "arch.ifc"
+          },
+          "local_id": "#23"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure then IfcRelDefinesByType; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "arch.ifc"
+            },
+            "locator": "ifc:sha256:c404e25973015e5b9b1bcfe23e744b7a4194a797d2bd583c95fc7f959f653195:relationship-scan:IfcRelContainedInSpatialStructure:3",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "42bc100e-3cab-581b-b736-5d329fe84e4f",
+        "rule_id": "outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "arch.ifc"
+          },
+          "local_id": "#24"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure then IfcRelDefinesByType; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "arch.ifc"
+            },
+            "locator": "ifc:sha256:c404e25973015e5b9b1bcfe23e744b7a4194a797d2bd583c95fc7f959f653195:relationship-scan:IfcRelContainedInSpatialStructure:3",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "c81c7cfe-5841-5e0e-9917-5bc024c59f6b",
+        "rule_id": "outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "arch.ifc"
+          },
+          "local_id": "#25"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure then IfcRelDefinesByType; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "arch.ifc"
+            },
+            "locator": "ifc:sha256:c404e25973015e5b9b1bcfe23e744b7a4194a797d2bd583c95fc7f959f653195:relationship-scan:IfcRelContainedInSpatialStructure:3",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "bd73bbf7-18d2-5501-b221-5aba0e3a7444",
+        "rule_id": "outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "arch.ifc"
+          },
+          "local_id": "#26"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure then IfcRelDefinesByType; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "arch.ifc"
+            },
+            "locator": "ifc:sha256:c404e25973015e5b9b1bcfe23e744b7a4194a797d2bd583c95fc7f959f653195:relationship-scan:IfcRelContainedInSpatialStructure:3",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "e21a7cde-2c0a-5d6e-80c7-df934c05900e",
+        "rule_id": "outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "electrical.ifc"
+          },
+          "local_id": "#10"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure then IfcRelDefinesByType; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "electrical.ifc"
+            },
+            "locator": "ifc:sha256:aca45dd6afddf5153f685029f15e08a81970118279340e5787da6798fc978d16:relationship-scan:IfcRelContainedInSpatialStructure:15",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "ab840f0b-48fb-567d-ad9a-9fdb0f5a423a",
+        "rule_id": "outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "electrical.ifc"
+          },
+          "local_id": "#14"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure then IfcRelDefinesByType; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "electrical.ifc"
+            },
+            "locator": "ifc:sha256:aca45dd6afddf5153f685029f15e08a81970118279340e5787da6798fc978d16:relationship-scan:IfcRelContainedInSpatialStructure:15",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "983ee03b-c344-5825-87c9-845f558a9220",
+        "rule_id": "outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "electrical.ifc"
+          },
+          "local_id": "#18"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure then IfcRelDefinesByType; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "electrical.ifc"
+            },
+            "locator": "ifc:sha256:aca45dd6afddf5153f685029f15e08a81970118279340e5787da6798fc978d16:relationship-scan:IfcRelContainedInSpatialStructure:15",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "d6634388-0eab-519e-9a21-ce21e4bbe219",
+        "rule_id": "outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "electrical.ifc"
+          },
+          "local_id": "#22"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure then IfcRelDefinesByType; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "electrical.ifc"
+            },
+            "locator": "ifc:sha256:aca45dd6afddf5153f685029f15e08a81970118279340e5787da6798fc978d16:relationship-scan:IfcRelContainedInSpatialStructure:15",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "0b81c9b5-5cb8-50c5-ab75-5fb80411f606",
+        "rule_id": "outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "electrical.ifc"
+          },
+          "local_id": "#26"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure then IfcRelDefinesByType; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "electrical.ifc"
+            },
+            "locator": "ifc:sha256:aca45dd6afddf5153f685029f15e08a81970118279340e5787da6798fc978d16:relationship-scan:IfcRelContainedInSpatialStructure:15",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "70413349-7b0c-5d0d-9851-c8b4e78123b5",
+        "rule_id": "typed-outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "arch.ifc"
+          },
+          "local_id": "#10"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "arch.ifc"
+            },
+            "locator": "ifc:sha256:c404e25973015e5b9b1bcfe23e744b7a4194a797d2bd583c95fc7f959f653195:relationship-scan:IfcRelContainedInSpatialStructure:3",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "d1c67b62-8232-58ef-b5db-7118ebf6f31f",
+        "rule_id": "typed-outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "arch.ifc"
+          },
+          "local_id": "#11"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "arch.ifc"
+            },
+            "locator": "ifc:sha256:c404e25973015e5b9b1bcfe23e744b7a4194a797d2bd583c95fc7f959f653195:relationship-scan:IfcRelContainedInSpatialStructure:3",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "05466f97-a78b-5905-a222-960015102d2f",
+        "rule_id": "typed-outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "arch.ifc"
+          },
+          "local_id": "#12"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "arch.ifc"
+            },
+            "locator": "ifc:sha256:c404e25973015e5b9b1bcfe23e744b7a4194a797d2bd583c95fc7f959f653195:relationship-scan:IfcRelContainedInSpatialStructure:3",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "a726dc17-4a92-5ba0-b14d-1ad890732e0a",
+        "rule_id": "typed-outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "arch.ifc"
+          },
+          "local_id": "#13"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "arch.ifc"
+            },
+            "locator": "ifc:sha256:c404e25973015e5b9b1bcfe23e744b7a4194a797d2bd583c95fc7f959f653195:relationship-scan:IfcRelContainedInSpatialStructure:3",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "2db8eb0e-ccc5-5bee-99b2-173dea532e3e",
+        "rule_id": "typed-outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "arch.ifc"
+          },
+          "local_id": "#14"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "arch.ifc"
+            },
+            "locator": "ifc:sha256:c404e25973015e5b9b1bcfe23e744b7a4194a797d2bd583c95fc7f959f653195:relationship-scan:IfcRelContainedInSpatialStructure:3",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "87878cf9-5a74-5c36-9487-951a3817cf1f",
+        "rule_id": "typed-outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "arch.ifc"
+          },
+          "local_id": "#15"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "arch.ifc"
+            },
+            "locator": "ifc:sha256:c404e25973015e5b9b1bcfe23e744b7a4194a797d2bd583c95fc7f959f653195:relationship-scan:IfcRelContainedInSpatialStructure:3",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "68c23421-ba4e-5c40-8899-6a03c0bda6c1",
+        "rule_id": "typed-outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "arch.ifc"
+          },
+          "local_id": "#16"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "arch.ifc"
+            },
+            "locator": "ifc:sha256:c404e25973015e5b9b1bcfe23e744b7a4194a797d2bd583c95fc7f959f653195:relationship-scan:IfcRelContainedInSpatialStructure:3",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "a591254c-b2de-5199-bd74-5a076196bed3",
+        "rule_id": "typed-outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "arch.ifc"
+          },
+          "local_id": "#17"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "arch.ifc"
+            },
+            "locator": "ifc:sha256:c404e25973015e5b9b1bcfe23e744b7a4194a797d2bd583c95fc7f959f653195:relationship-scan:IfcRelContainedInSpatialStructure:3",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "8ac2ed99-8cf3-5ce3-b77b-28dc32fc7e0a",
+        "rule_id": "typed-outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "arch.ifc"
+          },
+          "local_id": "#18"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "arch.ifc"
+            },
+            "locator": "ifc:sha256:c404e25973015e5b9b1bcfe23e744b7a4194a797d2bd583c95fc7f959f653195:relationship-scan:IfcRelContainedInSpatialStructure:3",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "56f885bf-12e1-5e9d-bd2d-621e54d996d1",
+        "rule_id": "typed-outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "arch.ifc"
+          },
+          "local_id": "#19"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "arch.ifc"
+            },
+            "locator": "ifc:sha256:c404e25973015e5b9b1bcfe23e744b7a4194a797d2bd583c95fc7f959f653195:relationship-scan:IfcRelContainedInSpatialStructure:3",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "20203ea7-27e9-539a-96ca-0a655699f07e",
+        "rule_id": "typed-outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "arch.ifc"
+          },
+          "local_id": "#20"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "arch.ifc"
+            },
+            "locator": "ifc:sha256:c404e25973015e5b9b1bcfe23e744b7a4194a797d2bd583c95fc7f959f653195:relationship-scan:IfcRelContainedInSpatialStructure:3",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "125ecf04-ff0f-5001-9b0f-d0c701f5810f",
+        "rule_id": "typed-outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "arch.ifc"
+          },
+          "local_id": "#21"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "arch.ifc"
+            },
+            "locator": "ifc:sha256:c404e25973015e5b9b1bcfe23e744b7a4194a797d2bd583c95fc7f959f653195:relationship-scan:IfcRelContainedInSpatialStructure:3",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "b645388c-9a5d-5785-a110-d9b0f1671b86",
+        "rule_id": "typed-outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "arch.ifc"
+          },
+          "local_id": "#22"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "arch.ifc"
+            },
+            "locator": "ifc:sha256:c404e25973015e5b9b1bcfe23e744b7a4194a797d2bd583c95fc7f959f653195:relationship-scan:IfcRelContainedInSpatialStructure:3",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "3a243189-e88e-5853-9109-32366ed2aae9",
+        "rule_id": "typed-outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "arch.ifc"
+          },
+          "local_id": "#23"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "arch.ifc"
+            },
+            "locator": "ifc:sha256:c404e25973015e5b9b1bcfe23e744b7a4194a797d2bd583c95fc7f959f653195:relationship-scan:IfcRelContainedInSpatialStructure:3",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "3684ef74-6d4a-53c3-8355-2d7e376ea88e",
+        "rule_id": "typed-outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "arch.ifc"
+          },
+          "local_id": "#24"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "arch.ifc"
+            },
+            "locator": "ifc:sha256:c404e25973015e5b9b1bcfe23e744b7a4194a797d2bd583c95fc7f959f653195:relationship-scan:IfcRelContainedInSpatialStructure:3",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "5f0c1d18-ccb0-5160-b07b-90aa5f70cf55",
+        "rule_id": "typed-outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "arch.ifc"
+          },
+          "local_id": "#25"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "arch.ifc"
+            },
+            "locator": "ifc:sha256:c404e25973015e5b9b1bcfe23e744b7a4194a797d2bd583c95fc7f959f653195:relationship-scan:IfcRelContainedInSpatialStructure:3",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "46cc4bef-cf25-5f6a-b6e6-d64251e67622",
+        "rule_id": "typed-outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "arch.ifc"
+          },
+          "local_id": "#26"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "arch.ifc"
+            },
+            "locator": "ifc:sha256:c404e25973015e5b9b1bcfe23e744b7a4194a797d2bd583c95fc7f959f653195:relationship-scan:IfcRelContainedInSpatialStructure:3",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "bb0c2c8b-2549-5985-8a21-95be00889ab1",
+        "rule_id": "typed-outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "electrical.ifc"
+          },
+          "local_id": "#10"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "electrical.ifc"
+            },
+            "locator": "ifc:sha256:aca45dd6afddf5153f685029f15e08a81970118279340e5787da6798fc978d16:relationship-scan:IfcRelContainedInSpatialStructure:15",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "d988f0c9-2aff-5816-8a79-5bde79a2387e",
+        "rule_id": "typed-outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "electrical.ifc"
+          },
+          "local_id": "#14"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "electrical.ifc"
+            },
+            "locator": "ifc:sha256:aca45dd6afddf5153f685029f15e08a81970118279340e5787da6798fc978d16:relationship-scan:IfcRelContainedInSpatialStructure:15",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "57183290-6515-5ce5-b87b-c8c02f3aab56",
+        "rule_id": "typed-outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "electrical.ifc"
+          },
+          "local_id": "#18"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "electrical.ifc"
+            },
+            "locator": "ifc:sha256:aca45dd6afddf5153f685029f15e08a81970118279340e5787da6798fc978d16:relationship-scan:IfcRelContainedInSpatialStructure:15",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "8ac87499-04d1-5ed6-ad7a-e05970d6a72f",
+        "rule_id": "typed-outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "electrical.ifc"
+          },
+          "local_id": "#22"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "electrical.ifc"
+            },
+            "locator": "ifc:sha256:aca45dd6afddf5153f685029f15e08a81970118279340e5787da6798fc978d16:relationship-scan:IfcRelContainedInSpatialStructure:15",
+            "exact": true
+          }
+        ]
+      },
+      {
+        "id": "bc7a273b-bb06-5dcc-a1d3-d041f4a08f6d",
+        "rule_id": "typed-outlets-per-space",
+        "object_id": {
+          "source": {
+            "system": "ifc-step",
+            "document": "electrical.ifc"
+          },
+          "local_id": "#26"
+        },
+        "severity": "error",
+        "message": "0 related object(s) via IfcRelContainedInSpatialStructure; required at least 1",
+        "evidence": [
+          {
+            "source": {
+              "system": "ifc-step",
+              "document": "electrical.ifc"
+            },
+            "locator": "ifc:sha256:aca45dd6afddf5153f685029f15e08a81970118279340e5787da6798fc978d16:relationship-scan:IfcRelContainedInSpatialStructure:15",
+            "exact": true
+          }
+        ]
+      }
+    ],
+    "not_evaluated": []
+  },
+  "integrity": [],
+  "objects": {
+    "ifc-step:arch.ifc/#10": {
+      "kind": "IFCSPACE",
+      "global_id": "0000000000000000000010"
+    },
+    "ifc-step:arch.ifc/#11": {
+      "kind": "IFCSPACE",
+      "global_id": "0000000000000000000011"
+    },
+    "ifc-step:arch.ifc/#12": {
+      "kind": "IFCSPACE",
+      "global_id": "0000000000000000000012"
+    },
+    "ifc-step:arch.ifc/#13": {
+      "kind": "IFCSPACE",
+      "global_id": "0000000000000000000013"
+    },
+    "ifc-step:arch.ifc/#14": {
+      "kind": "IFCSPACE",
+      "global_id": "0000000000000000000014"
+    },
+    "ifc-step:arch.ifc/#15": {
+      "kind": "IFCSPACE",
+      "global_id": "0000000000000000000015"
+    },
+    "ifc-step:arch.ifc/#16": {
+      "kind": "IFCSPACE",
+      "global_id": "0000000000000000000016"
+    },
+    "ifc-step:arch.ifc/#17": {
+      "kind": "IFCSPACE",
+      "global_id": "0000000000000000000017"
+    },
+    "ifc-step:arch.ifc/#18": {
+      "kind": "IFCSPACE",
+      "global_id": "0000000000000000000018"
+    },
+    "ifc-step:arch.ifc/#19": {
+      "kind": "IFCSPACE",
+      "global_id": "0000000000000000000019"
+    },
+    "ifc-step:arch.ifc/#20": {
+      "kind": "IFCSPACE",
+      "global_id": "0000000000000000000020"
+    },
+    "ifc-step:arch.ifc/#21": {
+      "kind": "IFCSPACE",
+      "global_id": "0000000000000000000021"
+    },
+    "ifc-step:arch.ifc/#22": {
+      "kind": "IFCSPACE",
+      "global_id": "0000000000000000000022"
+    },
+    "ifc-step:arch.ifc/#23": {
+      "kind": "IFCSPACE",
+      "global_id": "0000000000000000000023"
+    },
+    "ifc-step:arch.ifc/#24": {
+      "kind": "IFCSPACE",
+      "global_id": "0000000000000000000024"
+    },
+    "ifc-step:arch.ifc/#25": {
+      "kind": "IFCSPACE",
+      "global_id": "0000000000000000000025"
+    },
+    "ifc-step:arch.ifc/#26": {
+      "kind": "IFCSPACE",
+      "global_id": "0000000000000000000026"
+    },
+    "ifc-step:electrical.ifc/#10": {
+      "kind": "IFCSPACE",
+      "global_id": "0000000000000000000010"
+    },
+    "ifc-step:electrical.ifc/#14": {
+      "kind": "IFCSPACE",
+      "global_id": "0000000000000000000014"
+    },
+    "ifc-step:electrical.ifc/#18": {
+      "kind": "IFCSPACE",
+      "global_id": "0000000000000000000018"
+    },
+    "ifc-step:electrical.ifc/#22": {
+      "kind": "IFCSPACE",
+      "global_id": "0000000000000000000022"
+    },
+    "ifc-step:electrical.ifc/#26": {
+      "kind": "IFCSPACE",
+      "global_id": "0000000000000000000026"
+    }
+  },
+  "sources": [
+    {
+      "source": "ifc-step:arch.ifc",
+      "discipline": "architecture",
+      "discipline_origin": "declared"
+    },
+    {
+      "source": "ifc-step:electrical.ifc",
+      "discipline": "electrical",
+      "discipline_origin": "declared"
+    },
+    {
+      "source": "ifc-step:mep.ifc",
+      "discipline": "mep",
+      "discipline_origin": "declared"
+    },
+    {
+      "source": "ifc-step:structure.ifc",
+      "discipline": "structure",
+      "discipline_origin": "declared"
+    }
+  ]
+}

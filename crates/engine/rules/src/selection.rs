@@ -782,8 +782,11 @@ fn related_matches(
             return Selection::NotEvaluated(reason, format!("related selector: {message}"));
         }
     };
-    let everything: Vec<&Object> = context.project.objects().collect();
-    let (reached, cited) = match traversal.related(context, &object.id, &everything) {
+    // The project's universe is built once per run, not once per object.
+    let reached = crate::support::everything_universe(context)
+        .map_err(crate::support::refused)
+        .and_then(|everything| traversal.related_within(context, &object.id, &everything));
+    let (reached, cited) = match reached {
         Ok(found) => found,
         Err((reason, message)) => {
             return Selection::NotEvaluated(

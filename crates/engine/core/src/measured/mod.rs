@@ -1542,21 +1542,26 @@ impl Measures {
             .relationships
             .as_ref()
             .ok_or_else(|| Self::missing(name, "relationship-selection"))?;
-        let universe: Vec<ObjectId> = self.kinds.keys().cloned().collect();
         let mut frontier = BTreeSet::from([object.clone()]);
         let mut cited: Vec<String> = Vec::new();
+        // Built once and shared by every hop; the project's objects are
+        // unique, so it is never refused.
+        let universe = crate::CandidateUniverse::try_new(self.kinds.keys().cloned().collect());
         for step in steps {
             let mut reached = BTreeSet::new();
             for from in &frontier {
-                let (found, evidence) = step
-                    .walk(
-                        service,
-                        from,
-                        &universe,
-                        &universe,
-                        step.chain(),
-                        AbsentEndPolicy::Refuse,
-                    )
+                let (found, evidence) = universe
+                    .clone()
+                    .and_then(|universe| {
+                        step.walk_within(
+                            service,
+                            from,
+                            &universe,
+                            &universe,
+                            step.chain(),
+                            AbsentEndPolicy::Refuse,
+                        )
+                    })
                     .map_err(|error| match error {
                         RelationshipSelectionError::Unavailable(message) => {
                             Self::unavailable(name, object, &message)

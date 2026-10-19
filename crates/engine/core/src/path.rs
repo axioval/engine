@@ -25,9 +25,9 @@ use axioval_ir::{Evidence, ObjectId};
 
 use crate::derived_relationships::DERIVED_RELATIONSHIP_PREFIX;
 use crate::relationships::{
-    AbsentEndPolicy, RELATIONSHIP_KIND_PREFIX, RelationshipQuery, RelationshipSelectionError,
-    RelationshipSelectionRequest, RelationshipSelectionServiceHandle, SemanticRelationship,
-    TraversalDirection,
+    AbsentEndPolicy, CandidateUniverse, RELATIONSHIP_KIND_PREFIX, RelationshipQuery,
+    RelationshipSelectionError, RelationshipSelectionRequest, RelationshipSelectionServiceHandle,
+    SemanticRelationship, TraversalDirection,
 };
 
 const DIRECTIONS: [&str; 3] = ["forward", "backward", "either"];
@@ -160,21 +160,56 @@ impl PathSegment {
         chain: bool,
         absent_ends: AbsentEndPolicy,
     ) -> Result<(BTreeSet<ObjectId>, Vec<Evidence>), RelationshipSelectionError> {
+        // Each universe is refused only where a request would carry it: a
+        // single hop asks over `scope`, a mixed chain over `everything`
+        // and keeps what lies in `scope`.
+        let (everything, scope) = if !chain || self.relationships.len() == 1 {
+            let scope = CandidateUniverse::try_new(scope.to_vec())?;
+            (scope.clone(), scope)
+        } else {
+            let mut kept = scope.to_vec();
+            kept.sort();
+            kept.dedup();
+            (
+                CandidateUniverse::try_new(everything.to_vec())?,
+                CandidateUniverse::try_new(kept)?,
+            )
+        };
+        self.walk_within(service, from, &everything, &scope, chain, absent_ends)
+    }
+
+    /// [`Self::walk`] over universes built already: every request it makes
+    /// shares them, so a walk costs what it reaches, never a copy of
+    /// `everything` per hop. A caller walking from many objects builds the
+    /// universes once.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::walk`].
+    pub fn walk_within(
+        &self,
+        service: &RelationshipSelectionServiceHandle,
+        from: &ObjectId,
+        everything: &CandidateUniverse,
+        scope: &CandidateUniverse,
+        chain: bool,
+        absent_ends: AbsentEndPolicy,
+    ) -> Result<(BTreeSet<ObjectId>, Vec<Evidence>), RelationshipSelectionError> {
         let mut evidence = Vec::new();
         let mut hop = |anchor: &ObjectId,
-                       universe: &[ObjectId],
+                       universe: &CandidateUniverse,
                        relationship: &SemanticRelationship,
                        follow_chain: bool|
          -> Result<Vec<ObjectId>, RelationshipSelectionError> {
-            let request = RelationshipSelectionRequest::try_new(
+            let request = RelationshipSelectionRequest::within(
                 anchor.clone(),
-                universe.to_vec(),
+                universe.clone(),
                 RelationshipQuery::Related {
                     relationship: relationship.clone(),
                     direction: self.direction,
                     follow_chain,
                 },
-            )?
+            )
             .with_absent_ends(absent_ends);
             let selection = service.select(&request)?;
             evidence.extend(selection.evidence().iter().cloned());
@@ -198,7 +233,6 @@ impl PathSegment {
                 }
             }
             seen.remove(from);
-            let scope: BTreeSet<&ObjectId> = scope.iter().collect();
             reached.extend(seen.into_iter().filter(|object| scope.contains(object)));
         }
         reached.remove(from);

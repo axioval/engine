@@ -25,7 +25,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::{Arc, Mutex};
 
 use axioval_engine::{
-    AbsentEndPolicy, CompleteRelationshipEdges, CompleteRelationshipSelection,
+    AbsentEndPolicy, CandidateUniverse, CompleteRelationshipEdges, CompleteRelationshipSelection,
     RELATIONSHIP_KIND_PREFIX, RelationshipEdge, RelationshipEdgesRequest, RelationshipKind,
     RelationshipQuery, RelationshipSelectionError, RelationshipSelectionRequest,
     RelationshipSelectionService, SourceSnapshot, TraversalDirection,
@@ -70,11 +70,22 @@ pub(crate) struct EdgeIndex {
     pub(crate) absent: Vec<AbsentEnd>,
 }
 
+/// A candidate universe by entity, or why it is refused.
+type Entities = Result<Arc<BTreeMap<EntityId, ObjectId>>, RelationshipSelectionError>;
+
+/// How many universes the service keeps read by entity: a rule asks about
+/// many anchors over one or two, so a few cover a run without holding
+/// every universe it ever saw.
+const UNIVERSES: usize = 4;
+
 pub(crate) struct IfcRelationshipService {
     release: Release,
     model: Arc<Model>,
     snapshots: Arc<[SourceSnapshot]>,
     cache: Mutex<BTreeMap<String, Result<Arc<EdgeIndex>, RelationshipSelectionError>>>,
+    /// The universes read last, newest last, each shared with the requests
+    /// bound to it.
+    universes: Mutex<VecDeque<(CandidateUniverse, Entities)>>,
 }
 
 impl IfcRelationshipService {
@@ -88,7 +99,31 @@ impl IfcRelationshipService {
             model,
             snapshots,
             cache: Mutex::new(BTreeMap::new()),
+            universes: Mutex::new(VecDeque::new()),
         }
+    }
+
+    /// The candidates of `universe` by entity, each refused as `entity`
+    /// refuses it, read once per shared universe rather than per request.
+    fn entities(&self, universe: &CandidateUniverse) -> Entities {
+        let mut kept = self
+            .universes
+            .lock()
+            .map_err(|_| unavailable("relationship universe lock is poisoned"))?;
+        if let Some((_, entities)) = kept.iter().find(|(seen, _)| seen.shares(universe)) {
+            return entities.clone();
+        }
+        let entities = universe
+            .objects()
+            .iter()
+            .map(|candidate| Ok((self.entity(candidate)?, candidate.clone())))
+            .collect::<Result<BTreeMap<_, _>, RelationshipSelectionError>>()
+            .map(Arc::new);
+        if kept.len() == UNIVERSES {
+            kept.pop_front();
+        }
+        kept.push_back((universe.clone(), entities.clone()));
+        entities
     }
 
     fn locator(&self, detail: impl std::fmt::Display) -> String {
@@ -137,11 +172,7 @@ impl RelationshipSelectionService for IfcRelationshipService {
         request: &RelationshipSelectionRequest,
     ) -> Result<CompleteRelationshipSelection, RelationshipSelectionError> {
         let anchor = self.entity(request.anchor())?;
-        let universe = request
-            .candidate_universe()
-            .iter()
-            .map(|candidate| Ok((self.entity(candidate)?, candidate.clone())))
-            .collect::<Result<BTreeMap<_, _>, RelationshipSelectionError>>()?;
+        let universe = self.entities(request.universe())?;
         let (relationship, reached, used) = match request.query() {
             RelationshipQuery::Related {
                 relationship,

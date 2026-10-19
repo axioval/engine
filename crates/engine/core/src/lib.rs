@@ -1294,7 +1294,7 @@ pub use relations::{
     UnknownRelationObject, unknown_relation_objects,
 };
 pub use relationships::{
-    AbsentEndPolicy, CompleteRelationshipEdges, CompleteRelationshipSelection,
+    AbsentEndPolicy, CandidateUniverse, CompleteRelationshipEdges, CompleteRelationshipSelection,
     RELATIONSHIP_KIND_PREFIX, RelationshipEdge, RelationshipEdgesRequest, RelationshipKind,
     RelationshipQuery, RelationshipSelectionError, RelationshipSelectionRequest,
     RelationshipSelectionService, RelationshipSelectionServiceHandle, SemanticRelationship,

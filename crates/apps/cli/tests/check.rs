@@ -25511,3 +25511,352 @@ fn with_geometry_a_glazing_ratio_is_judged_per_leaf() {
         "{result:#}"
     );
 }
+
+/// One generated IFC4 model of `name`: a project, site, building and three
+/// storeys, `spaces` spaces on the first, `per_kind` elements of each
+/// entity of `kinds` spread over the storeys, each with one property, and
+/// with `outlets` up to three outlets of one type in each space.
+#[allow(clippy::too_many_lines)] // one generated model, written in file order
+fn federated_counts_model(
+    name: &str,
+    kinds: &[&str],
+    per_kind: usize,
+    spaces: usize,
+    outlets: bool,
+) -> String {
+    let mut lines: Vec<String> = Vec::new();
+    let mut global = 0;
+    let mut add = |text: String| {
+        lines.push(format!("#{}={text};", lines.len() + 1));
+        lines.len()
+    };
+    let mut gid = || {
+        global += 1;
+        format!("{global:022}")
+    };
+    let refs = |ids: &[usize]| {
+        ids.iter()
+            .map(|id| format!("#{id}"))
+            .collect::<Vec<_>>()
+            .join(",")
+    };
+    let project = add(format!("IFCPROJECT('{}',$,'P',$,$,$,$,$,$)", gid()));
+    let site = add(format!(
+        "IFCSITE('{}',$,'S',$,$,$,$,$,.ELEMENT.,$,$,$,$,$)",
+        gid()
+    ));
+    let building = add(format!(
+        "IFCBUILDING('{}',$,'B',$,$,$,$,$,.ELEMENT.,$,$,$)",
+        gid()
+    ));
+    let storeys: Vec<usize> = (0..3)
+        .map(|i| {
+            add(format!(
+                "IFCBUILDINGSTOREY('{}',$,'L{i}',$,$,$,$,$,.ELEMENT.,{}.)",
+                gid(),
+                3 * i
+            ))
+        })
+        .collect();
+    add(format!(
+        "IFCRELAGGREGATES('{}',$,$,$,#{project},(#{site}))",
+        gid()
+    ));
+    add(format!(
+        "IFCRELAGGREGATES('{}',$,$,$,#{site},(#{building}))",
+        gid()
+    ));
+    add(format!(
+        "IFCRELAGGREGATES('{}',$,$,$,#{building},({}))",
+        gid(),
+        refs(&storeys)
+    ));
+    let rooms: Vec<usize> = (0..spaces)
+        .map(|i| {
+            add(format!(
+                "IFCSPACE('{}',$,'R{i:02}',$,$,$,$,$,.ELEMENT.,.INTERNAL.,$)",
+                gid()
+            ))
+        })
+        .collect();
+    if !rooms.is_empty() {
+        add(format!(
+            "IFCRELAGGREGATES('{}',$,$,$,#{},({}))",
+            gid(),
+            storeys[0],
+            refs(&rooms)
+        ));
+    }
+    let mut contained: Vec<Vec<usize>> = vec![Vec::new(); 3];
+    for kind in kinds {
+        for i in 0..per_kind {
+            let element = add(format!("{kind}('{}',$,'{kind}-{i}',$,$,$,$,$,$)", gid()));
+            contained[i % 3].push(element);
+            let value = add(format!(
+                "IFCPROPERTYSINGLEVALUE('Reference',$,IFCIDENTIFIER('R{i}'),$)"
+            ));
+            let set = add(format!(
+                "IFCPROPERTYSET('{}',$,'Pset_Common',$,(#{value}))",
+                gid()
+            ));
+            add(format!(
+                "IFCRELDEFINESBYPROPERTIES('{}',$,$,$,(#{element}),#{set})",
+                gid()
+            ));
+        }
+    }
+    for (storey, elements) in storeys.iter().zip(&contained) {
+        if !elements.is_empty() {
+            add(format!(
+                "IFCRELCONTAINEDINSPATIALSTRUCTURE('{}',$,$,$,({}),#{storey})",
+                gid(),
+                refs(elements)
+            ));
+        }
+    }
+    if outlets {
+        let socket = add(format!(
+            "IFCOUTLETTYPE('{}',$,'Socket',$,$,$,$,$,$,.POWEROUTLET.)",
+            gid()
+        ));
+        let mut typed = Vec::new();
+        for (k, room) in rooms.iter().enumerate() {
+            let placed: Vec<usize> = (0..k % 4)
+                .map(|j| {
+                    add(format!(
+                        "IFCOUTLET('{}',$,'O{k}-{j}',$,$,$,$,$,.POWEROUTLET.)",
+                        gid()
+                    ))
+                })
+                .collect();
+            if !placed.is_empty() {
+                add(format!(
+                    "IFCRELCONTAINEDINSPATIALSTRUCTURE('{}',$,$,$,({}),#{room})",
+                    gid(),
+                    refs(&placed)
+                ));
+            }
+            typed.extend(placed);
+        }
+        add(format!(
+            "IFCRELDEFINESBYTYPE('{}',$,$,$,({}),#{socket})",
+            gid(),
+            refs(&typed)
+        ));
+    }
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('{name}','t',(''),(''),'p','o','a');\n\
+         FILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n{}\nENDSEC;\nEND-ISO-10303-21;\n",
+        lines.join("\n")
+    )
+}
+
+/// The definitions [`counts_over_federated_models_keep_their_report_in_bounded_time`]
+/// checks with: its object types, an `object-count` and a `related-count`.
+fn federated_counts_definitions(case: &Case) {
+    let definitions = case.definitions(true);
+    let mut definitions: Value =
+        serde_json::from_str(&std::fs::read_to_string(definitions).unwrap()).unwrap();
+    for (key, name) in [
+        ("element", "IfcElement"),
+        ("storey", "IfcBuildingStorey"),
+        ("space", "IfcSpace"),
+        ("outlet-type", "IfcOutletType"),
+        ("spatial", "IfcSpatialStructureElement"),
+    ] {
+        let id = format!("axioval:bench.{key}");
+        definitions["objectTypes"][&id] = json!({
+            "id": id,
+            "name": {"default": name, "translations": {}},
+            "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": name}],
+            "citations": [],
+        });
+    }
+    let declare = |names: &[(&str, &str)]| -> Value {
+        names
+            .iter()
+            .map(|(id, kind)| {
+                (
+                    (*id).to_owned(),
+                    json!({"id": id, "name": {"default": id, "translations": {}},
+                           "kind": kind, "required": false, "allowedValues": [],
+                           "citations": []}),
+                )
+            })
+            .collect::<serde_json::Map<_, _>>()
+            .into()
+    };
+    let definition = |id: &str, capability: &str, parameters: Value| {
+        json!({
+            "id": id,
+            "name": {"default": id, "translations": {}},
+            "description": {"default": id, "translations": {}},
+            "capability": capability,
+            "parameters": parameters,
+            "citations": [],
+            "tags": [],
+        })
+    };
+    definitions["definitions"]["axioval:bench.count"] = definition(
+        "axioval:bench.count",
+        "axioval:capability.object-count",
+        declare(&[
+            ("minimum", "integer"),
+            ("maximum", "integer"),
+            ("across_sources", "boolean"),
+            ("disciplines", "stringList"),
+        ]),
+    );
+    definitions["definitions"]["axioval:bench.related"] = definition(
+        "axioval:bench.related",
+        "axioval:capability.related-count",
+        declare(&[
+            ("related_selector", "selector"),
+            ("minimum", "integer"),
+            ("maximum", "integer"),
+            ("same_ends", "stringList"),
+            ("relationship", "string"),
+            ("direction", "string"),
+            ("follow_chain", "boolean"),
+            ("path", "stringList"),
+            ("skip_absent_relationship_ends", "boolean"),
+        ]),
+    );
+    case.write("definitions.json", &definitions.to_string());
+}
+
+/// The ruleset [`counts_over_federated_models_keep_their_report_in_bounded_time`]
+/// checks with.
+fn federated_counts_ruleset(case: &Case) {
+    let text = std::fs::read_to_string(format!("{FIXTURES}/ruleset.json")).unwrap();
+    let mut ruleset: Value = serde_json::from_str(&text).unwrap();
+    let base = ruleset["root"]["rules"][0].clone();
+    let rule = |id: &str, definition: &str, parameters: Value, selector: Value| {
+        let mut rule = base.clone();
+        rule["id"] = json!(id);
+        rule["definitionId"] = json!(definition);
+        rule["parameters"] = parameters;
+        rule["explanatoryImages"] = json!([]);
+        rule["applicability"]["groups"]["walls"]["selector"] = selector;
+        rule
+    };
+    let entity = |key: &str| {
+        json!({"kind": "entityType", "objectType": format!("axioval:bench.{key}"),
+               "includeSubtypes": true})
+    };
+    let minimum = json!({"type": "integer", "value": 1});
+    ruleset["root"]["rules"] = json!([
+        rule(
+            "placed-mep",
+            "axioval:bench.count",
+            json!({"disciplines": {"type": "stringList", "value": ["mep"]},
+                   "minimum": minimum}),
+            json!({"kind": "allOf", "operands": [entity("element"), {"kind": "related",
+                   "path": ["IfcRelContainedInSpatialStructure:backward"],
+                   "selector": entity("spatial")}]}),
+        ),
+        rule(
+            "outlets-per-space",
+            "axioval:bench.related",
+            json!({"related_selector": {"type": "selector", "value": entity("outlet-type")},
+                   "path": {"type": "stringList", "value": [
+                       "IfcRelContainedInSpatialStructure:forward",
+                       "IfcRelDefinesByType:backward"]},
+                   "minimum": minimum}),
+            entity("space"),
+        ),
+        rule(
+            "typed-outlets-per-space",
+            "axioval:bench.related",
+            json!({"related_selector": {"type": "selector", "value": {"kind": "related",
+                       "path": ["IfcRelDefinesByType:backward"],
+                       "selector": entity("outlet-type")}},
+                   "relationship": {"type": "string",
+                                    "value": "IfcRelContainedInSpatialStructure"},
+                   "direction": {"type": "string", "value": "forward"},
+                   "minimum": minimum}),
+            entity("space"),
+        ),
+    ]);
+    case.write("ruleset.json", &ruleset.to_string());
+}
+
+/// Counts over four federated models of about 6,000 objects (#429): an
+/// `object-count` of the MEP model's elements placed in the spatial
+/// structure (a `related` applicability selector), and two
+/// `related-count`s of each space's outlets, one through a `path` and one
+/// whose `related_selector` is itself a `related` selector (outlets typed
+/// by an `IfcOutletType`).
+///
+/// The golden report was written by the binary before #429, which asked
+/// the relationship service over a fresh copy of the project for every
+/// object and took 16 s in release; it must stay byte for byte the same.
+/// Rewrite it with `AXIOVAL_BLESS=1` only for a change meant to alter the
+/// report.
+#[test]
+fn counts_over_federated_models_keep_their_report_in_bounded_time() {
+    let case = Case::new("federated-counts");
+    for (name, kinds, per_kind, spaces, outlets) in [
+        (
+            "arch.ifc",
+            &["IFCWALL", "IFCDOOR", "IFCWINDOW"][..],
+            500,
+            17,
+            false,
+        ),
+        (
+            "structure.ifc",
+            &["IFCBEAM", "IFCCOLUMN", "IFCSLAB"],
+            500,
+            0,
+            false,
+        ),
+        (
+            "mep.ifc",
+            &["IFCDUCTSEGMENT", "IFCPIPEFITTING", "IFCAIRTERMINAL"],
+            500,
+            0,
+            false,
+        ),
+        ("electrical.ifc", &["IFCCABLESEGMENT"], 1000, 17, true),
+    ] {
+        case.write(
+            name,
+            &federated_counts_model(name, kinds, per_kind, spaces, outlets),
+        );
+    }
+    federated_counts_definitions(&case);
+    federated_counts_ruleset(&case);
+    let started = std::time::Instant::now();
+    let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+        .current_dir(&case.dir)
+        .arg("check")
+        .args(["--model", "arch.ifc:architecture"])
+        .args(["--model", "structure.ifc:structure"])
+        .args(["--model", "mep.ifc:mep"])
+        .args(["--model", "electrical.ifc:electrical"])
+        .args(["--definitions", "definitions.json"])
+        .args(["--ruleset", "ruleset.json"])
+        .args(["--threads", "1", "--report", "report.json"])
+        .env("SOURCE_DATE_EPOCH", "1790416800")
+        .output()
+        .unwrap();
+    let elapsed = started.elapsed();
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let report = std::fs::read_to_string(case.path("report.json")).unwrap();
+    let golden = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden/federated-counts.json");
+    if std::env::var_os("AXIOVAL_BLESS").is_some() {
+        std::fs::write(&golden, &report).unwrap();
+    }
+    assert!(
+        report == std::fs::read_to_string(&golden).unwrap(),
+        "the report differs from {}; rewrite it with AXIOVAL_BLESS=1 only for a change \
+         meant to alter it",
+        golden.display()
+    );
+    // Before #429 each object's `related` selector copied the project
+    // through every layer of the relationship service: 16 s in release,
+    // longer in a test build. Shared universes take under a second in a
+    // test build; the bound leaves room for a loaded machine.
+    assert!(elapsed < std::time::Duration::from_secs(15), "{elapsed:?}");
+}

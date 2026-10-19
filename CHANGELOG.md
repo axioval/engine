@@ -55,6 +55,29 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **Relationship walks share their candidate universe**
+  ([#429](https://github.com/axioval/engine/issues/429)). A `related`
+  selector tested on each object asked the relationship service over a
+  fresh copy of every object of the project, and each layer below copied
+  it again: the walk per hop, a federation narrowing it to the anchor's
+  model, and the IFC adapter reading it by entity. An `object-count` of
+  the elements placed in the spatial structure, limited to one discipline,
+  and a `related-count` whose related selector is itself `related` were
+  quadratic in the project's size, with no time in host services.
+  `axioval_engine::CandidateUniverse` is now built once (the project's per
+  run) and shared by every request bound to it
+  (`RelationshipSelectionRequest::within`, `PathSegment::walk_within`); a
+  federation keeps its part per member with it, and the IFC adapter reads
+  the last four universes by entity once each. `RelationshipSelectionRequest::try_new`,
+  `candidate_universe` and `PathSegment::walk` keep their signatures.
+  On four generated federated models of about 6,000 objects (one thread,
+  release, three runs each), the discipline-limited `object-count` over
+  1,500 objects took 3.5 to 4.9 s and now 7 to 8 ms, and the
+  `related-count` of the typed outlets of 34 spaces 11.2 to 13.3 s and now
+  26 to 28 ms; the whole check 14.9 to 17.0 s and now 0.11 to 0.12 s.
+  Reports are byte-identical, pinned against the earlier binary's report in
+  `tests/check.rs`.
+
 - **Findings name the facet an IDS states, and every property by the names
   it binds to** ([#375](https://github.com/axioval/engine/issues/375)).
   With `check --ids`, findings named the concepts the translation

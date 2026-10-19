@@ -2,9 +2,10 @@
 //! the semantic capabilities.
 
 use axioval_engine::{
-    AbsentEndPolicy, CompiledRule, NotEvaluatedReason, ParameterDescriptor, ParameterType,
-    PathSegment, PropertyResolution, PropertyResolutionError, PropertyResolutionServiceHandle,
-    RelationshipSelectionError, RelationshipSelectionServiceHandle, RuleContext, SessionSources,
+    AbsentEndPolicy, CandidateUniverse, CompiledRule, NotEvaluatedReason, ParameterDescriptor,
+    ParameterType, PathSegment, PropertyResolution, PropertyResolutionError,
+    PropertyResolutionServiceHandle, RelationshipSelectionError,
+    RelationshipSelectionServiceHandle, RuleContext, SessionSources,
 };
 use axioval_ir::contract::{CategoryLevel, ParameterValue, Selector};
 use axioval_ir::{
@@ -472,19 +473,12 @@ impl Traversal {
         service: &RelationshipSelectionServiceHandle,
         step: &PathSegment,
         from: &ObjectId,
-        everything: &[ObjectId],
-        scope: &[ObjectId],
+        everything: &CandidateUniverse,
+        scope: &CandidateUniverse,
         chain: bool,
     ) -> Result<(BTreeSet<ObjectId>, Vec<Evidence>), Unavailable> {
-        step.walk(service, from, everything, scope, chain, self.absent_ends)
-            .map_err(|error| match error {
-                RelationshipSelectionError::Unavailable(message) => {
-                    (NotEvaluatedReason::BackendUnavailable, message)
-                }
-                RelationshipSelectionError::InvalidRequest
-                | RelationshipSelectionError::DuplicateCandidate => invalid(error.to_string()),
-                other => (NotEvaluatedReason::InvalidEvidence, other.to_string()),
-            })
+        step.walk_within(service, from, everything, scope, chain, self.absent_ends)
+            .map_err(refused)
     }
 
     /// Objects of `universe` related to `anchor`, with the completeness evidence.
@@ -505,12 +499,21 @@ impl Traversal {
         anchor: &ObjectId,
         universe: &[ObjectId],
     ) -> Result<(Vec<ObjectId>, Vec<Evidence>), Unavailable> {
-        let everything: Vec<ObjectId> = context
-            .project
-            .objects()
-            .map(|object| object.id.clone())
-            .collect();
-        self.related_among(context, anchor, universe, &everything)
+        let universe = CandidateUniverse::try_new(universe.to_vec()).map_err(refused)?;
+        self.related_within(context, anchor, &universe)
+    }
+
+    /// [`Self::related_ids`] over a universe built already: a caller
+    /// relating many anchors to one universe builds it once
+    /// ([`everything_universe`] for the whole project).
+    pub(crate) fn related_within(
+        &self,
+        context: &RuleContext<'_>,
+        anchor: &ObjectId,
+        universe: &CandidateUniverse,
+    ) -> Result<(Vec<ObjectId>, Vec<Evidence>), Unavailable> {
+        let everything = everything_universe(context).map_err(refused)?;
+        self.related_in(context, anchor, universe, &everything)
     }
 
     /// [`Self::related_ids`], every object of the project listed already
@@ -522,12 +525,26 @@ impl Traversal {
         universe: &[ObjectId],
         everything: &[ObjectId],
     ) -> Result<(Vec<ObjectId>, Vec<Evidence>), Unavailable> {
+        let universe = CandidateUniverse::try_new(universe.to_vec()).map_err(refused)?;
+        let everything = CandidateUniverse::try_new(everything.to_vec()).map_err(refused)?;
+        self.related_in(context, anchor, &universe, &everything)
+    }
+
+    /// Objects of `universe` related to `anchor`, every step but the last
+    /// passing through `everything`.
+    fn related_in(
+        &self,
+        context: &RuleContext<'_>,
+        anchor: &ObjectId,
+        universe: &CandidateUniverse,
+        everything: &CandidateUniverse,
+    ) -> Result<(Vec<ObjectId>, Vec<Evidence>), Unavailable> {
         let service = relationship_service(context)?;
         let mut frontier = vec![anchor.clone()];
         let mut evidence = Vec::new();
         for (index, step) in self.steps.iter().enumerate() {
             let last = index + 1 == self.steps.len();
-            let scope: &[ObjectId] = if last { universe } else { everything };
+            let scope = if last { universe } else { everything };
             let mut reached = BTreeSet::new();
             for from in &frontier {
                 let chain = self.follow_chain || step.chain();
@@ -556,11 +573,7 @@ impl Traversal {
         containers: &BTreeSet<ObjectId>,
     ) -> Result<(BTreeSet<ObjectId>, Vec<Evidence>), Unavailable> {
         let service = relationship_service(context)?;
-        let everything: Vec<ObjectId> = context
-            .project
-            .objects()
-            .map(|object| object.id.clone())
-            .collect();
+        let everything = everything_universe(context).map_err(refused)?;
         let mut found = BTreeSet::new();
         let mut seen = BTreeSet::from([anchor.clone()]);
         let mut frontier = vec![anchor.clone()];
@@ -582,6 +595,18 @@ impl Traversal {
         found.remove(anchor);
         sort_evidence(&mut evidence);
         Ok((found, evidence))
+    }
+}
+
+/// A relationship service's refusal as the outcome a rule reports.
+pub(crate) fn refused(error: RelationshipSelectionError) -> Unavailable {
+    match error {
+        RelationshipSelectionError::Unavailable(message) => {
+            (NotEvaluatedReason::BackendUnavailable, message)
+        }
+        RelationshipSelectionError::InvalidRequest
+        | RelationshipSelectionError::DuplicateCandidate => invalid(error.to_string()),
+        other => (NotEvaluatedReason::InvalidEvidence, other.to_string()),
     }
 }
 
@@ -1636,6 +1661,28 @@ pub(crate) fn undecided_reason(values: &[&PropertyValue]) -> NotEvaluatedReason 
 /// The memo key of every object of the project.
 #[derive(Clone, Copy, Hash, PartialEq, Eq)]
 struct Everything;
+
+/// The memo key of the project's candidate universe.
+#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+struct EverythingUniverse;
+
+/// Every object of the project as one candidate universe, built once per
+/// run (`MeasuredMemo`) and shared by every relationship request over it:
+/// a traversal from each of many objects costs what it reaches, never a
+/// copy of the project per object.
+pub(crate) fn everything_universe(
+    context: &RuleContext<'_>,
+) -> Result<CandidateUniverse, RelationshipSelectionError> {
+    axioval_engine::MeasuredMemo::of(context.services, EverythingUniverse, || {
+        CandidateUniverse::try_new(
+            context
+                .project
+                .objects()
+                .map(|object| object.id.clone())
+                .collect(),
+        )
+    })
+}
 
 /// Every object of the project by identity, in the project's order, listed
 /// once per run (`MeasuredMemo`): what a traversal walks through.

@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use axioval_ir::{Evidence, ObjectId};
+use axioval_ir::{Evidence, ObjectId, SourceId};
 use thiserror::Error;
 
 use crate::session::{SnapshotBoundService, SourceSnapshot};
@@ -183,11 +183,135 @@ pub enum AbsentEndPolicy {
     Skip,
 }
 
+/// A canonical, duplicate-free candidate universe, shared rather than
+/// copied.
+///
+/// A caller asking about many anchors over one universe (every object of
+/// the project, or the objects a selector picked) builds it once and binds
+/// each request to it ([`RelationshipSelectionRequest::within`]): cloning it
+/// shares the objects, so a request costs nothing per candidate. Its parts
+/// a federation asks its members over ([`Self::within_sources`]) are kept
+/// with it, one per member, and dropped with it.
+#[derive(Clone)]
+pub struct CandidateUniverse(Arc<Universe>);
+
+struct Universe {
+    objects: Box<[ObjectId]>,
+    /// The parts already asked for, one per set of sources, at most
+    /// [`PARTS`] of them.
+    parts: std::sync::Mutex<Vec<(std::collections::BTreeSet<SourceId>, CandidateUniverse)>>,
+}
+
+/// How many parts of one universe are kept: a federation asks one per
+/// member, so a part beyond them is computed again instead of kept.
+const PARTS: usize = 16;
+
+impl CandidateUniverse {
+    /// The universe of `objects`, put in canonical order.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RelationshipSelectionError::DuplicateCandidate`] when an
+    /// object appears twice.
+    pub fn try_new(mut objects: Vec<ObjectId>) -> Result<Self, RelationshipSelectionError> {
+        objects.sort();
+        if objects.windows(2).any(|pair| pair[0] == pair[1]) {
+            return Err(RelationshipSelectionError::DuplicateCandidate);
+        }
+        Ok(Self::canonical(objects.into_boxed_slice()))
+    }
+
+    fn canonical(objects: Box<[ObjectId]>) -> Self {
+        Self(Arc::new(Universe {
+            objects,
+            parts: std::sync::Mutex::new(Vec::new()),
+        }))
+    }
+
+    /// The objects, in canonical order.
+    #[must_use]
+    pub fn objects(&self) -> &[ObjectId] {
+        &self.0.objects
+    }
+
+    /// Whether `object` is in the universe.
+    #[must_use]
+    pub fn contains(&self, object: &ObjectId) -> bool {
+        self.0.objects.binary_search(object).is_ok()
+    }
+
+    /// Whether both are the same shared universe, not merely equal ones.
+    #[must_use]
+    pub fn shares(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+
+    /// The part of the universe whose objects come from `sources`: this
+    /// universe itself when it holds no other, else a part kept with it.
+    #[must_use]
+    pub fn within_sources(&self, sources: &std::collections::BTreeSet<SourceId>) -> Self {
+        if self
+            .0
+            .objects
+            .iter()
+            .all(|object| sources.contains(&object.source))
+        {
+            return self.clone();
+        }
+        let mut parts = self
+            .0
+            .parts
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some((_, part)) = parts.iter().find(|(kept, _)| kept == sources) {
+            return part.clone();
+        }
+        let part = Self::canonical(
+            self.0
+                .objects
+                .iter()
+                .filter(|object| sources.contains(&object.source))
+                .cloned()
+                .collect(),
+        );
+        if parts.len() < PARTS {
+            parts.push((sources.clone(), part.clone()));
+        }
+        part
+    }
+}
+
+impl std::fmt::Debug for CandidateUniverse {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.debug_list().entries(self.objects()).finish()
+    }
+}
+
+impl PartialEq for CandidateUniverse {
+    fn eq(&self, other: &Self) -> bool {
+        self.shares(other) || self.objects() == other.objects()
+    }
+}
+
+impl Eq for CandidateUniverse {}
+
+impl PartialOrd for CandidateUniverse {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for CandidateUniverse {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.objects().cmp(other.objects())
+    }
+}
+
 /// Request for relationship-selected objects within a caller-bound universe.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct RelationshipSelectionRequest {
     anchor: ObjectId,
-    candidate_universe: Vec<ObjectId>,
+    candidate_universe: CandidateUniverse,
     query: RelationshipQuery,
     absent_ends: AbsentEndPolicy,
 }
@@ -196,19 +320,30 @@ impl RelationshipSelectionRequest {
     /// Creates a request with a canonical, duplicate-free candidate universe.
     pub fn try_new(
         anchor: ObjectId,
-        mut candidate_universe: Vec<ObjectId>,
+        candidate_universe: Vec<ObjectId>,
         query: RelationshipQuery,
     ) -> Result<Self, RelationshipSelectionError> {
-        candidate_universe.sort();
-        if candidate_universe.windows(2).any(|pair| pair[0] == pair[1]) {
-            return Err(RelationshipSelectionError::DuplicateCandidate);
-        }
-        Ok(Self {
+        Ok(Self::within(
+            anchor,
+            CandidateUniverse::try_new(candidate_universe)?,
+            query,
+        ))
+    }
+
+    /// Creates a request over a universe built already, shared with every
+    /// other request bound to it.
+    #[must_use]
+    pub fn within(
+        anchor: ObjectId,
+        candidate_universe: CandidateUniverse,
+        query: RelationshipQuery,
+    ) -> Self {
+        Self {
             anchor,
             candidate_universe,
             query,
             absent_ends: AbsentEndPolicy::default(),
-        })
+        }
     }
 
     /// Sets how instances with an absent required end are treated.
@@ -233,6 +368,12 @@ impl RelationshipSelectionRequest {
     /// Complete caller-approved universe from which candidates may be returned.
     #[must_use]
     pub fn candidate_universe(&self) -> &[ObjectId] {
+        self.candidate_universe.objects()
+    }
+
+    /// The candidate universe as the shared value it was built as.
+    #[must_use]
+    pub fn universe(&self) -> &CandidateUniverse {
         &self.candidate_universe
     }
 
@@ -243,7 +384,7 @@ impl RelationshipSelectionRequest {
     }
 
     fn contains_candidate(&self, candidate: &ObjectId) -> bool {
-        self.candidate_universe.binary_search(candidate).is_ok()
+        self.candidate_universe.contains(candidate)
     }
 }
 

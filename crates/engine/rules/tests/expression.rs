@@ -1191,8 +1191,8 @@ fn a_spent_evaluation_budget_leaves_the_rest_open_never_passed() {
 
 /// #405: objects judged on several threads report what one thread reports,
 /// byte for byte, with the default budget and with one spent part way:
-/// which nodes a spent budget refuses depends on the order they are spent
-/// in, so that run is run again serially.
+/// which nodes a spent share refuses depends on the order they are spent
+/// in, so a rule whose share ran out is judged again on one thread (#447).
 #[test]
 fn objects_judged_on_several_threads_report_what_one_thread_reports() {
     let package = vocabulary(&registry(), &[]);
@@ -1219,6 +1219,138 @@ fn objects_judged_on_several_threads_report_what_one_thread_reports() {
             );
         }
     }
+}
+
+/// The cover each slab's exposure class requires, as a ruleset value.
+fn required_cover() -> BTreeMap<String, axioval_ir::contract::ValueDefinition> {
+    serde_json::from_value(json!({
+        "required": {"name": text("required cover"), "expression": {"kind": "if",
+            "branches": [
+                {"when": class_is("XC4"), "then": mm(40.0)},
+                {"when": class_is("XC3"), "then": mm(35.0)}],
+            "else": mm(25.0)}},
+    }))
+    .unwrap()
+}
+
+/// A rule `id` judging each slab's cover against the value `required`.
+fn covered_rule(id: &str) -> Value {
+    rule(
+        id,
+        EXPRESSION,
+        "error",
+        entity("slab"),
+        json!({"requirement": {"type": "expression", "value": {
+            "kind": "compare", "operator": "greaterThanOrEquals",
+            "left": property("Cover"), "right": value("required")}}}),
+        json!({}),
+    )
+}
+
+/// #447: three rules reading one ruleset value, over budgets about their
+/// threshold, report alike in either order, on one and several threads,
+/// and with nothing reused: each rule spends a share of its own, every
+/// read of the value charged as if built for it, and the backstop refuses
+/// in plan order the rules after the first that spent the run's size.
+#[test]
+fn rules_sharing_a_value_are_refused_alike_in_any_order() {
+    let package = vocabulary(&registry(), &[]);
+    let (required, covered) = (required_cover(), covered_rule);
+    let threads = |count: usize| {
+        axioval_engine::Parallelism::new(std::num::NonZeroUsize::new(count).unwrap())
+    };
+    let report = |budget: u64,
+                  order: axioval_engine::RuleOrder,
+                  parallelism: axioval_engine::Parallelism,
+                  reuse: bool| {
+        let mut ruleset = common::runtime::ruleset(vec![covered("a"), covered("b"), covered("c")]);
+        ruleset.values = required.clone();
+        let registry = registry();
+        let plan = axioval_engine::compile(&registry, std::slice::from_ref(&package), &ruleset)
+            .unwrap()
+            .evaluate_in(order);
+        run(registry, plan, &session(slabs()), |runtime| {
+            let runtime = runtime
+                .with_evaluation_budget(budget)
+                .with_parallelism(parallelism);
+            if reuse {
+                runtime
+            } else {
+                runtime.without_reuse()
+            }
+        })
+        .unwrap()
+    };
+    let limited = |report: &Report, rule: &str| -> Vec<String> {
+        report
+            .not_evaluated
+            .iter()
+            .filter(|outcome| {
+                outcome.rule_id.to_string() == rule
+                    && outcome.reason == NotEvaluatedReason::ResourceLimit
+            })
+            .map(|outcome| {
+                outcome
+                    .object_id()
+                    .map_or_else(|| "project".to_owned(), |id| id.local_id.clone())
+            })
+            .collect()
+    };
+    // Each slab spends its rule's three nodes and the value's: what a
+    // reader pays whether the value was built for it or reused.
+    let mut partly = false;
+    for budget in [0, 8, 12, 13, 25, 26, 30, 38, 39, 40, 52, 60, 80] {
+        let plan = report(
+            budget,
+            axioval_engine::RuleOrder::Plan,
+            axioval_engine::Parallelism::SERIAL,
+            true,
+        );
+        let expected = serde_json::to_string(&plan).unwrap();
+        for order in [
+            axioval_engine::RuleOrder::Plan,
+            axioval_engine::RuleOrder::Reversed,
+        ] {
+            for parallelism in [axioval_engine::Parallelism::SERIAL, threads(2), threads(8)] {
+                for reuse in [true, false] {
+                    assert_eq!(
+                        serde_json::to_string(&report(budget, order, parallelism, reuse)).unwrap(),
+                        expected,
+                        "budget {budget}, {order:?}, {parallelism:?}, reuse {reuse}"
+                    );
+                }
+            }
+        }
+        // `a` and `b` judge and leave open the same slabs: `a` spent no
+        // more than the run's size, so `b` is within it.
+        assert_eq!(limited(&plan, "a"), limited(&plan, "b"), "budget {budget}");
+        assert_eq!(
+            subjects(&plan, "a"),
+            subjects(&plan, "b"),
+            "budget {budget}"
+        );
+        // `c` follows two rules that spent more than the run's size.
+        let open = limited(&plan, "a");
+        if !open.is_empty() && !open.contains(&"project".to_owned()) && budget > 0 {
+            partly = true;
+            assert_eq!(limited(&plan, "c"), ["project"], "budget {budget}");
+            assert!(subjects(&plan, "c").is_empty());
+        }
+    }
+    assert!(partly, "no budget left a rule part way");
+    // With the default budget every slab is judged by every rule.
+    let report = report(
+        axioval_engine::expression::DEFAULT_EVALUATION_BUDGET,
+        axioval_engine::RuleOrder::Reversed,
+        threads(4),
+        true,
+    );
+    assert!(
+        report.not_evaluated.is_empty(),
+        "{:?}",
+        report.not_evaluated
+    );
+    assert_eq!(subjects(&report, "c"), ["s2", "s3", "s5"]);
 }
 
 /// A sum over no member is zero of the unit the compiler types its members'

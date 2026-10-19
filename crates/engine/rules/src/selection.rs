@@ -102,7 +102,7 @@ fn fingerprint(selector: &Selector, hasher: &mut impl std::hash::Hasher) {
 
 /// [`select_objects`], selected once per run for every rule and template
 /// selecting the same objects: a selector that reads no rule's outcomes
-/// and evaluates no expression (whose evaluation spends the run's budget)
+/// and evaluates no expression (whose evaluation spends the rule's budget)
 /// selects the same objects whichever rule reads it. Any other selector is
 /// selected now.
 pub(crate) fn select_shared<'a>(

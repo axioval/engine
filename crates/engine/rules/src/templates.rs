@@ -26,7 +26,7 @@ mod requirements;
 mod scopes;
 
 use axioval_engine::expression::{
-    Evaluation, EvaluationBudget, ExpressionContext, NotEvaluated, Reason, Value, evaluate_untraced,
+    Evaluation, ExpressionContext, NotEvaluated, Reason, Value, budget, evaluate_untraced,
 };
 use axioval_engine::template::{
     Check, Condition, Decision, Derived, End, Expect, Form, Members, Operand, Refusals, Sign,
@@ -2526,8 +2526,6 @@ fn cited(read: &Read, name: &str) -> Vec<ObjectId> {
 struct Ahead<'a> {
     prefetched: Prefetch<'a>,
     bound: Vec<BoundPrefetched>,
-    /// The run's evaluation budget, looked up once for every object.
-    budget: Option<&'a Arc<EvaluationBudget>>,
 }
 
 /// Whether each of the form's `unless` values applies to the rule, worked
@@ -2576,7 +2574,7 @@ fn refused_ahead(plan: &Plan<'_>, object: &Object, ahead: &mut Ahead<'_>) -> Opt
     };
     // A spent budget is worded where the leaves read it (spending a spent
     // budget again changes nothing).
-    if !ahead.budget.is_none_or(|budget| budget.spend()) {
+    if !budget::spend() {
         return None;
     }
     let (_, Err((reason, mut message))) = ahead.prefetched.swap_remove(at) else {
@@ -3320,7 +3318,7 @@ fn judge_object(
         .iter()
         .any(|step| property_read(&step.expression).is_none());
     let mut leaves = ObjectLeaves::read_ahead(
-        (context, ahead.budget),
+        context,
         (object, &plan.bound.parameters),
         arguments,
         (ahead.prefetched, ahead.bound),
@@ -4164,7 +4162,6 @@ pub(crate) fn run(
         arguments
     };
     let (batched, bound) = read_ahead(&plan, context, &arguments, selected.first().copied());
-    let budget = context.services.get::<Arc<EvaluationBudget>>();
     // Objects judged on several threads, each chunk read ahead and judged
     // on one, merged below in the selection's order exactly as the serial
     // loop pushes them. A form judging members keeps what it found of
@@ -4187,11 +4184,7 @@ pub(crate) fn run(
                         (context, &arguments),
                         rule,
                         (object, &ran.once),
-                        Ahead {
-                            prefetched,
-                            bound,
-                            budget,
-                        },
+                        Ahead { prefetched, bound },
                     )
                 })
                 .collect::<Vec<_>>()
@@ -4233,11 +4226,7 @@ pub(crate) fn run(
                 (context, &arguments),
                 rule,
                 (object, &ran.once),
-                Ahead {
-                    prefetched,
-                    bound,
-                    budget,
-                },
+                Ahead { prefetched, bound },
             );
             if let (Some(table), Some(row)) = (&mut table, row) {
                 // Selected objects are distinct, so rows never collide.

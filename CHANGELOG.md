@@ -72,9 +72,6 @@ All notable changes are documented here. This project follows Semantic Versionin
   the bridge's `Options::with_reuse` (the free-space service keeps no
   placement scene, footprint or column, `AxiolidFreeSpaceService::with_reuse`),
   through the hidden `check` switches `--rule-order` and `--no-reuse`.
-  The run-wide expression evaluation budget can still refuse a different
-  rule in another order once spent (#447); nothing in the gate comes near
-  it.
 
 - **A derivation store that builds each key once**
   ([#437](https://github.com/axioval/engine/issues/437)), the foundation of
@@ -179,6 +176,32 @@ All notable changes are documented here. This project follows Semantic Versionin
   archives stay byte-identical.
 
 ### Changed
+
+- **The expression evaluation budget refuses alike in any rule order**
+  ([#447](https://github.com/axioval/engine/issues/447),
+  [ADR 0006](docs/src/adr-0006.md#the-expression-evaluation-budget)).
+  `Runtime::with_evaluation_budget` now gives each rule a share of its own
+  of that many nodes instead of one count for the whole run, so a rule is
+  never left open because the rules before it spent the budget. A ruleset
+  value, and a value or selection the run's memo keeps, is built in a
+  share of its own and charged to every reader as if built for it
+  (`axioval_engine::expression::budget`: `EvaluationBudget`, `Cost`,
+  `built`, `charge`), whether it was built or kept. The same number bounds
+  the run: once the rules before a rule in plan order spent more, the rule
+  is refused whole (one project-wide `resource_limit` outcome) where it
+  would spend any node or reads a rule refused so, the same rules whatever
+  order they ran in (`ExecutionPlan::evaluate_in`). A rule whose share ran
+  out on several threads is judged again on one, its subjects in their
+  order; a run on several threads is no longer run again serially when the
+  budget runs out, and the derivation observer is told once. The
+  `EvaluationBudget` service is gone: the runtime enters each rule's
+  budget on its thread and `Parallelism::map_ordered` on every worker,
+  where `budget::spend` reads it. A spent budget's reason now reads "the
+  rule's expression evaluation budget is spent". With the default budget
+  nothing changes: no public parity model comes near it. The determinism
+  gate runs its checks again under a budget of 10 nodes in four variants
+  (the hidden `check --evaluation-budget`), and requires a rule refused
+  part way and rules refused whole, alike in each.
 
 - **`check --timings` prints no derivation lines**
   ([#442](https://github.com/axioval/engine/issues/442)). It keeps to

@@ -201,6 +201,15 @@ obstacle footprint or column. The harness only runs variants and compares
 bytes, so a later switch, such as a memory budget that makes evaluation
 wait (#407), is one more row.
 
+The same checks run again under an expression evaluation budget of 10
+nodes (the hidden `--evaluation-budget`, #447), in four variants of their
+own: the plan's order and reversed on one thread, a seeded shuffle on
+four, and reversed on four without reuse. Over the generated building
+that budget runs out part way through a rule of `coverage` and refuses
+the later rules of `counts`, `coverage` and `judges` whole by the
+backstop; the gate requires both to happen, so the variants cannot go
+inert, and every variant's output to be the first's.
+
 The checks are the parity cases whose rules share the most: `floors`
 (free-floor circle and rectangle searches, clearances and circulation over
 the same spaces), `counts` (relationship walks), `coverage` and `spans`
@@ -242,10 +251,18 @@ reused, so every budget charges a reused value as if it were built:
 - *The overlay budget* (#419) counts each overlay from its operands, and a
   refused obstacle footprint is kept by the very key it was refused for,
   so it refuses alike whether built or kept.
-- *The expression evaluation budget* is one count for a whole run: once
-  spent, whichever rule runs next is left open, so which rule that is
-  depends on the order (#447). A run on several threads is run again
-  serially; no fixture or public model comes near the default budget.
+- *The expression evaluation budget* (#447) gives each rule a share of
+  its own and charges every ruleset value, measured value and selection
+  it reads as if built for it, whether built or kept. Its backstop
+  refuses whole rules in plan order once the rules before them spent the
+  run's size, so the same rules whatever the order. A rule whose share
+  ran out on several threads is judged again on one, its subjects in
+  their order. `rules_sharing_a_value_are_refused_alike_in_any_order`
+  (`crates/engine/rules/tests/expression.rs`) runs three rules reading
+  one value over budgets about their thresholds, in the plan's order and
+  reversed, on one, two and eight threads, with and without reuse, and
+  requires one report; the gate's budgeted variants below do the same
+  for the cases.
 
 **Recorded outcomes.** A template replaces its capability under the
 capability's id, so a case cannot run both side by side. A case's

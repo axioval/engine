@@ -17,6 +17,7 @@ use axioval_ir::measured::{MeasuredArgument, MeasuredCall};
 use axioval_ir::{Evidence, ObjectId, Project, QuantityDimension, SourceId};
 
 use crate::derivation::{DerivationStore, Keyed};
+use crate::expression::budget::{self, Cost};
 use crate::properties::PropertyResolutionError;
 use crate::{RuleContext, ServiceRegistry};
 
@@ -517,6 +518,11 @@ impl MeasuredMemo {
     /// The value kept for `key` while the rule being evaluated runs, or
     /// `measure`'s, kept: what only that rule reads. Over a store that
     /// keeps nothing ([`DerivationStore::forgetful`]), measured every time.
+    ///
+    /// The expression nodes `measure` evaluates are charged to every
+    /// caller as if it measured the value itself
+    /// ([`crate::expression::budget::built`]), so which subject of the rule
+    /// measured it first changes nothing (#447).
     pub fn get_or_measure_for_rule<K, V>(&self, key: K, measure: impl FnOnce() -> V) -> V
     where
         K: Hash + Eq + Send + 'static,
@@ -525,25 +531,25 @@ impl MeasuredMemo {
         if !self.store.keeps() {
             return measure();
         }
-        let table = TypeId::of::<Table<K, V>>();
+        let table = TypeId::of::<Table<K, (V, Cost)>>();
         if let Ok(entries) = self.rule.lock()
-            && let Some(value) = entries
+            && let Some((value, cost)) = entries
                 .get(&table)
-                .and_then(|entries| entries.downcast_ref::<Table<K, V>>())
+                .and_then(|entries| entries.downcast_ref::<Table<K, (V, Cost)>>())
                 .and_then(|entries| entries.get(&key))
         {
-            return value.clone();
+            return budget::read_built(value.clone(), *cost);
         }
-        let value = measure();
+        let (value, cost) = budget::built(measure);
         if let Ok(mut entries) = self.rule.lock()
             && let Some(entries) = entries
                 .entry(table)
-                .or_insert_with(|| Box::new(Table::<K, V>::default()))
-                .downcast_mut::<Table<K, V>>()
+                .or_insert_with(|| Box::new(Table::<K, (V, Cost)>::default()))
+                .downcast_mut::<Table<K, (V, Cost)>>()
         {
-            entries.entry(key).or_insert_with(|| value.clone());
+            entries.entry(key).or_insert_with(|| (value.clone(), cost));
         }
-        value
+        budget::read_built(value, cost)
     }
 
     /// `measure` of `key` kept for the rule being evaluated in `services`'
@@ -579,18 +585,23 @@ impl MeasuredMemo {
     /// When measuring `key` needs `key` itself (a cycle,
     /// [`crate::DerivationError::Cycle`]), rather than waiting forever; and when
     /// `measure` panics.
+    ///
+    /// The expression nodes `measure` evaluates are charged to every
+    /// caller as if it measured the value itself
+    /// ([`crate::expression::budget::built`]): a caller whose budget cannot
+    /// afford them has nothing left (#447).
     pub fn get_or_measure<K, V>(&self, key: K, measure: impl FnOnce() -> V) -> V
     where
         K: Hash + Eq + Send + Sync + 'static,
         V: Clone + Send + 'static,
     {
-        match self.store.get_or_build::<Shared, K, V, V>(
+        match self.store.get_or_build::<Shared, K, (V, Cost), (V, Cost)>(
             crate::derivation::Policy::unplanned(std::any::type_name::<(K, V)>()),
             Keyed::Owned(key),
-            || Ok((measure(), 0)),
-            V::clone,
+            || Ok((budget::built(measure), 0)),
+            |(value, cost)| (value.clone(), *cost),
         ) {
-            Ok(value) => value,
+            Ok((value, cost)) => budget::read_built(value, cost),
             Err(error) => panic!("{error}"),
         }
     }

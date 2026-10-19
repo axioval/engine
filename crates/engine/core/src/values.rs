@@ -15,7 +15,7 @@ use axioval_ir::{Evidence, ObjectId, Property, PropertyValue, VALUE_SET};
 
 use crate::EngineError;
 use crate::concepts::ConceptBindings;
-use crate::expression::{ExpressionContext, Leaf, Value, evaluate};
+use crate::expression::{ExpressionContext, Leaf, Value, budget, evaluate};
 use crate::properties::{
     CompletePropertyAbsenceEvidence, PropertyRequest, PropertyResolution, PropertyResolutionError,
     ResolvedProperty,
@@ -112,10 +112,11 @@ pub(crate) type Computed = Result<(Value, Vec<Evidence>), String>;
 pub(crate) struct DerivedValues {
     definitions: Arc<BTreeMap<String, Expression>>,
     bindings: Option<ConceptBindings>,
-    budget: Option<Arc<crate::expression::EvaluationBudget>>,
     types: Option<Arc<crate::expression::DeclaredTypes>>,
     catalogues: Option<Arc<crate::Catalogues>>,
-    cache: Mutex<BTreeMap<(ObjectId, String), Computed>>,
+    /// Each value computed, with the nodes it took: charged to every
+    /// reader as if built for it (#447).
+    cache: Mutex<BTreeMap<(ObjectId, String), (Computed, budget::Cost)>>,
 }
 
 /// The value expressions of a plan, installed in a run's services.
@@ -129,7 +130,6 @@ impl DerivedValues {
     pub(crate) fn new(
         definitions: Arc<BTreeMap<String, Expression>>,
         bindings: Option<ConceptBindings>,
-        budget: Option<Arc<crate::expression::EvaluationBudget>>,
         (types, catalogues): (
             Option<Arc<crate::expression::DeclaredTypes>>,
             Option<Arc<crate::Catalogues>>,
@@ -138,7 +138,6 @@ impl DerivedValues {
         Self {
             definitions,
             bindings,
-            budget,
             types,
             catalogues,
             cache: Mutex::new(BTreeMap::new()),
@@ -146,7 +145,9 @@ impl DerivedValues {
     }
 
     /// The value `name` of `object`, reading through `resolver`, computed
-    /// once per run.
+    /// once per run in a budget of its own and charged to every reader as
+    /// if built for it ([`budget::built`]): a reader that cannot afford it
+    /// is refused it.
     pub(crate) fn compute(
         &self,
         object: &ObjectId,
@@ -154,15 +155,29 @@ impl DerivedValues {
         resolver: &Resolver<'_>,
     ) -> Computed {
         let key = (object.clone(), name.to_owned());
-        if let Some(cached) = self
+        let cached = self
             .cache
             .lock()
             .ok()
-            .and_then(|cache| cache.get(&key).cloned())
-        {
-            return cached;
+            .and_then(|cache| cache.get(&key).cloned());
+        let (computed, cost) = cached.unwrap_or_else(|| {
+            let built = budget::built(|| self.build(object, name, resolver));
+            // Held only to store: a value reading another computes it first.
+            if let Ok(mut cache) = self.cache.lock() {
+                cache.insert(key, built.clone());
+            }
+            built
+        });
+        if budget::charge(cost) {
+            computed
+        } else {
+            Err(crate::expression::Reason::BudgetExhausted.to_string())
         }
-        let computed = match self.definitions.get(name) {
+    }
+
+    /// The value `name` of `object`, computed now.
+    fn build(&self, object: &ObjectId, name: &str, resolver: &Resolver<'_>) -> Computed {
+        match self.definitions.get(name) {
             None => Err(format!("the ruleset declares no value `{name}`")),
             Some(expression) => {
                 let mut leaves = ObjectReads {
@@ -181,12 +196,7 @@ impl DerivedValues {
                     .map(|value| (value, evidence))
                     .map_err(|why| why.to_string())
             }
-        };
-        // Held only to store: a value reading another computes it first.
-        if let Ok(mut cache) = self.cache.lock() {
-            cache.insert(key, computed.clone());
         }
-        computed
     }
 
     /// Answers a request in [`VALUE_SET`].
@@ -274,10 +284,7 @@ struct ObjectReads<'a> {
 
 impl ExpressionContext for ObjectReads<'_> {
     fn spend(&mut self) -> bool {
-        self.values
-            .budget
-            .as_ref()
-            .is_none_or(|budget| budget.spend())
+        budget::spend()
     }
 
     fn property(&mut self, set: Option<&str>, name: &str) -> Leaf {

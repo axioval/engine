@@ -670,14 +670,42 @@ are bounded:
 | nodes, aggregate filters included | `MAX_EXPRESSION_NODES` (2048) | `Expression::validate` |
 | aggregates, `argmin`, `argmax` and `pairs` within one another's `value`, `by` or `where` | `MAX_AGGREGATE_NESTING` (2) | `Expression::validate` |
 | text | `MAX_TEXT_LENGTH` (1000 characters) | the text parser |
-| nodes evaluated per run, every rule, value and aggregate member together | `DEFAULT_EVALUATION_BUDGET` (100 000 000) | `Runtime::with_evaluation_budget` |
+| nodes evaluated per rule, its values and aggregate members included, and by the rules of a run before the rest are refused | `DEFAULT_EVALUATION_BUDGET` (100 000 000) | `Runtime::with_evaluation_budget` |
 
 The first four refuse the expression when the ruleset is compiled (a rule's
 `InvalidExpression`, a value's `InvalidValue`), naming the limit. Once a
-run has spent its evaluation budget, every further expression leaves its
-object not evaluated (`resource_limit`, "the run's expression evaluation
-budget is spent"), never passed: an expensive ruleset degrades to open
-outcomes, not to wrong ones.
+rule has spent its share of the evaluation budget, every further
+expression of the rule leaves its object not evaluated (`resource_limit`,
+"the rule's expression evaluation budget is spent"), never passed: an
+expensive ruleset degrades to open outcomes, not to wrong ones.
+
+What a rule is refused depends on its own request alone (#447,
+[ADR 0006](./adr-0006.md)), never on the rules before it, the order they
+run in, the threads or what was reused:
+
+- **Each rule spends a share of its own**, the budget's size, entered on
+  its thread and on every worker its subjects are judged on
+  (`axioval_engine::expression::budget`).
+- **A shared value is charged as if built.** A ruleset value, or a
+  measured value or selection the run's memo keeps, is built in a share of
+  its own, and the nodes it took are kept beside it. Every reader is
+  charged them, whether it built the value or found it kept. A reader that
+  cannot afford them is refused the value (a ruleset value is not
+  evaluated for it) and has nothing left.
+- **Threads.** A rule's subjects spend its one share. Which subject a
+  spent share refuses depends on the order they spend it in, so a rule
+  whose share ran out on several threads is judged again on one, its
+  subjects in their order; every other rule reports alike on any number
+  of threads, every node it evaluated having been granted.
+- **The backstop.** The same number bounds the run: once the rules before
+  a rule in plan order (and the classifications, groupings and relations
+  derived before any rule) spent more than it, the rule is refused whole,
+  one project-wide `resource_limit` outcome ("the rules before it spent
+  the run's expression evaluation budget"), where it would spend any node
+  or reads a rule refused so. A rule spending none is judged as ever.
+  Whichever order the rules run in, the backstop refuses the same rules:
+  a rule run before the rules ahead of it in plan order is refused once
+  they ran.
 
 The evaluator, the type checker and the text parser are fuzzed in the test
 suite with seeded random inputs (`fuzzing_*` in

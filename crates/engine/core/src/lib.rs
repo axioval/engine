@@ -871,6 +871,10 @@ pub struct DeferredRule {
 #[derive(Clone, Debug)]
 pub struct ExecutionPlan {
     rules: Vec<CompiledRule>,
+    /// The rules in the plan's own order where [`Self::evaluate_in`] evaluates
+    /// them in another: the order the evaluation budget's backstop refuses
+    /// them in (#447).
+    planned: Option<Arc<[RuleId]>>,
     deferred: Vec<DeferredRule>,
     concepts: Arc<ConceptCatalog>,
     refinements: BTreeMap<RuleId, RuleRefinement>,
@@ -912,9 +916,10 @@ pub struct ExecutionPlan {
 /// its parameters and the outcomes it reads, and whatever one rule builds
 /// for another is a pure function of its key, charged as if built
 /// (ADR 0006). The determinism gate (#441) evaluates a check in several
-/// orders and requires the same bytes. The one exception still open is a
-/// run whose expression evaluation budget runs out, which leaves open
-/// whichever rule comes next (#447).
+/// orders and requires the same bytes, under an expression evaluation
+/// budget that runs out too (#447): each rule spends a share of its own,
+/// and the run-wide backstop refuses rules in the plan's order whatever
+/// the order they ran in.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum RuleOrder {
     /// The plan's own: by rule id, after the rules each reads.
@@ -938,6 +943,9 @@ impl ExecutionPlan {
     /// (#441); the plan's own order is the one a check uses.
     #[must_use]
     pub fn evaluate_in(mut self, order: RuleOrder) -> Self {
+        if self.planned.is_none() {
+            self.planned = Some(self.rules.iter().map(|rule| rule.id.clone()).collect());
+        }
         let mut preferred = std::mem::take(&mut self.rules);
         match order {
             RuleOrder::Plan => {}
@@ -1590,23 +1598,35 @@ impl Runtime {
         }
     }
     /// Installs what a run's expressions need: the plan's derived values
-    /// and a fresh evaluation budget.
+    /// and their types.
     fn install_expressions(
-        &self,
         services: &mut ServiceRegistry,
         derived: &Arc<BTreeMap<String, schema::Expression>>,
         types: &Arc<expression::DeclaredTypes>,
     ) {
         services.replace(values::ValueExpressions(derived.clone()));
         services.replace(types.clone());
-        services.replace(Arc::new(expression::EvaluationBudget::new(
-            self.evaluation_budget,
-        )));
     }
-    /// How many expression nodes a run may evaluate, all rules, values and
-    /// aggregate members together ([`expression::DEFAULT_EVALUATION_BUDGET`]
-    /// unless set). Once spent, every further expression leaves its object
-    /// not evaluated (`resource_limit`), never passed.
+    /// How many expression nodes each rule may evaluate, its values and
+    /// aggregate members included ([`expression::DEFAULT_EVALUATION_BUDGET`]
+    /// unless set). Once its share is spent, every further expression of
+    /// the rule leaves its object not evaluated (`resource_limit`), never
+    /// passed.
+    ///
+    /// A share is the rule's own (#447): a value built once and read by
+    /// several rules or subjects (a ruleset value, a measured value, a
+    /// shared selection) is charged to every reader as if built for it
+    /// ([`expression::budget`]), so what a rule is refused depends on its
+    /// own request alone, never on the rules before it, the order they run
+    /// in ([`ExecutionPlan::evaluate_in`]), the threads or what was reused
+    /// ([`Self::without_reuse`]).
+    ///
+    /// The same number bounds the run: once the rules before a rule in
+    /// plan order (and the classifications, groupings and relations
+    /// evaluated before any rule) spent more than it, the rule is refused
+    /// whole (`resource_limit`, one project-wide outcome) where it would
+    /// spend any node or reads a rule refused so. A rule spending none is
+    /// judged as ever.
     #[must_use]
     pub fn with_evaluation_budget(mut self, nodes: u64) -> Self {
         self.evaluation_budget = nodes;
@@ -1618,10 +1638,12 @@ impl Runtime {
     /// their order, never in the order threads finish them, and a panic is
     /// raised as the serial loop raises it.
     ///
-    /// Which expression nodes the evaluation budget refuses depends on the
-    /// order they are spent in, so a run whose budget ran out is run again
-    /// serially, its report that serial run's (the rule observer is told
-    /// of each rule again). Each thread evaluates one subject at a time,
+    /// A rule's subjects spend one evaluation budget share whatever the
+    /// threads ([`Self::with_evaluation_budget`]). Which subject a spent
+    /// share refuses depends on the order they spend it in, so a rule whose
+    /// share ran out on several threads is judged again on one, its report
+    /// that serial judgement's; no other rule is judged again (#447). Each
+    /// thread evaluates one subject at a time,
     /// with what that subject's measurement holds; the heavy steps of
     /// those measurements are bounded together by the memory budget
     /// ([`Self::with_memory_budget`]), not by the threads.
@@ -1727,8 +1749,7 @@ impl Runtime {
     }
     /// Tells `observer`, at the end of each run, how its derivation store
     /// was reused ([`DerivationStore::statistics`]), such as for a host's
-    /// timings. A run on several threads that is run again serially (its
-    /// evaluation budget ran out) tells it twice.
+    /// timings.
     #[must_use]
     pub fn with_derivation_observer(mut self, observer: DerivationObserver) -> Self {
         self.derivations = Some(observer);
@@ -1951,9 +1972,7 @@ impl Runtime {
             .collect()
     }
 
-    /// Runs `plan` at the runtime's parallelism; a run on several threads
-    /// whose evaluation budget ran out is run again serially, since which
-    /// nodes it refused depends on the order they were spent in.
+    /// Runs `plan` at the runtime's parallelism.
     fn run_with_services(
         &self,
         project: &Project,
@@ -1966,40 +1985,17 @@ impl Runtime {
         // and on every worker it fans out to; without one, against any
         // budget the host entered on this thread.
         let _budget = self.memory_budget.as_ref().map(MemoryBudget::enter);
-        if self.parallelism.is_serial() {
-            return self
-                .run_at(
-                    project,
-                    services,
-                    (type_systems, session),
-                    plan,
-                    Parallelism::SERIAL,
-                )
-                .map(|(report, outcomes, _)| (report, outcomes));
-        }
-        let (report, outcomes, refused) = self.run_at(
-            project,
-            services,
-            (type_systems.clone(), session.clone()),
-            plan.clone(),
-            self.parallelism,
-        )?;
-        if !refused {
-            return Ok((report, outcomes));
-        }
-        drop((report, outcomes));
         self.run_at(
             project,
             services,
             (type_systems, session),
             plan,
-            Parallelism::SERIAL,
+            self.parallelism,
         )
-        .map(|(report, outcomes, _)| (report, outcomes))
     }
 
     /// Runs `plan` with each rule's subjects evaluated on `parallelism`
-    /// threads, and tells whether the evaluation budget refused a node.
+    /// threads.
     #[allow(clippy::type_complexity, clippy::too_many_lines)]
     fn run_at(
         &self,
@@ -2011,7 +2007,7 @@ impl Runtime {
         ),
         plan: ExecutionPlan,
         parallelism: Parallelism,
-    ) -> Result<(Report, RuleOutcomes, bool), EngineError> {
+    ) -> Result<(Report, RuleOutcomes), EngineError> {
         // Bindings are per run: they join this plan's package concepts to this
         // project's declared type systems, so they cannot be registered once by
         // a host. A host-registered `ConceptBindings` is overridden rather than
@@ -2046,7 +2042,7 @@ impl Runtime {
         let mut findings = Vec::new();
         let mut tables: Vec<ReportTable> = Vec::new();
         let mut not_evaluated = self.deferred(plan.deferred, &mut summaries);
-        self.install_expressions(&mut services, &plan.values, &plan.types);
+        Self::install_expressions(&mut services, &plan.values, &plan.types);
         // The catalogues are the plan's: a host copy could state entries it
         // never supplied through the plan.
         services.replace(Arc::new(plan.catalogues.clone()));
@@ -2070,6 +2066,11 @@ impl Runtime {
         // reach the store as the check's current one, on this thread and on
         // every worker it fans out to (`derivation::current`).
         let _store = store.enter();
+        // Expressions evaluated before any rule (classifications, groupings
+        // and relations reading values) spend a budget of the run's size,
+        // counted first by the backstop (#447).
+        let before_rules = Arc::new(expression::EvaluationBudget::new(self.evaluation_budget));
+        let _before_rules = before_rules.enter();
         self.registry.install_measured(&mut services, project);
         // Measured values are answered through the host's resolver in
         // every run; classifications are derived first when the plan has
@@ -2086,7 +2087,14 @@ impl Runtime {
         );
         // What every completed rule reported, for the rules that read it.
         let mut outcomes = RuleOutcomes::default();
-        for (index, rule) in plan.rules.into_iter().enumerate() {
+        let mut backstop = Backstop::new(
+            self.evaluation_budget,
+            plan.planned.as_deref(),
+            &plan.rules,
+            before_rules.spent(),
+        );
+        let mut ran: Vec<RuleOutput> = Vec::new();
+        for (index, rule) in plan.rules.iter().enumerate() {
             store.release_unread(readers.unread_from(index));
             let capability = self
                 .registry
@@ -2100,6 +2108,32 @@ impl Runtime {
             // An auxiliary rule's outcome is recorded for the rules that
             // read it, and reported only through them.
             let reported = !plan.auxiliary.contains(&rule_id);
+            let reads = plan.dependencies.get(&rule_id);
+            // Past the backstop, a rule reading a refused one is refused
+            // unrun, and any other is given nothing to spend.
+            let past = backstop.past(&rule_id);
+            if past == Some(true) && backstop.reads_refused(reads) {
+                backstop.done(&rule_id, 0, true, reads);
+                let refusal = backstop.refusal();
+                outcomes.insert(rule_id.clone(), RuleRecord::of(&refusal, None));
+                ran.push(RuleOutput::refused(
+                    rule_id,
+                    reported,
+                    refusal,
+                    self.summaries,
+                ));
+                continue;
+            }
+            let share = if past == Some(true) {
+                0
+            } else {
+                self.evaluation_budget
+            };
+            let mut budget = Arc::new(expression::EvaluationBudget::within(
+                share,
+                self.evaluation_budget,
+            ));
+            let mut entered = budget.enter();
             // A rule reads the outcomes of the rules the plan ran before it.
             services.replace(outcomes.clone());
             let clock = self.timings.then(timing::RuleClock::start);
@@ -2108,12 +2142,19 @@ impl Runtime {
                 services: &services,
             };
             let gates = plan.gates.get(&rule_id).map_or(&[][..], Vec::as_slice);
-            let mut evaluation = match outcomes.gate(gates) {
+            let evaluation = match outcomes.gate(gates) {
                 rule_outcomes::Gate::Closed => {
                     outcomes.insert(rule_id.clone(), RuleRecord::skipped());
-                    if self.summaries && reported {
-                        summaries.push(timed(RuleSummary::skipped(rule_id), clock));
-                    }
+                    backstop.done(&rule_id, 0, false, reads);
+                    let summary = (self.summaries && reported)
+                        .then(|| timed(RuleSummary::skipped(rule_id.clone()), clock));
+                    ran.push(RuleOutput::of(
+                        rule_id,
+                        reported,
+                        past.is_none(),
+                        CapabilityEvaluation::default(),
+                        summary,
+                    ));
                     continue;
                 }
                 rule_outcomes::Gate::Undecided(why) => {
@@ -2121,54 +2162,119 @@ impl Runtime {
                     CapabilityEvaluation::not_evaluated(NotEvaluatedReason::IncompleteEvidence, why)
                 }
                 rule_outcomes::Gate::Open => {
-                    let evaluation = self.evaluate(
-                        &context,
-                        capability.as_ref(),
-                        &rule,
-                        plan.refinements.get(&rule_id),
-                    );
-                    let selection = refiner
-                        .filter(|_| plan.recorded.contains(&rule_id))
-                        .map(|refiner| rule_outcomes::selection(refiner.as_ref(), &context, &rule));
+                    let judge = |context: &RuleContext<'_>| {
+                        let evaluation = self.evaluate(
+                            context,
+                            capability.as_ref(),
+                            rule,
+                            plan.refinements.get(&rule_id),
+                        );
+                        let selection =
+                            refiner
+                                .filter(|_| plan.recorded.contains(&rule_id))
+                                .map(|refiner| {
+                                    rule_outcomes::selection(refiner.as_ref(), context, rule)
+                                });
+                        (evaluation, selection)
+                    };
+                    let (mut evaluation, mut selection) = judge(&context);
+                    // Which subject a spent share refuses depends on the
+                    // order the threads spend it in: the rule is judged
+                    // again on one thread, its subjects in their order. A
+                    // rule refused by the backstop is not judged again.
+                    if budget.refused() && !parallelism.is_serial() && past != Some(true) {
+                        drop((evaluation, selection));
+                        drop(entered);
+                        budget = Arc::new(expression::EvaluationBudget::within(
+                            share,
+                            self.evaluation_budget,
+                        ));
+                        entered = budget.enter();
+                        let mut serial = services.clone();
+                        serial.replace(Parallelism::SERIAL);
+                        (evaluation, selection) = judge(&RuleContext {
+                            project,
+                            services: &serial,
+                        });
+                    }
                     outcomes.insert(rule_id.clone(), RuleRecord::of(&evaluation, selection));
                     evaluation
                 }
             };
+            // What the rule spent, recording its selection for the rules
+            // reading it included; its summary's count below is not.
+            let tried = budget.spent() > 0 || budget.refused();
+            backstop.done(&rule_id, budget.spent(), tried, reads);
+            if past == Some(true) && tried {
+                let refusal = backstop.refusal();
+                outcomes.insert(rule_id.clone(), RuleRecord::of(&refusal, None));
+                ran.push(RuleOutput::refused(
+                    rule_id,
+                    reported,
+                    refusal,
+                    self.summaries,
+                ));
+                continue;
+            }
             // The time is the rule's own: counting its selection for the
             // summary below is the host's diagnostic, not the rule's work.
             let timing = clock.map(timing::RuleClock::finish);
             if !reported {
+                ran.push(RuleOutput::of(
+                    rule_id,
+                    reported,
+                    past.is_none(),
+                    CapabilityEvaluation::default(),
+                    None,
+                ));
                 continue;
             }
-            if let Some(refiner) = refiner
-                && self.summaries
-            {
-                let summary = summarize(&rule_id, refiner.selected(&context, &rule), &evaluation);
-                summaries.push(match timing {
+            let summary = refiner.filter(|_| self.summaries).map(|refiner| {
+                let summary = summarize(&rule_id, refiner.selected(&context, rule), &evaluation);
+                match timing {
                     Some(timing) => summary.with_timing(timing),
                     None => summary,
-                });
+                }
+            });
+            drop(entered);
+            ran.push(RuleOutput::of(
+                rule_id,
+                reported,
+                past.is_none(),
+                evaluation,
+                summary,
+            ));
+        }
+        // A rule run before the backstop knew of it is refused now where
+        // the backstop refuses it in plan order.
+        for output in &mut ran {
+            if output.speculative && backstop.refuses(&output.rule) {
+                let refusal = backstop.refusal();
+                outcomes.insert(output.rule.clone(), RuleRecord::of(&refusal, None));
+                *output = RuleOutput::refused(
+                    output.rule.clone(),
+                    output.reported,
+                    refusal,
+                    self.summaries,
+                );
             }
-            findings.extend(std::mem::take(&mut evaluation.findings));
-            // The compiled rule is the table's identity, whatever the capability named.
-            tables.extend(
-                std::mem::take(&mut evaluation.tables)
-                    .into_iter()
-                    .map(|table| table.with_rule_id(rule_id.clone())),
-            );
-            not_evaluated.extend(collapse_source_wide(&rule_id, evaluation.not_evaluated));
+        }
+        for output in ran {
+            if !output.reported {
+                continue;
+            }
+            summaries.extend(output.summary);
+            findings.extend(output.findings);
+            tables.extend(output.tables);
+            not_evaluated.extend(output.not_evaluated);
         }
         store.release_unread(readers.unread_from(usize::MAX));
-        let refused = services
-            .get::<Arc<expression::EvaluationBudget>>()
-            .is_some_and(|budget| budget.refused());
         if let Some(observer) = &self.derivations {
             observer(&store.statistics());
         }
         Ok((
             assemble(findings, not_evaluated, tables, summaries, &services)?,
             outcomes,
-            refused,
         ))
     }
 }
@@ -2206,6 +2312,161 @@ impl LastReaders {
             self.any.is_none_or(|last| last < index)
                 && self.named.get(&service).is_none_or(|last| *last < index)
         }
+    }
+}
+
+/// One rule's reported outcomes, kept until the backstop has decided
+/// whether it refuses the rule.
+struct RuleOutput {
+    rule: RuleId,
+    reported: bool,
+    /// Whether it ran before every rule ahead of it in plan order had.
+    speculative: bool,
+    findings: Vec<Finding>,
+    tables: Vec<ReportTable>,
+    not_evaluated: Vec<NotEvaluated>,
+    summary: Option<RuleSummary>,
+}
+
+impl RuleOutput {
+    /// What `rule` reported in `evaluation`.
+    fn of(
+        rule: RuleId,
+        reported: bool,
+        speculative: bool,
+        mut evaluation: CapabilityEvaluation,
+        summary: Option<RuleSummary>,
+    ) -> Self {
+        Self {
+            findings: std::mem::take(&mut evaluation.findings),
+            // The compiled rule is the table's identity, whatever the
+            // capability named.
+            tables: std::mem::take(&mut evaluation.tables)
+                .into_iter()
+                .map(|table| table.with_rule_id(rule.clone()))
+                .collect(),
+            not_evaluated: collapse_source_wide(&rule, evaluation.not_evaluated),
+            rule,
+            reported,
+            speculative,
+            summary,
+        }
+    }
+
+    /// A rule the backstop refused, as `refusal` reports it, summarized
+    /// where `summaries`.
+    fn refused(
+        rule: RuleId,
+        reported: bool,
+        refusal: CapabilityEvaluation,
+        summaries: bool,
+    ) -> Self {
+        let summary = summaries.then(|| RuleSummary::new(rule.clone(), 0, (0, false), (0, true)));
+        Self::of(rule, reported, false, refusal, summary)
+    }
+}
+
+/// The run-wide backstop of the expression evaluation budget (#447): once
+/// the rules before a rule in plan order (and what was evaluated before any
+/// rule) spent more than the run's size, the rule is refused whole where
+/// it would spend anything, or reads a rule refused so. Each rule's
+/// spending is its own (its share, charged as if built), so which rules
+/// the backstop refuses depends on the plan alone, never on the order the
+/// rules ran in: a rule that ran before the rules ahead of it is refused
+/// once they have.
+struct Backstop {
+    limit: u64,
+    /// Each rule's place in plan order.
+    ranks: BTreeMap<RuleId, usize>,
+    /// What each rule in plan order spent and whether it tried to spend
+    /// anything, once it ran.
+    spent: Vec<Option<(u64, bool, Vec<RuleId>)>>,
+    /// The rules in plan order that ran, from the first.
+    known: usize,
+    /// What was spent before the rules, and by the first `known` rules.
+    total: u64,
+    /// The rules refused, in plan order up to `known`.
+    refused: BTreeSet<RuleId>,
+    planned: Vec<RuleId>,
+}
+
+impl Backstop {
+    fn new(
+        limit: u64,
+        planned: Option<&[RuleId]>,
+        rules: &[CompiledRule],
+        before_rules: u64,
+    ) -> Self {
+        let planned: Vec<RuleId> = planned.map_or_else(
+            || rules.iter().map(|rule| rule.id.clone()).collect(),
+            <[RuleId]>::to_vec,
+        );
+        Self {
+            limit,
+            ranks: planned
+                .iter()
+                .enumerate()
+                .map(|(rank, rule)| (rule.clone(), rank))
+                .collect(),
+            spent: std::iter::repeat_with(|| None)
+                .take(planned.len())
+                .collect(),
+            known: 0,
+            total: before_rules,
+            refused: BTreeSet::new(),
+            planned,
+        }
+    }
+
+    /// Whether `rule` is past the backstop: `None` while a rule before it
+    /// in plan order is still to run.
+    fn past(&self, rule: &RuleId) -> Option<bool> {
+        let rank = *self.ranks.get(rule)?;
+        (self.known >= rank).then_some(self.total > self.limit)
+    }
+
+    /// Whether any of `reads` was refused.
+    fn reads_refused(&self, reads: Option<&BTreeSet<RuleId>>) -> bool {
+        reads.is_some_and(|reads| reads.iter().any(|read| self.refused.contains(read)))
+    }
+
+    /// Records that `rule` spent `spent` (`tried`: anything at all) and
+    /// reads `reads`.
+    fn done(&mut self, rule: &RuleId, spent: u64, tried: bool, reads: Option<&BTreeSet<RuleId>>) {
+        let Some(&rank) = self.ranks.get(rule) else {
+            return;
+        };
+        let reads = reads.map_or_else(Vec::new, |reads| reads.iter().cloned().collect());
+        self.spent[rank] = Some((spent, tried, reads));
+        // Every rule a rule reads is before it in plan order, so whether
+        // it reads a refused one is known once the rules before it ran.
+        while let Some(Some((spent, tried, reads))) = self.spent.get(self.known) {
+            let refused = self.total > self.limit
+                && (*tried || reads.iter().any(|read| self.refused.contains(read)));
+            if refused {
+                self.refused.insert(self.planned[self.known].clone());
+            } else {
+                self.total = self.total.saturating_add(*spent);
+            }
+            self.known += 1;
+        }
+    }
+
+    /// Whether the backstop refuses `rule`, once every rule ran.
+    fn refuses(&self, rule: &RuleId) -> bool {
+        self.refused.contains(rule)
+    }
+
+    /// What a refused rule reports: one project-wide outcome.
+    fn refusal(&self) -> CapabilityEvaluation {
+        CapabilityEvaluation::not_evaluated(
+            NotEvaluatedReason::ResourceLimit,
+            format!(
+                "the rules before it spent the run's expression evaluation budget of {} \
+                 nodes",
+                self.limit
+            ),
+        )
     }
 }
 

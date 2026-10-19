@@ -234,7 +234,8 @@ Identity is always source-qualified. External IDs such as IFC GlobalId are alias
 
 Rule packages contain data, not code. Capability IDs resolve only through an application-created trusted registry. Packages cannot load dynamic libraries, issue network requests, choose file paths, or instantiate arbitrary Rust types. Expressions and templates are data the engine evaluates: the expression
 language is total (no loops, recursion or user-defined functions), bounded
-in size, and every run shares an evaluation budget. Measured values are
+in size, and every rule spends an evaluation budget of its own, the run
+bounded by a backstop. Measured values are
 answered only by providers the host registered.
 
 ## Geometry boundary

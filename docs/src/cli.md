@@ -815,7 +815,10 @@ how long a check takes: `--rule-order plan|reversed|shuffled:SEED`
 evaluates the rules in another order wherever the rules they read leave
 it free, and `--no-reuse` keeps nothing built for reuse (a derivation
 store that keeps nothing, and geometry services that keep no placement
-scene or footprint). The result is the same either way, byte for byte.
+scene or footprint). The result is the same either way, byte for byte. A
+third, `--evaluation-budget NODES`, sets the expression evaluation budget
+(`Runtime::with_evaluation_budget`, 100 000 000 nodes per rule unless
+given) so that the gate can run it out (#447).
 
 `--memory-budget SIZE` states how much memory the check's heavy geometry
 steps (an overlay, a morphology of a free-floor search) may take at once

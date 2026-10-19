@@ -17,7 +17,6 @@
 //!   gives the same answer; a straddling one is not evaluated.
 use std::collections::BTreeMap;
 use std::fmt;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use axioval_ir::contract::{
     AggregateFunction, AggregateSource, Branch, Expression, ExpressionComparison, PropertyScope,
@@ -232,7 +231,7 @@ pub enum Reason {
     Mismatch(String),
     /// A text pattern does not compile.
     InvalidPattern(String),
-    /// The run's evaluation budget is spent.
+    /// The rule's evaluation budget is spent (#447).
     BudgetExhausted,
     /// An aggregate's result depends on members whose membership cannot
     /// be decided, this many.
@@ -261,7 +260,9 @@ impl fmt::Display for Reason {
             Self::Domain => f.write_str("the operand lies outside the function's domain"),
             Self::Mismatch(why) => f.write_str(why),
             Self::InvalidPattern(why) => write!(f, "the pattern is invalid: {why}"),
-            Self::BudgetExhausted => f.write_str("the run's expression evaluation budget is spent"),
+            Self::BudgetExhausted => {
+                f.write_str("the rule's expression evaluation budget is spent")
+            }
             Self::UndecidedMembers(count) => write!(
                 f,
                 "it depends on {count} member(s) whose membership cannot be decided"
@@ -499,64 +500,11 @@ pub struct Sequenced {
 /// A value read with a member of a pair in scope, and its evidence.
 pub type PairRead = (Result<Value, NotEvaluated>, Vec<Evidence>);
 
-/// The default number of expression nodes one run may evaluate.
-pub const DEFAULT_EVALUATION_BUDGET: u64 = 100_000_000;
-
-/// The work a run may spend evaluating expressions, in nodes, shared by
-/// every rule, value and aggregate member of the run.
-#[derive(Debug)]
-pub struct EvaluationBudget {
-    remaining: AtomicU64,
-    limit: u64,
-    /// Whether a node was refused: which nodes are depends on the order
-    /// they are spent in, so a run evaluating subjects on several threads
-    /// is run again serially when it is ([`crate::Runtime::with_parallelism`]).
-    refused: AtomicBool,
-}
-
-impl EvaluationBudget {
-    /// A budget of `limit` nodes.
-    #[must_use]
-    pub fn new(limit: u64) -> Self {
-        Self {
-            remaining: AtomicU64::new(limit),
-            limit,
-            refused: AtomicBool::new(false),
-        }
-    }
-
-    /// Spends one node; false once the budget is spent.
-    pub fn spend(&self) -> bool {
-        let spent = self
-            .remaining
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |left| {
-                left.checked_sub(1)
-            })
-            .is_ok();
-        if !spent {
-            self.refused.store(true, Ordering::Relaxed);
-        }
-        spent
-    }
-
-    /// Whether a node was refused: the budget ran out while something was
-    /// still to be evaluated.
-    #[must_use]
-    pub fn refused(&self) -> bool {
-        self.refused.load(Ordering::Relaxed)
-    }
-
-    /// The budget's size.
-    #[must_use]
-    pub fn limit(&self) -> u64 {
-        self.limit
-    }
-}
-
 /// Answers an expression's leaves for one object in scope.
 pub trait ExpressionContext {
-    /// Spends the work of evaluating one node; false once the run's budget
-    /// is spent, which leaves the expression not evaluated.
+    /// Spends the work of evaluating one node; false once the budget is
+    /// spent, which leaves the expression not evaluated. The runtime's
+    /// contexts spend the calling thread's budget ([`super::budget::spend`]).
     fn spend(&mut self) -> bool {
         true
     }

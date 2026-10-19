@@ -374,6 +374,12 @@ struct CheckArgs {
     /// under any bound, only slower.
     #[arg(long, value_name = "SIZE", value_parser = axioval::engine::memory::parse_size, hide = true)]
     keep_derivations: Option<u64>,
+    /// How many expression nodes each rule may evaluate, and the rules
+    /// together before the rest are refused (100000000 unless given). A
+    /// diagnostic of the determinism gate (#447): a budget that runs out
+    /// refuses alike in every order, on any threads and without reuse.
+    #[arg(long, value_name = "NODES", hide = true)]
+    evaluation_budget: Option<u64>,
     /// How much memory the check's heavy geometry steps may take at once,
     /// such as `8G` or `512M` (powers of 1024), or `none`. A step that
     /// would pass it beside the ones running waits for one to finish; a
@@ -1709,6 +1715,9 @@ fn check_runtime(
     }
     if let Some(bytes) = args.keep_derivations {
         runtime = runtime.with_kept_derivations(bytes);
+    }
+    if let Some(nodes) = args.evaluation_budget {
+        runtime = runtime.with_evaluation_budget(nodes);
     }
     if let Some(budget) = budget {
         runtime = runtime.with_memory_budget(budget.clone());

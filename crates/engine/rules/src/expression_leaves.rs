@@ -6,9 +6,9 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use axioval_engine::expression::{
-    EvaluationBudget, ExpressionContext, Interval, Leaf, Member, PairRead, Ranked, RuleRead,
-    Sequenced, Unit, Value, ZoneNamed, catalogue_value, catalogue_value_at, derived_value,
-    evaluate, evaluate_untraced,
+    ExpressionContext, Interval, Leaf, Member, PairRead, Ranked, RuleRead, Sequenced, Unit, Value,
+    ZoneNamed, budget, catalogue_value, catalogue_value_at, derived_value, evaluate,
+    evaluate_untraced,
 };
 use axioval_engine::{
     MeasuredMember, MeasuredRead, Measurement, MemberValue, ObjectVerdict, RuleContext,
@@ -82,8 +82,6 @@ pub(crate) type BoundPrefetched = (
 /// Answers an expression's leaves for one selected object.
 pub(crate) struct ObjectLeaves<'a> {
     context: &'a RuleContext<'a>,
-    /// The run's evaluation budget, looked up once for the object.
-    budget: Option<&'a Arc<EvaluationBudget>>,
     object: &'a Object,
     /// The rule's checked object: `object`, except in an aggregate's
     /// member scope.
@@ -165,7 +163,7 @@ impl<'a> ObjectLeaves<'a> {
         parameters: Option<&'a BTreeMap<String, ParameterValue>>,
     ) -> Self {
         Self::built(
-            (context, context.services.get::<Arc<EvaluationBudget>>()),
+            context,
             (object, parameters),
             (Prefetch::new(), Vec::new()),
             None,
@@ -176,7 +174,7 @@ impl<'a> ObjectLeaves<'a> {
     /// Leaves of `object` with everything [`Self::read_ahead`] states,
     /// written straight into place: the leaves are large to move.
     fn built(
-        (context, budget): (&'a RuleContext<'a>, Option<&'a Arc<EvaluationBudget>>),
+        context: &'a RuleContext<'a>,
         (object, parameters): (&'a Object, Option<&'a BTreeMap<String, ParameterValue>>),
         (prefetched, bound): (Prefetch<'a>, Vec<BoundPrefetched>),
         arguments: Option<&'a Arguments>,
@@ -184,7 +182,6 @@ impl<'a> ObjectLeaves<'a> {
     ) -> Self {
         Self {
             context,
-            budget,
             object,
             subject: object,
             parameters,
@@ -222,7 +219,6 @@ impl<'a> ObjectLeaves<'a> {
     fn member(&self, member: &'a Object) -> Self {
         Self {
             context: self.context,
-            budget: self.budget,
             object: member,
             subject: self.subject,
             parameters: self.parameters,
@@ -252,7 +248,6 @@ impl<'a> ObjectLeaves<'a> {
     fn measured_member(&self, member: &'a MeasuredMember) -> Self {
         Self {
             context: self.context,
-            budget: self.budget,
             object: self.object,
             subject: self.subject,
             parameters: self.parameters,
@@ -299,14 +294,14 @@ impl<'a> ObjectLeaves<'a> {
     /// resolved, for values that read again what other values read. Built
     /// in place, the leaves being large to move.
     pub(crate) fn read_ahead(
-        (context, budget): (&'a RuleContext<'a>, Option<&'a Arc<EvaluationBudget>>),
+        context: &'a RuleContext<'a>,
         (object, parameters): (&'a Object, &'a BTreeMap<String, ParameterValue>),
         arguments: &'a Arguments,
         (prefetched, bound): (Prefetch<'a>, Vec<BoundPrefetched>),
         cached: bool,
     ) -> Self {
         Self::built(
-            (context, budget),
+            context,
             (object, Some(parameters)),
             (prefetched, bound),
             Some(arguments),
@@ -1029,7 +1024,8 @@ fn measured_words(member: &MeasuredMember, index: usize, count: usize) -> (Strin
 
 impl ExpressionContext for ObjectLeaves<'_> {
     fn spend(&mut self) -> bool {
-        let spent = self.budget.is_none_or(|budget| budget.spend());
+        // The rule's budget, entered on this thread by the runtime (#447).
+        let spent = budget::spend();
         if !spent {
             self.reasons
                 .borrow_mut()
@@ -1198,9 +1194,12 @@ impl ExpressionContext for ObjectLeaves<'_> {
     fn derived(&mut self, name: &str) -> Leaf {
         let leaf = derived_value(self.context.services, &self.object.id, name);
         if leaf.value.is_err() {
-            self.reasons
-                .borrow_mut()
-                .push(NotEvaluatedReason::IncompleteEvidence);
+            // A value the rule's budget cannot afford is refused for it.
+            self.reasons.borrow_mut().push(if budget::exhausted() {
+                NotEvaluatedReason::ResourceLimit
+            } else {
+                NotEvaluatedReason::IncompleteEvidence
+            });
         }
         leaf
     }

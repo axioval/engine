@@ -4,6 +4,7 @@
 //! The contract is [`axioval_ir::contract::Expression`]; this module never
 //! runs package code, and every expression terminates.
 mod aggregate;
+pub mod budget;
 mod evaluate;
 mod extreme;
 mod interval;
@@ -15,10 +16,10 @@ mod unit;
 
 pub use crate::catalogues::{catalogue_value, catalogue_value_at};
 pub use crate::values::derived_value;
+pub use budget::{Cost, DEFAULT_EVALUATION_BUDGET, EvaluationBudget};
 pub use evaluate::{
-    DEFAULT_EVALUATION_BUDGET, Evaluation, EvaluationBudget, ExpressionContext, Leaf, Member,
-    NotEvaluated, PairRead, Ranked, Read, Reason, RuleRead, Sequenced, Source, Value, ZoneNamed,
-    evaluate, evaluate_untraced,
+    Evaluation, ExpressionContext, Leaf, Member, NotEvaluated, PairRead, Ranked, Read, Reason,
+    RuleRead, Sequenced, Source, Value, ZoneNamed, evaluate, evaluate_untraced,
 };
 pub use interval::{Interval, IntervalFailure, IntervalResult};
 pub use text::{MAX_TEXT_LENGTH, parse_text};

@@ -16,6 +16,7 @@ use std::panic::{self, AssertUnwindSafe};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::ServiceRegistry;
+use crate::expression::budget as evaluation;
 use crate::{derivation, memory, timing};
 
 /// How many threads a run evaluates a rule's subjects on, the thread
@@ -79,7 +80,9 @@ impl Parallelism {
     /// is timing, as they would on this thread, and the steps they admit
     /// are admitted against this thread's memory budget
     /// ([`memory::current`]), so the memory those steps take together is
-    /// bounded whatever the threads.
+    /// bounded whatever the threads. Their expressions spend this thread's
+    /// expression evaluation budget ([`evaluation::current`]): the rule's
+    /// one share.
     pub fn map_ordered<T, R>(self, items: &[T], map: impl Fn(&T) -> R + Sync) -> Vec<R>
     where
         T: Sync,
@@ -115,6 +118,9 @@ impl Parallelism {
         // derive through its store.
         let budget = memory::current();
         let store = derivation::current();
+        // And spend the expression evaluation budget of the rule this
+        // thread evaluates (#447).
+        let evaluation = evaluation::current();
         let mut slots: Vec<Option<std::thread::Result<R>>> =
             std::iter::repeat_with(|| None).take(items.len()).collect();
         std::thread::scope(|scope| {
@@ -127,6 +133,7 @@ impl Parallelism {
                         .spawn_scoped(scope, || {
                             let _budget = memory::enter(budget.clone());
                             let _store = derivation::enter(store.clone());
+                            let _evaluation = evaluation::enter(evaluation.clone());
                             derivation::within(lineage.clone(), || timing::worker(timed, work))
                         })
                         .ok()

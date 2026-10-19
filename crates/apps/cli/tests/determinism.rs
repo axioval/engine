@@ -14,6 +14,12 @@
 //! (a memory budget that makes evaluation wait, a store on disk) is one
 //! more row of [`VARIANTS`].
 //!
+//! The same orders, threads and reuse run again under an expression
+//! evaluation budget small enough to run out ([`BUDGETED`], the hidden
+//! `--evaluation-budget`): each rule's share runs out part way and the
+//! backstop refuses the rules after the first that spent the run's size,
+//! alike in every variant (#447).
+//!
 //! The rulesets are the parity cases' that share the most between rules:
 //! `floors` (free-floor circle and rectangle searches, clearances and
 //! circulation over the same spaces), `counts` (relationship walks),
@@ -75,6 +81,49 @@ const VARIANTS: &[(&str, &[&str])] = &[
             "shuffled:3",
             "--keep-derivations",
             "1",
+        ],
+    ),
+];
+
+/// An expression evaluation budget most rules of the cases spend part
+/// way, and the variants run under it, the first the reference.
+const BUDGETED: &[(&str, &[&str])] = &[
+    (
+        "plan, 1 thread, budget 10",
+        &["--threads", "1", "--evaluation-budget", "10"],
+    ),
+    (
+        "reversed, 1 thread, budget 10",
+        &[
+            "--threads",
+            "1",
+            "--rule-order",
+            "reversed",
+            "--evaluation-budget",
+            "10",
+        ],
+    ),
+    (
+        "shuffled (seed 1), 4 threads, budget 10",
+        &[
+            "--threads",
+            "4",
+            "--rule-order",
+            "shuffled:1",
+            "--evaluation-budget",
+            "10",
+        ],
+    ),
+    (
+        "reversed, 4 threads, no reuse, budget 10",
+        &[
+            "--threads",
+            "4",
+            "--rule-order",
+            "reversed",
+            "--no-reuse",
+            "--evaluation-budget",
+            "10",
         ],
     ),
 ];
@@ -166,20 +215,21 @@ fn first_difference(expected: &[u8], actual: &[u8]) -> String {
     }
 }
 
-/// Runs every check in every variant, at most [`AT_ONCE`] at a time; the
-/// differences from each check's first variant, one line each.
-fn differences(checks: &[Check]) -> Vec<String> {
+/// Runs every check in every one of `variants`, at most [`AT_ONCE`] at a
+/// time; the differences from each check's first variant, one line each,
+/// and each check's first output.
+fn differences(checks: &[Check], variants: &[(&str, &[&str])]) -> (Vec<String>, Vec<Vec<u8>>) {
     let runs: Vec<(usize, usize)> = (0..checks.len())
-        .flat_map(|check| (0..VARIANTS.len()).map(move |variant| (check, variant)))
+        .flat_map(|check| (0..variants.len()).map(move |variant| (check, variant)))
         .collect();
     let next = AtomicUsize::new(0);
     let results: Mutex<Vec<Vec<Option<Vec<u8>>>>> =
-        Mutex::new(checks.iter().map(|_| vec![None; VARIANTS.len()]).collect());
+        Mutex::new(checks.iter().map(|_| vec![None; variants.len()]).collect());
     std::thread::scope(|scope| {
         for _ in 0..AT_ONCE {
             scope.spawn(|| {
                 while let Some(&(check, variant)) = runs.get(next.fetch_add(1, Ordering::Relaxed)) {
-                    let output = result(&checks[check], VARIANTS[variant].1);
+                    let output = result(&checks[check], variants[variant].1);
                     results.lock().unwrap()[check][variant] = Some(output);
                 }
             });
@@ -187,13 +237,14 @@ fn differences(checks: &[Check]) -> Vec<String> {
     });
     let results = results.into_inner().unwrap();
     let mut found = Vec::new();
+    let mut references = Vec::new();
     for (check, outputs) in checks.iter().zip(results) {
-        let outputs: Vec<Vec<u8>> = outputs
+        let mut outputs: Vec<Vec<u8>> = outputs
             .into_iter()
             .map(|output| output.expect("every variant ran"))
             .collect();
-        let (reference, expected) = (VARIANTS[0].0, &outputs[0]);
-        for ((variant, _), actual) in VARIANTS.iter().zip(&outputs).skip(1) {
+        let (reference, expected) = (variants[0].0, &outputs[0]);
+        for ((variant, _), actual) in variants.iter().zip(&outputs).skip(1) {
             if actual != expected {
                 found.push(format!(
                     "{} over {}: {variant} differs from {reference}: {}",
@@ -203,8 +254,40 @@ fn differences(checks: &[Check]) -> Vec<String> {
                 ));
             }
         }
+        references.push(outputs.swap_remove(0));
     }
-    found
+    (found, references)
+}
+
+/// How many rules of `output` the evaluation budget left something of
+/// open, and how many the backstop refused whole.
+fn budget_refusals(output: &[u8]) -> (usize, usize) {
+    let output: serde_json::Value = serde_json::from_slice(output).unwrap();
+    let limited: Vec<&serde_json::Value> = output["report"]["not_evaluated"]
+        .as_array()
+        .map(|outcomes| {
+            outcomes
+                .iter()
+                .filter(|outcome| outcome["reason"] == "resource_limit")
+                .collect()
+        })
+        .unwrap_or_default();
+    let refused = |whole: bool| {
+        let mut rules: Vec<&str> = limited
+            .iter()
+            .filter(|outcome| {
+                outcome["message"]
+                    .as_str()
+                    .is_some_and(|message| message.starts_with("the rules before it"))
+                    == whole
+            })
+            .filter_map(|outcome| outcome["rule_id"].as_str())
+            .collect();
+        rules.sort_unstable();
+        rules.dedup();
+        rules.len()
+    };
+    (refused(false), refused(true))
 }
 
 /// A box `[length, width, depth]` centred at `(x, y)`, its bottom at `z`,
@@ -406,8 +489,25 @@ fn a_generated_building_is_judged_alike_whatever_the_order_threads_and_reuse() {
             "no free-floor rule {status}: {statuses:?}"
         );
     }
-    let differences = differences(&checks);
+    let (differences, _) = differences(&checks, VARIANTS);
     assert!(differences.is_empty(), "{}", differences.join("\n"));
+    // Under a budget that runs out, rules are refused part way and whole,
+    // alike in every variant.
+    let (differences, references) = differences_budgeted(&checks);
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+    let (part_way, whole) = references
+        .iter()
+        .map(|output| budget_refusals(output))
+        .fold((0, 0), |(a, b), (c, d)| (a + c, b + d));
+    assert!(
+        part_way > 0 && whole > 0,
+        "{part_way} part way, {whole} whole"
+    );
+}
+
+/// [`differences`] under the budget of [`BUDGETED`].
+fn differences_budgeted(checks: &[Check]) -> (Vec<String>, Vec<Vec<u8>>) {
+    differences(checks, BUDGETED)
 }
 
 /// Every variant reports what the first does over each pinned public
@@ -462,6 +562,7 @@ fn public_models_are_judged_alike_whatever_the_order_threads_and_reuse() {
             })
         })
         .collect();
-    let differences = differences(&checks);
+    let (mut differences, _) = differences(&checks, VARIANTS);
+    differences.extend(differences_budgeted(&checks).0);
     assert!(differences.is_empty(), "{}", differences.join("\n"));
 }

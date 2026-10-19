@@ -122,6 +122,7 @@ pub fn compile(
     let rules = ordered(registry, rules, &dependencies, &recorded)?;
     Ok(ExecutionPlan {
         rules,
+        planned: None,
         deferred,
         types: Arc::new(vocabulary.declared_types()),
         concepts: Arc::new(concepts),
@@ -947,6 +948,7 @@ pub fn compile_rulesets(
     concepts.declare_values(values.keys().cloned());
     Ok(ExecutionPlan {
         rules,
+        planned: None,
         deferred,
         concepts: Arc::new(concepts),
         refinements,

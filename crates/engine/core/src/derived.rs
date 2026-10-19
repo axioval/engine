@@ -471,9 +471,6 @@ pub(crate) fn install(
             .map(|expressions| expressions.0.clone())
             .unwrap_or_default(),
         services.get::<crate::ConceptBindings>().cloned(),
-        services
-            .get::<Arc<crate::expression::EvaluationBudget>>()
-            .cloned(),
         (
             services
                 .get::<Arc<crate::expression::DeclaredTypes>>()

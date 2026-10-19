@@ -485,10 +485,12 @@ impl PreparedRead {
 impl BoundKey {
     /// The key of `call`, written `written`.
     fn of(written: &str, call: &MeasuredCall) -> Self {
-        use std::hash::{BuildHasher, BuildHasherDefault, DefaultHasher};
+        use std::hash::BuildHasher;
         let (arguments, selections) = arguments_key(call);
         let parts = Arc::new((written.to_owned(), arguments, selections));
-        let hash = BuildHasherDefault::<DefaultHasher>::default().hash_one(&*parts);
+        // Hashed once per prepared read, within the process (a selection
+        // hashes by its address): a fast fixed hasher, as the memo's.
+        let hash = foldhash::fast::FixedState::default().hash_one(&*parts);
         Self {
             hash,
             parts,

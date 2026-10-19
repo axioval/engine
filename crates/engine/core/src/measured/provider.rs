@@ -340,19 +340,26 @@ pub trait MeasuredProvider: Send + Sync + 'static {
     }
 }
 
+/// Each measured name's provider, by its position among a registry's
+/// providers: built as they are registered, so a read finds its provider
+/// by one lookup rather than asking every provider for its names.
+pub(crate) type ProviderIndex =
+    Arc<std::collections::HashMap<&'static str, usize, foldhash::fast::FixedState>>;
+
 /// The providers of a run, by name, with the run's project and services.
 #[derive(Clone)]
 pub(crate) struct Providers {
-    pub(crate) providers: Arc<Vec<Arc<dyn MeasuredProvider>>>,
+    pub(crate) registered: Arc<Vec<Arc<dyn MeasuredProvider>>>,
+    pub(crate) index: ProviderIndex,
     pub(crate) project: Arc<Project>,
 }
 
 impl Providers {
     /// The provider measuring `name`.
     pub(crate) fn of(&self, name: &str) -> Option<&Arc<dyn MeasuredProvider>> {
-        self.providers
-            .iter()
-            .find(|provider| provider.names().contains(&name))
+        self.index
+            .get(name)
+            .and_then(|position| self.registered.get(*position))
     }
 }
 
@@ -406,7 +413,7 @@ pub fn measured_members_bound(
         ))
     })?;
     let provider = providers
-        .providers
+        .registered
         .iter()
         .find(|provider| provider.member_lists().contains(&call.name()))
         .ok_or_else(|| {
@@ -807,6 +814,7 @@ impl Hash for ArgumentsKey {
 pub(crate) fn install(
     services: &mut ServiceRegistry,
     providers: &[Arc<dyn MeasuredProvider>],
+    index: &ProviderIndex,
     project: &Project,
 ) {
     if providers.is_empty() {
@@ -823,7 +831,8 @@ pub(crate) fn install(
     services.replace(store.clone());
     services.replace(MeasuredMemo::on(store));
     services.replace(Providers {
-        providers: Arc::new(providers.to_vec()),
+        registered: Arc::new(providers.to_vec()),
+        index: Arc::clone(index),
         project: Arc::new(project.clone()),
     });
 }

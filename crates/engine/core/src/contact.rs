@@ -220,6 +220,11 @@ impl ContactEvidence {
     pub fn evidence(&self) -> &Evidence {
         &self.evidence
     }
+    /// The objects found in contact and the evidence, given up rather than
+    /// copied by a caller keeping them.
+    pub fn into_touching_and_evidence(self) -> (Vec<ObjectId>, Evidence) {
+        (self.touching, self.evidence)
+    }
 
     /// Fraction of the face in contact, computed exactly.
     ///

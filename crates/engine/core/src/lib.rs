@@ -705,6 +705,9 @@ pub struct CapabilityRegistry {
     capabilities: BTreeMap<String, Arc<dyn RuleCapability>>,
     refiner: Option<Arc<dyn OutcomeRefiner>>,
     measured: Vec<Arc<dyn MeasuredProvider>>,
+    /// Each measured name's provider, by its position in `measured`: a run
+    /// finds a value's provider at every read.
+    measured_index: measured::provider::ProviderIndex,
 }
 impl CapabilityRegistry {
     /// Creates an empty registry.
@@ -788,6 +791,11 @@ impl CapabilityRegistry {
                 return refused("another provider measures it");
             }
         }
+        let position = self.measured.len();
+        let index = Arc::make_mut(&mut self.measured_index);
+        for name in provider.names() {
+            index.insert(name, position);
+        }
         self.measured.push(Arc::new(provider));
         Ok(self)
     }
@@ -821,7 +829,7 @@ impl CapabilityRegistry {
     /// for `project`, as a run does, so [`measured_value`] reads what a run
     /// would.
     pub fn install_measured(&self, services: &mut ServiceRegistry, project: &Project) {
-        measured::provider::install(services, &self.measured, project);
+        measured::provider::install(services, &self.measured, &self.measured_index, project);
     }
     /// Every registered capability ID, sorted.
     pub fn ids(&self) -> impl Iterator<Item = &str> {

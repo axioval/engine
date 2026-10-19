@@ -860,3 +860,44 @@ measurement. The kept scenes and indexes hold at most 8 MiB here, and
 peaks are the same within a run's noise. Every report is the same byte
 for byte as before.
 
+
+### Derivations released after their last reader
+
+Since [#440](https://github.com/axioval/engine/issues/440) the store
+releases a kind's values once no rule still to run may ask a service it
+is read through, and evicts, read least recently first, whenever kept
+values and running steps would pass the memory budget (see
+[Memory budget](./memory.md#for-a-derivation-store)). Every scene and
+index of the checks below is released after its last reader, and nothing
+is evicted under the default budget: at most 0.5 MiB of scenes and
+7.9 MiB of indexes are held at once.
+
+The same release build, measured as above, three ways: with the store
+("store"), with a store keeping nothing past the value just built
+(`--keep-derivations 0`, the services' own caches kept: "keep 0"), and
+without reuse (`--no-reuse`, which also turns off the free-space
+service's footprint and column caches: "none"). Two runs each where
+two peaks are given.
+
+| Model, rule set | Threads | Wall store / none | Peak store | Peak keep 0 | Peak none |
+|---|---:|---:|---:|---:|---:|
+| m13, furniture | 1 | 5.5 / 5.3 s | 1115, 1110 MiB | 1110 MiB | 1109, 1110 MiB |
+| m13, furniture | 4 | 4.3 / 4.3 s | 1155, 1161 MiB | 1157 MiB | 1153, 1168 MiB |
+| m07, furniture | 1 | 4.3 / 5.8 s | 635, 630 MiB | 631 MiB | 609, 612 MiB |
+| m07, furniture | 4 | 2.0 / 2.5 s | 1294, 1274 MiB | 1307 MiB | 1212, 1145 MiB |
+| m07, every physical element | 1 | 92.8 / 173.9 s | 796 MiB | 819 MiB | 829 MiB |
+| m07, every physical element | 4 | 69.3 / 103.1 s | 1902 MiB | 1904 MiB | 1910 MiB |
+| m07, clashes | 1 | 6.0 / 6.3 s | 386, 389 MiB | 378 MiB | 380, 378 MiB |
+| m07, clashes | 4 | 6.0 / 6.3 s | 392, 393 MiB | 378 MiB | 380, 380 MiB |
+
+The store's peak is the peak without it, within a run's noise, but in
+two places. m07's clashes peak 8 to 15 MiB (2 to 4%) higher: the body
+indexes every pair reads, kept until the last clash rule, which is the
+point of keeping them. m07's furniture set on four threads peaks 60 to
+150 MiB higher than with `--no-reuse`, and as high with a store keeping
+nothing: that is the free-space service's footprints of each storey's
+obstacles, which `--no-reuse` also drops, not the store. A store keeping
+one byte (`--keep-derivations 1`, the determinism gate's variant) builds
+m07's 17 physical scenes 97 times instead of 17, in the same 69.8 s on
+four threads. Every report is the same byte for byte in every variant
+and as the engine of #408.

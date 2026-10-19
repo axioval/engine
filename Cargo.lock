@@ -635,7 +635,7 @@ dependencies = [
  "serde_json",
  "thiserror",
  "uuid",
- "zip 9.0.5",
+ "zip",
 ]
 
 [[package]]
@@ -659,7 +659,7 @@ dependencies = [
  "axioval-ir",
  "flate2",
  "openbim-bcf",
- "zip 9.0.5",
+ "zip",
 ]
 
 [[package]]
@@ -684,7 +684,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
- "zip 9.0.5",
+ "zip",
 ]
 
 [[package]]
@@ -702,7 +702,7 @@ dependencies = [
  "thiserror",
  "tracing",
  "uuid",
- "zip 9.0.5",
+ "zip",
 ]
 
 [[package]]
@@ -795,7 +795,7 @@ dependencies = [
  "sha2",
  "thiserror",
  "yoke",
- "zip 9.0.5",
+ "zip",
 ]
 
 [[package]]
@@ -858,7 +858,7 @@ dependencies = [
  "axioval-ir",
  "rust_xlsxwriter",
  "thiserror",
- "zip 9.0.5",
+ "zip",
 ]
 
 [[package]]
@@ -2034,13 +2034,13 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "openbim-bcf"
-version = "0.6.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e022487a1d82efce02d0853082f0d08d8e4fdb4efcec5ed41f0628276c49db4"
+checksum = "111162ee3bfe72edc13852fc0d35e6341a019f9ed057abbd57d87a8d2f8d16f8"
 dependencies = [
  "openbim-core",
  "quick-xml",
- "zip 8.6.0",
+ "zip",
 ]
 
 [[package]]
@@ -2397,7 +2397,7 @@ version = "0.100.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c44904ffb6c57b148ffcc8ce3011c28bc49b97e1a8343b2d632283cd566e1393"
 dependencies = [
- "zip 9.0.5",
+ "zip",
 ]
 
 [[package]]
@@ -3114,19 +3114,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.4",
-]
-
-[[package]]
-name = "zip"
-version = "8.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d04a6b5381502aa6087c94c669499eb1602eb9c5e8198e534de571f7154809b"
-dependencies = [
- "crc32fast",
- "flate2",
- "indexmap",
- "memchr",
- "typed-path",
 ]
 
 [[package]]

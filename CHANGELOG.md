@@ -250,7 +250,7 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Security
 
-- Moved to zip 9 and rust_xlsxwriter 0.100, past RUSTSEC-2026-0367, -0368
+- Moved to zip 9, rust_xlsxwriter 0.100 and openbim-bcf 0.6.1, past RUSTSEC-2026-0367, -0368
   and -0369 in zip 8's `extract`, which the engine does not call. An entry
   name that does not decode is now an unreadable archive.
 

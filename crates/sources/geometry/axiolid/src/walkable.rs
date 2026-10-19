@@ -804,6 +804,152 @@ pub(crate) fn obstacles<'g>(
     Ok(found)
 }
 
+/// An obstacle that was not measured but whose body the host bounds
+/// (#422): by a closed solid it lies within
+/// ([`AxiolidGeometry::with_unmeasured_enclosure`]), else by boxes it lies
+/// within the union of (`with_unmeasured_bounds`). Only a possible
+/// obstacle: what it occupies is somewhere inside the bound.
+pub(crate) struct BoundedObstacle<'g> {
+    pub(crate) id: &'g ObjectId,
+    bound: Bound<'g>,
+    /// The extent enclosing every point the body may occupy.
+    pub(crate) extent: Extent,
+}
+
+enum Bound<'g> {
+    Enclosure(&'g crate::geometry::Enclosure),
+    Boxes(&'g [Extent]),
+}
+
+/// How far a bound's plan is grown past its corners: above the rounding of
+/// the coordinates, far below anything a body could pass through.
+const BOUND_GROWTH: f64 = 1.0e-6;
+
+/// The plan rectangle of `extent`, grown by `by` on every side.
+fn plan_box(extent: &Extent, by: f64) -> Option<Polygon> {
+    let (min, max) = extent;
+    let (x0, y0, x1, y1) = (min[0] - by, min[1] - by, max[0] + by, max[1] + by);
+    polygon(vec![
+        Point2::new(x0, y0),
+        Point2::new(x1, y0),
+        Point2::new(x1, y1),
+        Point2::new(x0, y1),
+    ])
+}
+
+impl BoundedObstacle<'_> {
+    /// A plan region holding whatever the body may occupy inside the open
+    /// band `lo < z < hi`: the band footprint of an exact enclosing solid,
+    /// else the plan box of the solid's mesh grown by its deviation, else
+    /// the union of the plan boxes reaching into the band. Empty when the
+    /// bound stays out of the band.
+    ///
+    /// # Errors
+    ///
+    /// When the overlay fails to unite the boxes; it names the obstacle.
+    pub(crate) fn footprint(&self, lo: f64, hi: f64) -> Result<Plan, String> {
+        let boxes: Vec<Polygon> = match &self.bound {
+            Bound::Enclosure(enclosure) => {
+                let Some(vertical) = enclosure.vertical_bounds() else {
+                    return Ok(Plan::empty());
+                };
+                if vertical.clear_of(lo, hi, ON_SURFACE) {
+                    return Ok(Plan::empty());
+                }
+                if enclosure.deviation == 0.0
+                    && let Ok(plan) = band_footprint(self.id, &enclosure.mesh, lo, hi)
+                {
+                    return Ok(plan);
+                }
+                plan_box(&self.extent, BOUND_GROWTH).into_iter().collect()
+            }
+            Bound::Boxes(boxes) => boxes
+                .iter()
+                .filter(|piece| piece.1[2] > lo && piece.0[2] < hi)
+                .filter_map(|piece| plan_box(piece, BOUND_GROWTH))
+                .collect(),
+        };
+        union(boxes).map_err(|error| format!("the bound of {} failed: {error}", self.id))
+    }
+}
+
+/// The obstacles among `ids` as [`obstacles`] reads them, except that an
+/// unmeasured one the host bounds is a [`BoundedObstacle`] (#422) rather
+/// than a refusal. An unmeasured obstacle without a bound still refuses.
+///
+/// # Errors
+///
+/// As [`obstacles`], for the obstacles without a bound.
+pub(crate) fn bounded_obstacles<'g>(
+    geometry: &'g AxiolidGeometry,
+    ids: impl IntoIterator<Item = &'g ObjectId>,
+) -> Result<(Vec<Obstacle<'g>>, Vec<BoundedObstacle<'g>>), String> {
+    let mut measured = Vec::new();
+    let mut bounded = Vec::new();
+    for id in ids {
+        if geometry.mesh(id).is_none() && geometry.is_unmeasured(id) {
+            if let Some(enclosure) = geometry.enclosure(id)
+                && let Some((min, max)) = mesh_extent(&enclosure.mesh)
+            {
+                let d = enclosure.deviation;
+                bounded.push(BoundedObstacle {
+                    id,
+                    bound: Bound::Enclosure(enclosure),
+                    extent: (min.map(|v| v - d), max.map(|v| v + d)),
+                });
+                continue;
+            }
+            if let Some(boxes) = geometry.unmeasured_bound(id)
+                && !boxes.is_empty()
+            {
+                bounded.push(BoundedObstacle {
+                    id,
+                    bound: Bound::Boxes(boxes),
+                    extent: crate::geometry::hull(boxes),
+                });
+                continue;
+            }
+        }
+        measured.push(id);
+    }
+    Ok((obstacles(geometry, measured)?, bounded))
+}
+
+/// What each bounded obstacle may occupy inside the band `lo < z < hi`
+/// over `area`, as possible blockers; those occupying nothing there are
+/// left out.
+///
+/// # Errors
+///
+/// As [`BoundedObstacle::footprint`].
+pub(crate) fn bounded_obstructions(
+    bounded: &[BoundedObstacle<'_>],
+    area: &Bounds2,
+    lo: f64,
+    hi: f64,
+) -> Result<Vec<Blocker>, String> {
+    let mut found = Vec::new();
+    for obstacle in bounded {
+        let (min, max) = obstacle.extent;
+        if plan_gap(area, &obstacle.extent) > ON_SURFACE
+            || max[2] <= lo + ON_SURFACE
+            || min[2] >= hi - ON_SURFACE
+        {
+            continue;
+        }
+        let plan = obstacle.footprint(lo, hi)?;
+        if !plan.is_empty() {
+            found.push(Blocker {
+                id: obstacle.id.clone(),
+                plan,
+                bottom: min[2],
+                possible: true,
+            });
+        }
+    }
+    Ok(found)
+}
+
 fn bounds_gap(a: &Bounds2, b: &Bounds2) -> f64 {
     (0..2)
         .map(|axis| {
@@ -825,6 +971,10 @@ pub(crate) struct Blocker {
     pub(crate) plan: Plan,
     /// The bottom of the obstacle's body (exact: tessellations refuse).
     pub(crate) bottom: f64,
+    /// Whether the plan only bounds what the obstacle may occupy (a
+    /// [`BoundedObstacle`]'s): sweeps avoid it, but nothing is proven
+    /// blocked by it.
+    pub(crate) possible: bool,
 }
 
 /// What each obstacle occupies inside the band `lo < z < hi` over `area`;
@@ -862,6 +1012,7 @@ pub(crate) fn obstructions(
                 id: obstacle.id.clone(),
                 plan,
                 bottom: min[2],
+                possible: false,
             });
         }
     }

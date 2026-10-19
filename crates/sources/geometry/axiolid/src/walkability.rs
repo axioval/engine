@@ -79,9 +79,10 @@ use crate::geometry::AxiolidGeometry;
 use crate::placement;
 use crate::walkable::{
     Blocker, Clearance, Floor, MARGIN, ON_SURFACE, Plan, PortalFacts, PortalFrame, REACH, Side,
-    UNBOUNDED, band_limits, centroid, closest, contains, corridor, floor, grown, inner_point,
-    intersect, join, landing, mid_line_width, obstacles, obstruction, obstructions, plan_gap,
-    sides, subtract, sweep, sweep_inside, touching, trapezoids, union, within, witness,
+    UNBOUNDED, band_limits, bounded_obstacles, bounded_obstructions, centroid, closest, contains,
+    corridor, floor, grown, inner_point, intersect, join, landing, mid_line_width, obstruction,
+    obstructions, plan_gap, sides, subtract, sweep, sweep_inside, touching, trapezoids, union,
+    within, witness,
 };
 use crate::walking_surface::LANDING_REACH;
 
@@ -176,7 +177,11 @@ struct Climbed {
 struct Portal {
     frame: PortalFrame,
     sides: [Option<Side>; 2],
+    /// Less every obstacle, possible ones included: where sweeps are proven.
     corridor: Plan,
+    /// Less the measured obstacles only: what bounds a crossing's width
+    /// from above. The same as `corridor` without possible obstacles.
+    open: Plan,
     clearance: Clearance,
 }
 
@@ -282,7 +287,8 @@ impl Ground {
                     .polygons(),
             );
             let mut sure = Vec::new();
-            for blocker in blockers {
+            // A possible obstacle (#422) is never sure.
+            for blocker in blockers.into_iter().filter(|blocker| !blocker.possible) {
                 let plan = intersect(&blocker.plan, &beyond_inner)?;
                 if !plan.is_empty() {
                     sure.push(Blocker { plan, ..blocker });
@@ -290,7 +296,11 @@ impl Ground {
             }
             (intersect(&raw, &beyond_outer)?, sure)
         } else {
-            (raw.clone(), blockers)
+            let sure = blockers
+                .into_iter()
+                .filter(|blocker| !blocker.possible)
+                .collect();
+            (raw.clone(), sure)
         };
         let plain = subtract(&floor.footprint, &blocked)?;
         let wide = subtract(
@@ -834,13 +844,17 @@ impl AxiolidWalkabilityService {
         // A selected surface is walked on and a selected entrance walked
         // through, so neither obstructs even when a broad selector also
         // picks it as an obstacle.
-        let obstacles = obstacles(
+        // An unmeasured obstacle the host bounds is a possible obstacle
+        // inside its bound (#422): sweeps avoid the bound, and nothing is
+        // proven blocked by it.
+        let (obstacles, bounded) = bounded_obstacles(
             &self.geometry,
             request.obstacles().iter().filter(|object| {
                 request.surfaces().binary_search(object).is_err()
                     && request.entrances().binary_search(object).is_err()
             }),
         )?;
+        let mut possible: BTreeSet<ObjectId> = BTreeSet::new();
 
         let floors: Vec<Floor> = request
             .surfaces()
@@ -851,7 +865,11 @@ impl AxiolidWalkabilityService {
         let mut grounds = Vec::with_capacity(floors.len());
         for floor in &floors {
             let (lo, hi) = band_limits(band, floor.z0, floor.top);
-            let blockers = obstructions(&obstacles, &grown(&floor.bounds, gap), lo, hi)?;
+            let area = grown(&floor.bounds, gap);
+            let mut blockers = obstructions(&obstacles, &area, lo, hi)?;
+            let may = bounded_obstructions(&bounded, &area, lo, hi)?;
+            possible.extend(may.iter().map(|blocker| blocker.id.clone()));
+            blockers.extend(may);
             grounds.push(Ground::new(
                 floor,
                 blockers,
@@ -884,7 +902,18 @@ impl AxiolidWalkabilityService {
                 )
             };
             let blocked = obstruction(&obstacles, &bounds, lo, hi)?;
-            let corridor = corridor(&frame, &sides, &blocked)?;
+            let open = corridor(&frame, &sides, &blocked)?;
+            let may = bounded_obstructions(&bounded, &bounds, lo, hi)?;
+            let corridor = if may.is_empty() {
+                open.clone()
+            } else {
+                let mut all = blocked;
+                for blocker in may {
+                    possible.insert(blocker.id.clone());
+                    all = join(&all, &blocker.plan)?;
+                }
+                corridor(&frame, &sides, &all)?
+            };
             let clearance = self
                 .facts
                 .clearance(entrance)?
@@ -893,6 +922,7 @@ impl AxiolidWalkabilityService {
                 frame,
                 sides,
                 corridor,
+                open,
                 clearance,
             });
         }
@@ -913,7 +943,7 @@ impl AxiolidWalkabilityService {
                     portals
                         .iter()
                         .filter(|other| other.frame.z0 < frame.z1 && other.frame.z1 > frame.z0)
-                        .map(|other| &other.corridor),
+                        .map(|other| &other.open),
                 )
                 .collect();
             let (upper, interval) = mid_line_width(frame, &pieces);
@@ -1371,17 +1401,20 @@ impl AxiolidWalkabilityService {
             || "own-height".to_owned(),
             |band| format!("{:.6}..{:.6}", band.lower_metres(), band.upper_metres()),
         );
+        let possible: Vec<ObjectId> = possible.into_iter().collect();
         let evidence = self.evidence(format!(
             "axiolid:walkability:complete:surfaces={}:entrances={}:obstacles={}:connectors={}:\
-             swept={}:width={required:.6}:band={band_text}:portals-traversed={}",
+             swept={}:width={required:.6}:band={band_text}:portals-traversed={}{}",
             request.surfaces().len(),
             request.entrances().len(),
             request.obstacles().len(),
             request.connectors().len(),
             request.swept_doors().len(),
             request.traverses_verified_portals(),
+            crate::free_space::within_bounds(&possible),
         ));
         WalkabilitySnapshot::try_new(request.clone(), regions, passages, evidence)
+            .and_then(|snapshot| snapshot.with_possible_obstacles(possible))
             .map_err(|e| e.to_string())
     }
 

@@ -513,6 +513,7 @@ pub struct WalkabilitySnapshot {
     passages: Vec<VerifiedWalkablePassage>,
     object_regions: BTreeMap<ObjectId, Vec<WalkabilityRegionId>>,
     evidence: Evidence,
+    possible_obstacles: Vec<ObjectId>,
 }
 impl WalkabilitySnapshot {
     pub fn try_new(
@@ -612,7 +613,39 @@ impl WalkabilitySnapshot {
             passages,
             object_regions,
             evidence,
+            possible_obstacles: Vec::new(),
         })
+    }
+    /// Declares the requested obstacles the backend could not measure but
+    /// bounded, so they entered the snapshot as possible obstacles: no
+    /// passage's lower bound passes through their bound, and no upper bound
+    /// rests on them. A route they may block is at most `Indeterminate`;
+    /// these name why. Sorted and deduplicated.
+    ///
+    /// # Errors
+    ///
+    /// [`WalkabilityError::UnexpectedMappedObject`] when one is not a
+    /// requested obstacle.
+    pub fn with_possible_obstacles(
+        mut self,
+        mut obstacles: Vec<ObjectId>,
+    ) -> Result<Self, WalkabilityError> {
+        obstacles.sort();
+        obstacles.dedup();
+        if obstacles
+            .iter()
+            .any(|object| self.request.obstacles.binary_search(object).is_err())
+        {
+            return Err(WalkabilityError::UnexpectedMappedObject);
+        }
+        self.possible_obstacles = obstacles;
+        Ok(self)
+    }
+    /// The obstacles bounded rather than measured
+    /// ([`Self::with_possible_obstacles`]); empty when every obstacle was
+    /// measured.
+    pub fn possible_obstacles(&self) -> &[ObjectId] {
+        &self.possible_obstacles
     }
     pub fn request(&self) -> &WalkabilityRequest {
         &self.request

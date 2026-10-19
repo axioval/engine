@@ -34,7 +34,7 @@ Semantic selectors run before this service. IFC placements, meshes, B-reps, and 
 
 ## Snapshot guarantees
 
-A `WalkabilitySnapshot` is accepted only when it carries complete exact provenance. Every passage must have exact reviewable evidence, declared endpoints, and a conservative clear-width interval. Duplicate passages, unrequested object mappings, and portals outside the request policy are rejected.
+A `WalkabilitySnapshot` is accepted only when it carries complete exact provenance. A backend may declare requested obstacles it bounded rather than measured (`with_possible_obstacles`, any other object is `UnexpectedMappedObject`); no passage is proven through them and no upper bound rests on them, so a route they may block is at most `Indeterminate`. Every passage must have exact reviewable evidence, declared endpoints, and a conservative clear-width interval. Duplicate passages, unrequested object mappings, and portals outside the request policy are rejected.
 
 Object-to-region membership lets reusable capabilities ask whether selected spaces, entrances, or components share traversable free space without exposing backend cells as model objects.
 
@@ -205,8 +205,21 @@ counts, and a stated width bounds even an opening's void from above.
   occupies there (obstacles are gathered over each floor grown by the gap,
   nothing tolerated) and every circumscribed swing; the passage's locator
   says `gap<=`.
+- **Bounded obstacles.** An obstacle that could not be measured (a face
+  whose boundary crosses itself, say) but whose body the host bounds, by a
+  closed solid it lies within or by boxes it lies within the union of, is
+  a possible obstacle inside that bound (#422): its band footprint (the
+  enclosing solid's, or the plan boxes reaching into the band) is avoided
+  by every witness, landing, hub and portal sweep, but never enters the
+  sure obstacles, the possible pieces or a crossing's mid-line bound. A
+  route through the bound is therefore at most `Indeterminate`, never
+  `Unreachable` because of it, and every route clear of it is decided as
+  usual. The snapshot names these obstacles
+  (`WalkabilitySnapshot::possible_obstacles`) and its locator ends in
+  `:bounded-not-measured=<ids>`.
 - **Refusals.** `WalkabilityError::Unavailable` for moving envelopes (use
-  swept doors instead), unmeasured or undescribed obstacles, tessellated
+  swept doors instead), unmeasured obstacles without a bound, undescribed
+  obstacles, tessellated
   surfaces, portals or obstacles inside a band, surfaces that are not closed
   or not flat underneath, portals without a single through-direction and
   portals opening onto two surfaces at the same distance.

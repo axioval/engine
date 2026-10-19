@@ -109,6 +109,21 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **One unmeasured obstacle no longer takes the whole walkability
+  snapshot down** ([#422](https://github.com/axioval/engine/issues/422)).
+  An obstacle whose face cannot be triangulated (its boundary crosses
+  itself) refused the snapshot, so `accessible-route` left every
+  destination not evaluated (*no walkability snapshot*). An unmeasured
+  obstacle the host bounds, by the closed solid it lies within or by the
+  boxes of its authored corners, is now a possible obstacle inside that
+  bound: sweeps avoid it, but no width bound or separation rests on it.
+  A route that may pass through it is not evaluated, its reason naming
+  the obstacle, and every other destination is decided as usual. Only an
+  obstacle with no bound still refuses the snapshot. The snapshot names
+  these obstacles (`WalkabilitySnapshot::possible_obstacles`, declared by
+  a backend with `with_possible_obstacles`) and its locator ends in
+  `:bounded-not-measured=<ids>`.
+
 - **Curved walls whose openings abut are measured**
   ([#417](https://github.com/axioval/engine/issues/417)). A curved wall
   whose openings abut each other, one side reaching micrometres to just

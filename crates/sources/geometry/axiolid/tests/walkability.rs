@@ -781,6 +781,110 @@ fn a_headroom_band_below_the_lintel_keeps_the_door_open() {
     );
 }
 
+/// The request of the two rooms with `cabinet` among the obstacles.
+fn request_with(cabinet: &str) -> WalkabilityRequest {
+    let mut obstacles: Vec<ObjectId> = WALLS.iter().map(|local| id(local)).collect();
+    obstacles.push(id(cabinet));
+    WalkabilityRequest::try_new(
+        vec![id("a"), id("b")],
+        vec![id("door")],
+        obstacles,
+        0.8,
+        None,
+        true,
+        false,
+    )
+    .unwrap()
+}
+
+/// A cabinet whose face cannot be triangulated is unmeasured, but the host
+/// bounds it by the box of its authored corners (#422). Standing in front
+/// of the door, the bound may block the route into `b`: the route is not
+/// proven, nor ruled out. Everything the bound cannot touch is decided as
+/// usual, and the snapshot names the cabinet as a possible obstacle.
+#[test]
+fn an_unmeasured_obstacle_bounded_in_front_of_the_door_leaves_only_that_route_open() {
+    let geometry = model(0.9)
+        .with_unmeasured(
+            id("cabinet"),
+            "planar face cannot be triangulated: profile outer ring intersects itself",
+        )
+        .with_unmeasured_bound(id("cabinet"), [4.3, 0.5, 0.0], [5.0, 2.5, 2.0]);
+    let service =
+        AxiolidWalkabilityService::new(geometry, source()).with_clear_width(id("door"), 0.85);
+    let snapshot = snapshot(service, &request_with("cabinet")).unwrap();
+    assert_eq!(snapshot.possible_obstacles(), &[id("cabinet")]);
+    assert!(
+        snapshot
+            .evidence()
+            .locator
+            .ends_with(":bounded-not-measured=cad:model/cabinet"),
+        "{}",
+        snapshot.evidence().locator
+    );
+    assert_eq!(
+        snapshot.route_between(&id("a"), &id("b")).unwrap(),
+        WalkabilityRouteOutcome::Indeterminate
+    );
+    // The door is still reached from `a`, where the bound is not.
+    assert!(matches!(
+        snapshot.route_between(&id("a"), &id("door")).unwrap(),
+        WalkabilityRouteOutcome::Reachable(_)
+    ));
+}
+
+/// The same bounded cabinet in `b`'s far corner blocks nothing a body
+/// needs: the route into `b` is proven round its bound.
+#[test]
+fn an_unmeasured_obstacle_bounded_apart_from_the_route_leaves_it_decided() {
+    let geometry = model(0.9)
+        .with_unmeasured(
+            id("cabinet"),
+            "planar face cannot be triangulated: profile outer ring intersects itself",
+        )
+        .with_unmeasured_bound(id("cabinet"), [7.4, 3.4, 0.0], [8.0, 4.0, 2.0]);
+    let service =
+        AxiolidWalkabilityService::new(geometry, source()).with_clear_width(id("door"), 0.85);
+    let snapshot = snapshot(service, &request_with("cabinet")).unwrap();
+    assert_eq!(snapshot.possible_obstacles(), &[id("cabinet")]);
+    assert!(matches!(
+        snapshot.route_between(&id("a"), &id("b")).unwrap(),
+        WalkabilityRouteOutcome::Reachable(_)
+    ));
+}
+
+/// A bound never rules a route out: a bounded cabinet filling the whole
+/// doorway leaves the route open, where a measured one blocks it.
+#[test]
+fn an_unmeasured_obstacle_bounded_across_the_doorway_never_blocks() {
+    let bounded = model(0.9)
+        .with_unmeasured(id("cabinet"), "profile outer ring intersects itself")
+        .with_unmeasured_enclosure(
+            id("cabinet"),
+            cuboid([4.3, 0.0, 0.0], [5.0, 4.0, 2.0]),
+            None,
+            None,
+        );
+    let service =
+        AxiolidWalkabilityService::new(bounded, source()).with_clear_width(id("door"), 0.85);
+    let open = snapshot(service, &request_with("cabinet")).unwrap();
+    assert_eq!(open.possible_obstacles(), &[id("cabinet")]);
+    assert_eq!(
+        open.route_between(&id("a"), &id("b")).unwrap(),
+        WalkabilityRouteOutcome::Indeterminate
+    );
+
+    let measured = model(0.9).with_mesh(id("cabinet"), cuboid([4.3, 0.0, 0.0], [5.0, 4.0, 2.0]));
+    let service =
+        AxiolidWalkabilityService::new(measured, source()).with_clear_width(id("door"), 0.85);
+    let snapshot = snapshot(service, &request_with("cabinet")).unwrap();
+    assert!(snapshot.possible_obstacles().is_empty());
+    assert_eq!(
+        snapshot.route_between(&id("a"), &id("b")).unwrap(),
+        WalkabilityRouteOutcome::Unreachable
+    );
+}
+
 #[test]
 fn missing_or_approximate_evidence_refuses() {
     let unmeasured = model(0.9).with_unmeasured(id("pillar"), "no body representation");

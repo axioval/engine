@@ -517,6 +517,15 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   through the intersection of both footprints' `dilate_inner`, less
   `Ground::raw` (untolerated obstacles over the floor grown by the gap)
   and circumscribed swings.
+  An unmeasured obstacle the host bounds (`walkable::bounded_obstacles`:
+  its enclosure, else its `unmeasured_bound` boxes) is a possible
+  obstacle (#422): its `BoundedObstacle::footprint` enters `raw`, `plain`
+  and a portal's `corridor` (`Blocker::possible`), never `sure`, the
+  pieces or a portal's `open` corridor, which the mid-line bounds use. So
+  sweeps avoid it and no upper bound or separation rests on it; never let
+  a possible blocker into `sure`. The snapshot names them
+  (`with_possible_obstacles`, locator `:bounded-not-measured=`). An
+  unmeasured obstacle without a bound still refuses.
 - `src/metric_routing.rs` implements `MetricRoutingService` on the origin's
   level. `Blocked` needs complete evidence (every declared surface and portal
   measured, no connector touching the level) and a separation of the free

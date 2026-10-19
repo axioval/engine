@@ -1056,7 +1056,7 @@ pub(crate) type Extent = ([f64; 3], [f64; 3]);
 pub(crate) const MAX_BOUND_BOXES: usize = 256;
 
 /// The box around `boxes`; `boxes` must not be empty.
-fn hull(boxes: &[Extent]) -> Extent {
+pub(crate) fn hull(boxes: &[Extent]) -> Extent {
     boxes
         .iter()
         .skip(1)

@@ -86,6 +86,25 @@ fn snapshot(edges: Vec<VerifiedWalkablePassage>) -> WalkabilitySnapshot {
     .unwrap()
 }
 #[test]
+fn possible_obstacles_name_requested_obstacles_only() {
+    let wall = oid("cad", "wall");
+    let declared = snapshot(vec![edge("a", "b", 0.0, 1.0)])
+        .with_possible_obstacles(vec![wall.clone(), wall.clone()])
+        .unwrap();
+    assert_eq!(declared.possible_obstacles(), std::slice::from_ref(&wall));
+    assert!(
+        snapshot(vec![edge("a", "b", 0.0, 1.0)])
+            .possible_obstacles()
+            .is_empty()
+    );
+    assert_eq!(
+        snapshot(vec![edge("a", "b", 0.0, 1.0)])
+            .with_possible_obstacles(vec![oid("cad", "space")])
+            .map(|_| ()),
+        Err(WalkabilityError::UnexpectedMappedObject)
+    );
+}
+#[test]
 fn width_bounds_make_routes_three_valued() {
     let from = oid("cad", "space");
     let to = oid("cad", "door");

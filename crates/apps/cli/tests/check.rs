@@ -11969,6 +11969,113 @@ fn with_geometry_an_accessible_route_names_where_a_corridor_is_obstructed() {
     );
 }
 
+/// The corridor of [`a_corridor_pinched_by_columns`] without its columns,
+/// and room #89 (x -4..-0.2) off the lobby through door #99. Across the
+/// corridor at x 7 stands member #308, one vertical face (y 1..2.2, z
+/// 0..1) whose boundary crosses itself, which the mesh compiler refuses:
+/// the member is unmeasured, bounded by its authored corners (#422). Both
+/// rooms are `Room`.
+fn a_corridor_crossed_by_an_unmeasured_member() -> String {
+    let space = "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,$,$)";
+    let door = "IFCDOOR('GID',$,$,$,$,PL,REP,$,2.1,0.9,$,$,$)";
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         {}{}{}{}{}{}{}\
+         #300=IFCCARTESIANPOINTLIST3D(((7.,1.,0.),(7.,2.2,1.),(7.,2.2,0.),(7.,1.,0.5)),$);\n\
+         #301=IFCINDEXEDPOLYGONALFACE((1,2,3,4));\n\
+         #302=IFCPOLYGONALFACESET(#300,.F.,(#301),$);\n\
+         #303=IFCSHAPEREPRESENTATION(#5,'Body','Tessellation',(#302));\n\
+         #304=IFCPRODUCTDEFINITIONSHAPE($,$,(#303));\n\
+         #308=IFCMEMBER('0000000000000000000308',$,$,$,$,#3,#304,$,.MEMBER.);\n\
+         #200=IFCPROPERTYSINGLEVALUE('Reference',$,IFCIDENTIFIER('Lobby'),$);\n\
+         #201=IFCPROPERTYSET('0000000000000000000201',$,'Pset_SpaceCommon',$,(#200));\n\
+         #202=IFCRELDEFINESBYPROPERTIES('0000000000000000000202',$,$,$,(#19),#201);\n\
+         #210=IFCPROPERTYSINGLEVALUE('Reference',$,IFCIDENTIFIER('Room'),$);\n\
+         #211=IFCPROPERTYSET('0000000000000000000211',$,'Pset_SpaceCommon',$,(#210));\n\
+         #212=IFCRELDEFINESBYPROPERTIES('0000000000000000000212',$,$,$,(#39,#89),#211);\n\
+         #220=IFCPROPERTYSINGLEVALUE('ClearWidth',$,IFCPOSITIVELENGTHMEASURE(0.85),$);\n\
+         #221=IFCPROPERTYSET('0000000000000000000221',$,'Access',$,(#220));\n\
+         #222=IFCRELDEFINESBYPROPERTIES('0000000000000000000222',$,$,$,(#49,#59,#99),#221);\n\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        placed_box(10, [2.0, 2.0, 0.0], [4.0, 4.0, 3.0], space),
+        placed_box(20, [7.1, 1.6, 0.0], [5.8, 1.2, 3.0], space),
+        placed_box(30, [12.1, 2.0, 0.0], [3.8, 4.0, 3.0], space),
+        placed_box(40, [4.1, 1.6, 0.0], [0.1, 0.9, 2.1], door),
+        placed_box(50, [10.1, 1.6, 0.0], [0.1, 0.9, 2.1], door),
+        placed_box(80, [-2.1, 2.0, 0.0], [3.8, 4.0, 3.0], space),
+        placed_box(90, [-0.1, 1.6, 0.0], [0.1, 0.9, 2.1], door),
+    )
+}
+
+/// One obstacle whose face cannot be triangulated no longer takes the
+/// whole walkability snapshot down (#422): bounded by its authored
+/// corners, it is a possible obstacle. The room off the lobby is reached
+/// and passes; the room beyond the member is neither passed nor found
+/// blocked, and its reason names the member.
+#[test]
+fn with_geometry_an_accessible_route_past_an_unmeasured_obstacle_is_left_open() {
+    let case = Case::new("geometry-accessible-route-unmeasured");
+    let reference = |value: &str| {
+        json!({"kind": "allOf", "operands": [
+            entity("space"),
+            {"kind": "property", "propertySet": "axioval:example.ifc.pset-space-common",
+             "property": "axioval:example.ifc.reference", "operator": "equals",
+             "value": {"type": "string", "value": value}},
+        ]})
+    };
+    let (output, result) = case.geometry_rule(
+        &a_corridor_crossed_by_an_unmeasured_member(),
+        &[
+            ("space", "IfcSpace"),
+            ("door", "IfcDoor"),
+            ("member", "IfcMember"),
+        ],
+        "axioval:capability.accessible-route",
+        &registry_signature("axioval:capability.accessible-route"),
+        reference("Room"),
+        json!({
+            "route_selector": {"type": "selector", "value": entity("space")},
+            "start_selector": {"type": "selector", "value": reference("Lobby")},
+            "portal_selector": {"type": "selector", "value": entity("door")},
+            "obstacle_selector": {"type": "selector", "value": entity("member")},
+            "width_metres": {"type": "number", "value": 0.8},
+            "door_width_metres": {"type": "number", "value": 0.8},
+            "clear_width_property": {"type": "propertyReference",
+                                     "property": "axioval:example.ifc.clear-width",
+                                     "propertySet": "axioval:example.ifc.pset-access"},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    let refused = |entry: &Value| {
+        let reason = entry["reason"].as_str().unwrap_or_default();
+        entry["object"]["local_id"] == "#308"
+            && reason.ends_with("profile outer ring intersects itself")
+    };
+    let unmeasured = result["geometry"]["unmeasured"].as_array().unwrap();
+    assert!(unmeasured.iter().any(refused), "{result:#}");
+    assert!(finding_messages(&result).is_empty(), "{result:#}");
+    let not_evaluated = result["report"]["not_evaluated"].as_array().unwrap();
+    assert_eq!(not_evaluated.len(), 1, "{result:#}");
+    assert_eq!(
+        not_evaluated[0]["object_id"]["local_id"], "#39",
+        "{result:#}"
+    );
+    let message = not_evaluated[0]["message"].as_str().unwrap();
+    assert!(!message.contains("no walkability snapshot"), "{message}");
+    assert!(
+        message.contains("#308 could not be measured and may obstruct within its bound"),
+        "{message}"
+    );
+}
+
 /// Three 2.1 m doors in one wall line, 0.1 m thick at y 0: #19 at x 0..1
 /// (`OverallWidth` 1 m) and #29 at x 1.5..2.4 (0.9 m), both single swing;
 /// #39 at x 10..11, a double door stating a clear width of 1.15 m and a

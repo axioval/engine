@@ -1059,6 +1059,18 @@ impl Judge<'_> {
                 metres(self.declared.width)
             );
             undecided.extend(spacing_open);
+            let possible = self.snapshot.possible_obstacles();
+            if !possible.is_empty() {
+                undecided.insert(format!(
+                    "{} could not be measured and may obstruct within {} bound",
+                    possible
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    if possible.len() == 1 { "its" } else { "their" }
+                ));
+            }
             if !undecided.is_empty() {
                 message.push_str(": ");
                 message.push_str(&undecided.into_iter().collect::<Vec<_>>().join("; "));

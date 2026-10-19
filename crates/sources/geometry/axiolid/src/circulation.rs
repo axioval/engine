@@ -249,15 +249,16 @@ impl AxiolidFreeSpaceService {
         let err = |e| unavailable("disc morphology", e);
         let radius = request.width_metres() / 2.0;
         let reach = radius + request.tolerance_metres();
-        let (scene, floor) = self.floor_scene(
-            request.scope(),
-            request.merged_scopes(),
-            request.obstacles(),
-            request.swept_doors(),
+        // The placement scene of the same scope, obstacles, doors and band,
+        // shared with the placement searches of the check (#408).
+        let derived = self.derived_scene(
+            (request.scope(), request.merged_scopes()),
+            (request.obstacles(), request.swept_doors()),
             request.band(),
             t,
-            None,
         )?;
+        let kept = derived.kept()?;
+        let (scene, floor) = (kept.bare(), kept.floor);
         // The free area bracketed: the sure scope less every possible
         // obstacle (`free`), and the possible scope less the sure ones only
         // (`roomy`). They differ by the swept sectors' polygonisation and

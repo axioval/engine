@@ -15,6 +15,7 @@ pub mod contact;
 pub(crate) mod containment;
 pub(crate) mod corridor_end;
 pub(crate) mod coverage;
+mod derivations;
 pub mod derived_relationships;
 mod drainage;
 pub(crate) mod elevation;

@@ -939,7 +939,7 @@ pub(crate) fn simplified(
 }
 
 /// The corners of every ring of `region`.
-fn region_points(region: &Region) -> usize {
+pub(crate) fn region_points(region: &Region) -> usize {
     region
         .polygons()
         .iter()

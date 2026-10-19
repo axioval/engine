@@ -9,11 +9,10 @@
 //! search found nowhere it fits. Neither may be returned on a hunch -- an
 //! adapter that cannot search exhaustively must say so instead.
 
-use std::cell::OnceCell;
+mod scenes;
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Mutex, PoisonError};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use axiolid_core::{Point2, Point3, Vec2};
 use axiolid_measure::WindingMesh;
@@ -47,8 +46,17 @@ pub(crate) const AREA_EPSILON_M2: f64 = 1.0e-9;
 
 /// Measures free space from application-supplied meshes.
 pub struct AxiolidFreeSpaceService {
-    geometry: AxiolidGeometry,
+    /// What the service measures over, shared with the placement scenes
+    /// the check's derivation store keeps ([`scenes::SceneKey`]).
+    over: Arc<Measuring>,
     source: SourceId,
+}
+
+/// The geometry a free-space service measures, with what it keeps of it
+/// for later requests: each obstacle's band footprint and column, and the
+/// obstacle lists its scenes are keyed by.
+pub(crate) struct Measuring {
+    geometry: AxiolidGeometry,
     /// Each obstacle's band footprint, by the band's exact limits: spaces on
     /// one floor share their band and many of their obstacles, and a large
     /// obstacle's footprint can take the overlay seconds.
@@ -56,153 +64,11 @@ pub struct AxiolidFreeSpaceService {
     /// Each tessellated obstacle's [`solid_column`], by the column's centre
     /// and half height.
     columns: Mutex<BTreeMap<FootprintKey, Column>>,
-    /// The last placement scenes built ([`KEPT_SCENES`]): a space is
-    /// searched several times over one scene (with undecided obstacles and
-    /// without, with a path from the entrances and without, a shape and
-    /// the smaller ones bracketing the largest that fits, #391), and its
-    /// unions of obstacle footprints are most of a search.
-    scenes: Mutex<Vec<KeptScene>>,
-    /// How many threads searched at once, at most: each searches its own
-    /// space, so [`KEPT_SCENES`] are kept for each.
-    searching: Searching,
+    /// The obstacle lists of the scenes keyed over this state, each once.
+    lists: scenes::Lists,
     /// Whether footprints, columns and scenes are kept for later requests
-    /// ([`Self::with_reuse`]).
+    /// ([`AxiolidFreeSpaceService::with_reuse`]).
     reuse: bool,
-}
-
-/// How many placement scenes a service keeps for each thread searching
-/// at once.
-const KEPT_SCENES: usize = 2;
-
-/// The threads searching now, and the most that searched at once.
-#[derive(Default)]
-struct Searching {
-    now: AtomicUsize,
-    most: AtomicUsize,
-}
-
-/// One thread's search, counted while it lasts.
-struct Searcher<'a>(&'a Searching);
-
-impl<'a> Searcher<'a> {
-    fn start(searching: &'a Searching) -> Self {
-        let now = searching.now.fetch_add(1, Ordering::Relaxed) + 1;
-        searching.most.fetch_max(now, Ordering::Relaxed);
-        Self(searching)
-    }
-}
-
-impl Drop for Searcher<'_> {
-    fn drop(&mut self) {
-        self.0.now.fetch_sub(1, Ordering::Relaxed);
-    }
-}
-
-/// What a placement scene is built from: everything of the request but
-/// the shape's footprint, its domain and its entrance reach.
-#[derive(PartialEq)]
-struct SceneKey {
-    scope: ObjectId,
-    merged: Vec<ObjectId>,
-    obstacles: Vec<ObjectId>,
-    swept: Vec<SweptDoor>,
-    band: (u64, u64),
-}
-
-impl SceneKey {
-    fn of(request: &PlacementRequest) -> Self {
-        let band = request.effective_band();
-        Self {
-            scope: request.scope().clone(),
-            merged: request.merged_scopes().to_vec(),
-            obstacles: request.obstacles().to_vec(),
-            swept: request.swept_doors().to_vec(),
-            band: (band.from_metres().to_bits(), band.to_metres().to_bits()),
-        }
-    }
-}
-
-/// A placement scene as built, before a window or a reach is set, with
-/// the differences its searches took ([`Scene::clear`]) and its floor.
-struct KeptScene {
-    key: SceneKey,
-    scope: Region,
-    room: Region,
-    obstacles: Region,
-    sure: Region,
-    tolerance: axiolid_core::Tolerance,
-    bracketed: Vec<(ObjectId, f64)>,
-    bounded: Vec<ObjectId>,
-    clear: [OnceCell<Region>; 2],
-    inscribed: [OnceCell<Option<placement::Inscribed>>; 2],
-    simple: [OnceCell<Option<Region>>; 4],
-    coarse: [OnceCell<Option<Region>>; 6],
-    found: placement::Found,
-    floor: f64,
-}
-
-/// Fills the cells of `held` that `taken` has and it lacks.
-fn fill<T: Clone, const N: usize>(held: &[OnceCell<T>; N], taken: &[OnceCell<T>; N]) {
-    for (held, taken) in held.iter().zip(taken) {
-        if let Some(value) = taken.get() {
-            let _ = held.set(value.clone());
-        }
-    }
-}
-
-impl KeptScene {
-    fn of(key: SceneKey, scene: &Scene, floor: f64) -> Self {
-        Self {
-            key,
-            scope: scene.scope.clone(),
-            room: scene.room.clone(),
-            obstacles: scene.obstacles.clone(),
-            sure: scene.sure.clone(),
-            tolerance: scene.tolerance,
-            bracketed: scene.bracketed.clone(),
-            bounded: scene.bounded.clone(),
-            clear: scene.clear.clone(),
-            inscribed: scene.inscribed.clone(),
-            simple: scene.simple.clone(),
-            coarse: scene.coarse.clone(),
-            found: scene.found.clone(),
-            floor,
-        }
-    }
-
-    /// Keeps what a search of the scene took that this one lacks: its
-    /// clear parts, their largest discs, the simplified and coarse
-    /// regions and the centres it found.
-    fn keep(&self, scene: &Scene) {
-        fill(&self.clear, &scene.clear);
-        fill(&self.inscribed, &scene.inscribed);
-        fill(&self.simple, &scene.simple);
-        fill(&self.coarse, &scene.coarse);
-        for (side, corners, steps, free) in scene.found.borrow().iter() {
-            placement::keep_found(&self.found, *side, corners, steps, free);
-        }
-    }
-
-    /// The scene again, as built, with what its searches took.
-    fn scene(&self) -> Scene {
-        Scene {
-            scope: self.scope.clone(),
-            room: self.room.clone(),
-            obstacles: self.obstacles.clone(),
-            sure: self.sure.clone(),
-            tolerance: self.tolerance,
-            window: None,
-            reach: None,
-            bracketed: self.bracketed.clone(),
-            bounded: self.bounded.clone(),
-            clear: self.clear.clone(),
-            inscribed: self.inscribed.clone(),
-            simple: self.simple.clone(),
-            coarse: self.coarse.clone(),
-            found: self.found.clone(),
-            work: Work::default(),
-        }
-    }
 }
 
 /// A [`solid_column`]'s section and boundary shadow, or why it failed.
@@ -216,13 +82,14 @@ impl AxiolidFreeSpaceService {
     #[must_use]
     pub fn new(geometry: AxiolidGeometry, source: SourceId) -> Self {
         Self {
-            geometry,
+            over: Arc::new(Measuring {
+                geometry,
+                footprints: Mutex::new(BTreeMap::new()),
+                columns: Mutex::new(BTreeMap::new()),
+                lists: scenes::Lists::default(),
+                reuse: true,
+            }),
             source,
-            footprints: Mutex::new(BTreeMap::new()),
-            columns: Mutex::new(BTreeMap::new()),
-            scenes: Mutex::new(Vec::new()),
-            searching: Searching::default(),
-            reuse: true,
         }
     }
 
@@ -232,9 +99,72 @@ impl AxiolidFreeSpaceService {
     /// of its request alone (#434); off, only to show that (#441).
     #[must_use]
     pub fn with_reuse(self, reuse: bool) -> Self {
-        Self { reuse, ..self }
+        let over = match Arc::try_unwrap(self.over) {
+            Ok(over) => Measuring { reuse, ..over },
+            Err(shared) => Measuring {
+                geometry: shared.geometry.clone(),
+                footprints: Mutex::new(BTreeMap::new()),
+                columns: Mutex::new(BTreeMap::new()),
+                lists: scenes::Lists::default(),
+                reuse,
+            },
+        };
+        Self {
+            over: Arc::new(over),
+            source: self.source,
+        }
     }
 
+    fn evidence(&self) -> Evidence {
+        Evidence::exact(self.source.clone(), "axiolid:free-space")
+    }
+
+    pub(crate) fn geometry(&self) -> &AxiolidGeometry {
+        &self.over.geometry
+    }
+
+    /// The placement scene of `scope` (with `merged`) less `obstacles` and
+    /// the `swept` doors' sectors in `band`: the check's, built once for
+    /// every rule and thread asking for it ([`scenes::PlacementScenes`],
+    /// #408), or with reuse off, built for this request alone.
+    pub(crate) fn derived_scene(
+        &self,
+        (scope, merged): (&ObjectId, &[ObjectId]),
+        (obstacles, swept): (&[ObjectId], &[SweptDoor]),
+        band: ElevationBand,
+        tolerance: axiolid_core::Tolerance,
+    ) -> Result<scenes::Derived, FreeSpaceError> {
+        let key = scenes::SceneKey::new(
+            &self.over,
+            (scope, merged),
+            (obstacles, swept),
+            band,
+            tolerance,
+        );
+        scenes::Derived::of(key, self.over.reuse)
+    }
+
+    /// The searched footprint and what the obstacles occupy in the elevation
+    /// band of `request` ([`Measuring::floor_scene`]), derived once per
+    /// check ([`Self::derived_scene`]), with what earlier searches of it
+    /// took.
+    fn placement_scene(
+        &self,
+        request: &PlacementRequest,
+        tolerance: axiolid_core::Tolerance,
+    ) -> Result<(Scene, f64, scenes::Derived), FreeSpaceError> {
+        let derived = self.derived_scene(
+            (request.scope(), request.merged_scopes()),
+            (request.obstacles(), request.swept_doors()),
+            request.effective_band(),
+            tolerance,
+        )?;
+        let kept = derived.kept()?;
+        Ok((kept.scene(), kept.floor, derived))
+    }
+}
+
+impl Measuring {
     /// [`solid_column`] of `obstacle` about `level`, built once per service.
     fn solid_column(&self, obstacle: &ObjectId, mesh: &TriMesh, level: f64, half: f64) -> Column {
         if !self.reuse {
@@ -324,14 +254,6 @@ impl AxiolidFreeSpaceService {
                         .flatten()
                 })
         }
-    }
-
-    fn evidence(&self) -> Evidence {
-        Evidence::exact(self.source.clone(), "axiolid:free-space")
-    }
-
-    pub(crate) fn geometry(&self) -> &AxiolidGeometry {
-        &self.geometry
     }
 }
 
@@ -664,64 +586,7 @@ fn reach(
     }
 }
 
-impl AxiolidFreeSpaceService {
-    /// The searched footprint and what the obstacles occupy in the elevation
-    /// band, and the floor elevation the shape stands on.
-    ///
-    /// The footprint is the union of the scope's and every merged scope's;
-    /// merged scopes must share the scope's floor. An obstacle counts only
-    /// by the part of its solid inside the open band, as in clearance: a
-    /// closed body's band footprint is its boundary clipped to the band plus
-    /// its section just above the band's bottom, so an L-shaped body
-    /// contributes only its foot to a low band. Clipping a planar triangle to
-    /// horizontal planes is exact.
-    ///
-    /// The last [`KEPT_SCENES`] scenes are kept and given again for a
-    /// request building the same one.
-    fn placement_scene(
-        &self,
-        request: &PlacementRequest,
-        tolerance: axiolid_core::Tolerance,
-    ) -> Result<(Scene, f64), FreeSpaceError> {
-        let key = SceneKey::of(request);
-        if self.reuse {
-            let kept = self.scenes.lock().unwrap_or_else(PoisonError::into_inner);
-            if let Some(kept) = kept.iter().find(|kept| kept.key == key) {
-                return Ok((kept.scene(), kept.floor));
-            }
-        }
-        let (scene, floor) = self.floor_scene(
-            request.scope(),
-            request.merged_scopes(),
-            request.obstacles(),
-            request.swept_doors(),
-            request.effective_band(),
-            tolerance,
-            None,
-        )?;
-        if !self.reuse {
-            return Ok((scene, floor));
-        }
-        let mut kept = self.scenes.lock().unwrap_or_else(PoisonError::into_inner);
-        kept.retain(|kept| kept.key != key);
-        kept.push(KeptScene::of(key, &scene, floor));
-        let threads = self.searching.most.load(Ordering::Relaxed).max(1);
-        if kept.len() > KEPT_SCENES.saturating_mul(threads) {
-            kept.remove(0);
-        }
-        Ok((scene, floor))
-    }
-
-    /// Keeps the differences a search of `request`'s scene took, for the
-    /// next search over it.
-    fn keep_clear(&self, request: &PlacementRequest, scene: &Scene) {
-        let key = SceneKey::of(request);
-        let kept = self.scenes.lock().unwrap_or_else(PoisonError::into_inner);
-        if let Some(kept) = kept.iter().find(|kept| kept.key == key) {
-            kept.keep(scene);
-        }
-    }
-
+impl Measuring {
     /// The footprint of `scope` and `merged` (which must share its floor),
     /// what `obstacles` and the sectors of `swept` doors occupy in `band`
     /// above that floor, and the floor's elevation.
@@ -1411,6 +1276,7 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
             },
         );
         if self
+            .over
             .geometry
             .tessellated_near(&volume_box, 0.0, false, |object| {
                 !request.obstacles().contains(object)
@@ -1424,12 +1290,13 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
         let mut blockers = Vec::new();
         let mut undecided = false;
         for obstacle in request.obstacles() {
-            if self.geometry.has_no_body(obstacle) {
+            if self.over.geometry.has_no_body(obstacle) {
                 continue;
             }
             // A named obstacle without geometry cannot be shown to be clear of
             // the volume, and `Clear` asserts that nothing obstructs it.
             let mesh = self
+                .over
                 .geometry
                 .mesh(obstacle)
                 .ok_or_else(|| FreeSpaceError::MissingGeometry(Box::new(obstacle.clone())))?;
@@ -1465,7 +1332,6 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
         &self,
         request: &PlacementRequest,
     ) -> Result<PlacementOutcome, FreeSpaceError> {
-        let _search = Searcher::start(&self.searching);
         let tolerance = tolerance()?;
         // The scope's own floor is the only support measured: every centre
         // the search accepts keeps the whole base inside the scope
@@ -1489,7 +1355,7 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
                 ));
             }
         };
-        let (mut scene, floor) = self.placement_scene(request, tolerance)?;
+        let (mut scene, floor, derived) = self.placement_scene(request, tolerance)?;
         if let Some(offsets) = offsets {
             scene.window = Some(offset_window(offsets, request.scope(), floor)?);
         }
@@ -1542,7 +1408,7 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
         }
         locator.push_str(&within_deviation(&scene.bracketed));
         locator.push_str(&within_bounds(&scene.bounded));
-        self.keep_clear(request, &scene);
+        derived.keep(&scene);
         let evidence = Evidence::exact(request.scope().source.clone(), locator);
         let (centre, right) = match search {
             Search::Nowhere => {
@@ -1615,11 +1481,10 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
         &self,
         request: &PlacementRequest,
     ) -> Result<LargestDiscEstimate, FreeSpaceError> {
-        let _search = Searcher::start(&self.searching);
         let tolerance = tolerance()?;
-        let (scene, _) = self.placement_scene(request, tolerance)?;
+        let (scene, _, derived) = self.placement_scene(request, tolerance)?;
         let estimate = scene.inscribed(false).zip(scene.inscribed(true));
-        self.keep_clear(request, &scene);
+        derived.keep(&scene);
         let (witness, absence) = estimate.ok_or_else(|| {
             FreeSpaceError::Unavailable("the overlay refused the clear floor".into())
         })?;
@@ -1642,7 +1507,7 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
     ) -> Result<FreeFloorEvidence, FreeSpaceError> {
         let tolerance = tolerance()?;
         let mut taken = Vec::new();
-        let (scene, _) = self.floor_scene(
+        let (scene, _) = self.over.floor_scene(
             request.scope(),
             request.merged_scopes(),
             request.obstacles(),
@@ -1709,18 +1574,20 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
         request: &FreeAreaRequest,
     ) -> Result<FreeAreaEvidence, FreeSpaceError> {
         let tolerance = tolerance()?;
-        let scope_mesh = self
-            .geometry
-            .mesh(request.scope())
-            .ok_or_else(|| FreeSpaceError::MissingGeometry(Box::new(request.scope().clone())))?;
+        let scope_mesh =
+            self.over.geometry.mesh(request.scope()).ok_or_else(|| {
+                FreeSpaceError::MissingGeometry(Box::new(request.scope().clone()))
+            })?;
         // Free area is exact evidence. A tessellated scope, or a tessellated
         // obstacle whose true footprint could reach it, makes it an estimate.
         let scope_extent = self
+            .over
             .geometry
             .enclosing_extent(request.scope())
             .ok_or_else(|| FreeSpaceError::MissingGeometry(Box::new(request.scope().clone())))?;
-        if self.geometry.is_tessellated(request.scope())
+        if self.over.geometry.is_tessellated(request.scope())
             || self
+                .over
                 .geometry
                 .tessellated_near(&scope_extent, 0.0, true, |object| {
                     !request.obstacles().contains(object)
@@ -1758,10 +1625,11 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
         // subtract their shared area twice and understate what is free.
         let mut obstacle_polygons = Vec::new();
         for obstacle in request.obstacles() {
-            if self.geometry.has_no_body(obstacle) {
+            if self.over.geometry.has_no_body(obstacle) {
                 continue;
             }
             let mesh = self
+                .over
                 .geometry
                 .mesh(obstacle)
                 .ok_or_else(|| FreeSpaceError::MissingGeometry(Box::new(obstacle.clone())))?;
@@ -1821,13 +1689,13 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
         &self,
         request: &ContainmentRequest,
     ) -> Result<ContainmentOutcome, FreeSpaceError> {
-        crate::containment::assess(&self.geometry, &self.source, request)
+        crate::containment::assess(&self.over.geometry, &self.source, request)
     }
 
     fn assess_support_coverage(
         &self,
         request: &axioval_engine::SupportCoverageRequest,
     ) -> Result<axioval_engine::SupportCoverageOutcome, FreeSpaceError> {
-        crate::support_coverage::assess(&self.geometry, &self.source, request)
+        crate::support_coverage::assess(&self.over.geometry, &self.source, request)
     }
 }

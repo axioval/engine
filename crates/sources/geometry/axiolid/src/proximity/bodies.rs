@@ -15,7 +15,7 @@ use axiolid_core::Tolerance;
 use axiolid_mesh::{TriMesh, audit_mesh};
 use axioval_engine::{
     Bounds3, DerivationError, DerivationKind, DerivationStore, DerivationVersion,
-    DerivedRelationshipServiceHandle, Inputs, ProximityError, ProximityServiceHandle,
+    DerivedRelationshipServiceHandle, Inputs, Precision, ProximityError, ProximityServiceHandle,
 };
 use axioval_ir::ObjectId;
 
@@ -42,15 +42,18 @@ pub(crate) struct IndexedBody {
 /// identity: its meshes in its one frame, model coordinates), the object,
 /// whether its void is measured in place of it (only for an object without
 /// a body of its own, so the material and void views share every other
-/// body) and the audit tolerance by its bits; the kind's version
-/// ([`IndexedBodies::VERSION`]) beside it. The index is exact: it holds the
-/// mesh's own coordinates.
+/// body), the audit tolerance by its bits and the precision class (#438);
+/// the kind's version ([`IndexedBodies::VERSION`]) beside it. The index is
+/// exact: it holds the mesh's own coordinates and computes nothing in a
+/// fast mode, so every reader asks Exact, and a Fast key, should one be
+/// asked, is another entry indexed as exactly, carrying no excess.
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub(crate) struct BodyKey {
     pub(crate) geometry: Over<AxiolidGeometry>,
     pub(crate) object: ObjectId,
     pub(crate) void: bool,
     pub(crate) tolerance: [u64; 2],
+    pub(crate) precision: Precision,
 }
 
 impl BodyKey {
@@ -62,6 +65,7 @@ impl BodyKey {
             object: object.clone(),
             void: voids && geometry.has_no_body(object),
             tolerance: [LINEAR_TOLERANCE.to_bits(), ANGULAR_TOLERANCE.to_bits()],
+            precision: Precision::Exact,
         }
     }
 
@@ -142,6 +146,10 @@ impl DerivationKind for IndexedBodies {
 
     fn build(key: &BodyKey, _: &Inputs<'_>) -> Result<Self::Value, DerivationError> {
         Ok(key.index())
+    }
+
+    fn precision(key: &BodyKey) -> Option<Precision> {
+        Some(key.precision)
     }
 
     fn size_hint(value: &Self::Value) -> Option<usize> {
@@ -265,7 +273,16 @@ mod tests {
                     ..base.clone()
                 },
             )
+            // Indexed as exactly, another entry.
+            .precision(
+                "the precision class",
+                BodyKey {
+                    precision: Precision::fast(1.0e-3),
+                    ..base.clone()
+                },
+            )
             .check();
+        assert_eq!(base.precision, Precision::Exact);
         // A body of its own is the same body in either view.
         assert!(
             BodyKey::new(&geometry, &id("wall"), true)

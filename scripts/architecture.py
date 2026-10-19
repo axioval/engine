@@ -637,7 +637,10 @@ def self_test() -> None:
     # ADR 0006 (#439): every derivation kind has a key-completeness test in
     # its crate; a kind without one, or keyed by a formatted string, is a
     # rejected mutation. A kind only quoted in a comment is none.
-    kind = "impl DerivationKind for Scenes {\n    type Key = SceneKey;\n}\n"
+    kind = (
+        "impl DerivationKind for Scenes {\n    type Key = SceneKey;\n"
+        "    fn precision(key: &SceneKey) -> Option<Precision> { Some(key.precision) }\n}\n"
+    )
     tested = "KeyCompleteness::<Scenes, _>::new(key, print).check();\n"
     assert derivation_kind_violations({"c": {"src/a.rs": kind, "tests/k.rs": tested}}) == []
     assert derivation_kind_violations({"c": {"src/a.rs": kind + "#[cfg(test)]\n" + tested}}) == []
@@ -659,10 +662,22 @@ def self_test() -> None:
         {"c": {"src/a.rs": "impl axioval_engine::DerivationKind for Scenes {}", "tests/k.rs": ""}}
     )
     assert derivation_kind_violations(
-        {"c": {"src/a.rs": "impl DerivationKind for Named {\n    type Key = String;\n}\n"
+        {"c": {"src/a.rs": "impl DerivationKind for Named {\n    type Key = String;\n"
+                           "    fn precision(_: &String) -> Option<Precision> { None }\n}\n"
                            "fn t() { KeyCompleteness::<Named, _>::new(k, p); }"}}
     ) == ["c/src/a.rs: derivation kind keyed by a formatted string (`type Key = String`); "
           "key it by its fields"]
+    # #438: a kind states its precision class in its own impl; one stated
+    # only in a comment, or by another kind's impl after it, is none.
+    silent = "impl DerivationKind for Silent {\n    type Key = u8;\n}\n"
+    silent_tested = "KeyCompleteness::<Silent, _>::new(key, print).check();\n"
+    assert derivation_kind_violations({"c": {"src/a.rs": silent, "tests/k.rs": silent_tested}}) == [
+        "c/src/a.rs: derivation kind `Silent` states no precision class (`fn precision`, #438)"
+    ]
+    assert derivation_kind_violations(
+        {"c": {"src/a.rs": silent.replace("}", "    // fn precision(k: &u8)\n}") + kind,
+               "tests/k.rs": silent_tested + tested}}
+    ) == ["c/src/a.rs: derivation kind `Silent` states no precision class (`fn precision`, #438)"]
     # A kind in a test is the store's own fixture, not a derivation.
     assert derivation_kind_violations({"c": {"tests/k.rs": kind}}) == []
     # A doc comment's example is no kind either.
@@ -1001,11 +1016,27 @@ def catalogue_violations(files: dict[str, str], texts: str) -> list[str]:
 # verdict. Every `DerivationKind` a crate's `src/` implements is named by a
 # key-completeness test (`KeyCompleteness::<Kind`) somewhere in that crate,
 # its unit tests or its `tests/`, and no kind is keyed by a formatted
-# string. Kinds of `tests/` are the store's own fixtures.
+# string. Every such kind states its precision class (#438: `fn precision`
+# in its impl, `None` only for a kind that is not geometric), which its
+# key-completeness test then has to change (`KeyCompleteness::precision`).
+# Kinds of `tests/` are the store's own fixtures.
 DERIVATION_KIND = re.compile(r"\bimpl\s+(?:[A-Za-z_]\w*::)*DerivationKind\s+for\s+([A-Za-z_]\w*)")
+STATES_PRECISION = re.compile(r"\bfn\s+precision\s*\(")
 FORMATTED_KEY = re.compile(
     r"\btype\s+Key\s*=\s*(String|&'static\s+str|Box<str>|Arc<str>|Rc<str>|Cow<[^>]*str>)\s*;"
 )
+
+
+def impl_body(scan: str, start: int) -> str:
+    """The brace-matched body of the impl whose header ends at `start`."""
+    open_brace = scan.find("{", start)
+    if open_brace < 0:
+        return ""
+    depth, index = 1, open_brace + 1
+    while index < len(scan) and depth:
+        depth += {"{": 1, "}": -1}.get(scan[index], 0)
+        index += 1
+    return scan[open_brace + 1 : index - 1]
 
 
 def derivation_kind_violations(crates: dict[str, dict[str, str]]) -> list[str]:
@@ -1023,6 +1054,11 @@ def derivation_kind_violations(crates: dict[str, dict[str, str]]) -> list[str]:
                 continue
             for match in DERIVATION_KIND.finditer(scan):
                 kind = match.group(1)
+                if not STATES_PRECISION.search(impl_body(scan, match.end())):
+                    failures.append(
+                        f"{crate}/{path}: derivation kind `{kind}` states no precision class "
+                        "(`fn precision`, #438)"
+                    )
                 if not re.search(rf"\bKeyCompleteness\s*::\s*<\s*{kind}\b", everything):
                     failures.append(
                         f"{crate}/{path}: derivation kind `{kind}` has no key-completeness test "

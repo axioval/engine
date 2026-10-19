@@ -177,7 +177,11 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   built from: the service's `Measuring` state by address
   (`derivations::Over`), scope, merged scopes, obstacles (interned per
   service, `Lists`, so a key compares them by address), swept doors by
-  their sectors' bits, band and tolerance bits and the precision; never
+  their sectors' bits, band and tolerance bits and the precision class
+  (`axioval_engine::Precision`, #438: Exact for every request; a Fast key,
+  `SceneKey::at`, builds the bracketing morphology of `floor_scene` in the
+  overlay's fast mode within its budget and carries the greatest
+  `Region::excess` it reported, `KeptScene::excess`); never
   the shape's footprint, domain or reach, which are set on a copy. Bump
   the revision of `PlacementScenes::VERSION` whenever a key could build
   another scene, and extend `changing_any_input_of_a_scene_changes_its_key`
@@ -185,7 +189,10 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   kind) with any new input, by `changes_value` wherever the fixture can
   show it. A scene keeps what its searches took (`Derived::keep`:
   clear parts, discs, simple and coarse regions, found regions) and states
-  its bytes again (`DerivationStore::resize`). Scenes are read through
+  its bytes again (`DerivationStore::resize`); `KeptScene::keep` keeps
+  only regions whose excess the scene's class holds (`Precision::holds`):
+  never keep a fast result (the circle search's disc morphology) with an
+  Exact scene, and never key a scene's class anywhere but `SceneKey`. Scenes are read through
   `FreeSpaceServiceHandle` alone (`read_through`, #440), so the run
   releases them after the last rule that may ask the free-space service;
   a new service reading scenes is added there, or its rules rebuild them.
@@ -728,7 +735,9 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   hierarchy, solidity, zero-area surface), keyed by the geometry's `Arc`
   by address, the object, whether its void is measured (only for a
   bodiless object, so both views share every other body) and the audit
-  tolerance bits, which the build reads (never the module's constants);
+  tolerance bits, which the build reads (never the module's constants),
+  and the precision class (Exact; the index computes nothing fast, so a
+  Fast key is another entry indexed as exactly, #438);
   bump the revision of `IndexedBodies::VERSION` whenever a key could index
   another body, and keep `changing_any_input_of_an_indexed_body_changes_its_key`
   changing every input (#439). Each kind's version names the kernel crates

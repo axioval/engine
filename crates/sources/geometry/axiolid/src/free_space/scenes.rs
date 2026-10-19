@@ -14,6 +14,15 @@
 //! Every search is charged what it takes as if it had built them
 //! (`planar::budget::Work`, #434), so no search decides otherwise for
 //! what another kept (#441).
+//!
+//! A scene's key carries its precision class (#438): Exact, as every
+//! request asks today, or Fast with its budget, whose bracketing
+//! morphology runs in the overlay's fast mode. The two are two entries,
+//! and a Fast scene carries its excess ([`KeptScene::excess`]), so an
+//! Exact read never receives a Fast scene, however alike the rest of
+//! their keys. What a scene's memo keeps is held to its class too: a
+//! region stating an excess (a search's disc morphology in the fast mode)
+//! is never kept with an Exact scene.
 
 use std::any::TypeId;
 use std::cell::OnceCell;
@@ -21,10 +30,10 @@ use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Mutex, PoisonError};
 
-use axiolid_overlay::Region;
+use axiolid_overlay::{MorphologyMode, Region};
 use axioval_engine::{
     DerivationError, DerivationKind, DerivationStore, DerivationVersion, ElevationBand,
-    FreeSpaceError, FreeSpaceServiceHandle, Inputs, SweptDoor, derivation,
+    FreeSpaceError, FreeSpaceServiceHandle, Inputs, Precision, SweptDoor, derivation,
 };
 use axioval_ir::ObjectId;
 
@@ -126,18 +135,19 @@ impl Hash for Doors {
     }
 }
 
-/// The precision a value is built at (#438): a scene's overlay operations
-/// are exact; a Fast scene, should one be built, never answers a key
-/// asking for an Exact one.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub(crate) enum Precision {
-    Exact,
+/// The overlay's morphology mode for a scene of `precision`: exact, or
+/// fast within its budget.
+fn mode(precision: Precision) -> MorphologyMode {
+    precision
+        .budget_metres()
+        .map_or(MorphologyMode::Exact, MorphologyMode::fast)
 }
 
 /// Everything a placement scene is built from (#408, #439): the service
 /// state (its geometry, by identity), the scope and merged scopes, the
 /// obstacles, the swept doors, the band's limits and the tolerance by their
-/// bits and the precision; the kind's version
+/// bits and the precision class (#438, Exact for every request; Fast only
+/// where a caller asks for it, [`Self::at`]); the kind's version
 /// ([`PlacementScenes::VERSION`]) beside it. Never the shape, its domain
 /// or its entrance reach, which a search sets on its copy. The scene's
 /// plan frame (the scope's corner, `Measuring::floor_scene`) is a function
@@ -177,6 +187,12 @@ impl SceneKey {
         }
     }
 
+    /// The same scene in the precision class `precision`.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn at(self, precision: Precision) -> Self {
+        Self { precision, ..self }
+    }
+
     fn band(&self) -> Result<ElevationBand, FreeSpaceError> {
         ElevationBand::try_new(f64::from_bits(self.band[0]), f64::from_bits(self.band[1]))
     }
@@ -189,18 +205,20 @@ impl SceneKey {
         .map_err(|error| FreeSpaceError::Unavailable(format!("tolerance: {error:?}")))
     }
 
-    /// Builds the scene, as `Measuring::floor_scene` does.
+    /// Builds the scene, as `Measuring::floor_scene` does, its bracketing
+    /// morphology in the key's precision class.
     fn build(&self) -> Result<KeptScene, FreeSpaceError> {
-        let (scene, floor) = self.over.0.floor_scene(
+        let (scene, floor, excess) = self.over.0.floor_scene(
             &self.scope,
             &self.merged,
             &self.obstacles.0,
             &self.swept.0,
             self.band()?,
             self.tolerance()?,
+            mode(self.precision),
             None,
         )?;
-        Ok(KeptScene::of(&scene, floor))
+        Ok(KeptScene::of(&scene, floor, self.precision, excess))
     }
 }
 
@@ -224,6 +242,16 @@ impl DerivationKind for PlacementScenes {
 
     fn build(key: &SceneKey, _: &Inputs<'_>) -> Result<Self::Value, DerivationError> {
         Ok(key.build())
+    }
+
+    fn precision(key: &SceneKey) -> Option<Precision> {
+        Some(key.precision)
+    }
+
+    /// A Fast scene's excess, what its memo keeps included; an Exact
+    /// scene, and a refused one, carry none.
+    fn excess(value: &Self::Value) -> Option<f64> {
+        value.as_ref().ok().and_then(KeptScene::excess)
     }
 
     fn size_hint(value: &Self::Value) -> Option<usize> {
@@ -291,17 +319,20 @@ impl Derived {
     }
 }
 
-/// What searches of a scene took ([`Scene::clear`] and the rest).
+/// What searches of a scene took ([`Scene::clear`] and the rest), each
+/// region within the scene's precision class.
 struct Memo {
     clear: [OnceCell<Region>; 2],
     inscribed: [OnceCell<Option<Inscribed>>; 2],
     simple: [OnceCell<Option<Region>>; 4],
     coarse: [OnceCell<Option<Region>>; 6],
     found: placement::Found,
+    /// The greatest excess a kept region states; `None` while none does.
+    excess: Option<f64>,
 }
 
 /// A placement scene as built, before a window or a reach is set, with
-/// what its searches took and its floor.
+/// what its searches took and its floor, in its precision class.
 pub(crate) struct KeptScene {
     scope: Region,
     room: Region,
@@ -311,14 +342,31 @@ pub(crate) struct KeptScene {
     bracketed: Vec<(ObjectId, f64)>,
     bounded: Vec<ObjectId>,
     pub(crate) floor: f64,
+    /// The class it was built in (#438).
+    precision: Precision,
+    /// The greatest excess its bracketing morphology states: `None` for an
+    /// Exact scene, and for a Fast one where no morphology ran.
+    excess: Option<f64>,
     memo: Mutex<Memo>,
 }
 
-/// Fills the cells of `held` that `taken` has and it lacks.
-fn fill<T: Clone, const N: usize>(held: &[OnceCell<T>; N], taken: &[OnceCell<T>; N]) {
+/// Fills `held` with what `taken` has, unless it holds a value already.
+fn fill_one<T: Clone>(held: &OnceCell<T>, taken: &OnceCell<T>) {
+    if let Some(value) = taken.get() {
+        let _ = held.set(value.clone());
+    }
+}
+
+/// Fills the cells of `held` that `taken` has and it lacks, with the
+/// values `admits` keeps.
+fn fill<T: Clone, const N: usize>(
+    held: &[OnceCell<T>; N],
+    taken: &[OnceCell<T>; N],
+    mut admits: impl FnMut(&T) -> bool,
+) {
     for (held, taken) in held.iter().zip(taken) {
-        if let Some(value) = taken.get() {
-            let _ = held.set(value.clone());
+        if taken.get().is_some_and(&mut admits) {
+            fill_one(held, taken);
         }
     }
 }
@@ -336,8 +384,8 @@ fn cell_points<const N: usize>(cells: &[OnceCell<Option<Region>>; N]) -> usize {
 const CORNER_BYTES: usize = 24;
 
 impl KeptScene {
-    fn of(scene: &Scene, floor: f64) -> Self {
-        Self {
+    fn of(scene: &Scene, floor: f64, precision: Precision, excess: Option<f64>) -> Self {
+        let kept = Self {
             scope: scene.scope.clone(),
             room: scene.room.clone(),
             obstacles: scene.obstacles.clone(),
@@ -346,13 +394,29 @@ impl KeptScene {
             bracketed: scene.bracketed.clone(),
             bounded: scene.bounded.clone(),
             floor,
+            precision,
+            excess,
             memo: Mutex::new(Memo {
-                clear: scene.clear.clone(),
-                inscribed: scene.inscribed.clone(),
-                simple: scene.simple.clone(),
-                coarse: scene.coarse.clone(),
-                found: scene.found.clone(),
+                clear: Default::default(),
+                inscribed: Default::default(),
+                simple: Default::default(),
+                coarse: Default::default(),
+                found: placement::Found::default(),
+                excess: None,
             }),
+        };
+        kept.keep(scene);
+        kept
+    }
+
+    /// The greatest excess the scene carries (#438): its bracketing
+    /// morphology's, or a region its memo keeps; `None` for an Exact
+    /// scene, which keeps no region stating one.
+    pub(crate) fn excess(&self) -> Option<f64> {
+        let kept = self.memo().excess;
+        match (self.excess, kept) {
+            (Some(built), Some(kept)) => Some(built.max(kept)),
+            (built, kept) => built.or(kept),
         }
     }
 
@@ -362,16 +426,42 @@ impl KeptScene {
 
     /// Keeps what a search of the scene took that this one lacks: its
     /// clear parts, their largest discs, the simplified and coarse
-    /// regions and the regions it found.
+    /// regions and the regions it found. A region stating an excess the
+    /// scene's class does not hold (#438: a fast result, for an Exact
+    /// scene) is never kept; one it holds raises the scene's excess.
     fn keep(&self, scene: &Scene) {
-        let memo = self.memo();
-        fill(&memo.clear, &scene.clear);
-        fill(&memo.inscribed, &scene.inscribed);
-        fill(&memo.simple, &scene.simple);
-        fill(&memo.coarse, &scene.coarse);
-        for (side, corners, steps, free) in scene.found.borrow().iter() {
-            placement::keep_found(&memo.found, *side, corners, steps, free);
+        let mut memo = self.memo();
+        let precision = self.precision;
+        let mut excess = memo.excess;
+        let mut admits = |region: &Region| {
+            let more = region.excess();
+            if !precision.holds(more) {
+                return false;
+            }
+            if let Some(more) = more {
+                excess = Some(excess.map_or(more, |held: f64| held.max(more)));
+            }
+            true
+        };
+        // A clear part's largest disc is kept only where the part may be.
+        for (side, taken) in scene.clear.iter().enumerate() {
+            if taken.get().is_none_or(&mut admits) {
+                fill_one(&memo.clear[side], taken);
+                fill_one(&memo.inscribed[side], &scene.inscribed[side]);
+            }
         }
+        fill(&memo.simple, &scene.simple, |region| {
+            region.as_ref().is_none_or(&mut admits)
+        });
+        fill(&memo.coarse, &scene.coarse, |region| {
+            region.as_ref().is_none_or(&mut admits)
+        });
+        for (side, corners, steps, free) in scene.found.borrow().iter() {
+            if admits(free) {
+                placement::keep_found(&memo.found, *side, corners, steps, free);
+            }
+        }
+        memo.excess = excess;
     }
 
     /// The scene again, as built, with what its searches took; a search
@@ -677,10 +767,139 @@ mod tests {
                     axiolid_core::Tolerance::new(1.0e-9, 1.0e-6).unwrap(),
                 ),
             )
+            // Over exact boxes the fast mode has nothing to fill: the same
+            // regions, another entry.
+            .precision(
+                "the precision class",
+                base.clone().at(Precision::fast(FAST_BUDGET)),
+            )
+            .input(
+                "the fast budget",
+                base.clone().at(Precision::fast(2.0 * FAST_BUDGET)),
+            )
             .check();
-        // The precision has one class today; a Fast one would be a variant,
-        // and an input of this test.
         assert_eq!(base.precision, Precision::Exact);
+    }
+
+    /// The budget the tests' Fast scenes are asked within.
+    const FAST_BUDGET: f64 = 1.0e-3;
+
+    /// The room with a round table, tessellated within 2 mm: its
+    /// bracketing morphology is what a Fast scene takes in the fast mode.
+    fn with_round_table() -> AxiolidFreeSpaceService {
+        let sides = 48;
+        let (centre, radius, height) = ([2.5, 2.0], 0.6, 0.75);
+        let mut positions = Vec::new();
+        for z in [0.0, height] {
+            for i in 0..sides {
+                let angle = 2.0 * std::f64::consts::PI * f64::from(i) / f64::from(sides);
+                positions.push(Point3::new(
+                    centre[0] + radius * angle.cos(),
+                    centre[1] + radius * angle.sin(),
+                    z,
+                ));
+            }
+        }
+        positions.push(Point3::new(centre[0], centre[1], 0.0));
+        positions.push(Point3::new(centre[0], centre[1], height));
+        let (bottom, top) = (2 * sides, 2 * sides + 1);
+        let mut indices = Vec::new();
+        for i in 0..sides {
+            let j = (i + 1) % sides;
+            indices.extend([bottom, j, i, top, sides + i, sides + j]);
+            indices.extend([i, j, sides + j, i, sides + j, sides + i]);
+        }
+        let geometry = furnished().with_tessellated_mesh(
+            id("round"),
+            TriMesh::new(positions, indices),
+            2.0e-3,
+        );
+        AxiolidFreeSpaceService::new(geometry, SourceId::new("cad", "m").unwrap())
+    }
+
+    /// The done-when of #438: one scene asked once Exact and once Fast is
+    /// two entries of the check's store, and an Exact read never returns
+    /// the Fast one, whichever was asked first and however often.
+    #[test]
+    fn a_scene_asked_exact_and_fast_is_two_entries_and_exact_never_reads_the_fast_one() {
+        let service = with_round_table();
+        let tolerance = axiolid_core::Tolerance::new(1.0e-9, 1.0e-9).unwrap();
+        let exact = SceneKey::new(
+            &service.over,
+            (&id("room"), &[]),
+            (&[id("round"), id("chair")], &[]),
+            ElevationBand::try_new(0.0, 2.0).unwrap(),
+            tolerance,
+        );
+        let fast = exact.clone().at(Precision::fast(FAST_BUDGET));
+        let store = DerivationStore::new();
+        let _entered = store.enter();
+        let fast_scene = Derived::of(fast.clone(), true).unwrap();
+        // Held Fast, the Exact key finds nothing and builds its own.
+        assert!(store.held::<PlacementScenes>(&exact).is_none());
+        let exact_scene = Derived::of(exact.clone(), true).unwrap();
+        assert!(!Arc::ptr_eq(&exact_scene.value, &fast_scene.value));
+        let statistics = store.statistics();
+        assert_eq!((statistics[0].entries, statistics[0].builds), (2, 2));
+        // The Fast scene carries its excess, within the budget; the Exact
+        // one none, and each key reads its own again.
+        let excess = fast_scene.kept().unwrap().excess();
+        assert!(excess.is_some_and(|excess| (0.0..=FAST_BUDGET).contains(&excess)));
+        assert_eq!(exact_scene.kept().unwrap().excess(), None);
+        for _ in 0..3 {
+            let again = Derived::of(exact.clone(), true).unwrap();
+            assert!(Arc::ptr_eq(&again.value, &exact_scene.value));
+            assert_eq!(again.kept().unwrap().excess(), None);
+        }
+        let again = Derived::of(fast, true).unwrap();
+        assert!(Arc::ptr_eq(&again.value, &fast_scene.value));
+        // Searched alike, both decide alike here.
+        for scene in [&exact_scene, &fast_scene] {
+            let searched = scene.kept().unwrap().scene();
+            let verdict = placement::circle(&searched, 0.4).unwrap();
+            assert!(matches!(verdict, placement::Search::Found { .. }));
+            scene.keep(&searched);
+        }
+        assert_eq!(exact_scene.kept().unwrap().excess(), None);
+    }
+
+    /// What a scene's memo keeps is held to its class: a region stating an
+    /// excess (a disc morphology in the fast mode) is never kept with an
+    /// Exact scene, and raises a Fast scene's excess within its budget.
+    #[test]
+    fn an_exact_scene_never_keeps_a_fast_region() {
+        let service = with_round_table();
+        let tolerance = axiolid_core::Tolerance::new(1.0e-9, 1.0e-9).unwrap();
+        let exact = SceneKey::new(
+            &service.over,
+            (&id("room"), &[]),
+            (&[id("round")], &[]),
+            ElevationBand::try_new(0.0, 2.0).unwrap(),
+            tolerance,
+        );
+        for precision in [Precision::Exact, Precision::fast(FAST_BUDGET)] {
+            let derived = Derived::of(exact.clone().at(precision), false).unwrap();
+            let kept = derived.kept().unwrap();
+            let built = kept.excess();
+            let searched = kept.scene();
+            let fast = searched
+                .scope
+                .erode_inner_with(0.3, tolerance, MorphologyMode::fast(FAST_BUDGET))
+                .unwrap();
+            assert!(fast.excess().is_some());
+            let _ = searched.clear[0].set(fast.clone());
+            let _ = searched.simple[2].set(Some(fast));
+            kept.keep(&searched);
+            let again = kept.scene();
+            assert_eq!(again.clear[0].get().is_some(), !precision.is_exact());
+            assert_eq!(again.simple[2].get().is_some(), !precision.is_exact());
+            if precision.is_exact() {
+                assert_eq!(kept.excess(), None);
+            } else {
+                assert!(kept.excess().is_some_and(|excess| excess <= FAST_BUDGET));
+                assert!(kept.excess() >= built);
+            }
+        }
     }
 
     /// Equal obstacle lists are one list in a service's keys, however

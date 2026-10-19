@@ -14,6 +14,7 @@
 use std::collections::hash_map::DefaultHasher;
 use std::fmt;
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
 use super::{DerivationKind, DerivationStore};
 use crate::ServiceRegistry;
@@ -144,6 +145,8 @@ pub struct KeyCompleteness<D: DerivationKind, F> {
     services: ServiceRegistry,
     fingerprint: fn(&D::Value) -> F,
     inputs: usize,
+    /// Whether a key in another precision class was asked ([`Self::precision`]).
+    classes: bool,
     failures: Vec<String>,
 }
 
@@ -170,6 +173,7 @@ where
             services: ServiceRegistry::new(),
             fingerprint,
             inputs: 0,
+            classes: false,
             failures,
         }
     }
@@ -230,8 +234,69 @@ where
         self
     }
 
+    /// `key`, the base key in another precision class (#438), is another
+    /// entry of one store: asked first, its value never answers the base
+    /// key, whose read builds a value of its own, and each key reads its
+    /// own value again. Its value is not compared: a Fast value may equal
+    /// the Exact one where the fast mode has nothing to fill.
+    ///
+    /// # Panics
+    ///
+    /// When a build fails with an error of the store's (a cycle, or a value
+    /// its class does not hold).
+    #[must_use]
+    pub fn precision(mut self, what: &str, key: D::Key) -> Self {
+        self.inputs += 1;
+        self.classes = true;
+        let (asked, base) = (D::precision(&key), D::precision(&self.base));
+        if key == self.base {
+            self.failures
+                .push(format!("changing {what} leaves the key alike"));
+            return self;
+        }
+        if asked.is_none() || asked == base {
+            self.failures.push(format!(
+                "changing {what} leaves the precision class alike ({asked:?}, the base key's \
+                 {base:?})"
+            ));
+            return self;
+        }
+        let store = DerivationStore::new();
+        let read = |key: &D::Key| {
+            store
+                .derive::<D>(&self.services, key)
+                .unwrap_or_else(|error| panic!("building a key of `{}`: {error}", D::NAME))
+        };
+        let other = read(&key);
+        if store.held::<D>(&self.base).is_some() {
+            self.failures.push(format!(
+                "{what}: the base key finds the value built for the other class"
+            ));
+        }
+        let first = read(&self.base);
+        let entries: usize = store
+            .statistics()
+            .iter()
+            .filter(|statistics| statistics.kind == D::NAME)
+            .map(|statistics| statistics.entries)
+            .sum();
+        if Arc::ptr_eq(&first, &other) || entries != 2 {
+            self.failures.push(format!(
+                "{what}: the base key is answered by the other class's value ({entries} entries)"
+            ));
+        }
+        if !Arc::ptr_eq(&read(&self.base), &first) || !Arc::ptr_eq(&read(&key), &other) {
+            self.failures.push(format!(
+                "{what}: a key does not read its own class's value again"
+            ));
+        }
+        self
+    }
+
     /// Fails, naming every input that failed, when one did or when no input
-    /// was changed; and when the kind names a kernel crate at another
+    /// was changed, or when the kind keys a precision class
+    /// ([`DerivationKind::precision`]) and no key in another class was
+    /// asked ([`Self::precision`]); and when the kind names a kernel crate at another
     /// version than the `Cargo.lock` above the working directory (the
     /// workspace's, under `cargo test`) locks, or no lock is found.
     ///
@@ -244,6 +309,13 @@ where
             "the key-completeness test of `{}` changes no input",
             D::NAME
         );
+        if D::precision(&self.base).is_some() && !self.classes {
+            self.failures.push(
+                "it keys a precision class, and no key in another class is asked \
+                 (`KeyCompleteness::precision`)"
+                    .to_owned(),
+            );
+        }
         if !D::VERSION.kernels.is_empty() {
             match workspace_lock() {
                 Some(lock) => {

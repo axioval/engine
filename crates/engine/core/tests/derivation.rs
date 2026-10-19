@@ -10,8 +10,8 @@ use std::sync::{Arc, Barrier};
 use std::time::Duration;
 
 use axioval_engine::{
-    DerivationError, DerivationKind, DerivationStore, DerivationVersion, Inputs, MeasuredMemo,
-    MemoryBudget, Parallelism, ServiceRegistry,
+    DerivationError, DerivationKind, DerivationStore, DerivationVersion, Inputs, KeyCompleteness,
+    MeasuredMemo, MemoryBudget, Parallelism, Precision, ServiceRegistry,
 };
 
 /// `work` on a thread of its own, failing the test should it not end: a
@@ -900,4 +900,129 @@ mod planned {
             assert_eq!(found, expected);
         }
     }
+}
+
+/// A value of a key in a precision class (#438): its key's number, and the
+/// excess of a Fast build, half its budget; an Exact build carries none.
+struct Classed;
+
+impl DerivationKind for Classed {
+    const NAME: &'static str = "classed";
+    const VERSION: DerivationVersion = DerivationVersion::new(1, &[]);
+    type Key = (u32, Precision);
+    type Value = (u32, Option<f64>);
+
+    fn build(
+        &(value, precision): &(u32, Precision),
+        _: &Inputs<'_>,
+    ) -> Result<Self::Value, DerivationError> {
+        Ok((value, precision.budget_metres().map(|budget| budget / 2.0)))
+    }
+
+    fn precision(&(_, precision): &(u32, Precision)) -> Option<Precision> {
+        Some(precision)
+    }
+
+    fn excess(&(_, excess): &Self::Value) -> Option<f64> {
+        excess
+    }
+}
+
+#[test]
+fn the_same_question_asked_exact_and_fast_is_two_entries() {
+    let store = DerivationStore::new();
+    let services = ServiceRegistry::new();
+    let fast = store
+        .derive::<Classed>(&services, &(7, Precision::fast(1.0e-3)))
+        .unwrap();
+    assert_eq!(*fast, (7, Some(5.0e-4)));
+    // Held Fast, an otherwise equal Exact key finds nothing and builds.
+    assert!(store.held::<Classed>(&(7, Precision::Exact)).is_none());
+    let exact = store
+        .derive::<Classed>(&services, &(7, Precision::Exact))
+        .unwrap();
+    assert_eq!(*exact, (7, None));
+    assert!(!Arc::ptr_eq(&exact, &fast));
+    let statistics = store.statistics();
+    assert_eq!((statistics[0].entries, statistics[0].builds), (2, 2));
+    // Each reads its own again; another budget is another entry.
+    for _ in 0..3 {
+        let again = store
+            .derive::<Classed>(&services, &(7, Precision::Exact))
+            .unwrap();
+        assert!(Arc::ptr_eq(&again, &exact));
+    }
+    store
+        .derive::<Classed>(&services, &(7, Precision::fast(2.0e-3)))
+        .unwrap();
+    assert_eq!(store.statistics()[0].entries, 3);
+}
+
+/// A kind whose build states an excess its key's class may not hold: 2 mm,
+/// whatever was asked.
+struct Overstated;
+
+impl DerivationKind for Overstated {
+    const NAME: &'static str = "overstated";
+    const VERSION: DerivationVersion = DerivationVersion::new(1, &[]);
+    type Key = Precision;
+    type Value = Option<f64>;
+
+    fn build(_: &Precision, _: &Inputs<'_>) -> Result<Option<f64>, DerivationError> {
+        Ok(Some(2.0e-3))
+    }
+
+    fn precision(precision: &Precision) -> Option<Precision> {
+        Some(*precision)
+    }
+
+    fn excess(excess: &Option<f64>) -> Option<f64> {
+        *excess
+    }
+}
+
+#[test]
+fn a_value_with_an_excess_its_class_does_not_hold_is_never_handed_out() {
+    let store = DerivationStore::new();
+    let services = ServiceRegistry::new();
+    for asked in [Precision::Exact, Precision::fast(1.0e-3)] {
+        assert_eq!(
+            store.derive::<Overstated>(&services, &asked),
+            Err(DerivationError::Precision {
+                kind: "overstated",
+                asked
+            })
+        );
+        assert!(store.held::<Overstated>(&asked).is_none());
+    }
+    assert_eq!(
+        *store
+            .derive::<Overstated>(&services, &Precision::fast(2.0e-3))
+            .unwrap(),
+        Some(2.0e-3)
+    );
+}
+
+#[test]
+fn a_key_completeness_test_asks_for_another_class() {
+    KeyCompleteness::<Classed, _>::new((7, Precision::Exact), |value| value.0)
+        .changes_value("the number", (8, Precision::Exact))
+        .precision("the precision", (7, Precision::fast(1.0e-3)))
+        .check();
+}
+
+#[test]
+#[should_panic(expected = "no key in another class is asked")]
+fn a_key_completeness_test_of_a_classed_kind_must_ask_another_class() {
+    KeyCompleteness::<Classed, _>::new((7, Precision::Exact), |value| value.0)
+        .changes_value("the number", (8, Precision::Exact))
+        .check();
+}
+
+#[test]
+#[should_panic(expected = "leaves the precision class alike")]
+fn another_class_must_be_another_class() {
+    KeyCompleteness::<Classed, _>::new((7, Precision::Exact), |value| value.0)
+        .precision("the number", (8, Precision::Exact))
+        .check();
 }

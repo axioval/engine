@@ -1249,7 +1249,7 @@ pub use corridor_end::{CorridorEnd, CorridorEndRequest, CorridorEnds, EndWall, W
 pub use coverage::{CoverageEvidence, CoverageRequest, EffectMeets, EffectReach, Participant};
 pub use derivation::{
     DerivationError, DerivationKind, DerivationStatistics, DerivationStore, DerivationVersion,
-    Inputs, Kernel, KeyCompleteness,
+    FastBudget, Inputs, Kernel, KeyCompleteness, Precision,
 };
 pub use derived::{ClassOutcome, Classifications};
 pub use derived_relationships::{

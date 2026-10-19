@@ -41,6 +41,14 @@
 //! runs every check with the store kept and forgetful, and requires the
 //! same bytes. [`crate::Runtime::without_reuse`] installs one.
 //!
+//! **Precision** ([#438](https://github.com/axioval/engine/issues/438)).
+//! A geometric kind keys its precision class ([`Precision`]: Exact, or Fast
+//! with its budget, [`DerivationKind::precision`]), so the same question
+//! asked Exact and Fast is two entries, and an Exact read never finds the
+//! Fast one. A Fast value carries its excess ([`DerivationKind::excess`]);
+//! every read checks it against the class asked, and a value the class does
+//! not hold is refused ([`DerivationError::Precision`]), never handed out.
+//!
 //! **Releasing** ([#440](https://github.com/axioval/engine/issues/440)).
 //! A kept value is memory held on purpose, so the store gives it up in
 //! three ways, each only ever costing time: a released value is built
@@ -74,8 +82,10 @@ use crate::ServiceRegistry;
 use crate::memory::{self, Held, Reclaim};
 
 mod key;
+mod precision;
 
 pub use key::{DerivationVersion, Kernel, KeyCompleteness};
+pub use precision::{FastBudget, Precision};
 
 /// A kind of derivation: a key, a value and the pure function building the
 /// value of a key.
@@ -88,8 +98,8 @@ pub use key::{DerivationVersion, Kernel, KeyCompleteness};
 ///
 /// The key holds every input that can change the value: the
 /// source-qualified identities of its objects, the tolerance and frame, the
-/// parameters, and for a geometric derivation its precision class, so a
-/// Fast value never answers an Exact question
+/// parameters, and for a geometric derivation its precision class
+/// ([`Self::precision`]), so a Fast value never answers an Exact question
 /// ([#438](https://github.com/axioval/engine/issues/438),
 /// [#439](https://github.com/axioval/engine/issues/439)). Keys are compared
 /// field by field (`Eq`), never by a formatted string, and every kind has a
@@ -119,6 +129,27 @@ pub trait DerivationKind: 'static {
     /// an error is not kept, so the next caller builds the key again. A
     /// failure of the derivation's own belongs in its value.
     fn build(key: &Self::Key, inputs: &Inputs<'_>) -> Result<Self::Value, DerivationError>;
+
+    /// The precision class `key` asks for (#438), a field of the key: a
+    /// geometric kind states it for every key, Exact or Fast with its
+    /// budget; `None`, the default, is a kind that is not geometric (a
+    /// measurement's table). The store hands a read only a value whose
+    /// [`Self::excess`] the class holds ([`Precision::holds`]), and a
+    /// kind's key-completeness test asks for a key in another class
+    /// ([`KeyCompleteness::precision`]).
+    fn precision(key: &Self::Key) -> Option<Precision> {
+        let _ = key;
+        None
+    }
+
+    /// The excess `value` carries (#438): for a value computed in a
+    /// kernel's fast mode, how far beyond the exact one it may lie, at
+    /// most its key's budget; `None`, the default, for a value computed
+    /// exactly. Read on every read of a key with a [`Self::precision`].
+    fn excess(value: &Self::Value) -> Option<f64> {
+        let _ = value;
+        None
+    }
 
     /// The bytes `value` holds, where the kind can say: summed in the run's
     /// statistics and held against the check's memory budget while the
@@ -166,6 +197,17 @@ pub enum DerivationError {
     Cycle {
         /// The kind of the key read while it was being built.
         kind: &'static str,
+    },
+    /// The value held or built for a key carries an excess its precision
+    /// class does not hold ([`DerivationKind::excess`], #438): a Fast value
+    /// for an Exact question, or one past the budget asked. Never handed
+    /// out; the read fails closed.
+    #[error("{kind}: a value carrying an excess past its key's class ({asked}) is not handed out")]
+    Precision {
+        /// The kind read.
+        kind: &'static str,
+        /// The class the key asked for.
+        asked: Precision,
     },
 }
 
@@ -299,6 +341,24 @@ impl<S> Slot<S> {
             read,
             held: hold(bytes),
         }
+    }
+}
+
+/// `value`, read for `key`, where the precision class `key` asks for holds
+/// the excess it carries (#438); else the refusal. A kind keying its class
+/// keeps an Exact read from ever finding a Fast value, and this keeps one
+/// from being handed out should a build, or what a value keeps after it,
+/// state otherwise.
+fn held_to<D: DerivationKind>(
+    key: &D::Key,
+    value: Arc<D::Value>,
+) -> Result<Arc<D::Value>, DerivationError> {
+    match D::precision(key) {
+        Some(asked) if !asked.holds(D::excess(&value)) => Err(DerivationError::Precision {
+            kind: D::NAME,
+            asked,
+        }),
+        _ => Ok(value),
     }
 }
 
@@ -607,7 +667,9 @@ impl DerivationStore {
     /// # Errors
     ///
     /// [`DerivationError::Cycle`] when building `key` needs `key` itself,
-    /// on this thread or through the threads it would wait for.
+    /// on this thread or through the threads it would wait for;
+    /// [`DerivationError::Precision`] when the value carries an excess the
+    /// precision class `key` asks for does not hold (#438).
     ///
     /// # Panics
     ///
@@ -639,6 +701,7 @@ impl DerivationStore {
             },
             Arc::clone,
         )
+        .and_then(|value| held_to::<D>(key, value))
     }
 
     /// [`Self::derive`] in the store `services` holds; without one (outside
@@ -725,6 +788,7 @@ impl DerivationStore {
     #[must_use]
     pub fn held<D: DerivationKind>(&self, key: &D::Key) -> Option<Arc<D::Value>> {
         self.read_held::<Typed<D>, D::Key, Arc<D::Value>, _>(key, Arc::clone)
+            .and_then(|value| held_to::<D>(key, value).ok())
     }
 
     /// Releases the value held for `key` of kind `D`, if any: the next read

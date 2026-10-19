@@ -6,6 +6,23 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Exact and Fast derivations kept apart**
+  ([#438](https://github.com/axioval/engine/issues/438),
+  [ADR 0006](docs/src/adr-0006.md#precision-classes)). A geometric
+  derivation's key carries its precision class (`Precision`: Exact, or
+  Fast with its budget), which the kind states
+  (`DerivationKind::precision`), and a Fast value carries its excess
+  (`DerivationKind::excess`). The store hands a read only a value its class
+  holds and refuses any other (`DerivationError::Precision`), so the same
+  question asked Exact and Fast is two entries and an Exact read never
+  receives the Fast one. The Axiolid adapter's placement scenes and indexed
+  bodies key their class; a Fast scene runs its bracketing morphology in
+  the overlay's fast mode, and an Exact scene's memo never keeps a region
+  stating an excess. `KeyCompleteness::precision` asks a kind's key in
+  another class, a kind keying one must, and the architecture gate refuses
+  a kind whose impl states no class. Every request still asks Exact:
+  reports are unchanged.
+
 - **Derivations released after their last reader and within the memory
   budget** ([#440](https://github.com/axioval/engine/issues/440),
   [ADR 0006](docs/src/adr-0006.md)). A derivation kind names the service

@@ -33,7 +33,9 @@ use crate::placement::{self, Axis, Scene, Search, Window};
 use crate::planar::budget::Work;
 use crate::planar::{enclosing_hull, plan_frame, polygon_area, projected_polygons};
 use crate::walkable::{ON_SURFACE, Plan, band_footprint, solid_column, trapezoids};
-use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, Polygon, Region, Ring, overlay};
+use axiolid_overlay::{
+    FillRule, MorphologyMode, OverlayInput, OverlayOperation, Polygon, Region, Ring, overlay,
+};
 
 /// The audit tolerance every measurement here shares.
 pub(crate) fn tolerance() -> Result<axiolid_core::Tolerance, FreeSpaceError> {
@@ -607,6 +609,13 @@ impl Measuring {
     /// With `taken`, each obstacle that may occupy anything near the scope
     /// is also kept apart there, with what it may and what it surely
     /// occupies ([`Taken`]), for [`FreeSpaceService::measure_free_floor`].
+    ///
+    /// The bracketing morphology runs in `mode` (#438): exactly, as every
+    /// request is answered, or in the overlay's fast mode for a scene of
+    /// the Fast precision class, each result on the side it is asked for
+    /// and within the budget. The greatest excess a fast result states
+    /// ([`Region::excess`]) is returned beside the floor; `None` where no
+    /// morphology ran in the fast mode.
     #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
     pub(crate) fn floor_scene(
         &self,
@@ -616,8 +625,9 @@ impl Measuring {
         swept: &[SweptDoor],
         band: ElevationBand,
         tolerance: axiolid_core::Tolerance,
+        mode: MorphologyMode,
         mut taken: Option<&mut Vec<Taken>>,
-    ) -> Result<(Scene, f64), FreeSpaceError> {
+    ) -> Result<(Scene, f64, Option<f64>), FreeSpaceError> {
         let missing = |id: &ObjectId| FreeSpaceError::MissingGeometry(Box::new(id.clone()));
         let deviation = |id: &ObjectId| {
             self.geometry
@@ -625,6 +635,15 @@ impl Measuring {
                 .ok_or(FreeSpaceError::InexactPlacementEvidence)
         };
         let region_error = |e| FreeSpaceError::Unavailable(format!("bracketed footprint: {e:?}"));
+        // The greatest excess of a fast morphology result, kept as each is
+        // taken: the union it joins states none.
+        let excess = std::cell::Cell::new(None::<f64>);
+        let noted = |region: Region| {
+            if let Some(more) = region.excess() {
+                excess.set(Some(excess.get().map_or(more, |held| held.max(more))));
+            }
+            region
+        };
         let mut bracketed: Vec<(ObjectId, f64)> = Vec::new();
         // Obstacles bounded rather than measured (#401).
         let mut bounded: Vec<ObjectId> = Vec::new();
@@ -721,9 +740,13 @@ impl Measuring {
                 let (own_inner, own_outer) = (local(own_inner)?, local(own_outer)?);
                 let (sure, possible) = if *d > 0.0 {
                     (
-                        own_inner.erode_inner(*d, tolerance).map_err(region_error)?,
+                        own_inner
+                            .erode_inner_with(*d, tolerance, mode)
+                            .map(noted)
+                            .map_err(region_error)?,
                         own_outer
-                            .dilate_outer(*d, tolerance)
+                            .dilate_outer_with(*d, tolerance, mode)
+                            .map(noted)
                             .map_err(region_error)?,
                     )
                 } else {
@@ -809,7 +832,10 @@ impl Measuring {
                     .map_err(FreeSpaceError::Unavailable)?;
                 let mut may = to_local(&widened)?;
                 if d > 0.0 && !may.is_empty() {
-                    may = may.dilate_outer(d, tolerance).map_err(region_error)?;
+                    may = may
+                        .dilate_outer_with(d, tolerance, mode)
+                        .map(noted)
+                        .map_err(region_error)?;
                 }
                 bounded.push(obstacle.clone());
                 possible = possible.union(&may, tolerance).map_err(region_error)?;
@@ -867,8 +893,9 @@ impl Measuring {
                                     .ok()?
                                     .difference(&to_local(&shadow).ok()?, tolerance)
                                     .ok()?
-                                    .erode_inner(d, tolerance)
+                                    .erode_inner_with(d, tolerance, mode)
                                     .ok()
+                                    .map(noted)
                             })
                     };
                     // A core the overlay refuses is left out: absence is
@@ -936,7 +963,8 @@ impl Measuring {
                 .band_footprint(obstacle, mesh, low - u - d, high + u + d)
                 .map_err(FreeSpaceError::Unavailable)?;
             let grown = to_local(&widened)?
-                .dilate_outer(d, tolerance)
+                .dilate_outer_with(d, tolerance, mode)
+                .map(noted)
                 .map_err(region_error)?;
             possible = possible.union(&grown, tolerance).map_err(region_error)?;
             // A column of height 2d a deviation above the band's surest
@@ -952,7 +980,10 @@ impl Measuring {
                     .difference(&to_local(&shadow)?, tolerance)
                     .map_err(region_error)?;
                 if !core.is_empty() {
-                    surely = core.erode_inner(d, tolerance).map_err(region_error)?;
+                    surely = core
+                        .erode_inner_with(d, tolerance, mode)
+                        .map(noted)
+                        .map_err(region_error)?;
                     certain = certain.union(&surely, tolerance).map_err(region_error)?;
                 }
             }
@@ -1003,7 +1034,7 @@ impl Measuring {
             found: placement::Found::default(),
             work: Work::default(),
         };
-        Ok((scene, floor))
+        Ok((scene, floor, excess.get()))
     }
 }
 
@@ -1507,13 +1538,14 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
     ) -> Result<FreeFloorEvidence, FreeSpaceError> {
         let tolerance = tolerance()?;
         let mut taken = Vec::new();
-        let (scene, _) = self.over.floor_scene(
+        let (scene, _, _) = self.over.floor_scene(
             request.scope(),
             request.merged_scopes(),
             request.obstacles(),
             request.swept_doors(),
             request.effective_band(),
             tolerance,
+            MorphologyMode::Exact,
             Some(&mut taken),
         )?;
         let fail = |e| FreeSpaceError::Unavailable(format!("free floor: {e:?}"));

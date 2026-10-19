@@ -75,7 +75,13 @@ at 1.5 million pairs and more for some smaller ones.
 ### For a derivation store
 
 Values kept on purpose between steps, such as a derivation store's
-(#437, #440), count against the same budget through `MemoryBudget::hold`:
+(#437, #440), count against the same budget through `MemoryBudget::hold`.
+The store holds each kept value's bytes, as its kind's `size_hint` states
+them, while it keeps the value (#408): a placement scene by its regions'
+corners, an indexed body by its triangles. A kind may also bound what the
+store keeps of it (`DerivationKind::keep_bytes`); the Axiolid adapter's
+scenes and indexed bodies keep at most a quarter of the budget each, and
+past it the values read least recently are released. Held bytes,
 never refused and never waiting, they leave less room to the steps
 admitted beside them. `MemoryBudget::headroom` tells a keeper what is
 left before it evicts, and `MemoryBudget::check` refuses a step taken
@@ -91,10 +97,10 @@ its own, so the resident set stayed near the check's heaviest moment long
 after it, and near the sum of every thread's. The allocator was chosen by
 measurement (below): mimalloc and jemalloc both returned freed pages, with
 about the same peak and run time; mimalloc builds from the crate without a
-system library. A free-space service's kept scenes are bounded by two per
-searching thread, each search's own regions and its found centres
-(#427, at most 250,000 corners) are dropped with the search, so no space's
-scene outlives the next few searches.
+system library. A check's placement scenes are kept in its derivation store
+(#408), bounded and held against the budget as above, each with at most
+250,000 corners of found regions (#427), and dropped with the store at the
+end of the run.
 
 ## Measurements
 

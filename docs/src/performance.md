@@ -808,3 +808,53 @@ peak heap):
 The heap on the wall model rises by the bodies kept for the run. One rule
 run alone reads them all itself and stays 1.24 to 1.53× its reference's
 time there: the runner's fixed cost per rule on a model of nine objects.
+
+### Scenes and body indexes built once per check
+
+Free-floor searches, largest-disc estimates and circulation maps read a
+space's placement scene, and every pair a clash, clearance or distance
+rule measures reads both bodies' triangle hierarchies. Both are
+derivations of the check's store since
+[#408](https://github.com/axioval/engine/issues/408)
+([ADR 0006](./adr-0006.md)): a scene is built once for every rule and
+thread reading the same space, obstacles, swept doors and band, and a
+body is indexed once for every pair reading it. Before, the free-space
+service kept the last two scenes of each searching thread, and each pair
+indexed both its bodies afresh. `check --timings` prints the store's
+statistics, one line a kind:
+
+```text
+derivation: placement scene: 157 built, 989 read again (0 waited), 0 released, 5.7 MiB held
+derivation: indexed body: 588 built, 30227 read again (0 waited), 0 released, 7.9 MiB held
+```
+
+Release builds, wall time and peak resident memory from `getrusage`
+under a 20 GB cgroup limit, one run at a time on a 20-core machine, the
+default memory budget. The rule sets: two circles (1.5 and 1.2 m) and two
+rectangles at any orientation (1.8 by 1.5 and 1.2 by 0.9 m), all 2 m
+high, among the spaces' furniture, or among every physical element; and
+the six clash and clash-matrix rules of the parity case `clashes`.
+
+| Model, rule set | Threads | Scenes or bodies built / read | Wall before | Wall after | Peak before | Peak after |
+|---|---:|---|---:|---:|---:|---:|
+| m13 (157 spaces), furniture | 1 | 157 / 915 | 5.3 s | 5.3 s | 1109 MiB | 1112 MiB |
+| m13, furniture | 4 | 157 / 915 | 4.3 s | 4.3 s | 1157 MiB | 1161 MiB |
+| m13, every physical element | 4 | 157 / 1146 | 1712 s | 1621 s | 3517 MiB | 3515 MiB |
+| m07 (17 spaces), furniture | 1 | 17 / 127 | 4.3 s | 4.0 s | 633 MiB | 633 MiB |
+| m07, every physical element | 1 | 17 / 144 | 94.1 s | 93.1 s | 799 MiB | 799 MiB |
+| m07, every physical element | 4 | 17 / 144 | 69.8 s | 69.6 s | 1917 MiB | 1904 MiB |
+| m07, clashes | 1 | 588 / 30,815 | 6.5 s | 6.0 s | 377 MiB | 393 MiB |
+| public architecture (IFC4), clashes | 1 | 8 / 120 | 0.3 s | 0.3 s | 45 MiB | 46 MiB |
+
+Each space's scene is now built once: on m13 among every physical
+element, the three rules after the first spend 2.4 → 1.3 s
+(`circle-150`) and 15.3 → 14.1 s (`rectangle-120x90`), and the check
+5% less in all. Most of a scene is its obstacles' band footprints, which
+the service already kept for every space of a floor, and most of these
+checks is the rectangle search itself (1665 of the 1712 s on m13), which
+reuse does not touch. On m07's clashes the 30,227 indexes no longer
+built save 7% of the rules' time (5.4 → 5.1 s); the rest is the pairs' own
+measurement. The kept scenes and indexes hold at most 8 MiB here, and
+peaks are the same within a run's noise. Every report is the same byte
+for byte as before.
+

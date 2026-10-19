@@ -130,6 +130,32 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **Placement scenes and body indexes are built once per check**
+  ([#408](https://github.com/axioval/engine/issues/408),
+  [ADR 0006](docs/src/adr-0006.md) stage 1). A space's placement scene is
+  a derivation of the check's store (`PlacementScenes`), read by circle
+  and rectangle searches, largest-disc estimates and circulation maps of
+  every rule and thread over the same space, obstacles, swept doors and
+  band, in place of the two scenes each searching thread kept
+  (`KEPT_SCENES`). Every body a clash, clearance or distance pair reads is
+  indexed once (`IndexedBodies`) instead of once per pair. Each key holds
+  every input its value is built from, with a test changing each. A
+  geometry service reaches the store as the thread's current one
+  (`derivation::current`, `DerivationStore::derive_current`), entered by
+  the runtime and on every worker. Kept values are held against the memory
+  budget (`MemoryBudget::hold`, `DerivationStore::resize`), and a kind may
+  bound what the store keeps of it (`DerivationKind::keep_bytes`, the
+  adapter's kinds a quarter of the budget each), releasing the values read
+  least recently; releasing after a value's last reader is #440.
+  `Runtime::with_derivation_observer` reports each kind's builds, hits,
+  waits, releases and bytes, which `check --timings` prints. On a private
+  sample of 157 spaces, two circles and two rectangles among every physical
+  element build 157 scenes for 1146 reads, and the check takes 1621 s
+  instead of 1712 s at the same peak (3.4 GiB); on a private house's six
+  clash rules 588 bodies are indexed for 30,815 reads, 7% of the rules'
+  time. Reports are byte-identical before and after on every set measured
+  ([Template performance](docs/src/performance.md#scenes-and-body-indexes-built-once-per-check)).
+
 - **Budgets charge a reused value as if built** (#441). A circle search
   over a placement scene that kept its clear parts, their largest discs
   or its simplified regions from an earlier search is charged the overlay

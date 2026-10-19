@@ -168,13 +168,22 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   `erode_outer` of the room less the sure obstacles for an absence; keep
   the threshold so smaller scenes stay bit-identical
   (`tests/placement.rs`
-  `a_circle_among_many_obstacle_corners_is_decided_both_ways`). The last
-  `KEPT_SCENES` scenes are kept by everything they are built from
-  (`SceneKey`: scope, merged scopes, obstacles, swept doors, band bits;
-  never the shape's footprint, domain or reach, which are set on a copy),
-  with the differences their searches took (`keep_clear`): a space is
-  searched over one scene several times (undecided obstacles first, a
-  path and none, the bracket of the largest shape, #391).
+  `a_circle_among_many_obstacle_corners_is_decided_both_ways`). A placement scene is a
+  derivation of the check's store (`free_space/scenes.rs`,
+  `PlacementScenes`, #408), read through the thread's current store
+  (`DerivationStore::derive_current`) by `find_placement`,
+  `estimate_largest_disc` and `circulation_map` alike: built once per
+  check for every rule and thread. `SceneKey` holds everything a scene is
+  built from: the service's `Measuring` state by address
+  (`derivations::Over`), scope, merged scopes, obstacles (interned per
+  service, `Lists`, so a key compares them by address), swept doors by
+  their sectors' bits, band and tolerance bits, the precision and
+  `SCENE_VERSION`; never the shape's footprint, domain or reach, which are
+  set on a copy. Bump `SCENE_VERSION` whenever a key could build another
+  scene, and extend `changing_any_input_of_a_scene_changes_its_key` with
+  any new input. A scene keeps what its searches took (`Derived::keep`:
+  clear parts, discs, simple and coarse regions, found regions) and states
+  its bytes again (`DerivationStore::resize`).
   `AxiolidFreeSpaceService::with_reuse(false)` keeps no scene, footprint
   or column, for the determinism gate (#441); every answer must stay the
   same either way.
@@ -709,7 +718,13 @@ Geometry evidence for any source, measured with the Axiolid kernel.
 - The area clamp against the subject's own face area is load-bearing: independent
   counterparts are measured independently and can double-count a shared region.
 - `src/proximity.rs` implements `ProximityService` for clash and distance
-  checks: separation from `closest_points_on_triangles`, plan overlap from
+  checks. Every body a pair reads is indexed once per check
+  (`proximity/bodies.rs`, `IndexedBodies`, #408: triangles, boxes and
+  hierarchy, solidity, zero-area surface), keyed by the geometry's `Arc`
+  by address, the object, whether its void is measured (only for a
+  bodiless object, so both views share every other body), the tolerance
+  bits and `INDEX_VERSION`; bump it whenever a key could index another
+  body. Measurements: separation from `closest_points_on_triangles`, plan overlap from
   the oriented footprint overlay in `planar.rs` (only when the request asks,
   `ProximityRequest::with_plan_overlap`: an overlay per pair), and penetration witnessed by
   sampling points (including midpoints between an edge's crossings of the

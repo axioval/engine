@@ -6,8 +6,8 @@
 //! reaches.
 
 use axioval_engine::{
-    Citation, ContactError, ContactEvidence, ContactRequest, ContactServiceHandle, ContactSide,
-    ContactTolerance, MeasuredMemo, MeasuredProvider, Measurement, NotEvaluatedReason,
+    ArgumentsKey, Citation, ContactError, ContactEvidence, ContactRequest, ContactServiceHandle,
+    ContactSide, ContactTolerance, MeasuredMemo, MeasuredProvider, Measurement, NotEvaluatedReason,
     PropertyResolutionError, RuleContext,
 };
 use axioval_ir::contract::Selector;
@@ -90,9 +90,19 @@ enum StoreysKey {
     Selection(SelectionIdentity),
 }
 
-/// The traversal arguments of a call, as a memo keys the traversal.
+/// The traversal arguments of a call, as a memo keys the traversal: read
+/// for every object, so hashed, never formatted.
 #[derive(Hash, PartialEq, Eq)]
-struct TraversalKey([String; 5]);
+struct TraversalKey(ArgumentsKey);
+
+/// The arguments a storey's traversal is read from.
+const TRAVERSAL: &[&str] = &[
+    "relationship",
+    "direction",
+    "path",
+    "follow_chain",
+    "skip_absent_relationship_ends",
+];
 
 /// 1 where `object` lies on the end storey `end` names, 0 where not, as
 /// `slab-contact` decides which subjects it leaves out.
@@ -112,16 +122,7 @@ fn end(
     // The traversal, read once per run for every object.
     let walked: Result<Option<Traversal>, Unavailable> = MeasuredMemo::of(
         context.services,
-        TraversalKey(
-            [
-                "relationship",
-                "direction",
-                "path",
-                "follow_chain",
-                "skip_absent_relationship_ends",
-            ]
-            .map(|key| format!("{:?}", call.argument(key))),
-        ),
+        TraversalKey(ArgumentsKey::of_keys(call, TRAVERSAL)),
         || traversal(call),
     );
     let traversal = walked?.ok_or_else(|| {
@@ -219,12 +220,18 @@ struct Contact {
 
 impl From<ContactEvidence> for Contact {
     fn from(measured: ContactEvidence) -> Self {
+        let (area, whole, gap) = (
+            measured.contact_area_square_metres(),
+            measured.whole_area_square_metres(),
+            measured.nearest_distance_metres(),
+        );
+        let (touching, evidence) = measured.into_touching_and_evidence();
         Self {
-            area: measured.contact_area_square_metres(),
-            whole: measured.whole_area_square_metres(),
-            gap: measured.nearest_distance_metres(),
-            touching: measured.touching().to_vec(),
-            evidence: measured.evidence().clone(),
+            area,
+            whole,
+            gap,
+            touching,
+            evidence,
         }
     }
 }

@@ -24,12 +24,13 @@
 //! index once per declaration, and each element's measurement once per run
 //! for every value reading it.
 
+use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use axioval_engine::{
-    Citation, MeasuredMember, MeasuredMemo, MeasuredProvider, Measurement, MemberValue,
-    NotEvaluatedReason, PropertyResolutionError, RuleContext,
+    ArgumentsKey, Citation, MeasuredMember, MeasuredMemo, MeasuredProvider, Measurement,
+    MemberValue, NotEvaluatedReason, PropertyResolutionError, RuleContext,
 };
 use axioval_ir::contract::ParameterValue;
 use axioval_ir::measured::{MeasuredArgument, MeasuredCall, MeasuredSelection, SelectionIdentity};
@@ -75,21 +76,27 @@ enum Named {
     Selection(SelectionIdentity),
 }
 
-fn named(
+/// The objects `key` names, borrowed where the call holds a bound
+/// selection: every value of every element reads them, so they are never
+/// copied or formatted for a read.
+fn named<'c>(
     context: &RuleContext<'_>,
-    call: &MeasuredCall,
+    call: &'c MeasuredCall,
     key: &str,
-) -> Result<Option<(MeasuredSelection, Named)>, Unavailable> {
-    let identity = match call.argument(key) {
-        None => return Ok(None),
-        Some(MeasuredArgument::Objects(picked)) => {
-            Named::Selection(SelectionIdentity(picked.clone()))
+) -> Result<Option<(Cow<'c, MeasuredSelection>, Named)>, Unavailable> {
+    match call.argument(key) {
+        None => Ok(None),
+        Some(MeasuredArgument::Objects(picked)) => Ok(Some((
+            Cow::Borrowed(&**picked),
+            Named::Selection(SelectionIdentity(picked.clone())),
+        ))),
+        Some(argument) => {
+            let identity = Named::Kinds(format!("{argument:?}"));
+            let picked = selection(context, call, key, None)
+                .map_err(|error| (NotEvaluatedReason::IncompleteEvidence, error.to_string()))?;
+            Ok(picked.map(|picked| (Cow::Owned(picked), identity)))
         }
-        Some(argument) => Named::Kinds(format!("{argument:?}")),
-    };
-    let picked = selection(context, call, key, None)
-        .map_err(|error| (NotEvaluatedReason::IncompleteEvidence, error.to_string()))?;
-    Ok(picked.map(|picked| (picked, identity)))
+    }
 }
 
 fn length(call: &MeasuredCall, key: &str) -> Option<f64> {
@@ -109,25 +116,56 @@ fn property<'c>(call: &'c MeasuredCall, key: &str) -> Option<PropertyRef<'c>> {
     }
 }
 
-/// The bound arguments of a call, as a memo keys them: every argument but
-/// the selections, which are keyed by identity.
-fn written(call: &MeasuredCall) -> String {
-    use std::fmt::Write as _;
-    let mut key = String::new();
-    for name in [
-        "mode",
-        "range",
-        "touch_tolerance",
-        "area_property",
-        "access_path",
-        "capacity_property",
-        "capacity_multiplier",
-        "capacity_multiplier_property",
-    ] {
-        let _ = write!(key, "{name}={:?};", call.argument(name));
-    }
-    key
+/// The bound arguments an element's measurement depends on besides its
+/// sources and blockers, in this order.
+const SETTING: [&str; 11] = [
+    "mode",
+    "range",
+    "touch_tolerance",
+    "area_property",
+    "access_path",
+    "capacity_property",
+    "capacity_multiplier",
+    "capacity_multiplier_property",
+    "door_selector",
+    "opening_selector",
+    "space_selector",
+];
+
+/// One bound argument as a memo keys it: a number by its bits, a selection
+/// by its identity. Every value of every element builds one per argument,
+/// so nothing is formatted and only what the call states is copied.
+#[derive(Hash, PartialEq, Eq)]
+enum Keyed {
+    Number(bool, u64),
+    Choice(&'static str),
+    Property(Option<String>, String),
+    Path(Vec<String>),
+    Selection(SelectionIdentity),
+    Other(String),
 }
+
+impl Keyed {
+    fn of(argument: &MeasuredArgument) -> Self {
+        match argument {
+            MeasuredArgument::Length(value) => Self::Number(true, value.to_bits()),
+            MeasuredArgument::Number(value) => Self::Number(false, value.to_bits()),
+            MeasuredArgument::Choice(choice) => Self::Choice(choice),
+            MeasuredArgument::Property { set, name } => Self::Property(set.clone(), name.clone()),
+            MeasuredArgument::Path(steps) => Self::Path(steps.clone()),
+            MeasuredArgument::Objects(picked) => Self::Selection(SelectionIdentity(picked.clone())),
+            other => Self::Other(format!("{other:?}")),
+        }
+    }
+}
+
+/// The arguments the access index is built from.
+const ACCESS: &[&str] = &[
+    "access_path",
+    "door_selector",
+    "opening_selector",
+    "space_selector",
+];
 
 /// The sources and blockers a call names, their extents read once per
 /// selection.
@@ -139,8 +177,8 @@ struct Placed {
 fn placed(
     context: &RuleContext<'_>,
     services: &Services<'_>,
-    (sources, sources_named): &(MeasuredSelection, Named),
-    blockers: Option<&(MeasuredSelection, Named)>,
+    (sources, sources_named): &(Cow<'_, MeasuredSelection>, Named),
+    blockers: Option<&(Cow<'_, MeasuredSelection>, Named)>,
 ) -> Placed {
     #[derive(Hash, PartialEq, Eq)]
     struct Read(Named, Option<Named>);
@@ -193,16 +231,12 @@ fn index(
     context: &RuleContext<'_>,
     call: &MeasuredCall,
 ) -> Result<Option<Arc<AccessIndex>>, Unavailable> {
+    #[derive(Hash, PartialEq, Eq)]
+    struct Access(ArgumentsKey);
     let Some(MeasuredArgument::Path(steps)) = call.argument("access_path") else {
         return Ok(None);
     };
-    let key = format!(
-        "effective-access:{:?};{:?};{:?};{:?}",
-        steps,
-        call.argument("door_selector"),
-        call.argument("opening_selector"),
-        call.argument("space_selector")
-    );
+    let key = Access(ArgumentsKey::of_keys(call, ACCESS));
     MeasuredMemo::of(context.services, key, || {
         let pick = |key: &str| {
             selection(context, call, key, None)
@@ -224,8 +258,15 @@ fn index(
     .map(Some)
 }
 
+/// Where an element's measurement is cited.
+fn locator(object: &Object) -> String {
+    format!("effective-coverage:{}", object.id)
+}
+
 /// What one element's measurement came to, as the values read it.
 struct Summary {
+    /// Where it is cited, worded once for every value reading it.
+    locator: String,
     area: (f64, f64),
     area_exact: bool,
     reaching: usize,
@@ -265,7 +306,7 @@ fn summary(
     object: &Object,
 ) -> Result<Arc<Summary>, Unsummed> {
     #[derive(Hash, PartialEq, Eq)]
-    struct Cached(ObjectId, Named, Option<Named>, String, String);
+    struct Cached(ObjectId, Named, Option<Named>, [Option<Keyed>; 11]);
     let unavailable = Unsummed::Unavailable;
     let services = Services::of(context).map_err(unavailable)?;
     let sources = named(context, call, "sources")
@@ -282,13 +323,7 @@ fn summary(
         object.id.clone(),
         sources.1.clone(),
         blockers.as_ref().map(|(_, named)| named.clone()),
-        written(call),
-        format!(
-            "{:?};{:?};{:?}",
-            call.argument("door_selector"),
-            call.argument("opening_selector"),
-            call.argument("space_selector")
-        ),
+        SETTING.map(|key| call.argument(key).map(Keyed::of)),
     );
     MeasuredMemo::of(context.services, key, || {
         let setting = Setting {
@@ -354,6 +389,7 @@ fn summary(
             }
         });
         Ok(Arc::new(Summary {
+            locator: locator(object),
             area: (measured.area.lower, measured.area.upper),
             area_exact: measured.area.evidence.iter().all(|cited| cited.exact),
             reaching: measured.asked.request.sources().len(),
@@ -390,8 +426,8 @@ fn value(
     object: &Object,
     context: &RuleContext<'_>,
 ) -> Result<(Measurement, Citation), Unavailable> {
-    // One measurement of the element, cited once however many values read it.
-    let locator = format!("effective-coverage:{}", object.id);
+    // One measurement of the element, cited once however many values read
+    // it, under the locator worded with it.
     let summary = match summary(context, call, object) {
         Ok(summary) => summary,
         // Nothing is measured of an element stating no area: its reach is
@@ -399,7 +435,7 @@ fn value(
         Err(Unsummed::Missing(why)) if call.name() == REACHING => {
             return Ok((
                 Measurement::Absent {
-                    locator: format!("{locator}: {why}"),
+                    locator: format!("{}: {why}", self::locator(object)),
                 },
                 Citation::default(),
             ));
@@ -412,6 +448,7 @@ fn value(
         }
         Err(Unsummed::Unavailable(refused)) => return Err(refused),
     };
+    let locator = &summary.locator;
     let area = Some(QuantityDimension::Area);
     let cited = |(lower, upper): (f64, f64), dimension, exact| Measurement::Cited {
         lower,

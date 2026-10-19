@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use axioval::engine::memory::Size;
-use axioval::engine::{MemoryBudget, RuleObserver, RuleProgress};
+use axioval::engine::{DerivationObserver, MemoryBudget, RuleObserver, RuleProgress};
 
 /// Times consecutive phases; silent unless enabled.
 #[derive(Debug)]
@@ -70,6 +70,29 @@ impl Stopwatch {
                 usage.waited
             );
         }
+    }
+
+    /// An observer printing, at the end of each run, how its derivation
+    /// store was reused, one line a kind: `derivation: <kind>: N built, M
+    /// read again (W waited), R released, … held`; `None` when timings are
+    /// off.
+    pub fn derivations(&self) -> Option<DerivationObserver> {
+        self.is_on().then(|| {
+            let observer: DerivationObserver = Arc::new(|statistics| {
+                for kind in statistics {
+                    eprintln!(
+                        "derivation: {}: {} built, {} read again ({} waited), {} released, {} held",
+                        kind.kind,
+                        kind.builds,
+                        kind.hits,
+                        kind.waits,
+                        kind.released,
+                        Size(kind.bytes)
+                    );
+                }
+            });
+            observer
+        })
     }
 
     /// A rule observer printing each rule's time as `rule <id>`, or `None`

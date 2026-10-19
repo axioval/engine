@@ -26,6 +26,14 @@
 //! depends on an adapter to read or build an adapter's derivations.
 //! [`crate::MeasuredMemo`]'s shared table is a view of the same store.
 //!
+//! **The current store.** A geometry service's methods are handed a request,
+//! never the registry, so the runtime also makes the run's store the
+//! *current* one of the thread running the plan, and `Parallelism::map_ordered`
+//! of every worker it starts ([`current`], [`DerivationStore::enter`]), as it
+//! does the check's memory budget. An adapter derives through it
+//! ([`DerivationStore::derive_current`]); outside a run there is none, and
+//! every read is built afresh.
+//!
 //! **Keeping nothing.** A store made by [`DerivationStore::forgetful`]
 //! builds every read afresh and keeps no value, still one build of a key at
 //! a time, so a run shows that no report depends on what was reused: the
@@ -44,6 +52,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 
 use crate::ServiceRegistry;
+use crate::memory::{self, Held};
 
 /// A kind of derivation: a key, a value and the pure function building the
 /// value of a key.
@@ -79,12 +88,23 @@ pub trait DerivationKind: 'static {
     /// failure of the derivation's own belongs in its value.
     fn build(key: &Self::Key, inputs: &Inputs<'_>) -> Result<Self::Value, DerivationError>;
 
-    /// The bytes `value` holds, where the kind can say: what a kept value
-    /// will be charged against the check's memory budget
-    /// ([#440](https://github.com/axioval/engine/issues/440)). Today it is
-    /// only summed in the run's statistics.
+    /// The bytes `value` holds, where the kind can say: summed in the run's
+    /// statistics and held against the check's memory budget while the
+    /// value is kept ([`crate::MemoryBudget::hold`], #407).
     fn size_hint(value: &Self::Value) -> Option<usize> {
         let _ = value;
+        None
+    }
+
+    /// The most bytes (as [`Self::size_hint`] states them) the store keeps
+    /// of this kind's values at once, read when a value lands; `None`, the
+    /// default, keeps every value for the run. Past it, the values read
+    /// least recently are released, and built again when read again: what
+    /// the plan cannot yet release after a value's last reader
+    /// ([#440](https://github.com/axioval/engine/issues/440)), this bounds.
+    /// Releasing only ever costs time, never changes a value.
+    #[must_use]
+    fn keep_bytes() -> Option<u64> {
         None
     }
 }
@@ -181,10 +201,41 @@ struct Waiting {
     within: Vec<u64>,
 }
 
-/// A slot of a table: a value held, or a build in flight.
+/// A slot of a table: a value held (its bytes held against the check's
+/// memory budget while it is, and when it was last read), or a build in
+/// flight.
 enum Slot<S> {
-    Ready { value: S, bytes: u64 },
-    Building { flight: u64, waiters: u32 },
+    Ready {
+        value: S,
+        bytes: u64,
+        read: u64,
+        held: Option<Held>,
+    },
+    Building {
+        flight: u64,
+        waiters: u32,
+    },
+}
+
+impl<S> Slot<S> {
+    /// A value held, its bytes held against the calling thread's budget.
+    fn ready(value: S, bytes: u64, read: u64) -> Self {
+        Self::Ready {
+            value,
+            bytes,
+            read,
+            held: hold(bytes),
+        }
+    }
+}
+
+/// `bytes` held against the memory budget of the calling thread's check,
+/// if it has one and they are some.
+fn hold(bytes: u64) -> Option<Held> {
+    (bytes > 0)
+        .then(memory::current)
+        .flatten()
+        .map(|budget| budget.hold(bytes))
 }
 
 struct Table<K, S> {
@@ -192,6 +243,41 @@ struct Table<K, S> {
     /// them, so a key need not be cloned.
     entries: HashMap<Arc<K>, Slot<S>, foldhash::fast::RandomState>,
     statistics: DerivationStatistics,
+    /// Counts reads, so the value read least recently is known.
+    clock: u64,
+}
+
+impl<K: Hash + Eq, S> Table<K, S> {
+    /// The next read's time.
+    fn tick(&mut self) -> u64 {
+        self.clock += 1;
+        self.clock
+    }
+
+    /// Releases the values read least recently, all but `kept`'s, until
+    /// the table holds at most `limit` bytes; handed back to be dropped
+    /// once the store is unlocked.
+    fn evict(&mut self, limit: u64, kept: &K) -> Vec<S> {
+        let mut evicted = Vec::new();
+        while self.statistics.bytes > limit {
+            let oldest = self
+                .entries
+                .iter()
+                .filter(|(key, _)| ***key != *kept)
+                .filter_map(|(key, slot)| match slot {
+                    Slot::Ready { read, .. } => Some((*read, Arc::clone(key))),
+                    Slot::Building { .. } => None,
+                })
+                .min_by_key(|(read, _)| *read);
+            let Some((_, key)) = oldest else { break };
+            if let Some(Slot::Ready { value, bytes, .. }) = self.entries.remove(&*key) {
+                self.statistics.bytes -= bytes;
+                self.statistics.released += 1;
+                evicted.push(value);
+            }
+        }
+        evicted
+    }
 }
 
 trait Kept: Send {
@@ -224,6 +310,8 @@ fn next() -> u64 {
 }
 
 thread_local! {
+    /// The store of the check this thread evaluates ([`current`]).
+    static CURRENT: RefCell<Option<DerivationStore>> = const { RefCell::new(None) };
     /// The builds this thread works within: its own, innermost last, after
     /// those of the thread that started it to work for them.
     static LINEAGE: RefCell<Vec<u64>> = const { RefCell::new(Vec::new()) };
@@ -254,6 +342,36 @@ impl Drop for Restore {
             LINEAGE.with(|current| *current.borrow_mut() = outer);
         }
     }
+}
+
+/// The store of the check this thread evaluates, if it evaluates one: the
+/// run's, entered by the runtime on the thread running the plan and by
+/// `Parallelism::map_ordered` on its workers ([`DerivationStore::enter`]).
+#[must_use]
+pub fn current() -> Option<DerivationStore> {
+    CURRENT.with(|current| current.borrow().clone())
+}
+
+/// The calling thread's current store while held
+/// ([`DerivationStore::enter`]); the one it replaced is put back when
+/// dropped.
+#[must_use = "the store is current only while this is held"]
+pub struct Entered {
+    outer: Option<DerivationStore>,
+}
+
+impl Drop for Entered {
+    fn drop(&mut self) {
+        let outer = self.outer.take();
+        CURRENT.with(|current| *current.borrow_mut() = outer);
+    }
+}
+
+/// Makes `store` the calling thread's current one until the guard is
+/// dropped; `None` makes it have none.
+pub(crate) fn enter(store: Option<DerivationStore>) -> Entered {
+    let outer = CURRENT.with(|current| std::mem::replace(&mut *current.borrow_mut(), store));
+    Entered { outer }
 }
 
 /// The marker of a [`DerivationKind`]'s table, apart from any other use of
@@ -305,7 +423,7 @@ impl DerivationStore {
         key: &D::Key,
     ) -> Result<Arc<D::Value>, DerivationError> {
         self.get_or_build::<Typed<D>, D::Key, Arc<D::Value>, _>(
-            D::NAME,
+            (D::NAME, D::keep_bytes()),
             Keyed::Borrowed(key, D::Key::clone),
             || {
                 let value = D::build(
@@ -336,6 +454,56 @@ impl DerivationStore {
         match services.get::<Self>() {
             Some(store) => store.derive::<D>(services, key),
             None => Self::new().derive::<D>(services, key),
+        }
+    }
+
+    /// Makes this the calling thread's current store ([`current`]) until
+    /// the returned guard is dropped, which puts back the one it replaced.
+    pub fn enter(&self) -> Entered {
+        enter(Some(self.clone()))
+    }
+
+    /// [`Self::derive`] in the calling thread's current store ([`current`]),
+    /// for a build that reads no service: a geometry adapter's kind, whose
+    /// key names the adapter state it is built over. Outside a run there is
+    /// no current store, and the value is built afresh (in a store of this
+    /// call alone).
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::derive`].
+    pub fn derive_current<D: DerivationKind>(
+        key: &D::Key,
+    ) -> Result<Arc<D::Value>, DerivationError> {
+        let services = ServiceRegistry::new();
+        match current() {
+            Some(store) => store.derive::<D>(&services, key),
+            None => Self::new().derive::<D>(&services, key),
+        }
+    }
+
+    /// States again the bytes the value held for `key` of kind `D` holds,
+    /// where it has grown since it was built (a memo it keeps), so the
+    /// statistics count what is held. Whether a value is held.
+    pub fn resize<D: DerivationKind>(&self, key: &D::Key, bytes: usize) -> bool {
+        let mut state = self.lock();
+        let Some(table) = state.existing::<Typed<D>, D::Key, Arc<D::Value>>() else {
+            return false;
+        };
+        if let Some(Slot::Ready {
+            bytes: counted,
+            held,
+            ..
+        }) = table.entries.get_mut(key)
+        {
+            let bytes = bytes as u64;
+            table.statistics.bytes = table.statistics.bytes - *counted + bytes;
+            *counted = bytes;
+            // The bytes held before are returned as the new ones are held.
+            *held = hold(bytes);
+            true
+        } else {
+            false
         }
     }
 
@@ -395,8 +563,14 @@ impl DerivationStore {
     {
         let mut state = self.lock();
         let table = state.existing::<Marker, K, S>()?;
-        match table.entries.get(key)? {
-            Slot::Ready { value, .. } => Some(read(value)),
+        let now = table.tick();
+        match table.entries.get_mut(key)? {
+            Slot::Ready {
+                value, read: last, ..
+            } => {
+                *last = now;
+                Some(read(value))
+            }
             Slot::Building { .. } => None,
         }
     }
@@ -414,9 +588,10 @@ impl DerivationStore {
         }
         let mut state = self.lock();
         let table = state.table::<Marker, K, S>(kind);
+        let now = table.tick();
         match table
             .entries
-            .insert(Arc::new(key), Slot::Ready { value, bytes: 0 })
+            .insert(Arc::new(key), Slot::ready(value, 0, now))
         {
             Some(Slot::Ready { bytes, .. }) => table.statistics.bytes -= bytes,
             // Whoever waited for that build reads the value now held.
@@ -443,10 +618,8 @@ impl DerivationStore {
         }
         let mut state = self.lock();
         let table = state.table::<Marker, K, S>(kind);
-        let fresh = || Slot::Ready {
-            value: S::default(),
-            bytes: 0,
-        };
+        let now = table.tick();
+        let fresh = || Slot::ready(S::default(), 0, now);
         let slot = match table.entries.get_mut(&key) {
             Some(slot) => {
                 if matches!(slot, Slot::Building { .. }) {
@@ -466,9 +639,12 @@ impl DerivationStore {
     /// The value of `key` in `Marker`'s table, read by `read`: held, built
     /// by the caller already building it and waited for, or built here by
     /// `build` (with the bytes it holds) and held.
+    ///
+    /// Past `keep` bytes held in the table, the values read least recently
+    /// are released when this one lands.
     pub(crate) fn get_or_build<Marker, K, S, R>(
         &self,
-        kind: &'static str,
+        (kind, keep): (&'static str, Option<u64>),
         key: Keyed<'_, K>,
         build: impl FnOnce() -> Result<(S, u64), DerivationError>,
         read: impl FnOnce(&S) -> R,
@@ -481,8 +657,12 @@ impl DerivationStore {
         let mut state = self.lock();
         let (key, flight) = loop {
             let table = state.table::<Marker, K, S>(kind);
-            let building = match table.entries.get(key.get()) {
-                Some(Slot::Ready { value, .. }) => {
+            let now = table.tick();
+            let building = match table.entries.get_mut(key.get()) {
+                Some(Slot::Ready {
+                    value, read: last, ..
+                }) => {
+                    *last = now;
                     table.statistics.hits += 1;
                     return Ok(read(value));
                 }
@@ -528,6 +708,7 @@ impl DerivationStore {
             store: self,
             key,
             flight,
+            keep,
             landed: false,
             marker: PhantomData,
         };
@@ -573,6 +754,7 @@ where
     store: &'a DerivationStore,
     key: Arc<K>,
     flight: u64,
+    keep: Option<u64>,
     landed: bool,
     marker: PhantomData<fn() -> (Marker, S)>,
 }
@@ -587,6 +769,8 @@ where
         // Should reading panic, the build is dropped unlanded.
         let answer = read(&value);
         self.landed = true;
+        // Released values are dropped after the store is unlocked.
+        let mut evicted = Vec::new();
         let mut state = self.store.lock();
         // A value put in its place meanwhile stays: the build keeps its own.
         if let Some(table) = state.existing::<Marker, K, S>()
@@ -602,12 +786,21 @@ where
                 }
                 return answer;
             }
-            *slot = Slot::Ready { value, bytes };
+            *slot = Slot::ready(value, bytes, 0);
+            let now = table.tick();
+            if let Some(Slot::Ready { read, .. }) = table.entries.get_mut(&*self.key) {
+                *read = now;
+            }
             table.statistics.bytes += bytes;
+            if let Some(limit) = self.keep {
+                evicted = table.evict(limit, &self.key);
+            }
             if waiters > 0 {
                 self.store.0.ended.notify_all();
             }
         }
+        drop(state);
+        drop(evicted);
         answer
     }
 }
@@ -665,6 +858,7 @@ impl State {
                         kind,
                         ..DerivationStatistics::default()
                     },
+                    clock: 0,
                 })
             })
             .as_any_mut()

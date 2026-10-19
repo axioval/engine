@@ -111,8 +111,10 @@ impl Parallelism {
         // Workers work within the derivations this thread is building, so
         // one reading a key this thread builds is a cycle, never a wait.
         let lineage = derivation::lineage();
-        // The workers admit their steps against this thread's budget.
+        // The workers admit their steps against this thread's budget, and
+        // derive through its store.
         let budget = memory::current();
+        let store = derivation::current();
         let mut slots: Vec<Option<std::thread::Result<R>>> =
             std::iter::repeat_with(|| None).take(items.len()).collect();
         std::thread::scope(|scope| {
@@ -124,6 +126,7 @@ impl Parallelism {
                         .stack_size(WORKER_STACK)
                         .spawn_scoped(scope, || {
                             let _budget = memory::enter(budget.clone());
+                            let _store = derivation::enter(store.clone());
                             derivation::within(lineage.clone(), || timing::worker(timed, work))
                         })
                         .ok()

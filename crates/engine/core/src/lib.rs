@@ -1544,6 +1544,12 @@ pub enum RuleProgress {
 /// a report.
 pub type RuleObserver = Arc<dyn Fn(&RuleId, RuleProgress) + Send + Sync>;
 
+/// A host's observer of how a run reused its derivations
+/// ([`Runtime::with_derivation_observer`]): each kind's builds, hits,
+/// waits, releases and bytes held at the end of the run. It never changes
+/// a report.
+pub type DerivationObserver = Arc<dyn Fn(&[DerivationStatistics]) + Send + Sync>;
+
 /// Deterministic runtime that invokes only registered trusted capabilities.
 pub struct Runtime {
     registry: CapabilityRegistry,
@@ -1555,6 +1561,7 @@ pub struct Runtime {
     parallelism: Parallelism,
     memory_budget: Option<Arc<MemoryBudget>>,
     observer: Option<RuleObserver>,
+    derivations: Option<DerivationObserver>,
     terrain: Option<TerrainServiceHandle>,
     reuse: bool,
 }
@@ -1571,6 +1578,7 @@ impl Runtime {
             parallelism: Parallelism::SERIAL,
             memory_budget: None,
             observer: None,
+            derivations: None,
             terrain: None,
             reuse: true,
         }
@@ -1696,6 +1704,15 @@ impl Runtime {
     #[must_use]
     pub fn without_reuse(mut self) -> Self {
         self.reuse = false;
+        self
+    }
+    /// Tells `observer`, at the end of each run, how its derivation store
+    /// was reused ([`DerivationStore::statistics`]), such as for a host's
+    /// timings. A run on several threads that is run again serially (its
+    /// evaluation budget ran out) tells it twice.
+    #[must_use]
+    pub fn with_derivation_observer(mut self, observer: DerivationObserver) -> Self {
+        self.derivations = Some(observer);
         self
     }
     /// Adds adapter-provided host services to subsequent evaluations.
@@ -2016,11 +2033,16 @@ impl Runtime {
         services.replace(plan.zones.clone());
         // One derivation store per check: nothing built in one run answers
         // another, whatever a host registered.
-        services.replace(if self.reuse {
+        let store = if self.reuse {
             DerivationStore::new()
         } else {
             DerivationStore::forgetful()
-        });
+        };
+        services.replace(store.clone());
+        // A geometry adapter's service methods read no registry, so they
+        // reach the store as the check's current one, on this thread and on
+        // every worker it fans out to (`derivation::current`).
+        let _store = store.enter();
         self.registry.install_measured(&mut services, project);
         // Measured values are answered through the host's resolver in
         // every run; classifications are derived first when the plan has
@@ -2111,6 +2133,9 @@ impl Runtime {
         let refused = services
             .get::<Arc<expression::EvaluationBudget>>()
             .is_some_and(|budget| budget.refused());
+        if let Some(observer) = &self.derivations {
+            observer(&store.statistics());
+        }
         Ok((
             assemble(findings, not_evaluated, tables, summaries, &services)?,
             outcomes,

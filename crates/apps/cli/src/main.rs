@@ -1710,6 +1710,9 @@ fn check_runtime(
     if let Some(observer) = clock.rules() {
         runtime = runtime.with_rule_observer(observer);
     }
+    if let Some(observer) = clock.derivations() {
+        runtime = runtime.with_derivation_observer(observer);
+    }
     Ok(runtime)
 }
 

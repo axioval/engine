@@ -10,8 +10,8 @@ use std::sync::{Arc, Barrier};
 use std::time::Duration;
 
 use axioval_engine::{
-    DerivationError, DerivationKind, DerivationStore, Inputs, MeasuredMemo, Parallelism,
-    ServiceRegistry,
+    DerivationError, DerivationKind, DerivationStore, Inputs, MeasuredMemo, MemoryBudget,
+    Parallelism, ServiceRegistry,
 };
 
 /// `work` on a thread of its own, failing the test should it not end: a
@@ -463,4 +463,136 @@ fn a_forgetful_store_builds_every_read_and_keeps_nothing() {
     memo.insert("door", 1_u32);
     memo.update("door", |value: &mut u32| *value += 1);
     assert_eq!(memo.get::<&str, u32>(&"door"), None);
+}
+
+static KILOS_BUILT: AtomicUsize = AtomicUsize::new(0);
+
+/// A kilobyte value per key, of which the store keeps at most three.
+struct Kilo;
+
+impl DerivationKind for Kilo {
+    const NAME: &'static str = "kilo";
+    type Key = u64;
+    type Value = u64;
+
+    fn build(key: &u64, _: &Inputs<'_>) -> Result<u64, DerivationError> {
+        KILOS_BUILT.fetch_add(1, Ordering::SeqCst);
+        Ok(*key)
+    }
+
+    fn size_hint(_: &u64) -> Option<usize> {
+        Some(1024)
+    }
+
+    fn keep_bytes() -> Option<u64> {
+        Some(3 * 1024)
+    }
+}
+
+#[test]
+fn a_kind_past_its_bound_releases_the_values_read_least_recently() {
+    let store = DerivationStore::new();
+    let services = ServiceRegistry::new();
+    let read = |key: u64| *store.derive::<Kilo>(&services, &key).expect("no cycle");
+    for key in 1..=3 {
+        assert_eq!(read(key), key);
+    }
+    // Reading 1 again makes 2 the value read least recently.
+    assert_eq!(read(1), 1);
+    assert_eq!(read(4), 4);
+    assert!(store.held::<Kilo>(&2).is_none());
+    for key in [1, 3, 4] {
+        assert!(store.held::<Kilo>(&key).is_some(), "{key} is kept");
+    }
+    let kilo = store
+        .statistics()
+        .into_iter()
+        .find(|kind| kind.kind == "kilo")
+        .expect("counted");
+    assert_eq!((kilo.builds, kilo.hits, kilo.released), (4, 1, 1));
+    assert_eq!((kilo.entries, kilo.bytes), (3, 3 * 1024));
+    // A released value is built again, to the same value.
+    assert_eq!(read(2), 2);
+    assert_eq!(KILOS_BUILT.load(Ordering::SeqCst), 5);
+}
+
+/// An eight-byte value per key.
+struct Eight;
+
+impl DerivationKind for Eight {
+    const NAME: &'static str = "eight";
+    type Key = u64;
+    type Value = u64;
+
+    fn build(key: &u64, _: &Inputs<'_>) -> Result<u64, DerivationError> {
+        Ok(*key)
+    }
+
+    fn size_hint(_: &u64) -> Option<usize> {
+        Some(8)
+    }
+}
+
+#[test]
+fn kept_values_are_held_against_the_check_memory_budget_until_released() {
+    let budget = Arc::new(MemoryBudget::new(1 << 20));
+    let _entered = budget.enter();
+    let store = DerivationStore::new();
+    let services = ServiceRegistry::new();
+    store.derive::<Eight>(&services, &3).expect("no cycle");
+    assert_eq!(budget.in_use(), 8);
+    // A value grown after it was built states its bytes again.
+    assert!(store.resize::<Eight>(&3, 100));
+    assert_eq!(budget.in_use(), 100);
+    let square = store
+        .statistics()
+        .into_iter()
+        .find(|kind| kind.kind == "eight")
+        .expect("counted");
+    assert_eq!(square.bytes, 100);
+    assert!(store.release::<Eight>(&3));
+    assert_eq!(budget.in_use(), 0);
+    assert!(!store.resize::<Eight>(&3, 100));
+}
+
+static TRIPLES_BUILT: AtomicUsize = AtomicUsize::new(0);
+
+/// A key's triple, counting its builds.
+struct Triple;
+
+impl DerivationKind for Triple {
+    const NAME: &'static str = "triple";
+    type Key = u64;
+    type Value = u64;
+
+    fn build(key: &u64, _: &Inputs<'_>) -> Result<u64, DerivationError> {
+        TRIPLES_BUILT.fetch_add(1, Ordering::SeqCst);
+        Ok(key * 3)
+    }
+}
+
+#[test]
+fn an_adapter_derives_through_the_current_store_on_every_worker() {
+    // Outside a check there is no current store: every read is built.
+    assert!(axioval_engine::derivation::current().is_none());
+    for _ in 0..2 {
+        assert_eq!(
+            *DerivationStore::derive_current::<Triple>(&1).expect("no cycle"),
+            3
+        );
+    }
+    assert_eq!(TRIPLES_BUILT.load(Ordering::SeqCst), 2);
+
+    let store = DerivationStore::new();
+    let entered = store.enter();
+    let keys: Vec<u64> = (0..64).map(|key| key % 4 + 10).collect();
+    let parallelism = Parallelism::new(NonZeroUsize::new(4).expect("nonzero"));
+    let tripled = parallelism.map_ordered(&keys, |key| {
+        *DerivationStore::derive_current::<Triple>(key).expect("no cycle")
+    });
+    assert_eq!(tripled, keys.iter().map(|key| key * 3).collect::<Vec<_>>());
+    // Four keys, each built once by whichever worker asked first.
+    assert_eq!(TRIPLES_BUILT.load(Ordering::SeqCst), 2 + 4);
+    drop(entered);
+    assert!(axioval_engine::derivation::current().is_none());
 }

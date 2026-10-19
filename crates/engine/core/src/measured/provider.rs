@@ -585,7 +585,7 @@ impl MeasuredMemo {
         V: Clone + Send + 'static,
     {
         match self.store.get_or_build::<Shared, K, V, V>(
-            std::any::type_name::<(K, V)>(),
+            (std::any::type_name::<(K, V)>(), None),
             Keyed::Owned(key),
             || Ok((measure(), 0)),
             V::clone,

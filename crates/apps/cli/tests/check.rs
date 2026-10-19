@@ -26170,3 +26170,127 @@ fn escape_routes_over_repeated_steps_keep_their_report_in_bounded_time() {
     // build; the bound leaves room for a loaded machine.
     assert!(elapsed < std::time::Duration::from_secs(30), "{elapsed:?}");
 }
+
+/// Room #19 (x 0..3, y 0..3, 3 m high) with wardrobe #39 along its north
+/// side, wall #59 along its south side holding door #79, and two products
+/// no free-floor rule of it selects: pipe #99 and beam #119, apart.
+fn room_among_unselected_products() -> String {
+    let space = "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,$,$)";
+    let furniture = "IFCFURNITURE('GID',$,$,$,$,PL,REP,$,$)";
+    let wall = "IFCWALL('GID',$,$,$,$,PL,REP,$,$)";
+    let door = "IFCDOOR('GID',$,$,$,$,PL,REP,$,$,$,$,$,$)";
+    let pipe = "IFCPIPESEGMENT('GID',$,$,$,$,PL,REP,$,$)";
+    let beam = "IFCBEAM('GID',$,$,$,$,PL,REP,$,$)";
+    model_with(
+        &[
+            placed_box(10, [1.5, 1.5, 0.0], [3.0, 3.0, 3.0], space),
+            placed_box(30, [1.0, 2.7, 0.0], [2.0, 0.6, 2.0], furniture),
+            placed_box(50, [1.5, -0.1, 0.0], [3.0, 0.2, 3.0], wall),
+            placed_box(70, [2.5, -0.1, 0.0], [0.9, 0.2, 2.1], door),
+            placed_box(90, [10.0, 10.0, 0.0], [0.2, 0.2, 3.0], pipe),
+            placed_box(110, [12.0, 10.0, 2.5], [4.0, 0.2, 0.4], beam),
+        ]
+        .concat(),
+    )
+}
+
+/// The report of `result`, written as the result writes it.
+fn report_text(result: &Value) -> String {
+    serde_json::to_string_pretty(&result["report"]).unwrap()
+}
+
+/// A free-floor rule selecting its obstacles meshes only its spaces, those
+/// obstacles and the doors whose swings it subtracts (#410): the pipe and
+/// the beam it never asks about are left unmeshed, and the report is the
+/// one `--mesh-all` gives, byte for byte.
+#[test]
+fn with_geometry_a_free_floor_rule_meshes_only_its_spaces_obstacles_and_doors() {
+    let case = Case::new("geometry-demand-free-floor");
+    case.write("model.ifc", &room_among_unselected_products());
+    let check = |args: &[&str]| {
+        case.geometry_rule_with(
+            &["model.ifc"],
+            &[
+                ("furniture", "IfcFurniture"),
+                ("space", "IfcSpace"),
+                ("wall", "IfcWall"),
+                ("door", "IfcDoor"),
+            ],
+            (
+                "axioval:capability.free-floor-circle",
+                &registry_signature("axioval:capability.free-floor-circle"),
+            ),
+            entity("space"),
+            json!({
+                "diameter_metres": {"type": "number", "value": 1.5},
+                "height_metres": {"type": "number", "value": 2.0},
+                "obstacles": {"type": "selector", "value": {"kind": "anyOf",
+                    "operands": [entity("furniture"), entity("wall")]}},
+                "subtract_door_swings": {"type": "selector", "value": entity("door")},
+            }),
+            &json!({}),
+            args,
+        )
+    };
+    let (output, selected) = check(&[]);
+    assert!(
+        matches!(output.status.code(), Some(0 | 3 | 4)),
+        "{}",
+        stderr(&output)
+    );
+    assert!(
+        !stderr(&output).contains("checking again"),
+        "{}",
+        stderr(&output)
+    );
+    let geometry = &selected["geometry"];
+    assert_eq!(geometry["exact"], 4, "{geometry:#}");
+    assert_eq!(geometry["not_meshed"], 2, "{geometry:#}");
+    let (output, every) = check(&["--mesh-all"]);
+    assert!(
+        matches!(output.status.code(), Some(0 | 3 | 4)),
+        "{}",
+        stderr(&output)
+    );
+    assert_eq!(every["geometry"]["exact"], 6, "{:#}", every["geometry"]);
+    assert_eq!(every["geometry"]["not_meshed"], json!(null));
+    assert_eq!(report_text(&selected), report_text(&every));
+}
+
+/// A rule that reads properties only meshes nothing (#410): no body is
+/// meshed, no geometry service is registered, and the report is the one
+/// `--mesh-all` gives, byte for byte.
+#[test]
+fn with_geometry_a_property_rule_meshes_nothing() {
+    let case = Case::new("geometry-demand-properties");
+    case.write("model.ifc", &room_among_unselected_products());
+    let check = |args: &[&str]| {
+        case.geometry_rule_with(
+            &["model.ifc"],
+            &[("furniture", "IfcFurniture")],
+            (
+                "axioval:capability.object-count",
+                &registry_signature("axioval:capability.object-count"),
+            ),
+            entity("furniture"),
+            json!({"minimum": {"type": "integer", "value": 2}}),
+            &json!({}),
+            args,
+        )
+    };
+    let (output, nothing) = check(&[]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert!(
+        !stderr(&output).contains("checking again"),
+        "{}",
+        stderr(&output)
+    );
+    let geometry = &nothing["geometry"];
+    assert_eq!(geometry["exact"], 0, "{geometry:#}");
+    assert_eq!(geometry["tessellated"], 0, "{geometry:#}");
+    assert_eq!(geometry["not_meshed"], 6, "{geometry:#}");
+    let (output, every) = check(&["--mesh-all"]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(every["geometry"]["exact"], 6, "{:#}", every["geometry"]);
+    assert_eq!(report_text(&nothing), report_text(&every));
+}

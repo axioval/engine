@@ -43,6 +43,13 @@ static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
 static PLANS: crate::templates::Plans = crate::templates::Plans::new();
 
 impl RuleCapability for RelatedCount {
+    /// Reads the model's semantics only; a selector or parameter naming a
+    /// measured value or a derived relationship makes the plan's demand
+    /// everything regardless (#410).
+    fn geometry_reach(&self, _rule: &CompiledRule) -> axioval_engine::GeometryReach {
+        axioval_engine::GeometryReach::None
+    }
+
     fn id(&self) -> &'static str {
         template::ID
     }

@@ -13,7 +13,7 @@
 //! Exit status is part of the automation contract; see [`Outcome`].
 
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     error::Error,
     fmt::Write as _,
     fs,
@@ -41,9 +41,9 @@ use axioval::{
     bcf, bcf_snapshot,
     engine::{
         DisciplineMap, DisciplineOrigin, DisciplineRule, EvidenceSession, ExecutionPlan,
-        IntegritySeverity, LocationMethod, LocationPolicy, QUALIFIED_RULE_SEPARATOR, Runtime,
-        SourceIntegrityServiceHandle, SourceMetadata, SuppliedCatalogue, SuppliedPairs,
-        UnmappedReason, compile_rulesets,
+        GeometryDemand, IntegritySeverity, LocationMethod, LocationPolicy,
+        QUALIFIED_RULE_SEPARATOR, Runtime, SourceIntegrityServiceHandle, SourceMetadata,
+        SuppliedCatalogue, SuppliedPairs, UnmappedReason, compile_rulesets,
     },
     html, ifc,
     ir::{
@@ -266,8 +266,17 @@ struct CheckArgs {
     terrain_in: Option<terrain::TerrainIn>,
     /// Mesh the model's bodies so geometric rules can run. Off by default:
     /// meshing costs time and purely semantic rulesets do not need it.
+    /// Only the bodies some rule can ask about are meshed: none for rules
+    /// that read properties only, the selected spaces, obstacles and doors
+    /// for a free-floor rule that selects its obstacles, every body
+    /// otherwise (see `--mesh-all`).
     #[arg(long)]
     geometry: bool,
+    /// With `--geometry`, mesh every object's body, whatever the rules can
+    /// ask about, so the result's `geometry` record and the model-data
+    /// warnings cover the whole model. The report is the same either way.
+    #[arg(long, requires = "geometry")]
+    mesh_all: bool,
     /// With `--geometry`, mesh only: build no exact boundaries. By default a
     /// body whose construction is exact (a rigidly placed extrusion or
     /// revolution of a rectangle, circle, section or line-and-arc profile,
@@ -1155,6 +1164,7 @@ fn geometry_record(report: geometry::GeometryReport) -> digest::GeometryRecord {
             .into_iter()
             .map(|(cause, count)| (cause.as_str().to_owned(), count))
             .collect(),
+        not_meshed: report.not_meshed,
     }
 }
 
@@ -1238,33 +1248,25 @@ fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     clock.lap("compile");
     let (session, bytes) = sources(&args.models)?;
     clock.lap("read models");
-    let session = session.with_discipline_map(
-        &args
-            .discipline_map
-            .iter()
-            .cloned()
-            .fold(DisciplineMap::new(), DisciplineMap::with),
-    );
-    let (session, mut meshed) = if args.geometry {
-        let options = geometry_options(&args, &session)?;
-        let (session, report) = geometry::attach(session, &bytes, options)
-            .map_err(|error| format!("geometry: {error}"))?;
-        // Each geometry phase is timed by `attach`.
-        clock.skip();
-        (session, Some(report))
-    } else {
-        (session, None)
-    };
-    let placements = zones::check_placements(&session, &plan, &mut supplied.zone_files);
-    supplied.unsupplied.extend(placements);
+    let session = with_disciplines(session, &args);
+    // Reads no body, so it stands whatever is meshed.
     let stale = results::supply_revisions(&mut plan, &args, &session)?;
-    supplied.unsupplied.extend(stale);
+    let unknown_pairs = axioval::engine::unknown_relation_objects(&plan, session.project());
+    let demand = demand(&args, &plan, &registry, &session);
     let parallelism = parallelism(args.threads)?;
     let runtime = check_runtime(registry, &args, &clock, supplied.terrain.take())
         .with_parallelism(parallelism);
-    let unknown_pairs = axioval::engine::unknown_relation_objects(&plan, session.project());
-    let mut result = runtime.run_session(&session, plan)?;
-    clock.lap("run (all rules)");
+    let ((session, mut meshed, mut result), demand) = checked(
+        &args,
+        (&runtime, &mut clock),
+        &plan,
+        (session, &bytes),
+        demand,
+    )?;
+    // The zones are placed against every body of the session as checked.
+    let placements = zones::check_placements(&session, &plan, &mut supplied.zone_files);
+    supplied.unsupplied.extend(placements);
+    supplied.unsupplied.extend(stale);
     // Keyed as the BCF sink keys its topics, so a decision recorded against
     // either is the same.
     result.identify_findings(session.project(), bcf::IFC_GLOBAL_ID_SCHEME)?;
@@ -1301,7 +1303,14 @@ fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     }
     let bounds = args
         .geometry
-        .then(|| bounds::bounds(&[&session], &output.report));
+        .then(|| match demand {
+            GeometryDemand::Everything => Ok(bounds::bounds(&[&session], &output.report)),
+            // Only a BCF archive frames objects, and a finding may name one
+            // the rules never measured.
+            _ if args.output.bcf.is_none() => Ok(BTreeMap::new()),
+            _ => named_bounds(&args, &output.report),
+        })
+        .transpose()?;
     emit(
         &output,
         session.project(),
@@ -1315,6 +1324,178 @@ fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
         Outcome::Passed if !complete => Outcome::Incomplete,
         outcome => outcome,
     })
+}
+
+/// `session` with the disciplines `--discipline-map` declares.
+fn with_disciplines(session: EvidenceSession, args: &CheckArgs) -> EvidenceSession {
+    session.with_discipline_map(
+        &args
+            .discipline_map
+            .iter()
+            .cloned()
+            .fold(DisciplineMap::new(), DisciplineMap::with),
+    )
+}
+
+/// What `check --geometry` meshes for `plan` over `session` (#410): every
+/// body when asked (`--mesh-all`), when spaces are located from bodies,
+/// when a derived model is compared with its original, when BCF
+/// snapshots draw the model or when context zones are placed against the
+/// model's extent; otherwise only what the plan's rules can ask
+/// about ([`axioval::engine::geometry_demand`]).
+fn demand(
+    args: &CheckArgs,
+    plan: &ExecutionPlan,
+    registry: &axioval::engine::CapabilityRegistry,
+    session: &EvidenceSession,
+) -> GeometryDemand {
+    if args.mesh_all
+        || args.locate == Locate::Geometry
+        || !args.derived_from.is_empty()
+        || args.output.bcf_view.snapshots
+        || !plan.context_zones().files().is_empty()
+    {
+        return GeometryDemand::Everything;
+    }
+    axioval::engine::geometry_demand(plan, registry, session)
+}
+
+/// What a kept run of `check` checked: the session, what was meshed and
+/// the report.
+type Kept = (EvidenceSession, Option<geometry::GeometryReport>, Report);
+
+/// A run of `check`: kept, or reaching geometry it had left out.
+enum Checked {
+    /// The run, kept.
+    Kept(Box<Kept>),
+    /// A rule asked for a service or a body left out, as named: the report
+    /// cannot be kept.
+    Reached(String),
+}
+
+/// [`run_check`] meshing what `demand` asks for, and again with every body
+/// meshed from freshly read sources when a rule reached geometry it had
+/// left out: the answers assumed an object absent that was only left
+/// unmeshed, so they are never kept and the report is the same as ever.
+/// Returns the kept run and the demand it meshed for.
+fn checked(
+    args: &CheckArgs,
+    (runtime, clock): (&Runtime, &mut timings::Stopwatch),
+    plan: &ExecutionPlan,
+    (session, bytes): (EvidenceSession, &geometry::ModelBytes),
+    demand: GeometryDemand,
+) -> Result<(Kept, GeometryDemand), Box<dyn Error>> {
+    let why = match run_check(args, (runtime, clock), plan, (session, bytes), &demand)? {
+        Checked::Kept(kept) => return Ok((*kept, demand)),
+        Checked::Reached(why) => why,
+    };
+    eprintln!(
+        "note: a rule asked for geometry the check had left out ({why}); \
+         meshing every object and checking again"
+    );
+    let (session, bytes) = sources(&args.models)?;
+    let session = with_disciplines(session, args);
+    let every = GeometryDemand::Everything;
+    match run_check(args, (runtime, clock), plan, (session, &bytes), &every)? {
+        Checked::Kept(kept) => Ok((*kept, every)),
+        Checked::Reached(why) => Err(format!("geometry: every object meshed, yet {why}").into()),
+    }
+}
+
+/// Meshes what `demand` asks for (with `--geometry`) and runs `plan` over
+/// the session. With less than every body meshed, the session watches the
+/// geometry services left out, or every service when nothing is meshed,
+/// and the bodies left out; a rule reaching either makes the run
+/// [`Checked::Reached`].
+fn run_check(
+    args: &CheckArgs,
+    (runtime, clock): (&Runtime, &mut timings::Stopwatch),
+    plan: &ExecutionPlan,
+    (session, bytes): (EvidenceSession, &geometry::ModelBytes),
+    demand: &GeometryDemand,
+) -> Result<Checked, Box<dyn Error>> {
+    if !args.geometry {
+        let report = runtime.run_session(&session, plan.clone())?;
+        clock.lap("run (all rules)");
+        return Ok(Checked::Kept(Box::new((session, None, report))));
+    }
+    let every = geometry::service_types();
+    let (session, report, watched) = match demand {
+        GeometryDemand::Nothing => {
+            // Nothing attached: every geometry service, and the local
+            // frames, are left out.
+            let report =
+                geometry::unattached(&session).map_err(|error| format!("geometry: {error}"))?;
+            (session, report, Some(every))
+        }
+        demand => {
+            let mut options = geometry_options(args, &session)?;
+            let mut watched = None;
+            if let GeometryDemand::Objects { objects, services } = demand {
+                options = options.with_only(objects.clone());
+                // The local frames are the same whatever is meshed.
+                let frames = std::any::TypeId::of::<axioval::engine::LocalOrigins>();
+                watched = Some(
+                    every
+                        .into_iter()
+                        .filter(|(id, _)| !services.contains(id) && *id != frames)
+                        .collect(),
+                );
+            }
+            let (session, report) = geometry::attach(session, bytes, options)
+                .map_err(|error| format!("geometry: {error}"))?;
+            (session, report, watched)
+        }
+    };
+    // Each geometry phase is timed by `attach`.
+    clock.skip();
+    let (session, watch) = match watched {
+        Some(types) => {
+            let (session, watch) = session.watching(types);
+            (session, Some(watch))
+        }
+        None => (session, None),
+    };
+    let result = runtime.run_session(&session, plan.clone())?;
+    clock.lap("run (all rules)");
+    let asked = watch.map(|watch| watch.asked()).unwrap_or_default();
+    if !asked.is_empty() {
+        return Ok(Checked::Reached(asked.join(", ")));
+    }
+    if report.reached_left_out() {
+        return Ok(Checked::Reached(
+            "a body no rule was expected to ask about".to_owned(),
+        ));
+    }
+    Ok(Checked::Kept(Box::new((session, Some(report), result))))
+}
+
+/// The measured extent of every object `report` names, meshed for that
+/// alone: a run that meshed only what its rules asked about may name
+/// others in its findings, and BCF cameras frame them all. Each object is
+/// meshed as among all the others ([`geometry::Options::with_only`]), so
+/// its extent is the one a run meshing everything measures.
+fn named_bounds(
+    args: &CheckArgs,
+    report: &Report,
+) -> Result<BTreeMap<ObjectId, bcf::Bounds>, Box<dyn Error>> {
+    let mut named: BTreeSet<ObjectId> = BTreeSet::new();
+    for finding in report.findings() {
+        named.extend(finding.object_id().cloned());
+        named.extend(finding.related.iter().cloned());
+    }
+    for outcome in report.not_evaluated() {
+        named.extend(outcome.object_id().cloned());
+    }
+    if named.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+    let (session, bytes) = sources(&args.models)?;
+    let session = with_disciplines(session, args);
+    let options = geometry_options(args, &session)?.with_only(named);
+    let (session, _) =
+        geometry::attach(session, &bytes, options).map_err(|error| format!("geometry: {error}"))?;
+    Ok(bounds::bounds(&[&session], report))
 }
 
 /// What `check` supplied beside the model before anything ran: the files
@@ -1923,12 +2104,20 @@ fn warn(output: &CheckOutput, summarized: bool, unanchored: &[&ObjectId], unfram
         if let Some(geometry) = &output.geometry {
             eprintln!(
                 "geometry: {} exact, {} tessellated, {} without body, {} unmeasured, \
-                 {} with an exact boundary{}{}{}",
+                 {} with an exact boundary{}{}{}{}",
                 geometry.exact,
                 geometry.tessellated,
                 geometry.no_body,
                 geometry.unmeasured.len(),
                 geometry.exact_boundaries,
+                if geometry.not_meshed == 0 {
+                    String::new()
+                } else {
+                    format!(
+                        ", {} not meshed (no rule asks about them)",
+                        geometry.not_meshed
+                    )
+                },
                 if geometry.composed == 0 {
                     String::new()
                 } else {

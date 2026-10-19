@@ -801,6 +801,19 @@ impl EvidenceSession {
         &self.services
     }
 
+    /// The session watching `types` ([`ServiceRegistry::watch`]): every
+    /// later look-up of one through its services, by a run or the host, is
+    /// noted on the returned watch. A host that leaves services out of a
+    /// run reads it afterwards to learn whether a rule asked for any.
+    #[must_use]
+    pub fn watching(
+        mut self,
+        types: Vec<(std::any::TypeId, &'static str)>,
+    ) -> (Self, crate::ServiceWatch) {
+        let watch = self.services.watch(types);
+        (self, watch)
+    }
+
     /// Returns one typed service bound to this snapshot.
     #[must_use]
     pub fn service<T: Any + Send + Sync>(&self) -> Option<&T> {

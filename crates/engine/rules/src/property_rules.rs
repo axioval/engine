@@ -82,6 +82,13 @@ fn resolve_error(
 /// Requires an exactly resolved property to be present.
 pub struct PropertyExists;
 impl RuleCapability for PropertyExists {
+    /// Reads the model's semantics only; a selector or parameter naming a
+    /// measured value or a derived relationship makes the plan's demand
+    /// everything regardless (#410).
+    fn geometry_reach(&self, _rule: &CompiledRule) -> axioval_engine::GeometryReach {
+        axioval_engine::GeometryReach::None
+    }
+
     fn id(&self) -> &'static str {
         "axioval:capability.property-exists"
     }
@@ -143,6 +150,13 @@ impl RuleCapability for PropertyExists {
 /// failures remain not-evaluated.
 pub struct PropertyRequired;
 impl RuleCapability for PropertyRequired {
+    /// Reads the model's semantics only; a selector or parameter naming a
+    /// measured value or a derived relationship makes the plan's demand
+    /// everything regardless (#410).
+    fn geometry_reach(&self, _rule: &CompiledRule) -> axioval_engine::GeometryReach {
+        axioval_engine::GeometryReach::None
+    }
+
     fn id(&self) -> &'static str {
         "axioval:capability.property-required"
     }
@@ -222,6 +236,13 @@ fn is_empty_value(value: &PropertyValue) -> bool {
 /// STEP-based sources do not distinguish case.
 pub struct PropertyDataType;
 impl RuleCapability for PropertyDataType {
+    /// Reads the model's semantics only; a selector or parameter naming a
+    /// measured value or a derived relationship makes the plan's demand
+    /// everything regardless (#410).
+    fn geometry_reach(&self, _rule: &CompiledRule) -> axioval_engine::GeometryReach {
+        axioval_engine::GeometryReach::None
+    }
+
     fn id(&self) -> &'static str {
         "axioval:capability.property-data-type"
     }
@@ -343,6 +364,13 @@ fn boolean(rule: &CompiledRule, name: &str) -> Option<bool> {
 /// Compares an exactly resolved boolean property with a declarative value.
 pub struct BooleanPropertyEquals;
 impl RuleCapability for BooleanPropertyEquals {
+    /// Reads the model's semantics only; a selector or parameter naming a
+    /// measured value or a derived relationship makes the plan's demand
+    /// everything regardless (#410).
+    fn geometry_reach(&self, _rule: &CompiledRule) -> axioval_engine::GeometryReach {
+        axioval_engine::GeometryReach::None
+    }
+
     fn id(&self) -> &'static str {
         "axioval:capability.property-value-equals"
     }

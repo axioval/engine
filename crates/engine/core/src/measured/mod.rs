@@ -631,6 +631,9 @@ pub(crate) struct Measures {
     host: Option<PropertyResolutionServiceHandle>,
     providers: Option<(provider::Providers, ServiceRegistry)>,
     kinds: Arc<BTreeMap<ObjectId, String>>,
+    /// The host's watch over the services taken above without noting
+    /// them ([`ServiceRegistry::peek`]): every measured read notes all.
+    watch: Option<crate::ServiceWatch>,
 }
 
 impl Measures {
@@ -640,35 +643,35 @@ impl Measures {
         project: &Project,
     ) -> Self {
         Self {
-            vertical: services.get::<VerticalExtentServiceHandle>().cloned(),
-            plan: services.get::<PlanAreaServiceHandle>().cloned(),
-            proximity: services.get::<ProximityServiceHandle>().cloned(),
-            frames: services.get::<ObjectFrameServiceHandle>().cloned(),
+            vertical: services.peek::<VerticalExtentServiceHandle>().cloned(),
+            plan: services.peek::<PlanAreaServiceHandle>().cloned(),
+            proximity: services.peek::<ProximityServiceHandle>().cloned(),
+            frames: services.peek::<ObjectFrameServiceHandle>().cloned(),
             relationships: services
-                .get::<RelationshipSelectionServiceHandle>()
+                .peek::<RelationshipSelectionServiceHandle>()
                 .cloned(),
-            boundaries: services.get::<BoundaryCoverageServiceHandle>().cloned(),
-            hierarchy: services.get::<TypeHierarchyServiceHandle>().cloned(),
-            rectangles: services.get::<PlanSpanServiceHandle>().cloned(),
-            walking: services.get::<WalkingSurfaceServiceHandle>().cloned(),
+            boundaries: services.peek::<BoundaryCoverageServiceHandle>().cloned(),
+            hierarchy: services.peek::<TypeHierarchyServiceHandle>().cloned(),
+            rectangles: services.peek::<PlanSpanServiceHandle>().cloned(),
+            walking: services.peek::<WalkingSurfaceServiceHandle>().cloned(),
             facades: services
-                .get::<crate::facade_area::FacadeAreaServiceHandle>()
+                .peek::<crate::facade_area::FacadeAreaServiceHandle>()
                 .cloned(),
-            spaces: services.get::<SpaceServiceHandle>().cloned(),
-            coordinates: services.get::<CoordinateSystemServiceHandle>().cloned(),
+            spaces: services.peek::<SpaceServiceHandle>().cloned(),
+            coordinates: services.peek::<CoordinateSystemServiceHandle>().cloned(),
             alignments: services
-                .get::<crate::alignment::AlignmentServiceHandle>()
+                .peek::<crate::alignment::AlignmentServiceHandle>()
                 .cloned(),
             terrain: services
-                .get::<crate::terrain::TerrainServiceHandle>()
+                .peek::<crate::terrain::TerrainServiceHandle>()
                 .cloned(),
             origins: services
-                .get::<crate::LocalOrigins>()
+                .peek::<crate::LocalOrigins>()
                 .cloned()
                 .unwrap_or_default(),
             host: host.cloned(),
             providers: services
-                .get::<provider::Providers>()
+                .peek::<provider::Providers>()
                 .map(|providers| (providers.clone(), services.clone())),
             kinds: Arc::new(
                 project
@@ -676,6 +679,15 @@ impl Measures {
                     .map(|object| (object.id.clone(), object.kind().to_owned()))
                     .collect(),
             ),
+            watch: services.watching().cloned(),
+        }
+    }
+
+    /// Notes on the host's watch that a built-in measured value is read,
+    /// which may ask any service taken at [`Self::of`].
+    fn asked(&self) {
+        if let Some(watch) = &self.watch {
+            watch.note_every();
         }
     }
 
@@ -976,6 +988,11 @@ impl Measures {
         name: &MeasuredName,
         object: &ObjectId,
     ) -> Result<Answer, PropertyResolutionError> {
+        // Built-in measurements use the services taken at `of`; a provider
+        // looks up its own.
+        if !matches!(name, MeasuredName::Provided(_)) {
+            self.asked();
+        }
         match name {
             MeasuredName::Plain(name) => self.plain(name, object),
             MeasuredName::BottomAboveLevel(steps) => self.bottom_above_level(steps, object),

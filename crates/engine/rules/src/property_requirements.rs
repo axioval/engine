@@ -111,6 +111,22 @@ impl RuleCapability for PropertyRequirements {
         TEMPLATE.parameters.clone()
     }
 
+    /// Reads the model's semantics only, unless a row is judged per
+    /// measured area, volume or face area (`per` `measured-…`), which
+    /// measures bodies. Rows not stated inline are not read before the
+    /// run, so they may (#410).
+    fn geometry_reach(&self, rule: &CompiledRule) -> axioval_engine::GeometryReach {
+        match rule.parameters.get("requirements") {
+            Some(table @ axioval_ir::contract::ParameterValue::Table { .. })
+                if serde_json::to_string(table)
+                    .is_ok_and(|written| !written.contains("measured")) =>
+            {
+                axioval_engine::GeometryReach::None
+            }
+            _ => axioval_engine::GeometryReach::Unbounded,
+        }
+    }
+
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
         crate::templates::run((&TEMPLATE, &PLANS), context, rule)
     }

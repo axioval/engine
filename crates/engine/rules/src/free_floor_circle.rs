@@ -25,6 +25,10 @@ impl RuleCapability for FreeFloorCircle {
         TEMPLATE.parameters.clone()
     }
 
+    fn geometry_reach(&self, rule: &CompiledRule) -> axioval_engine::GeometryReach {
+        crate::free_floor::geometry_reach(rule)
+    }
+
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
         crate::templates::run((&TEMPLATE, &PLANS), context, rule)
     }

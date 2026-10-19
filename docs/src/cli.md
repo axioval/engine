@@ -92,7 +92,7 @@ axioval check --model building.ifc[:DISCIPLINE] [--model other.ifc[:DISCIPLINE] 
   [--relations RELATION=FILE[#SHEET] ...] [--catalogue CATALOGUE[@VERSION]=FILE[#SHEET] ...] \
   [--zones [ACCURACY=]FILE ...] \
   [--terrain KIND@ACCURACY=FILE[#SURFACE] ... --terrain-in model|map] \
-  [--geometry [--no-exact-boundaries]] [--locate storeys|containers|geometry] \
+  [--geometry [--no-exact-boundaries] [--mesh-all]] [--locate storeys|containers|geometry] \
   [--rule-status] [--rule-timings] [--timings] [--threads N] [--report result.json] \
   [--decisions decisions.json | --decisions-from reviewed.bcfzip] \
   [--summary [--top N]] [--bcf issues.bcfzip] [--xlsx report.xlsx] \
@@ -607,7 +607,8 @@ object stands in that no file states, and as `zone-reference-mismatch`
 and `zones-apart-from-model` a file whose zones a model cannot place or
 which lie apart from it (see
 [Context zones](#context-zones-supplied-beside-the-model)).
-With `--geometry` it lists, as `shape.no-representation` warnings, every
+With `--geometry` it lists, among the bodies it meshed (every body with
+`--mesh-all`; see [Geometry](#geometry)), as `shape.no-representation` warnings, every
 physical product with no shape representation and no parts, and as
 `shape.self-intersecting-face` warnings every product unmeasured for a face
 whose boundary crosses or runs back along itself, as `shape.voided-body`
@@ -1275,6 +1276,36 @@ storey-height, exit-separation, corridor-end-openings, escape-route, space-dista
 and metric-routing services. It is off by default because meshing costs time a purely semantic ruleset
 does not need. Without it, geometric rules report `missing-service` (status 4),
 never pass, and the summary suggests `--geometry`.
+
+`--geometry` meshes only the bodies some rule of the check can ask about
+(#410). Each capability states what its rules may ask of geometry: nothing
+(the property, count, classification, conformance, numbering and
+expression capabilities), only the bodies of the objects some of their
+selectors select through named services (`free-floor-circle` and
+`free-floor-rectangle` with an `obstacles` selector and no `merge_path` or
+`access_path`: the spaces, those obstacles and the doors and openings their
+selectors name, through the free-space service), or anything (every other
+capability). A rule, value, classification, grouping, relation or
+refinement naming a measured value (`axioval:measured`) or a derived
+relationship (`axioval:derived.…`) may ask anything, and so may a check
+with `--locate geometry`, `--derived-from`, `--bcf-snapshots` or `--zones`
+(whose placement is checked against every body). A check
+whose rules ask nothing reads no model for geometry and registers no
+geometry service; one asking for some objects meshes them and whatever
+measuring them as among all the others needs (a whole and its parts, the
+openings of a whole, the elements an opening voids), and leaves every
+other body out. The report is the same either way, byte for byte: the
+check watches the services and bodies it left out, and when a rule asks
+for one after all it says so on stderr (`note: a rule asked for geometry
+the check had left out (…); meshing every object and checking again`),
+discards that run and checks again with every body meshed. What changes is
+what the result says about the model: the `geometry` record counts the
+bodies left unmeshed as `not_meshed` (and none of them as exact,
+tessellated, bodiless or unmeasured), and the model-data warnings below
+cover only the meshed bodies. A BCF archive frames every object a finding
+names by its measured bounds as before, meshing those objects for it.
+`--mesh-all` meshes every body whatever the rules ask, as before, so the
+`geometry` record and the model-data warnings cover the whole model.
 
 The CLI meshes each product's net body, with openings subtracted, using
 `ifc-geometry` and hands the meshes to the Axiolid geometry services, one set

@@ -5,6 +5,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use axiolid_brep::ExactBRep;
 use axiolid_core::Point3;
@@ -59,6 +60,59 @@ pub struct AxiolidGeometry {
     /// The voids of bodiless objects ([`Self::with_void`]): each mesh and
     /// its chord deviation (`None` when exact), or why it is unmeasured.
     voids: BTreeMap<ObjectId, Result<(TriMesh, Option<f64>), String>>,
+    /// The objects the host left out ([`Self::with_left_out`]), shared by
+    /// every copy.
+    left_out: Option<Arc<LeftOut>>,
+}
+
+/// Objects a host left out of a geometry set because no rule of its check
+/// could ask about them (#410), and whether a service asked after all.
+#[derive(Debug)]
+struct LeftOut {
+    objects: BTreeSet<ObjectId>,
+    /// Set once the host has built every service ([`LeftOutWatch::arm`]):
+    /// only questions asked afterwards are a rule's.
+    armed: AtomicBool,
+    reached: AtomicBool,
+}
+
+/// What became of the objects a host left out of a geometry set
+/// ([`AxiolidGeometry::with_left_out`]): whether any service asked about
+/// one, or about every object at once, after the host armed it.
+///
+/// A left-out object is neither measured, bodiless nor unmeasured: the set
+/// simply has nothing about it, so a service asking about it would answer
+/// as if it were not there. The host therefore arms the watch once its
+/// services are built and, when a rule's question reached a left-out
+/// object, discards the run's answers and runs again with every object.
+#[derive(Clone, Debug)]
+pub struct LeftOutWatch(Arc<LeftOut>);
+
+impl LeftOutWatch {
+    /// Counts every later question about a left-out object, or about every
+    /// object at once, as reaching one.
+    pub fn arm(&self) {
+        self.0.armed.store(true, Ordering::Relaxed);
+    }
+
+    /// Whether a question asked since [`Self::arm`] reached a left-out
+    /// object, or every object at once.
+    #[must_use]
+    pub fn reached(&self) -> bool {
+        self.0.reached.load(Ordering::Relaxed)
+    }
+
+    /// How many objects were left out.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.0.objects.len()
+    }
+
+    /// Whether none was.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.0.objects.is_empty()
+    }
 }
 
 /// How a whole's body is built from its parts.
@@ -145,6 +199,52 @@ impl AxiolidGeometry {
         self
     }
 
+    /// Declares `objects` left out (#410): the host measured nothing about
+    /// them, neither a body, a void, nor that they have none, because no
+    /// rule of its check can ask about them. Asking about one afterwards,
+    /// or about every object at once, is noted on [`Self::left_out`]'s
+    /// watch once armed, and answered as if the object were not there, so
+    /// the host must not keep such an answer. An empty set declares
+    /// nothing.
+    #[must_use]
+    pub fn with_left_out(mut self, objects: BTreeSet<ObjectId>) -> Self {
+        self.left_out = (!objects.is_empty()).then(|| {
+            Arc::new(LeftOut {
+                objects,
+                armed: AtomicBool::new(false),
+                reached: AtomicBool::new(false),
+            })
+        });
+        self
+    }
+
+    /// The watch over the objects left out ([`Self::with_left_out`]),
+    /// `None` when none was.
+    #[must_use]
+    pub fn left_out(&self) -> Option<LeftOutWatch> {
+        self.left_out.clone().map(LeftOutWatch)
+    }
+
+    /// Notes a question about `object` on the left-out watch.
+    fn ask(&self, object: &ObjectId) {
+        if let Some(left_out) = &self.left_out
+            && left_out.armed.load(Ordering::Relaxed)
+            && left_out.objects.contains(object)
+        {
+            left_out.reached.store(true, Ordering::Relaxed);
+        }
+    }
+
+    /// Notes a question about every object at once, or one whose answer
+    /// depends on the whole set, on the left-out watch.
+    fn ask_all(&self) {
+        if let Some(left_out) = &self.left_out
+            && left_out.armed.load(Ordering::Relaxed)
+        {
+            left_out.reached.store(true, Ordering::Relaxed);
+        }
+    }
+
     /// The origin of the local frame `source`'s meshes are stated in, zero
     /// when they are in its model coordinates.
     #[must_use]
@@ -218,6 +318,7 @@ impl AxiolidGeometry {
     /// why it is unmeasured; `None` for an object with no declared void.
     #[must_use]
     pub fn void(&self, object: &ObjectId) -> Option<Result<&TriMesh, &str>> {
+        self.ask(object);
         self.voids.get(object).map(|void| match void {
             Ok((mesh, _)) => Ok(mesh),
             Err(reason) => Err(reason.as_str()),
@@ -233,6 +334,7 @@ impl AxiolidGeometry {
     /// measured void, and an error when its declared chord deviation is
     /// negative or non-finite.
     pub fn void_fidelity(&self, object: &ObjectId) -> Result<GeometryFidelity, ProximityError> {
+        self.ask(object);
         match self.voids.get(object) {
             Some(Ok((_, None))) => Ok(GeometryFidelity::Exact),
             Some(Ok((_, Some(deviation)))) => GeometryFidelity::tessellated(*deviation),
@@ -243,6 +345,7 @@ impl AxiolidGeometry {
     /// How many voids are registered with a mesh.
     #[must_use]
     pub fn measured_voids(&self) -> usize {
+        self.ask_all();
         self.voids.values().filter(|void| void.is_ok()).count()
     }
 
@@ -304,6 +407,7 @@ impl AxiolidGeometry {
     /// when the host declared them; `None` for a measured object or one
     /// that may be anywhere.
     pub(crate) fn unmeasured_bound(&self, object: &ObjectId) -> Option<&[Extent]> {
+        self.ask(object);
         if !self.is_unmeasured(object) {
             return None;
         }
@@ -368,6 +472,7 @@ impl AxiolidGeometry {
     /// The closed solid an unmeasured object's body lies within, when the
     /// host declared one; `None` for a measured object.
     pub(crate) fn enclosure(&self, object: &ObjectId) -> Option<&Enclosure> {
+        self.ask(object);
         if !self.is_unmeasured(object) {
             return None;
         }
@@ -506,6 +611,7 @@ impl AxiolidGeometry {
     /// without a mesh, with a deviation that bounds nothing, or where the
     /// certified bounds contradict the mesh.
     pub(crate) fn vertical_bounds(&self, object: &ObjectId) -> Option<VerticalBounds> {
+        self.ask(object);
         let (min, max) = mesh_extent(self.meshes.get(object)?)?;
         let deviation = self.deviation(object)?;
         let mut bounds = VerticalBounds {
@@ -572,17 +678,20 @@ impl AxiolidGeometry {
     /// Whether the host declared the object bodiless.
     #[must_use]
     pub fn has_no_body(&self, object: &ObjectId) -> bool {
+        self.ask(object);
         self.bodiless.contains(object)
     }
 
     /// Whether the host declared the object's body unmeasured.
     #[must_use]
     pub fn is_unmeasured(&self, object: &ObjectId) -> bool {
+        self.ask(object);
         self.unmeasured.contains_key(object)
     }
 
     /// Every object whose body could not be measured, with the host's reason.
     pub fn unmeasured(&self) -> impl Iterator<Item = (&ObjectId, &str)> {
+        self.ask_all();
         self.unmeasured
             .iter()
             .map(|(object, reason)| (object, reason.as_str()))
@@ -672,12 +781,16 @@ impl AxiolidGeometry {
     /// The exact body registered for an object.
     #[must_use]
     pub fn exact_boundary(&self, object: &ObjectId) -> Option<&ExactBody> {
+        // The host registers exact bodies only when some tessellated body
+        // of the whole set has one, so any answer depends on every object.
+        self.ask_all();
         self.boundaries.get(object).map(Arc::as_ref)
     }
 
     /// The exact body registered for an object, shared, to hand out beside
     /// its surface.
     pub(crate) fn shared_exact_boundary(&self, object: &ObjectId) -> Option<Arc<ExactBody>> {
+        self.ask_all();
         self.boundaries.get(object).cloned()
     }
 
@@ -688,6 +801,7 @@ impl AxiolidGeometry {
     /// Returns an error when the declared chord deviation is negative or
     /// non-finite.
     pub fn fidelity(&self, object: &ObjectId) -> Result<GeometryFidelity, ProximityError> {
+        self.ask(object);
         self.chord_deviations
             .get(object)
             .map_or(Ok(GeometryFidelity::Exact), |deviation| {
@@ -698,17 +812,20 @@ impl AxiolidGeometry {
     /// Returns the mesh registered for an object.
     #[must_use]
     pub fn mesh(&self, object: &ObjectId) -> Option<&TriMesh> {
+        self.ask(object);
         self.meshes.get(object)
     }
 
     /// Whether an object's mesh was registered as a tessellation.
     pub(crate) fn is_tessellated(&self, object: &ObjectId) -> bool {
+        self.ask(object);
         self.chord_deviations.contains_key(object)
     }
 
     /// An object's mesh extent grown by its chord deviation, so it encloses
     /// the true body. `None` without a mesh or with an invalid deviation.
     pub(crate) fn enclosing_extent(&self, object: &ObjectId) -> Option<Extent> {
+        self.ask(object);
         let (min, max) = mesh_extent(self.meshes.get(object)?)?;
         let deviation = self.fidelity(object).ok()?.deviation_metres();
         Some((min.map(|v| v - deviation), max.map(|v| v + deviation)))
@@ -729,6 +846,13 @@ impl AxiolidGeometry {
         plan: bool,
         skip: impl Fn(&ObjectId) -> bool,
     ) -> Option<&ObjectId> {
+        // A left-out object the search would not skip might have been one.
+        if let Some(left_out) = &self.left_out
+            && left_out.armed.load(Ordering::Relaxed)
+            && left_out.objects.iter().any(|object| !skip(object))
+        {
+            left_out.reached.store(true, Ordering::Relaxed);
+        }
         self.chord_deviations.keys().find(|object| {
             !skip(object)
                 && self
@@ -759,6 +883,9 @@ impl AxiolidGeometry {
     ///
     /// Returns the reason the whole stays unmeasured.
     pub fn compose(&self, parts: &[ObjectId]) -> Result<ComposedBody, String> {
+        for part in parts {
+            self.ask(part);
+        }
         let mut parts = parts.to_vec();
         parts.sort();
         parts.dedup();
@@ -871,6 +998,9 @@ impl AxiolidGeometry {
     /// [`Self::with_unmeasured_bounds`] for the whole.
     #[must_use]
     pub fn parts_bounds(&self, parts: &[ObjectId]) -> Option<Vec<([f64; 3], [f64; 3])>> {
+        for part in parts {
+            self.ask(part);
+        }
         let mut boxes = Vec::new();
         for part in parts {
             if self.meshes.contains_key(part) {
@@ -923,6 +1053,7 @@ impl AxiolidGeometry {
     /// in identity order; `None` for any other object.
     #[must_use]
     pub fn parts_of(&self, whole: &ObjectId) -> Option<&[ObjectId]> {
+        self.ask(whole);
         self.compositions
             .get(whole)
             .map(|composition| composition.parts.as_slice())
@@ -931,6 +1062,7 @@ impl AxiolidGeometry {
     /// The objects whose own bodies make up `object`: its pieces when it is
     /// measured through its parts, the object itself otherwise.
     pub(crate) fn pieces<'a>(&'a self, object: &'a ObjectId) -> Vec<&'a ObjectId> {
+        self.ask(object);
         match self.compositions.get(object) {
             Some(composition) => composition.pieces.iter().collect(),
             None => vec![object],
@@ -961,6 +1093,7 @@ impl AxiolidGeometry {
     /// declared.
     #[must_use]
     pub fn applied_openings(&self, host: &ObjectId) -> Option<&[ObjectId]> {
+        self.ask(host);
         self.applied_openings.get(host).map(Vec::as_slice)
     }
 
@@ -990,6 +1123,7 @@ impl AxiolidGeometry {
     /// declared.
     #[must_use]
     pub fn whole_openings(&self, object: &ObjectId) -> Option<&[ObjectId]> {
+        self.ask(object);
         self.whole_openings.get(object).map(Vec::as_slice)
     }
 
@@ -1007,6 +1141,7 @@ impl AxiolidGeometry {
         use std::fmt::Write as _;
         let mut note = String::new();
         for object in objects {
+            self.ask(object);
             if self.voids.contains_key(*object) {
                 let _ = write!(note, ";void:{object}");
             }
@@ -1044,6 +1179,7 @@ impl AxiolidGeometry {
 
     /// Every registered object and its mesh, in identity order.
     pub(crate) fn objects(&self) -> impl Iterator<Item = (&ObjectId, &TriMesh)> {
+        self.ask_all();
         self.meshes.iter()
     }
 }

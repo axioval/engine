@@ -46,6 +46,37 @@ pub(crate) fn parameters() -> Vec<ParameterDescriptor> {
     ]
 }
 
+/// What a free-floor rule may ask of a host's geometry (#410): the bodies
+/// of its spaces, its selected obstacles and the doors and openings its
+/// selectors name, through the free-space service alone. A rule without
+/// an `obstacles` selector counts every physical object as one, and a
+/// `merge_path` or `access_path` reaches objects no selector bounds, so
+/// either may ask anything.
+pub(crate) fn geometry_reach(rule: &axioval_engine::CompiledRule) -> axioval_engine::GeometryReach {
+    let stated = |name: &str| rule.parameters.contains_key(name);
+    if !matches!(
+        rule.parameters.get("obstacles"),
+        Some(ParameterValue::Selector { .. })
+    ) || stated("merge_path")
+        || stated("access_path")
+    {
+        return axioval_engine::GeometryReach::Unbounded;
+    }
+    axioval_engine::GeometryReach::Selected {
+        selectors: axioval_engine::rule_selectors(
+            rule,
+            &[
+                "obstacles",
+                "subtract_door_swings",
+                "door_selector",
+                "opening_selector",
+                "space_selector",
+            ],
+        ),
+        services: vec![std::any::TypeId::of::<FreeSpaceServiceHandle>()],
+    }
+}
+
 /// The default distance an entrance may be from the path beyond its half
 /// width, as in `local-circulation`.
 const DEFAULT_ENTRANCE_TOLERANCE: f64 = 0.05;

@@ -513,6 +513,13 @@ pub struct GeometryRecord {
     /// in results saved before it existed, and without a derived model.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub derived_unmatched: BTreeMap<String, usize>,
+    /// Objects that may have a body left unmeshed because no rule of the
+    /// check can ask about them (#410; `--mesh-all` meshes them): counted
+    /// in none of the above, and never checked for model data. Additive:
+    /// absent in results saved before it existed, and when every body was
+    /// meshed.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub not_meshed: usize,
 }
 
 /// An object of a derived model superseded by its original.

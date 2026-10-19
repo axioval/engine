@@ -31,14 +31,16 @@ be decided, not whether a model complies. `tests/check.rs` keeps the
 definitions' parameter signatures equal to the registry's, so the packages
 keep compiling as capabilities grow.
 
-Run a release build over each model with `--geometry` and save one result
-per model, then hand the results to the script. Keep models and results out
+Run a release build over each model with `--geometry --mesh-all` (so
+model data is listed for every body, whatever the rules ask; see
+[Geometry](./cli.md#geometry)) and save one result per model, then hand
+the results to the script. Keep models and results out
 of the repository:
 
 ```bash
 cargo build --release -p axioval-cli
 for model in /path/to/models/*.ifc; do
-  ./target/release/axioval check --geometry --model "$model" \
+  ./target/release/axioval check --geometry --mesh-all --model "$model" \
     --definitions scripts/inventory/definitions.json \
     --ruleset scripts/inventory/ruleset.json \
     --report "target/inventory/$(basename "$model" .ifc).json"

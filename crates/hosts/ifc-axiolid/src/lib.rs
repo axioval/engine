@@ -289,6 +289,68 @@ pub struct GeometryReport {
     /// How many objects of the derived sources stay evaluated, by cause.
     /// Empty without a derived source.
     pub derived_unmatched: BTreeMap<Unmatched, usize>,
+    /// Physical objects left unmeshed because no rule can ask about them
+    /// ([`Options::with_only`], #410): neither meshed, bodiless nor
+    /// unmeasured, and counted in none of those.
+    pub not_meshed: usize,
+    /// The watch over the objects left out, armed once every service was
+    /// registered ([`Self::reached_left_out`]).
+    left_out: Option<axioval_axiolid::LeftOutWatch>,
+}
+
+impl GeometryReport {
+    /// Whether a question asked of the registered services after
+    /// [`attach`] returned reached an object left unmeshed
+    /// ([`Options::with_only`]), or every object at once: the answers it
+    /// got assumed that object absent, so a host must not keep them and
+    /// should attach every object and ask again. Always false when every
+    /// object was meshed.
+    #[must_use]
+    pub fn reached_left_out(&self) -> bool {
+        self.left_out
+            .as_ref()
+            .is_some_and(axioval_axiolid::LeftOutWatch::reached)
+    }
+}
+
+/// Every service handle type [`attach`] may register, with its name: what a
+/// host that leaves geometry out of a run, or meshes only some objects,
+/// watches the session for ([`EvidenceSession::watching`]), so it learns
+/// whether a rule asked for one after all (#410).
+#[must_use]
+pub fn service_types() -> Vec<(std::any::TypeId, &'static str)> {
+    use axioval_engine::{
+        AlignmentServiceHandle, BoundaryCoverageServiceHandle, ContactServiceHandle,
+        DerivedRelationshipServiceHandle, EnvelopeMembershipServiceHandle, FacadeAreaServiceHandle,
+        FreeSpaceServiceHandle, GuardServiceHandle, LeafGlazingServiceHandle,
+        LinearQuantityServiceHandle, LocalOrigins, MetricRoutingServiceHandle,
+        PlanAreaServiceHandle, PlanSpanServiceHandle, ProximityServiceHandle, ServiceWatch,
+        SightServiceHandle, SpaceServiceHandle, TriangleCountServiceHandle,
+        VerticalExtentServiceHandle, WalkabilityServiceHandle, WalkingSurfaceServiceHandle,
+    };
+    vec![
+        ServiceWatch::of::<ContactServiceHandle>(),
+        ServiceWatch::of::<FreeSpaceServiceHandle>(),
+        ServiceWatch::of::<SpaceServiceHandle>(),
+        ServiceWatch::of::<BoundaryCoverageServiceHandle>(),
+        ServiceWatch::of::<GuardServiceHandle>(),
+        ServiceWatch::of::<LinearQuantityServiceHandle>(),
+        ServiceWatch::of::<PlanAreaServiceHandle>(),
+        ServiceWatch::of::<PlanSpanServiceHandle>(),
+        ServiceWatch::of::<TriangleCountServiceHandle>(),
+        ServiceWatch::of::<VerticalExtentServiceHandle>(),
+        ServiceWatch::of::<WalkingSurfaceServiceHandle>(),
+        ServiceWatch::of::<SightServiceHandle>(),
+        ServiceWatch::of::<ProximityServiceHandle>(),
+        ServiceWatch::of::<EnvelopeMembershipServiceHandle>(),
+        ServiceWatch::of::<WalkabilityServiceHandle>(),
+        ServiceWatch::of::<MetricRoutingServiceHandle>(),
+        ServiceWatch::of::<FacadeAreaServiceHandle>(),
+        ServiceWatch::of::<LeafGlazingServiceHandle>(),
+        ServiceWatch::of::<DerivedRelationshipServiceHandle>(),
+        ServiceWatch::of::<AlignmentServiceHandle>(),
+        ServiceWatch::of::<LocalOrigins>(),
+    ]
 }
 
 /// The integrity code of a physical product with no shape representation
@@ -524,6 +586,9 @@ pub struct Options {
     /// be its original's to be superseded by it
     /// ([`DEFAULT_TOLERANCE_METRES`] unless stated).
     pub derived_tolerance_metres: f64,
+    /// The only objects whose bodies are asked about ([`Self::with_only`],
+    /// #410); every object when `None`, the default.
+    pub only: Option<BTreeSet<ObjectId>>,
 }
 
 impl Default for Options {
@@ -556,6 +621,29 @@ impl Options {
             derived_from: Vec::new(),
             derived_matching: Matching::ById,
             derived_tolerance_metres: DEFAULT_TOLERANCE_METRES,
+            only: None,
+        }
+    }
+
+    /// The same, meshing only what measuring `objects` as among all the
+    /// others needs (#410): each of them, every product sharing a
+    /// decomposition with one (a whole measured through its parts, its
+    /// parts, the wholes it is a part of, and their openings), every
+    /// opening voiding one and every element an opening among them voids.
+    /// Every other physical object is left out
+    /// ([`GeometryReport::not_meshed`]): neither meshed, bodiless nor
+    /// unmeasured. Every service is registered as ever, over what is
+    /// meshed; a host whose rules ask nothing of geometry attaches none
+    /// ([`unattached`]). Each object it meshes is measured exactly as
+    /// it would be among all the others; a question reaching a left-out
+    /// object ([`GeometryReport::reached_left_out`]) means the answers
+    /// cannot be kept. Ignored with a derived source
+    /// ([`Self::with_derived_from`]), which compares every object.
+    #[must_use]
+    pub fn with_only(self, objects: BTreeSet<ObjectId>) -> Self {
+        Self {
+            only: Some(objects),
+            ..self
         }
     }
 
@@ -1113,6 +1201,8 @@ pub fn attach(
     // cited under one source; evidence about one object cites its own.
     let source = first.source().clone();
     let mut clock = timings::Stopwatch::new(options.timings);
+    // A derived source is compared object by object with its original.
+    let only = options.only.filter(|_| derived_from.is_empty());
     let mut parsed = parse(&snapshots, models)?;
     // A model placed far out is measured about a local origin (#372).
     let origins = if options.frame == Frame::Model {
@@ -1138,6 +1228,23 @@ pub fn attach(
         .map(|object| (object.id.clone(), object.kind().to_owned()))
         .collect();
     let is_a = |id: &ObjectId, ancestor: &str| is_a(id, ancestor, &kinds);
+
+    let relationships = session.service::<RelationshipSelectionServiceHandle>();
+    let parts = decompositions(relationships, &kinds);
+    // Every object some rule may ask about, with what measuring it as
+    // among all the others needs (#410); `None` for every object.
+    let wanted = only.as_ref().map(|only| {
+        wanted(
+            only,
+            parts.as_ref().ok(),
+            &voiding(relationships, &kinds),
+            &parsed,
+            &|id| bodied(id, &is_a),
+        )
+    });
+    // The physical objects left out, neither meshed, bodiless nor
+    // unmeasured.
+    let mut left_out: BTreeSet<ObjectId> = BTreeSet::new();
 
     let Alignment {
         unaligned,
@@ -1181,9 +1288,15 @@ pub fn attach(
             return Err(format!("no model for source `{}`", id.source).into());
         };
         let is_space = is_a(&id, "IfcSpace");
-        let bodiless = !is_a(&id, "IfcProduct")
-            || (!is_space && NO_BODY.iter().any(|ancestor| is_a(&id, ancestor)));
+        let bodiless = !bodied(&id, &is_a);
         let unaligned = unaligned.get(&id.source);
+        // An opening's void is meshed too, so it is left out alike.
+        if wanted.as_ref().is_some_and(|wanted| !wanted.contains(&id))
+            && (!bodiless || is_a(&id, "IfcOpeningElement"))
+        {
+            left_out.insert(id);
+            continue;
+        }
         if bodiless {
             if let (true, Some(reason)) = (is_a(&id, "IfcOpeningElement"), unaligned) {
                 voids.push((id.clone(), Err(reason.clone())));
@@ -1281,8 +1394,9 @@ pub fn attach(
     }
 
     clock.lap("geometry: mesh");
-    let relationships = session.service::<RelationshipSelectionServiceHandle>();
-    let parts = decompositions(relationships, &kinds);
+    report.not_meshed = left_out.len();
+    geometry = geometry.with_left_out(left_out);
+    let geometry_watch = geometry.left_out();
     let mut cuts = WholeOpenings::decide(
         &backend,
         &parsed,
@@ -1455,6 +1569,7 @@ pub fn attach(
     clock.lap("geometry: register services");
     // Copies a derived source keeps of its original's objects, compared
     // through the services just registered, in the shared world frame.
+    report.left_out = geometry_watch;
     let (session, matched) = derived::supersede(
         session,
         &derived_from,
@@ -1467,7 +1582,155 @@ pub fn attach(
     if !derived_from.is_empty() {
         clock.lap("geometry: derived sources");
     }
+    // Every service is built: only a rule's question reaches an object left
+    // out from here on.
+    if let Some(watch) = &report.left_out {
+        watch.arm();
+    }
     Ok((session, report))
+}
+
+/// Whether `id` may have a body of its own: a product that is no spatial
+/// element, opening, virtual element, annotation, grid, port or
+/// structural item ([`NO_BODY`]), and every space.
+fn bodied(id: &ObjectId, is_a: &impl Fn(&ObjectId, &str) -> bool) -> bool {
+    is_a(id, "IfcProduct")
+        && (is_a(id, "IfcSpace") || !NO_BODY.iter().any(|ancestor| is_a(id, ancestor)))
+}
+
+/// What a host that attaches no geometry at all, because no rule of its
+/// check asks anything of it (#410), reports in place of [`attach`]'s
+/// report: every object that may have a body (and every opening, whose
+/// void [`attach`] would mesh) left out ([`GeometryReport::not_meshed`]),
+/// every other bodiless. It reads no model and registers nothing.
+///
+/// # Errors
+///
+/// The session has no type hierarchy to tell them apart.
+pub fn unattached(
+    session: &EvidenceSession,
+) -> Result<GeometryReport, Box<dyn Error + Send + Sync>> {
+    let hierarchy = session
+        .service::<TypeHierarchyServiceHandle>()
+        .ok_or("the session has no type hierarchy to classify objects with")?;
+    let is_a = |id: &ObjectId, ancestor: &str| {
+        session.project().object(id).is_some_and(|object| {
+            hierarchy
+                .is_a(&id.source, object.kind(), ancestor)
+                .unwrap_or(false)
+        })
+    };
+    let mut report = GeometryReport::default();
+    for object in session.project().objects() {
+        if bodied(&object.id, &is_a) || is_a(&object.id, "IfcOpeningElement") {
+            report.not_meshed += 1;
+        } else {
+            report.no_body += 1;
+        }
+    }
+    Ok(report)
+}
+
+/// Each element and the openings voiding it, from the session's
+/// `IfcRelVoidsElement` edges; empty where they cannot be read, so only the
+/// models' own statements ([`ifc_geometry::openings_of`]) add any.
+fn voiding(
+    relationships: Option<&RelationshipSelectionServiceHandle>,
+    kinds: &BTreeMap<ObjectId, String>,
+) -> BTreeMap<ObjectId, Vec<ObjectId>> {
+    let mut voids: BTreeMap<ObjectId, Vec<ObjectId>> = BTreeMap::new();
+    let Some(relationships) = relationships else {
+        return voids;
+    };
+    let edges = SemanticRelationship::try_new("IfcRelVoidsElement")
+        .ok()
+        .and_then(|relationship| {
+            RelationshipEdgesRequest::try_new(kinds.keys().cloned().collect(), relationship).ok()
+        })
+        .and_then(|request| relationships.edges(&request).ok());
+    for edge in edges
+        .iter()
+        .flat_map(axioval_engine::CompleteRelationshipEdges::edges)
+    {
+        voids
+            .entry(edge.relating.clone())
+            .or_default()
+            .push(edge.related.clone());
+    }
+    voids
+}
+
+/// The objects [`attach`] meshes to measure `only` exactly as among all
+/// the others (#410): each of them; every product sharing a decomposition
+/// with one through products that may have a body (`bodied`), since a
+/// whole is measured through its parts; every opening voiding such a
+/// whole, which cuts its parts; and every element an opening among them
+/// voids, which decides whether its `Reference` void is taken as applied.
+/// Spatial elements are never crossed: a storey aggregating spaces
+/// measures none of them.
+fn wanted(
+    only: &BTreeSet<ObjectId>,
+    parts: Option<&BTreeMap<ObjectId, Vec<ObjectId>>>,
+    voiding: &BTreeMap<ObjectId, Vec<ObjectId>>,
+    parsed: &BTreeMap<SourceId, Parsed>,
+    bodied: &impl Fn(&ObjectId) -> bool,
+) -> BTreeSet<ObjectId> {
+    // Decomposition edges both ways, and each opening's elements.
+    let mut linked: BTreeMap<&ObjectId, Vec<&ObjectId>> = BTreeMap::new();
+    for (whole, wholes_parts) in parts.into_iter().flatten() {
+        for part in wholes_parts {
+            if bodied(whole) && bodied(part) {
+                linked.entry(whole).or_default().push(part);
+                linked.entry(part).or_default().push(whole);
+            }
+        }
+    }
+    let mut voided: BTreeMap<&ObjectId, Vec<&ObjectId>> = BTreeMap::new();
+    for (element, openings) in voiding {
+        for opening in openings {
+            voided.entry(opening).or_default().push(element);
+        }
+    }
+    let mut wanted: BTreeSet<ObjectId> = BTreeSet::new();
+    let mut pending: Vec<ObjectId> = only.iter().cloned().collect();
+    while let Some(id) = pending.pop() {
+        if !wanted.insert(id.clone()) {
+            continue;
+        }
+        pending.extend(
+            linked
+                .get(&id)
+                .into_iter()
+                .flatten()
+                .map(|other| (*other).clone()),
+        );
+        // An opening's elements, which decide whether it is taken as
+        // applied, with what measuring them needs in turn.
+        pending.extend(
+            voided
+                .get(&id)
+                .into_iter()
+                .flatten()
+                .map(|element| (*element).clone()),
+        );
+        // A whole's openings cut its parts, so their voids are measured.
+        let whole = parts
+            .and_then(|parts| parts.get(&id))
+            .is_some_and(|parts| bodied(&id) && parts.iter().any(bodied));
+        if !whole {
+            continue;
+        }
+        let stated = parsed
+            .get(&id.source)
+            .zip(entity_id(&id))
+            .map(|(source, entity)| ifc_geometry::openings_of(&source.model, entity))
+            .unwrap_or_default();
+        pending.extend(voiding.get(&id).cloned().unwrap_or_default());
+        pending.extend(stated.into_iter().filter_map(|opening| {
+            ObjectId::new(id.source.clone(), format!("#{}", opening.0)).ok()
+        }));
+    }
+    wanted
 }
 
 /// Registers each opening's void, measured as the solid of space it keeps

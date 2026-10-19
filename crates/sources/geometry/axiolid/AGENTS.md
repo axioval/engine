@@ -1039,3 +1039,21 @@ registry source, not the kernel checkout, before relying on an API.
 - axiolid/kernel discussion #175: winding numbers are O(n) per query; the
   deepest-first ordering in `proximity.rs` hides it in practice but not in
   the worst case.
+
+## Objects left out (#410)
+
+`AxiolidGeometry::with_left_out` declares objects a host did not mesh
+because no rule of its check can ask about them: neither measured, bodiless
+nor unmeasured. Every reader of the set notes a question about one on the
+shared `LeftOutWatch` once the host armed it (`arm`, after every service is
+built): a per-object reader (`mesh`, `fidelity`, `has_no_body`,
+`is_unmeasured`, `void`, `enclosure`, `unmeasured_bound`, `vertical_bounds`,
+`enclosing_extent`, `parts_of`, `pieces`, `applied_openings`,
+`whole_openings`, `body_note`, `compose`, `parts_bounds`) when the object
+is left out, a reader of the whole set (`objects`, `unmeasured`,
+`measured_voids`) and `exact_boundary` (the host registers exact bodies
+only when some tessellated body of the whole set has one) always, and
+`tessellated_near` when a left-out object would not be skipped. Add the
+note to every new reader; a service keeping its own copy of objects (voids,
+spaces, portals) is watched by the host through the registry instead.
+`tests/left_out.rs` pins it.

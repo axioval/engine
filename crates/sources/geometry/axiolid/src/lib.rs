@@ -59,7 +59,7 @@ pub use envelope_membership::AxiolidEnvelopeMembershipService;
 pub use exact_boundary::{ExactBody, ExactBoundary, exact_boundary};
 pub use facade_area::AxiolidFacadeAreaService;
 pub use free_space::AxiolidFreeSpaceService;
-pub use geometry::{AxiolidGeometry, ComposedBody, VerticalExtentBounds};
+pub use geometry::{AxiolidGeometry, ComposedBody, LeftOutWatch, VerticalExtentBounds};
 pub use guard::AxiolidGuardService;
 pub use leaf_glazing::{
     AxiolidLeafGlazingService, GlazingItem, GlazingItems, ItemMaterial, RegisteredGlazingItems,

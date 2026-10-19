@@ -88,6 +88,53 @@ All notable changes are documented here. This project follows Semantic Versionin
   pinned against the earlier binary's report in `tests/check.rs`.
   **Breaking** for code matching `RelationshipSelectionError` exhaustively.
 
+- **`check --geometry` meshes only what the rules can ask about**
+  ([#410](https://github.com/axioval/engine/issues/410)). Each capability
+  states what its rules may ask of geometry
+  (`RuleCapability::geometry_reach`: nothing, the bodies of what some of
+  their selectors select through named services, or anything, the
+  default), and `axioval_engine::geometry_demand` joins them over the
+  plan; a measured value or derived relationship named anywhere in the
+  plan asks for everything, and so do `--zones`, `--locate geometry`,
+  `--derived-from` and `--bcf-snapshots`. Rules reading properties only (property,
+  count, classification, conformance, numbering and expression
+  capabilities) attach no geometry at all; a `free-floor-circle` or
+  `free-floor-rectangle` rule selecting its `obstacles` (without
+  `merge_path` or `access_path`) meshes its spaces, those obstacles and
+  the doors and openings it selects, with what measuring them as among all
+  the others needs (`axioval_host_ifc_axiolid::Options::with_only`: wholes
+  and their parts, a whole's openings, an opening's element). Every other
+  rule meshes every body as before. The check watches what it left out
+  (`ServiceRegistry::watch`, `AxiolidGeometry::with_left_out`) and, when a
+  rule asks for a service or body it left out after all, notes it on
+  stderr and checks again with every body, so the report, the BCF archive
+  and the exit status are byte-identical to a check meshing everything;
+  `--mesh-all` restores that. The result's `geometry` record counts the
+  bodies left out as the additive `not_meshed`, and model-data warnings
+  cover only the meshed bodies. Release build, one run each, before
+  (6c2b0776) and after; reports byte-identical on all 170 parity runs
+  (17 cases over the 10 public models), the property-only and
+  accessibility-like sets on the public and private models, and the
+  broad inventory set:
+
+  | Model | Set | Attach | Peak RSS | Wall |
+  |---|---|---|---|---|
+  | 15 MB private | property-only | 0.60 s -> 0 s | 347 -> 156 MB | 1.4 -> 0.8 s |
+  | 29 MB private | property-only | 2.4 s -> 0 s | 980 -> 365 MB | 5.6 -> 2.8 s |
+  | 66 MB private | property-only | 3.0 s -> 0 s | 1671 -> 839 MB | 9.4 -> 5.4 s |
+  | 29 MB private, heavy meshing | property-only | 41.2 s -> 0 s | 6232 -> 1782 MB | 164.8 -> 113.4 s |
+  | 29 MB private | accessibility-like | 2.4 -> 1.3 s | 2951 -> 2695 MB | 84.6 -> 77.9 s |
+  | 15 MB private | accessibility-like | 0.53 -> 0.33 s | 1219 -> 1155 MB | 3.7 -> 3.4 s |
+  | 29 MB private, heavy meshing, one thread | accessibility-like | 39.0 -> 16.5 s | 8254 -> 6295 MB | 930 -> 884 s |
+  | 15 MB private | inventory (everything) | 0.53 -> 0.51 s | 2213 -> 2215 MB | 18.6 -> 18.5 s |
+  | 10 public models | property-only | 0.054 -> 0 s | 40 -> 29 MB | 0.25 -> 0.18 s |
+
+  The accessibility-like set is the public `floors` case's four free-floor
+  rules with selected obstacles (furniture, and walls for one) and door
+  swings; on the heavy model it meshes 10,746 of 29,137 bodies. Its
+  free-floor searches, not meshing, dominate there, and a 66 MB model ran
+  out of memory with four threads before and after alike (#407).
+
 - **Relationship walks share their candidate universe**
   ([#429](https://github.com/axioval/engine/issues/429)). A `related`
   selector tested on each object asked the relationship service over a

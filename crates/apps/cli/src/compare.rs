@@ -140,6 +140,7 @@ fn combined(
         declared_frame_sources: Vec::new(),
         superseded: Vec::new(),
         derived_unmatched: BTreeMap::new(),
+        not_meshed: before.not_meshed + after.not_meshed,
     };
     (record, bodies)
 }

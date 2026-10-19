@@ -678,6 +678,17 @@ pub trait RuleCapability: Send + Sync {
     fn takes_authored_parameters(&self) -> bool {
         false
     }
+    /// What `rule` may ask of a host's geometry ([`GeometryReach`]), so a
+    /// host meshes only what the plan's rules can measure (#410).
+    /// [`GeometryReach::Unbounded`] unless the capability states less: a
+    /// capability stating less than it asks would be measured on missing
+    /// bodies, so state [`GeometryReach::None`] only for code that asks no
+    /// geometry service, and [`GeometryReach::Selected`] only for code that
+    /// measures the bodies of those selections alone.
+    fn geometry_reach(&self, rule: &CompiledRule) -> GeometryReach {
+        let _ = rule;
+        GeometryReach::Unbounded
+    }
     /// Evaluates an already-validated rule request.
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation;
     /// The composition the capability is built as, when it is a
@@ -1087,6 +1098,7 @@ mod expression_binding;
 mod facade_area;
 mod federation;
 mod free_space;
+mod geometry_demand;
 mod groupings;
 mod guard;
 mod integrity;
@@ -1207,6 +1219,7 @@ pub use free_space::{
     PlacementRequest, PlacementShape, SignedDistanceInterval, SupportCoverageEvidence,
     SupportCoverageOutcome, SupportCoverageRequest, SupportedPlacement,
 };
+pub use geometry_demand::{GeometryDemand, GeometryReach, geometry_demand, rule_selectors};
 pub use groupings::{
     DerivedGroups, GROUP_RELATIONSHIP_PREFIX, Group, Grouping, Membership, PropertyRead, group_id,
 };
@@ -1309,7 +1322,7 @@ pub use section::{
     BodySection, EnvelopeRequest, EnvelopeSweep, Intrusion, Section, SectionAxis, SectionPolygon,
     SectionRequest,
 };
-pub use services::{ServiceRegistry, ServiceRegistryError};
+pub use services::{ServiceRegistry, ServiceRegistryError, ServiceWatch};
 pub use session::{
     EvidenceSession, EvidenceSessionError, SessionSources, SnapshotBoundService, SourceDisciplines,
     SourceSnapshot,

@@ -13,6 +13,7 @@ benchmark) is its first consumer.
   on both sides; never move any of it into either adapter, and never give
   it a sink (BCF, HTML, spreadsheets) or any command-line concern.
 - Its public API is what a host needs and nothing more: `attach`,
+  `unattached`, `service_types`,
   `Options` (with `Frame`), `ModelBytes`, `GeometryReport`, `KeptMesh`,
   `ModelData`, the model-data integrity codes, and the derived-source
   vocabulary (`Matching`, `MatchedBy`, `DerivedMatch`, `Unmatched`,
@@ -78,6 +79,21 @@ benchmark) is its first consumer.
   and `a_tessellated_copy_is_confirmed…` pin it end to end. Each object's model is looked up by its source, spatial
   trees are built per source, and every service is bound to all snapshots.
   Never key anything on a bare local id: two files share `#10`.
+- Meshing only what the rules ask (#410): `Options::with_only` meshes
+  the objects named and what measuring them as among all the others needs
+  (`wanted`: every product sharing a decomposition with one through
+  products that may have a body, `bodied`, never through spatial elements;
+  the openings of such a whole, `IfcRelVoidsElement` edges and
+  `ifc_geometry::openings_of`; the elements an opening among them voids),
+  and leaves every other body out (`AxiolidGeometry::with_left_out`,
+  `GeometryReport::not_meshed`), its watch armed once every service is
+  registered and read by `GeometryReport::reached_left_out`. Every service
+  is still registered. Each object meshed must end in the state a full
+  attach gives it: when a new step makes an object's state depend on
+  another object, add that object to `wanted`. Ignored with a derived
+  source. `unattached` is the report of a host attaching nothing;
+  `service_types` lists every handle type `attach` may register, for a
+  host's watch (`EvidenceSession::watching`): keep it complete.
 - Below, `tests/check.rs` is `crates/apps/cli/tests/check.rs`, which runs
   the bridge end to end through `check --geometry`; the unit tests live
   here beside the code they pin. `geometry.*` names the CLI result's

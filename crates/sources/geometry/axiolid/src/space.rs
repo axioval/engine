@@ -23,12 +23,12 @@ use axioval_ir::{Evidence, ObjectId, SourceId};
 use crate::free_space::within_deviation;
 use crate::geometry::{AxiolidGeometry, Extent, Triangle, VerticalBounds, extent_gap, triangles};
 use crate::planar::{
-    BoundedOverlap, boundary_rings, bounded_footprint, bounded_plan_overlap, footprint_polygons,
-    overlay_refusal, plan_frame, polygon_area, ring_segments, snapping_area,
+    BoundedOverlap, PlanarRefusal, boundary_rings, bounded_footprint, bounded_plan_overlap,
+    footprint_polygons, plan_frame, plan_overlay, polygon_area, ring_segments, snapping_area,
 };
 use axiolid_core::Point2;
 use axiolid_mesh::TriMesh;
-use axiolid_overlay::{FillRule, OverlayError, OverlayInput, OverlayOperation, Polygon, overlay};
+use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, Polygon};
 
 /// Areas below this are numerical dust, not a measured overlap.
 ///
@@ -440,9 +440,10 @@ const SLIVERS_EXCEED_ROUNDING: &str = "the slivers of near-vertical faces the pl
      rounding";
 
 /// A plan-overlay refusal that leaving the slivers out did not remove,
-/// with the overlay's reason; never a zero area.
-fn refused(error: &OverlayError) -> SpaceError {
-    SpaceError::Refused(overlay_refusal(error))
+/// with the overlay's reason, or the overlay budget's (#419); never a zero
+/// area.
+fn refused(error: &PlanarRefusal) -> SpaceError {
+    SpaceError::Refused(error.reason())
 }
 
 /// Plan area of a triangle set: the union of its shadows, so overlapping
@@ -1135,7 +1136,7 @@ impl SpaceService for AxiolidSpaceService {
             let left = if spaces.is_empty() || floor.is_empty() {
                 floor
             } else {
-                overlay(
+                plan_overlay(
                     &OverlayInput {
                         frame: plan_frame(),
                         polygons: floor,
@@ -1376,11 +1377,16 @@ mod tests {
     /// "unavailable" a missing body gives.
     #[test]
     fn an_overlay_refusal_names_the_overlays_error() {
-        let message = refused(&OverlayError::SelfIntersection).to_string();
+        let message = refused(&PlanarRefusal::Overlay(
+            axiolid_overlay::OverlayError::SelfIntersection,
+        ))
+        .to_string();
         assert!(message.contains("plan overlay"), "{message}");
         assert!(message.contains("SelfIntersection"), "{message}");
         assert_ne!(
-            refused(&OverlayError::RepeatedVertex),
+            refused(&PlanarRefusal::Overlay(
+                axiolid_overlay::OverlayError::RepeatedVertex,
+            )),
             SpaceError::Unavailable
         );
         let message = SpaceError::Refused(SLIVERS_COULD_DECIDE).to_string();

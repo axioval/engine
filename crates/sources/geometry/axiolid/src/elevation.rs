@@ -35,15 +35,15 @@
 //! grow in that direction and loses the band of its own outline instead.
 
 use axiolid_core::{Point2, Point3};
-use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, Polygon, Ring, overlay};
+use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, Polygon, Ring};
 use axioval_engine::{ElevationCover, ElevationRequest, PlanAreaError};
 use axioval_ir::{Evidence, ObjectId};
 
 use crate::geometry::Triangle;
 use crate::plan_area::{AxiolidPlanAreaService, band, tolerance};
 use crate::planar::{
-    footprint_measure, hull_of, kept_fan_triangle, plan_frame, polygons_overlap_area,
-    projected_polygons, ring_perimeter,
+    PlanarRefusal, footprint_measure, hull_of, kept_fan_triangle, plan_frame, plan_overlay,
+    polygons_overlap_area, projected_polygons, ring_perimeter,
 };
 
 /// How far a projected coordinate may round when the axis is off the
@@ -78,6 +78,15 @@ enum Side {
 
 fn unavailable(object: &ObjectId, what: &str) -> PlanAreaError {
     PlanAreaError::Unavailable(format!("the {what} of {object} cannot be computed"))
+}
+
+/// [`unavailable`], with why the overlay was not built: its refusal or the
+/// overlay budget (#419).
+fn refused(object: &ObjectId, what: &str, error: &PlanarRefusal) -> PlanAreaError {
+    PlanAreaError::Unavailable(format!(
+        "the {what} of {object} cannot be computed{}",
+        error.budget_note()
+    ))
 }
 
 /// The request's bodies in its frame, with what bounds their uncertainty.
@@ -221,7 +230,7 @@ impl<'r> Scene<'r> {
             region.clone(),
             self.tolerance,
         )
-        .ok_or_else(|| unavailable(self.object, "cover"))?
+        .map_err(|error| refused(self.object, "cover", &error))?
         .min(self.area);
         let lost = if clamped && theirs > 0.0 {
             band(
@@ -355,7 +364,7 @@ fn even_odd(polygons: Vec<Polygon>, tolerance: axiolid_core::Tolerance) -> Optio
         frame: plan_frame(),
         polygons,
     };
-    overlay(
+    plan_overlay(
         &input,
         &input,
         OverlayOperation::Union,
@@ -441,14 +450,14 @@ fn union_perimeter(
         frame: plan_frame(),
         polygons,
     };
-    let merged = overlay(
+    let merged = plan_overlay(
         &input,
         &input,
         OverlayOperation::Union,
         FillRule::NonZero,
         tolerance,
     )
-    .map_err(|_| unavailable(object, "cover outline"))?;
+    .map_err(|error| refused(object, "cover outline", &error))?;
     Ok(merged
         .polygons
         .iter()

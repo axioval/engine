@@ -48,8 +48,9 @@ use axioval_ir::{Evidence, ObjectId, SourceId};
 
 use crate::geometry::{AxiolidGeometry, Triangle, triangles};
 use crate::planar::{
-    Disc, certified_perimeter, footprint_measure, footprint_polygons, grown_polygons, hull_of,
-    kept_fan_triangle, plan_overlap_area, polygons_overlap_area, projected_polygons,
+    Disc, OVERLAY_SNAP, PlanarRefusal, certified_perimeter, footprint_polygons, grown_polygons,
+    grown_region, hull_of, kept_fan_triangle, measured_footprint, plan_footprint,
+    plan_overlap_area, polygons_overlap_area, projected_polygons, ring_perimeter, snapping_area,
 };
 
 /// How far a computed band cut is moved, in metres, plus `CUT_SCALE` of the
@@ -151,8 +152,11 @@ impl AxiolidPlanAreaService {
         let mut soup = Vec::new();
         let mut deviation = 0.0_f64;
         self.collect(object, None, &mut Vec::new(), &mut soup, &mut deviation)?;
-        let (area, perimeter) = footprint_measure(&soup, tolerance()?).ok_or_else(|| {
-            PlanAreaError::Unavailable(format!("the footprint of {object} cannot be computed"))
+        let (area, perimeter) = measured_footprint(&soup, tolerance()?).map_err(|error| {
+            PlanAreaError::Unavailable(format!(
+                "the footprint of {object} cannot be computed{}",
+                error.budget_note()
+            ))
         })?;
         Ok(Footprint {
             soup,
@@ -326,6 +330,118 @@ pub(crate) fn band(perimeter: f64, deviation: f64) -> f64 {
     2.0 * perimeter * deviation + std::f64::consts::PI * deviation * deviation
 }
 
+/// How much of a measured footprint a cover grown by a radius covers.
+struct Covered {
+    /// Surely covered: a lower bound on the footprint's part within the
+    /// cover grown by the radius less its deviation.
+    inner: f64,
+    /// The band the sure part loses when the growth is smaller than the
+    /// cover's deviation.
+    inner_band: f64,
+    /// Possibly covered: an upper bound on the part within the cover grown
+    /// by the radius plus its deviation.
+    outer: f64,
+}
+
+/// [`Covered`] from the subject's and the cover's triangles, each cover
+/// triangle grown on its own: exact up to the overlay's output snapping.
+fn triangle_cover(
+    subject: &Footprint,
+    cover: &[Triangle],
+    deviation: f64,
+    growth: f64,
+    tolerance: axiolid_core::Tolerance,
+) -> Result<Covered, PlanarRefusal> {
+    let overlap =
+        |polygons| polygons_overlap_area(projected_polygons(&subject.soup), polygons, tolerance);
+    // Surely covered: the cover grown by less than the true growth, or the
+    // measured cover less its band.
+    let (inner, inner_band) = if growth >= deviation {
+        (
+            overlap(grown_polygons(cover, growth - deviation, Disc::Inscribed))?,
+            0.0,
+        )
+    } else {
+        let (_, perimeter) = measured_footprint(cover, tolerance)?;
+        (
+            overlap(projected_polygons(cover))?,
+            band(perimeter, deviation),
+        )
+    };
+    // Possibly covered: the cover grown by more than the true growth.
+    let outer = overlap(grown_polygons(
+        cover,
+        growth + deviation,
+        Disc::Circumscribed,
+    ))?;
+    Ok(Covered {
+        inner,
+        inner_band,
+        outer,
+    })
+}
+
+/// [`Covered`] from the subject's and the cover's united footprints (#419),
+/// for triangles past the overlay budget: a finely tessellated beam's
+/// shadows grown one by one lie over one another along its whole length.
+///
+/// The overlay snaps the united footprints by up to `δ`
+/// ([`OVERLAY_SNAP`] of the largest coordinate, at least a metre), so
+/// every point of the measured cover lies within `δ` of the united one and
+/// back. The sure part grows the united cover by `δ` less, the possible
+/// part by `δ` more; a growth under `δ` takes the united cover itself, less
+/// the area the snapping may have added to it. The subject's footprint
+/// moves by its own snapping, which the two parts lose and gain. The
+/// bracket is therefore never a point.
+fn united_cover(
+    subject: &Footprint,
+    cover: &[Triangle],
+    deviation: f64,
+    growth: f64,
+    tolerance: axiolid_core::Tolerance,
+) -> Result<Covered, PlanarRefusal> {
+    let own = plan_footprint(&subject.soup, tolerance)?;
+    let united = plan_footprint(cover, tolerance)?;
+    let magnitude = own
+        .iter()
+        .chain(&united)
+        .flat_map(|polygon| std::iter::once(&polygon.outer).chain(&polygon.holes))
+        .flat_map(|ring| &ring.points)
+        .fold(1.0_f64, |size, point| {
+            size.max(point.x.abs()).max(point.y.abs())
+        });
+    let snap = OVERLAY_SNAP * magnitude;
+    // Both sides of a footprint's boundary may have moved.
+    let (own_slack, united_slack) = (2.0 * snapping_area(&own), 2.0 * snapping_area(&united));
+    let overlap = |polygons| polygons_overlap_area(own.clone(), polygons, tolerance);
+    let sure = growth - deviation - snap;
+    let inner = if sure >= 0.0 {
+        overlap(grown_region(&united, sure, Disc::Inscribed))? - own_slack
+    } else {
+        overlap(united.clone())? - own_slack - united_slack
+    };
+    let inner_band = if growth >= deviation {
+        0.0
+    } else {
+        let perimeter: f64 = united
+            .iter()
+            .flat_map(|polygon| std::iter::once(&polygon.outer).chain(&polygon.holes))
+            .map(ring_perimeter)
+            .sum();
+        band(perimeter, deviation)
+    };
+    let outer = overlap(grown_region(
+        &united,
+        growth + deviation + snap,
+        Disc::Circumscribed,
+    ))? + own_slack;
+    Ok(Covered {
+        inner: inner.max(0.0),
+        inner_band,
+        outer,
+    })
+}
+
 impl PlanAreaService for AxiolidPlanAreaService {
     fn measure_footprint(&self, object: &ObjectId) -> Result<PlanArea, PlanAreaError> {
         let footprint = self.measure(object)?;
@@ -470,51 +586,39 @@ impl PlanAreaService for AxiolidPlanAreaService {
             deviation = deviation.max(footprint.deviation);
         }
         let tolerance = tolerance()?;
-        let overlap = |polygons| {
-            polygons_overlap_area(projected_polygons(&subject.soup), polygons, tolerance)
-                .map(|area| area.min(subject.area))
-                .ok_or_else(|| {
-                    PlanAreaError::Unavailable(format!("the cover of {object} cannot be computed"))
-                })
-        };
-        // Surely covered: the cover grown by less than the true growth, or
-        // the measured cover less its band.
-        let (inner, inner_band) = if growth_metres >= deviation {
-            (
-                overlap(grown_polygons(
-                    &soup,
-                    growth_metres - deviation,
-                    Disc::Inscribed,
-                ))?,
-                0.0,
-            )
-        } else {
-            let (_, perimeter) = footprint_measure(&soup, tolerance).ok_or_else(|| {
-                PlanAreaError::Unavailable(format!("the cover of {object} cannot be computed"))
-            })?;
-            (
-                overlap(projected_polygons(&soup))?,
-                band(perimeter, deviation),
-            )
-        };
-        // Possibly covered: the cover grown by more than the true growth.
-        let outer = overlap(grown_polygons(
-            &soup,
-            growth_metres + deviation,
-            Disc::Circumscribed,
-        ))?;
+        // Triangle by triangle first; past the overlay budget, over the
+        // united footprints (#419), whose snapping widens the bracket.
+        let (covered, united) =
+            match triangle_cover(&subject, &soup, deviation, growth_metres, tolerance) {
+                Err(PlanarRefusal::OverBudget(_)) => (
+                    united_cover(&subject, &soup, deviation, growth_metres, tolerance),
+                    true,
+                ),
+                covered => (covered, false),
+            };
+        let covered = covered.map_err(|error| {
+            PlanAreaError::Unavailable(format!(
+                "the cover of {object} cannot be computed{}",
+                error.budget_note()
+            ))
+        })?;
+        let (inner, outer) = (
+            covered.inner.min(subject.area),
+            covered.outer.min(subject.area),
+        );
         let subject_band = band(subject.perimeter, subject.deviation);
-        let upper = (subject.area - inner + subject_band + inner_band)
+        let upper = (subject.area - inner + subject_band + covered.inner_band)
             .min(subject.area + subject_band)
             .max(0.0);
         let lower = (subject.area - outer - subject_band).max(0.0).min(upper);
         let locator = format!(
-            "uncovered-area:{object}:{growth_metres}:{}",
+            "uncovered-area:{object}:{growth_metres}:{}{}",
             cover
                 .iter()
                 .map(ToString::to_string)
                 .collect::<Vec<_>>()
-                .join(",")
+                .join(","),
+            if united { ";united" } else { "" }
         );
         #[allow(clippy::float_cmp)]
         let exact = lower == upper;
@@ -580,9 +684,10 @@ impl PlanAreaService for AxiolidPlanAreaService {
         let overlap = |polygons: Vec<Polygon>| {
             polygons_overlap_area(projected_polygons(&subject.soup), polygons, tolerance)
                 .map(|area| area.min(subject.area))
-                .ok_or_else(|| {
+                .map_err(|error| {
                     PlanAreaError::Unavailable(format!(
-                        "the bands over {object} cannot be computed"
+                        "the bands over {object} cannot be computed{}",
+                        error.budget_note()
                     ))
                 })
         };

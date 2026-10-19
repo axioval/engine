@@ -25,15 +25,15 @@
 //! footprint, exactly.
 
 use axiolid_core::{Point2, Point3};
-use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, Polygon, Ring, overlay};
+use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, Polygon, Ring};
 use axioval_engine::{PlanAreaError, PlanPolygon, ZoneArea, ZoneAreaRequest};
 use axioval_ir::Evidence;
 
 use crate::geometry::Triangle;
 use crate::plan_area::{AxiolidPlanAreaService, band, tolerance};
 use crate::planar::{
-    Disc, bounded_footprint, footprint_measure, hull_of, kept_fan_triangle, overlay_refusal,
-    plan_frame, polygon_area,
+    Disc, bounded_footprint, footprint_measure, hull_of, kept_fan_triangle, plan_frame,
+    plan_overlay, polygon_area,
 };
 
 /// The smallest accuracy drawn as a band, in metres: below it the overlay
@@ -221,7 +221,7 @@ pub(crate) fn combine(
         frame: plan_frame(),
         polygons,
     };
-    overlay(
+    plan_overlay(
         &input(first),
         &input(second),
         operation,
@@ -229,7 +229,7 @@ pub(crate) fn combine(
         tolerance()?,
     )
     .map(|result| result.polygons)
-    .map_err(|error| PlanAreaError::Unavailable(overlay_refusal(&error).to_owned()))
+    .map_err(|error| PlanAreaError::Unavailable(error.to_string()))
 }
 
 pub(crate) fn area(polygons: &[Polygon]) -> f64 {
@@ -261,7 +261,7 @@ pub(crate) fn measure(
         PlanAreaError::Unavailable(format!("the footprint of {} cannot be computed", named()))
     })?;
     let footprint = bounded_footprint(&soup, tolerance)
-        .map_err(|error| PlanAreaError::Unavailable(overlay_refusal(&error).to_owned()))?;
+        .map_err(|error| PlanAreaError::Unavailable(error.to_string()))?;
     let zone: Vec<Polygon> = request.zone().iter().map(overlay_polygon).collect();
     let accuracy = request.accuracy_metres();
     // The stated zone less its band lies inside the true one, and the

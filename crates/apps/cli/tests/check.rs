@@ -7383,6 +7383,7 @@ impl Case {
         });
         let text = std::fs::read_to_string(format!("{FIXTURES}/ruleset.json")).unwrap();
         let mut ruleset: Value = serde_json::from_str(&text).unwrap();
+        let fixture_rule = ruleset["root"]["rules"][0].clone();
         let rule = &mut ruleset["root"]["rules"][0];
         rule["id"] = json!("under-test");
         rule["definitionId"] = json!("axioval:example.under-test");
@@ -7390,9 +7391,14 @@ impl Case {
         rule["applicability"]["groups"]["walls"]["selector"] = applicability;
         // A `ruleset:` field belongs to the ruleset, a `definitions:` one
         // adds its entries to that section of the definitions, every other
-        // belongs to the rule.
+        // belongs to the rule; `with:fixture-rule` keeps the fixture's own
+        // rule (walls need a `Reference`) beside the rule under test.
         let mut outer = Vec::new();
         for (field, value) in extra.as_object().into_iter().flatten() {
+            if field == "with:fixture-rule" {
+                outer.push(("root.rules+".to_owned(), fixture_rule.clone()));
+                continue;
+            }
             if let Some(section) = field.strip_prefix("definitions:") {
                 for (id, entry) in value.as_object().into_iter().flatten() {
                     definitions[section][id] = entry.clone();
@@ -7405,7 +7411,11 @@ impl Case {
             }
         }
         for (field, value) in outer {
-            ruleset[field] = value;
+            if field == "root.rules+" {
+                ruleset["root"]["rules"].as_array_mut().unwrap().push(value);
+            } else {
+                ruleset[field] = value;
+            }
         }
         let definitions = self.write("definitions.json", &definitions.to_string());
         let ruleset = self.write("ruleset.json", &ruleset.to_string());
@@ -10464,6 +10474,129 @@ fn with_geometry_a_wall_over_two_heights_of_structure_is_found_only_in_elevation
             .starts_with("elevation: 0.2442 of the elevation (2.9304 of 12 m²)"),
         "{findings:#?}"
     );
+}
+
+/// One wall `#100` of `teeth` boxes 40 m long, 1 cm wide and 3 m high, 5 cm
+/// apart, along world x or along world y: a comb in plan.
+fn comb_wall(teeth: u32, along_x: bool, global: &str) -> String {
+    let mut data = String::new();
+    let mut items = Vec::new();
+    for tooth in 0..teeth {
+        let first = 1000 + 4 * tooth;
+        let [p, pos, profile, solid] = [0, 1, 2, 3].map(|offset| first + offset);
+        let across = 0.05 * f64::from(tooth) + 0.005;
+        let (x, y, length, width) = if along_x {
+            (20.0, across, 40.0, 0.01)
+        } else {
+            (across, 20.0, 0.01, 40.0)
+        };
+        let _ = write!(
+            data,
+            "#{p}=IFCCARTESIANPOINT(({x:?},{y:?}));\n\
+             #{pos}=IFCAXIS2PLACEMENT2D(#{p},$);\n\
+             #{profile}=IFCRECTANGLEPROFILEDEF(.AREA.,$,#{pos},{length:?},{width:?});\n\
+             #{solid}=IFCEXTRUDEDAREASOLID(#{profile},#2,#4,3.);\n"
+        );
+        items.push(format!("#{solid}"));
+    }
+    let _ = write!(
+        data,
+        "#98=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',({}));\n\
+         #99=IFCPRODUCTDEFINITIONSHAPE($,$,(#98));\n\
+         #100=IFCWALL('{global}',$,$,$,$,#3,#99,$,$);\n",
+        items.join(",")
+    );
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         {data}ENDSEC;\nEND-ISO-10303-21;\n"
+    )
+}
+
+/// An architectural wall crossing a structural one in a grid of 600 by 600
+/// teeth meets it in more pairs of edges than one plan overlay is handed
+/// (#419): its coverage is refused by name, not built until memory runs
+/// out, and the check's other rule reports as it would alone.
+#[test]
+fn with_geometry_a_coverage_past_the_overlay_budget_is_refused_and_other_rules_report() {
+    let case = Case::new("geometry-counterpart-budget");
+    case.write("arch.ifc", &comb_wall(600, true, "0000000000000000000A16"));
+    case.write(
+        "struct.ifc",
+        &comb_wall(600, false, "0000000000000000000S16"),
+    );
+    let walls_of = |discipline: &str| {
+        json!({"kind": "allOf", "operands": [
+            entity("wall"), {"kind": "discipline", "value": discipline},
+        ]})
+    };
+    let started = std::time::Instant::now();
+    let (output, result) = case.geometry_rule_with(
+        &["arch.ifc:architecture", "struct.ifc:structure"],
+        &[],
+        (
+            "axioval:capability.counterpart-coverage",
+            &registry_signature("axioval:capability.counterpart-coverage"),
+        ),
+        walls_of("architecture"),
+        json!({
+            "counterparts": {"type": "selector", "value": walls_of("structure")},
+            "horizontal_tolerance": {"type": "quantity", "value": 0.01, "unit": "m"},
+            "vertical_tolerance": {"type": "quantity", "value": 0.1, "unit": "m"},
+            "info_above": {"type": "number", "value": 0.01},
+        }),
+        &json!({"with:fixture-rule": true}),
+        &[],
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert!(started.elapsed().as_secs() < 300, "{:?}", started.elapsed());
+    // The fixture's rule finds both walls without a reference.
+    let mut referenced: Vec<String> = result["report"]["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|finding| finding["rule_id"] == "wall-reference-required")
+        .map(|finding| {
+            finding["object_id"]["source"]["document"]
+                .as_str()
+                .unwrap()
+                .to_owned()
+        })
+        .collect();
+    referenced.sort();
+    assert_eq!(referenced, ["arch.ifc", "struct.ifc"], "{result:#}");
+    // The coverage rule finds nothing and leaves the architectural wall
+    // not evaluated in plan and in height, naming the budget.
+    assert!(
+        result["report"]["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|finding| finding["rule_id"] != "under-test"),
+        "{result:#}"
+    );
+    let not_evaluated: Vec<&Value> = result["report"]["not_evaluated"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|outcome| outcome["rule_id"] == "under-test")
+        .collect();
+    assert_eq!(not_evaluated.len(), 2, "{result:#}");
+    for outcome in not_evaluated {
+        assert_eq!(outcome["object_id"]["source"]["document"], "arch.ifc");
+        let message = outcome["message"].as_str().unwrap();
+        assert!(
+            message.contains("past the overlay budget of 4000000 pairs"),
+            "{message}"
+        );
+    }
 }
 
 /// A side profile extruded 1.2 m across, as instances `#first` to

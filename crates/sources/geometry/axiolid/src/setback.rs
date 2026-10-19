@@ -35,8 +35,7 @@ use axioval_ir::Evidence;
 use crate::geometry::Triangle;
 use crate::plan_area::{AxiolidPlanAreaService, band, tolerance};
 use crate::planar::{
-    bounded_footprint, hull_of, kept_fan_triangle, overlay_refusal, projected_polygons,
-    ring_perimeter,
+    bounded_footprint, hull_of, kept_fan_triangle, projected_polygons, ring_perimeter,
 };
 use crate::zone_area::{area, boundary_band, combine, overlay_polygon};
 
@@ -91,7 +90,7 @@ fn swept(service: &AxiolidPlanAreaService, strip: &SetbackStrip) -> Result<Swept
     let footprint = service.measure(object)?;
     let tolerance = tolerance()?;
     let bounded = bounded_footprint(&footprint.soup, tolerance)
-        .map_err(|error| PlanAreaError::Unavailable(overlay_refusal(&error).to_owned()))?;
+        .map_err(|error| PlanAreaError::Unavailable(error.to_string()))?;
     if bounded.polygons.is_empty() {
         return Err(PlanAreaError::Unavailable(format!(
             "{object} has no footprint to sweep a setback from"

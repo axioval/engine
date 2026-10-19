@@ -146,9 +146,7 @@ use axioval_ir::{
 
 use crate::exact_boundary::ExactBody;
 use crate::geometry::{AxiolidGeometry, Triangle, triangles};
-use crate::planar::{
-    BoundedOverlap, bounded_plan_overlap, overlay_refusal, plan_overlap_area, polygon_area,
-};
+use crate::planar::{BoundedOverlap, bounded_plan_overlap, plan_overlap_area, polygon_area};
 
 mod shells;
 mod zero_area;
@@ -1506,7 +1504,7 @@ fn footprints_overlap(
     counterpart: &Body<'_>,
 ) -> Result<BoundedOverlap, ProximityError> {
     bounded_plan_overlap(&subject.soup.items, &counterpart.soup.items, tolerance()?)
-        .map_err(|error| ProximityError::Refused(overlay_refusal(&error)))
+        .map_err(|error| ProximityError::Refused(error.reason()))
 }
 
 /// Whether `polygon` holds a point farther than `depth` from its boundary.
@@ -3028,7 +3026,7 @@ mod tests {
             (OverlayError::SelfIntersection, "SelfIntersection"),
             (OverlayError::ZeroArea, "ZeroArea"),
         ] {
-            let refused = ProximityError::Refused(overlay_refusal(&error));
+            let refused = ProximityError::Refused(crate::planar::overlay_refusal(&error));
             let message = refused.to_string();
             assert!(message.contains(name), "{message}");
             assert!(message.contains("plan overlay"), "{message}");

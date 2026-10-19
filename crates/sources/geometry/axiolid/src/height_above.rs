@@ -32,7 +32,9 @@ use axioval_engine::{
 use axioval_ir::Evidence;
 
 use crate::geometry::Triangle;
-use crate::planar::{footprint_polygons, polygon_area, polygons_overlap_area, projected_polygons};
+use crate::planar::{
+    PlanarRefusal, footprint_polygons, polygon_area, polygons_overlap_area, projected_polygons,
+};
 use crate::proximity::{AxiolidProximityService, Body, LINEAR_TOLERANCE, tolerance};
 use crate::vertical_surface::{Plan, apart, clip, over, plan_area, triangle_box};
 
@@ -252,8 +254,13 @@ fn coverage(
         .iter()
         .map(polygon_area)
         .sum();
-    let covered = polygons_overlap_area(projected_polygons(edge), beneath, tolerance)
-        .ok_or(ProximityError::Refused(REFUSED))?;
+    let covered =
+        polygons_overlap_area(projected_polygons(edge), beneath, tolerance).map_err(|error| {
+            match error {
+                PlanarRefusal::OverBudget(_) => ProximityError::Refused(error.reason()),
+                PlanarRefusal::Overlay(_) => ProximityError::Refused(REFUSED),
+            }
+        })?;
     let uncovered = whole - covered;
     // The overlay snaps its output to a grid, so a covered edge may leave a
     // sliver of rounding.

@@ -750,6 +750,29 @@ unmeasured, undescribed or a group that cannot give a footprint refuses the
 measurement, never zero. The 0.3.0 overlay's region dilation is not used: it
 does not state on which side of the true offset its polygon lies.
 
+Every plan overlay the adapter's shared plan helpers build (footprints,
+overlaps, uncovered areas, elevations, zones and setbacks) is first held to
+an **overlay budget** (#419): the pairs of edges of its operands whose boxes
+meet are counted exactly, in `O(n log n)` for `n` edges, and past 4,000,000
+pairs the overlay is not built. Every crossing the overlay keeps comes from
+such a pair, so the count bounds its time and memory; before the budget,
+the shadows of a finely faceted beam grown one by one, each a long, thin
+fan lying over every other along the beam, asked for gigabytes and the
+allocation failure aborted the host. A grown triangle is handed over as
+fans from each corner's run of hull vertices and one fan of the runs'
+ends, so only a handful of its edges are as long as the shadow. An
+uncovered area whose triangles are past the budget is measured again over
+the united footprints: the cover's union grown edge by edge (the union
+itself and each boundary edge's hull with the growth polygon, which is the
+grown union exactly) against the element's union. The overlay snaps a
+union by up to `δ` (`10⁻⁷` of the largest coordinate, at least a metre),
+so the sure part grows the united cover by `δ` less, the possible part by
+`δ` more, and both lose and gain the area the snapping may move along the
+element's outline: the bracket is never a point, and the locator ends in
+`;united`. Past the budget there too, the measurement is refused, naming
+the edges, the pairs and the budget: the element is not evaluated, and
+every other element and rule keeps running.
+
 The footprint of objects in a stated zone (`measure_zone_area`) unites the
 objects' footprints as a footprint is united (slivers the overlay refuses
 left out, their area bounding what they could add) and measures the part

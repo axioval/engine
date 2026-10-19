@@ -323,3 +323,133 @@ fn an_uncovered_area_with_an_unmeasured_cover_is_unknown() {
         Err(PlanAreaError::UnknownObject(_))
     ));
 }
+
+/// A closed bar of `facets` flat faces along x from 0 to `length`, its
+/// section a regular polygon of `radius` about `(y, z)`, turned by a tenth
+/// of a radian so no face lies level.
+fn bar(facets: u32, radius: f64, length: f64, y: f64, z: f64) -> TriMesh {
+    let n = facets;
+    let mut points = Vec::new();
+    for x in [0.0, length] {
+        for i in 0..n {
+            let t = std::f64::consts::TAU * f64::from(i) / f64::from(n) + 0.1;
+            points.push(Point3::new(x, y + radius * t.cos(), z + radius * t.sin()));
+        }
+    }
+    let mut indices = Vec::new();
+    for i in 0..n {
+        let j = (i + 1) % n;
+        indices.extend([i, j, n + j, i, n + j, n + i]);
+    }
+    for i in 1..n - 1 {
+        indices.extend([0, i + 1, i, n, n + i, n + i + 1]);
+    }
+    TriMesh::new(points, indices)
+}
+
+/// The least and greatest y of `bar`'s section.
+fn bar_reach(facets: u32, radius: f64, y: f64) -> (f64, f64) {
+    (0..facets)
+        .map(|i| {
+            let t = std::f64::consts::TAU * f64::from(i) / f64::from(facets) + 0.1;
+            y + radius * t.cos()
+        })
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(low, high), value| {
+            (low.min(value), high.max(value))
+        })
+}
+
+/// A 6 m beam of 256 facets over another: each of the cover's long, thin
+/// shadows grown on its own meets every other along the whole beam, which
+/// aborted the host asking for gigabytes (#419). Past the overlay budget
+/// the cover is measured over the united footprints instead, the bracket
+/// widened by the overlay's snapping.
+#[test]
+fn a_finely_faceted_beam_is_measured_over_its_united_footprints() {
+    let facets = 256;
+    let areas = service(
+        AxiolidGeometry::new()
+            .with_mesh(id("beam"), bar(facets, 0.1, 6.0, 0.0, 0.0))
+            .with_mesh(id("cover"), bar(facets, 0.1, 6.0, 0.15, 0.0)),
+    );
+    let started = std::time::Instant::now();
+    let area = areas
+        .measure_uncovered_area(&id("beam"), &[id("cover")], 0.02)
+        .unwrap();
+    // The footprints are rectangles along the beam: the cover grown by
+    // 2 cm reaches 2 cm below its own least y, along its whole length.
+    let (low, _) = bar_reach(facets, 0.1, 0.0);
+    let (cover_low, _) = bar_reach(facets, 0.1, 0.15);
+    let expected = 6.0 * ((cover_low - 0.02) - low);
+    let (lower, upper) = (area.lower_square_metres(), area.upper_square_metres());
+    assert!(
+        lower <= expected && expected <= upper && upper - lower < 1e-4,
+        "{lower} {expected} {upper}"
+    );
+    assert!(!area.is_exact());
+    assert!(area.evidence().locator.ends_with(";united"), "{area:?}");
+    assert!(started.elapsed().as_secs() < 60, "{:?}", started.elapsed());
+    // A beam of few facets is still measured triangle by triangle, exactly.
+    let areas = service(
+        AxiolidGeometry::new()
+            .with_mesh(id("beam"), bar(16, 0.1, 6.0, 0.0, 0.0))
+            .with_mesh(id("cover"), bar(16, 0.1, 6.0, 0.15, 0.0)),
+    );
+    let area = areas
+        .measure_uncovered_area(&id("beam"), &[id("cover")], 0.02)
+        .unwrap();
+    let (low, _) = bar_reach(16, 0.1, 0.0);
+    let (cover_low, _) = bar_reach(16, 0.1, 0.15);
+    let expected = 6.0 * ((cover_low - 0.02) - low);
+    assert!(area.is_exact(), "{area:?}");
+    assert!(!area.evidence().locator.ends_with(";united"), "{area:?}");
+    assert!(
+        (area.lower_square_metres() - expected).abs() < 1e-7,
+        "{area:?} {expected}"
+    );
+}
+
+/// `teeth` boxes 40 m long and 1 cm wide, 5 cm apart, along x or along y.
+fn comb(teeth: u32, along_x: bool) -> TriMesh {
+    let mut points = Vec::new();
+    let mut indices = Vec::new();
+    for tooth in 0..teeth {
+        let offset = 0.05 * f64::from(tooth);
+        let (x0, y0, x1, y1) = if along_x {
+            (0.0, offset, 40.0, offset + 0.01)
+        } else {
+            (offset, 0.0, offset + 0.01, 40.0)
+        };
+        let block = cuboid(x0, y0, x1, y1, 3.0);
+        let base = u32::try_from(points.len()).unwrap();
+        points.extend(block.positions.iter().copied());
+        indices.extend(block.indices.iter().map(|index| base + index));
+    }
+    TriMesh::new(points, indices)
+}
+
+/// Two combs crossing at right angles meet in a grid of over a million
+/// crossings, which the overlay would build vertex by vertex. Their united
+/// footprints are past the overlay budget too, so the cover is refused by
+/// name, in bounded time and memory, never built.
+#[test]
+fn crossing_combs_past_the_overlay_budget_are_refused_by_name() {
+    let areas = service(
+        AxiolidGeometry::new()
+            .with_mesh(id("rows"), comb(600, true))
+            .with_mesh(id("columns"), comb(600, false)),
+    );
+    let started = std::time::Instant::now();
+    // Each comb alone is measured.
+    assert!(areas.measure_footprint(&id("rows")).is_ok());
+    let refused = areas.measure_uncovered_area(&id("rows"), &[id("columns")], 0.01);
+    let Err(PlanAreaError::Unavailable(reason)) = refused else {
+        panic!("{refused:?}");
+    };
+    assert!(
+        reason.starts_with(&format!("the cover of {} cannot be computed: ", id("rows")))
+            && reason.contains("past the overlay budget of 4000000 pairs"),
+        "{reason}"
+    );
+    assert!(started.elapsed().as_secs() < 60, "{:?}", started.elapsed());
+}

@@ -6,10 +6,74 @@
 
 use axiolid_core::{Frame2, Point2, Vec2};
 use axiolid_overlay::{
-    FillRule, OverlayError, OverlayInput, OverlayOperation, Polygon, Ring, overlay,
+    FillRule, OverlayError, OverlayInput, OverlayOperation, OverlayResult, Polygon, Ring,
 };
 
 use crate::geometry::Triangle;
+
+mod budget;
+
+/// Why a plan measurement was not built: the overlay refused its operands,
+/// or they were past the overlay budget (#419).
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum PlanarRefusal {
+    /// The overlay refused the operands.
+    Overlay(OverlayError),
+    /// The operands' edges meet in more pairs than one overlay is handed.
+    OverBudget(budget::OverBudget),
+}
+
+impl PlanarRefusal {
+    /// The refusal in a report's words, without the counts its
+    /// [`std::fmt::Display`] adds, for errors that carry a static reason.
+    pub(crate) fn reason(&self) -> &'static str {
+        match self {
+            Self::Overlay(error) => overlay_refusal(error),
+            Self::OverBudget(_) => budget::OVER_BUDGET,
+        }
+    }
+
+    /// What a "cannot be computed" message adds: the overlay budget's
+    /// reason with its counts, or nothing for an overlay refusal, whose
+    /// messages name only what could not be computed.
+    pub(crate) fn budget_note(&self) -> String {
+        match self {
+            Self::Overlay(_) => String::new(),
+            Self::OverBudget(over) => format!(": {over}"),
+        }
+    }
+}
+
+impl std::fmt::Display for PlanarRefusal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Overlay(error) => f.write_str(overlay_refusal(error)),
+            Self::OverBudget(over) => over.fmt(f),
+        }
+    }
+}
+
+/// The plan overlay of two polygon sets, refused before it is built when
+/// their edges meet in more pairs than the overlay budget allows (#419).
+/// Every overlay this module builds goes through here, so none can grow
+/// without bound; a union passing one set as both operands counts its
+/// edges once.
+pub(crate) fn plan_overlay(
+    first: &OverlayInput,
+    second: &OverlayInput,
+    operation: OverlayOperation,
+    fill: FillRule,
+    tolerance: axiolid_core::Tolerance,
+) -> Result<OverlayResult, PlanarRefusal> {
+    if std::ptr::eq(first, second) {
+        budget::admit(&[&first.polygons])
+    } else {
+        budget::admit(&[&first.polygons, &second.polygons])
+    }
+    .map_err(PlanarRefusal::OverBudget)?;
+    axiolid_overlay::overlay(first, second, operation, fill, tolerance)
+        .map_err(PlanarRefusal::Overlay)
+}
 
 /// The xy plan frame both projections share.
 pub(crate) fn plan_frame() -> Frame2 {
@@ -150,7 +214,7 @@ pub(crate) fn boundary_rings(
         frame: plan_frame(),
         polygons,
     };
-    let merged = overlay(
+    let merged = plan_overlay(
         &input,
         &input,
         OverlayOperation::Union,
@@ -229,14 +293,22 @@ pub(crate) fn footprint_measure(
     triangles: &[Triangle],
     tolerance: axiolid_core::Tolerance,
 ) -> Option<(f64, f64)> {
-    let polygons = footprint_polygons(triangles, tolerance)?;
+    measured_footprint(triangles, tolerance).ok()
+}
+
+/// [`footprint_measure`], or why the overlay was not built.
+pub(crate) fn measured_footprint(
+    triangles: &[Triangle],
+    tolerance: axiolid_core::Tolerance,
+) -> Result<(f64, f64), PlanarRefusal> {
+    let polygons = plan_footprint(triangles, tolerance)?;
     let area = polygons.iter().map(polygon_area).sum();
     let perimeter = polygons
         .iter()
         .flat_map(|polygon| std::iter::once(&polygon.outer).chain(&polygon.holes))
         .map(ring_perimeter)
         .sum();
-    Some((area, perimeter))
+    Ok((area, perimeter))
 }
 
 /// A triangle set's footprint as the polygons of its plan union.
@@ -247,22 +319,29 @@ pub(crate) fn footprint_polygons(
     triangles: &[Triangle],
     tolerance: axiolid_core::Tolerance,
 ) -> Option<Vec<Polygon>> {
+    plan_footprint(triangles, tolerance).ok()
+}
+
+/// [`footprint_polygons`], or why the overlay was not built.
+pub(crate) fn plan_footprint(
+    triangles: &[Triangle],
+    tolerance: axiolid_core::Tolerance,
+) -> Result<Vec<Polygon>, PlanarRefusal> {
     let input = OverlayInput {
         frame: plan_frame(),
         polygons: projected_polygons(triangles),
     };
     if input.polygons.is_empty() {
-        return Some(Vec::new());
+        return Ok(Vec::new());
     }
-    let merged = overlay(
+    let merged = plan_overlay(
         &input,
         &input,
         OverlayOperation::Union,
         FillRule::NonZero,
         tolerance,
-    )
-    .ok()?;
-    Some(merged.polygons)
+    )?;
+    Ok(merged.polygons)
 }
 
 /// Area and first moments `(A, ∫x, ∫y)` of a polygon, holes subtracted,
@@ -322,7 +401,7 @@ fn overlap_of(
     first: Vec<Polygon>,
     second: Vec<Polygon>,
     tolerance: axiolid_core::Tolerance,
-) -> Result<Vec<Polygon>, OverlayError> {
+) -> Result<Vec<Polygon>, PlanarRefusal> {
     if first.is_empty() || second.is_empty() {
         return Ok(Vec::new());
     }
@@ -334,7 +413,7 @@ fn overlap_of(
         frame: plan_frame(),
         polygons: second,
     };
-    Ok(overlay(
+    Ok(plan_overlay(
         &first,
         &second,
         OverlayOperation::Intersection,
@@ -360,7 +439,7 @@ pub(crate) fn bounded_plan_overlap(
     first: &[Triangle],
     second: &[Triangle],
     tolerance: axiolid_core::Tolerance,
-) -> Result<BoundedOverlap, OverlayError> {
+) -> Result<BoundedOverlap, PlanarRefusal> {
     let first = Shadows::of(first, tolerance);
     let second = Shadows::of(second, tolerance);
     let slivers = first.slivers_meeting(second.bounds()) + second.slivers_meeting(first.bounds());
@@ -389,7 +468,7 @@ pub(crate) struct BoundedOverlap {
 pub(crate) fn bounded_footprint(
     triangles: &[Triangle],
     tolerance: axiolid_core::Tolerance,
-) -> Result<BoundedOverlap, OverlayError> {
+) -> Result<BoundedOverlap, PlanarRefusal> {
     let shadows = Shadows::of(triangles, tolerance);
     let slivers = shadows.slivers_meeting(shadows.bounds());
     if shadows.kept.is_empty() {
@@ -403,7 +482,7 @@ pub(crate) fn bounded_footprint(
         polygons: shadows.kept,
     };
     Ok(BoundedOverlap {
-        polygons: overlay(
+        polygons: plan_overlay(
             &input,
             &input,
             OverlayOperation::Union,
@@ -678,62 +757,151 @@ const MINIMUM_GROWTH: f64 = 1e-6;
 /// non-adjacent edges. A zero radius is the footprint itself.
 pub(crate) fn grown_polygons(triangles: &[Triangle], radius: f64, disc: Disc) -> Vec<Polygon> {
     let footprint = projected_polygons(triangles);
-    let radius = match disc {
-        Disc::Inscribed if radius < MINIMUM_GROWTH => 0.0,
-        Disc::Circumscribed if radius > 0.0 => radius.max(MINIMUM_GROWTH),
-        _ => radius,
-    };
-    if radius <= 0.0 {
+    let Some(offsets) = growth_offsets(radius, disc) else {
         return footprint;
-    }
-    let offsets = disc.vertices(radius);
+    };
     let mut grown = Vec::new();
     for polygon in &footprint {
-        let hull = hull_of(
-            polygon
-                .outer
-                .points
-                .iter()
-                .flat_map(|point| {
-                    offsets
-                        .iter()
-                        .map(move |(dx, dy)| (point.x + dx, point.y + dy))
-                })
-                .collect(),
-        );
-        let Some(&apex) = hull.first() else {
-            continue;
-        };
-        for pair in hull[1..].windows(2) {
-            let ring = Ring {
-                points: [apex, pair[0], pair[1]]
-                    .into_iter()
-                    .map(|(x, y)| Point2::new(x, y))
-                    .collect(),
-            };
-            if kept_fan_triangle(&ring) {
-                grown.push(Polygon {
-                    outer: ring,
-                    holes: Vec::new(),
-                });
-            }
+        grow_convex(&polygon.outer.points, &offsets, &mut grown);
+    }
+    grown
+}
+
+/// A region grown by `radius` in every plan direction, as polygons whose
+/// non-zero union is the grown region, with the growth disc replaced by
+/// `disc` (#419): the region itself and each boundary edge, holes' too,
+/// grown on its own.
+///
+/// A point within the disc of a point of the region but outside it lies
+/// within the disc of the boundary point where the segment between the two
+/// leaves the region (the disc's polygon is convex and holds its centre),
+/// so the region and its grown edges are the grown region exactly. A region
+/// the overlay has united has a boundary far shorter than the triangles it
+/// was united from, so this hands the overlay a few edges where
+/// [`grown_polygons`] hands it every triangle grown.
+pub(crate) fn grown_region(region: &[Polygon], radius: f64, disc: Disc) -> Vec<Polygon> {
+    let mut grown = region.to_vec();
+    let Some(offsets) = growth_offsets(radius, disc) else {
+        return grown;
+    };
+    for ring in region
+        .iter()
+        .flat_map(|polygon| std::iter::once(&polygon.outer).chain(&polygon.holes))
+    {
+        for (a, b) in ring_segments(ring) {
+            grow_convex(&[a, b], &offsets, &mut grown);
         }
     }
     grown
 }
 
+/// The growth polygon's vertices for `radius`, or `None` where no growth
+/// is drawn: an inscribed growth below [`MINIMUM_GROWTH`] is dropped and a
+/// circumscribed one rounded up to it.
+fn growth_offsets(radius: f64, disc: Disc) -> Option<Vec<(f64, f64)>> {
+    let radius = match disc {
+        Disc::Inscribed if radius < MINIMUM_GROWTH => 0.0,
+        Disc::Circumscribed if radius > 0.0 => radius.max(MINIMUM_GROWTH),
+        _ => radius,
+    };
+    (radius > 0.0).then(|| disc.vertices(radius))
+}
+
+/// Adds to `grown` the convex polygon `corners` grown by the polygon of
+/// `offsets`: the hull of every corner moved by every offset, as triangles
+/// ([`clustered_fan`]) the overlay accepts ([`kept_fan_triangle`]).
+fn grow_convex(corners: &[Point2], offsets: &[(f64, f64)], grown: &mut Vec<Polygon>) {
+    let moved: Vec<((f64, f64), usize)> = corners
+        .iter()
+        .enumerate()
+        .flat_map(|(corner, point)| {
+            offsets
+                .iter()
+                .map(move |(dx, dy)| ((point.x + dx, point.y + dy), corner))
+        })
+        .collect();
+    let hull = hull_of(moved.iter().map(|(point, _)| *point).collect());
+    let corner_of = |vertex: (f64, f64)| {
+        moved
+            .iter()
+            .find(|(point, _)| *point == vertex)
+            .map_or(usize::MAX, |(_, corner)| *corner)
+    };
+    let sources: Vec<usize> = hull.iter().map(|vertex| corner_of(*vertex)).collect();
+    for [a, b, c] in clustered_fan(&sources) {
+        let ring = Ring {
+            points: [hull[a], hull[b], hull[c]]
+                .into_iter()
+                .map(|(x, y)| Point2::new(x, y))
+                .collect(),
+        };
+        if kept_fan_triangle(&ring) {
+            grown.push(Polygon {
+                outer: ring,
+                holes: Vec::new(),
+            });
+        }
+    }
+}
+
+/// A triangulation of a convex polygon, as index triples into its
+/// counter-clockwise vertices, given which corner of the grown shadow each
+/// vertex was moved from (#419).
+///
+/// The vertices moved from one corner form a run along the hull, a disc's
+/// width across. Each run is fanned from its first vertex, and the polygon
+/// of the runs' ends is fanned from the first: the triangles tile the hull
+/// whatever the runs are, since every run's fan fills the part its chord
+/// cuts off and the ends' polygon is convex. Only the ends' polygon has
+/// edges as long as the shadow, a handful against one per vertex in a fan
+/// from a single apex, and the overlay meets every pair of long edges lying
+/// over one another: a grown, finely tessellated beam asked for gigabytes.
+fn clustered_fan(corners: &[usize]) -> Vec<[usize; 3]> {
+    let count = corners.len();
+    if count < 3 {
+        return Vec::new();
+    }
+    // Start at a run's first vertex, so no run wraps round the end.
+    let start = (0..count)
+        .find(|&index| corners[index] != corners[(index + count - 1) % count])
+        .unwrap_or(0);
+    let at = |offset: usize| (start + offset) % count;
+    let mut triangles = Vec::new();
+    let mut ends = Vec::new();
+    let mut first = 0;
+    for offset in 1..=count {
+        if offset < count && corners[at(offset)] == corners[at(first)] {
+            continue;
+        }
+        let last = offset - 1;
+        for inner in first + 1..last {
+            triangles.push([at(first), at(inner), at(inner + 1)]);
+        }
+        ends.push(at(first));
+        if last > first {
+            ends.push(at(last));
+        }
+        first = offset;
+    }
+    for pair in ends[1..].windows(2) {
+        triangles.push([ends[0], pair[0], pair[1]]);
+    }
+    triangles
+}
+
 /// Area where two polygon sets overlap, each filled as its non-zero union.
 ///
-/// `None` when the overlay cannot be computed; an empty set overlaps nothing.
+/// Refused when the overlay cannot be computed or its operands are past the
+/// overlay budget; an empty set overlaps nothing.
 pub(crate) fn polygons_overlap_area(
     first: Vec<Polygon>,
     second: Vec<Polygon>,
     tolerance: axiolid_core::Tolerance,
-) -> Option<f64> {
+) -> Result<f64, PlanarRefusal> {
     if first.is_empty() || second.is_empty() {
-        return Some(0.0);
+        return Ok(0.0);
     }
-    let result = overlay(
+    let result = plan_overlay(
         &OverlayInput {
             frame: plan_frame(),
             polygons: first,
@@ -745,9 +913,8 @@ pub(crate) fn polygons_overlap_area(
         OverlayOperation::Intersection,
         FillRule::NonZero,
         tolerance,
-    )
-    .ok()?;
-    Some(result.polygons.iter().map(polygon_area).sum())
+    )?;
+    Ok(result.polygons.iter().map(polygon_area).sum())
 }
 
 #[cfg(test)]
@@ -758,7 +925,7 @@ mod polygon_area_tests {
         ring_area,
     };
     use axiolid_core::{Point2, Point3, Tolerance};
-    use axiolid_overlay::{Polygon, Ring};
+    use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, Polygon, Ring};
 
     /// A vertical face along a diagonal away from the origin: its corners
     /// project onto one line, but the shoelace sum over its rounded
@@ -936,6 +1103,98 @@ mod polygon_area_tests {
         // Below the smallest drawn growth, inscribed growth is dropped.
         assert_eq!(grown_polygons(&square, 1e-9, Disc::Inscribed).len(), 2);
         assert!(grown_polygons(&square, 1e-9, Disc::Circumscribed).len() > 2);
+    }
+
+    /// The runs' fans and the ends' fan tile the hull: their areas sum to
+    /// its own, whichever vertex the runs start at, and so do runs of one
+    /// vertex and a hull of one run.
+    #[test]
+    fn a_clustered_fan_tiles_its_hull() {
+        let hull: Vec<(f64, f64)> = (0..12)
+            .map(|index| {
+                let angle = std::f64::consts::TAU * f64::from(index) / 12.0;
+                (angle.cos(), angle.sin())
+            })
+            .collect();
+        let whole = ring_area(&Ring {
+            points: hull.iter().map(|&(x, y)| Point2::new(x, y)).collect(),
+        });
+        let tiled = |sources: &[usize]| {
+            let triangles = super::clustered_fan(sources);
+            let area: f64 = triangles
+                .iter()
+                .map(|[a, b, c]| {
+                    let ring = Ring {
+                        points: [hull[*a], hull[*b], hull[*c]]
+                            .into_iter()
+                            .map(|(x, y)| Point2::new(x, y))
+                            .collect(),
+                    };
+                    let area = ring_area(&ring);
+                    assert!(area > 0.0, "{a} {b} {c} turns clockwise");
+                    area
+                })
+                .sum();
+            assert_eq!(triangles.len(), hull.len() - 2, "{sources:?}");
+            area
+        };
+        for sources in [
+            vec![0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2],
+            vec![2, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2],
+            vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+            vec![7; 12],
+        ] {
+            let area = tiled(&sources);
+            assert!((area - whole).abs() < 1e-12, "{sources:?}: {area} {whole}");
+        }
+    }
+
+    /// A united region grown edge by edge covers what its triangles grown
+    /// one by one cover: the same point set, up to the overlay's snapping.
+    #[test]
+    fn a_region_grown_by_its_edges_is_its_triangles_grown() {
+        // An L of three unit squares, as six triangles.
+        let squares = [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)];
+        let triangles: Vec<[Point3; 3]> = squares
+            .iter()
+            .flat_map(|&(x, y)| {
+                let p = |dx: f64, dy: f64| Point3::new(x + dx, y + dy, 0.0);
+                [
+                    [p(0.0, 0.0), p(1.0, 0.0), p(1.0, 1.0)],
+                    [p(0.0, 0.0), p(1.0, 1.0), p(0.0, 1.0)],
+                ]
+            })
+            .collect();
+        let tolerance = axiolid_core::Tolerance::new(1e-9, 1e-9).unwrap();
+        let united = super::plan_footprint(&triangles, tolerance).unwrap();
+        let union = |polygons: Vec<Polygon>| -> f64 {
+            let input = OverlayInput {
+                frame: super::plan_frame(),
+                polygons,
+            };
+            super::plan_overlay(
+                &input,
+                &input,
+                OverlayOperation::Union,
+                FillRule::NonZero,
+                tolerance,
+            )
+            .unwrap()
+            .polygons
+            .iter()
+            .map(polygon_area)
+            .sum()
+        };
+        for disc in [Disc::Inscribed, Disc::Circumscribed] {
+            let by_triangles = union(grown_polygons(&triangles, 0.25, disc));
+            let by_edges = union(super::grown_region(&united, 0.25, disc));
+            assert!(
+                (by_triangles - by_edges).abs() < 1e-7,
+                "{disc:?}: {by_triangles} {by_edges}"
+            );
+        }
+        // No growth leaves the region as it is.
+        assert_eq!(super::grown_region(&united, 0.0, Disc::Inscribed), united);
     }
 }
 

@@ -136,6 +136,26 @@ All notable changes are documented here. This project follows Semantic Versionin
   (axiolid/kernel#332), and the wall is measured within its certified
   deviation, under 1 mm.
 
+- **A plan overlay too large to build is refused by name, never aborting
+  the host** ([#419](https://github.com/axioval/engine/issues/419)).
+  `counterpart-coverage` grew each cover triangle by a disc and handed the
+  overlay the fans: a finely faceted beam's shadows, long and thin, then
+  lie over one another along its whole length, and one sample's walls,
+  beams and building element parts asked for 15 GB, whose failed
+  allocation aborted the process and every check in it. Every plan
+  overlay the Axiolid adapter's plan helpers build (footprints, overlaps,
+  uncovered areas, elevations, zones and setbacks) now counts the pairs
+  of edges whose boxes meet before it is built, and past 4,000,000 pairs
+  it is not built. An uncovered area past the budget is measured again
+  over the united footprints, the cover's union grown edge by edge, with
+  the bracket widened by the overlay's snapping (locator `;united`): a
+  6 m beam of 256 facets over another, which aborted at 4.5 GB, is
+  measured in 0.1 s and 12 MB. Past the budget there too, the element is
+  not evaluated, the reason naming the edges, the pairs and the budget,
+  and every other element and rule keeps running. Grown triangles are
+  handed over as fans from each corner, with fewer long edges, which
+  halves the overlay's time and memory where it is still built.
+
 ### Security
 
 - Moved to zip 9 and rust_xlsxwriter 0.100, past RUSTSEC-2026-0367, -0368

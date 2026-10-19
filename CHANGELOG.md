@@ -78,6 +78,27 @@ All notable changes are documented here. This project follows Semantic Versionin
   Reports are byte-identical, pinned against the earlier binary's report in
   `tests/check.rs`.
 
+- **Free-floor rectangles are searched faster around curved furniture**
+  ([#427](https://github.com/axioval/engine/issues/427)). A rectangle's
+  angle search summed every sure obstacle with the rectangle once per
+  angle interval to prove it absent there, and a piece of curved
+  furniture tessellated into some 280 edges of a few millimetres took the
+  overlay more than half a second per sum. Each interval's absence, and
+  the proofs over every angle at once, are now asked first over the
+  obstacles simplified on the side the proof may use them (corners within
+  1 mm of their neighbours' chord, where that leaves at most three
+  quarters of them), and over the regions as built only where that proves
+  nothing; witnesses are sought over the regions as built, as before. A
+  scene also keeps each rectangle's configuration space (250,000 corners
+  at most), so a space searched with an entrance path and without asks
+  the overlay once per angle. Reports are byte-identical. On a private
+  four-model house of 17 spaces on one thread, a 1.8 × 1.8 m rectangle
+  at any orientation with a 0.9 m entrance path took 24.1 s (443 ms per
+  search) before and 15.2 s (280 ms) after, a 2.4 × 1.2 m one 19.1 s
+  (352 ms) and 11.5 s (211 ms); the two spaces furnished with such a
+  piece went from 6.6 s to 2.3 s per first search. The first interval's
+  witness and mapping the path remain.
+
 - **Findings name the facet an IDS states, and every property by the names
   it binds to** ([#375](https://github.com/axioval/engine/issues/375)).
   With `check --ids`, findings named the concepts the translation

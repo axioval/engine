@@ -35,7 +35,7 @@
 //! [`KNIFE_EDGE_METRES`], so rounding its corners cannot hide a centre on
 //! its edge. For a fixed orientation this is exact up to the same margins.
 
-use std::cell::OnceCell;
+use std::cell::{OnceCell, RefCell};
 use std::f64::consts::PI;
 
 use axiolid_core::{Point2, Tolerance};
@@ -190,6 +190,42 @@ pub(crate) struct Scene {
     /// The regions a circle search erodes or dilates, simplified on the
     /// side it may use them ([`Self::simple`]); taken once.
     pub(crate) simple: [OnceCell<Option<Region>>; 4],
+    /// The regions a rectangle search asks its cheap proofs over,
+    /// simplified coarsely on the side each proof may use them
+    /// ([`Self::coarse`]); taken once.
+    pub(crate) coarse: [OnceCell<Option<Region>>; 6],
+    /// The centres [`Self::free_for`] found, by the shape's corners and
+    /// side: a space's searches over one scene ask the same rectangles
+    /// at the same angles (#427).
+    pub(crate) found: Found,
+}
+
+/// Centres a scene's rectangle searches found ([`Scene::found`]): whether
+/// for an absence, the shape's corners' bits, and the region.
+pub(crate) type Found = RefCell<Vec<(bool, Vec<u64>, Region)>>;
+
+/// How many corners the regions a scene keeps in [`Scene::found`] may
+/// have together (some 4 MB); past it, more are computed but not kept.
+pub(crate) const FOUND_POINTS: usize = 250_000;
+
+/// Keeps `free`, found for an absence (`absence`) or a witness by the
+/// shape whose corners have `bits`, in `found` while it is within
+/// [`FOUND_POINTS`] and not kept already.
+pub(crate) fn keep_found(found: &Found, absence: bool, bits: &[u64], free: &Region) {
+    let mut found = found.borrow_mut();
+    if found
+        .iter()
+        .any(|(side, corners, _)| *side == absence && corners == bits)
+    {
+        return;
+    }
+    let kept: usize = found
+        .iter()
+        .map(|(_, _, region)| region_points(region))
+        .sum();
+    if kept + region_points(free) <= FOUND_POINTS {
+        found.push((absence, bits.to_vec(), free.clone()));
+    }
 }
 
 /// The pieces of the free area eroded by half a path's width that come
@@ -348,19 +384,38 @@ impl Scene {
     /// witness from them is still verified by direct overlap
     /// ([`Self::fits`]), and an absence proven where they are empty holds
     /// all the more.
+    ///
+    /// Each region is kept with the scene ([`Self::found`]) by the
+    /// shape's corners, so a search asking for it again, at the same angle
+    /// and size, takes it as it was found; a refusal is not kept.
     fn free_for(&self, shape: &Ring, absence: bool) -> Result<Region, FreeSpaceError> {
+        let bits: Vec<u64> = shape
+            .points
+            .iter()
+            .flat_map(|p| [p.x.to_bits(), p.y.to_bits()])
+            .collect();
+        if let Some((_, _, free)) = self
+            .found
+            .borrow()
+            .iter()
+            .find(|(side, corners, _)| *side == absence && *corners == bits)
+        {
+            return Ok(free.clone());
+        }
         let (scope, obstacles) = if absence {
             (&self.room, &self.sure)
         } else {
             (&self.scope, &self.obstacles)
         };
-        if region_points(obstacles) > OBSTACLE_SUM_POINTS {
-            return self
-                .clear(absence)?
+        let free = if region_points(obstacles) > OBSTACLE_SUM_POINTS {
+            self.clear(absence)?
                 .minkowski_erosion(shape, self.tolerance)
-                .map_err(|e| unavailable("erosion", e));
-        }
-        summed_free(scope, obstacles, shape, self.tolerance)
+                .map_err(|e| unavailable("erosion", e))?
+        } else {
+            summed_free(scope, obstacles, shape, self.tolerance)?
+        };
+        keep_found(&self.found, absence, &bits, &free);
+        Ok(free)
     }
 
     /// The scope less the obstacles ([`clear_of`]): `scope` less
@@ -400,6 +455,37 @@ impl Scene {
             .as_ref()
     }
 
+    /// One of the regions a rectangle search's cheap proofs ask over
+    /// (#427), simplified ([`simplified`]) by up to
+    /// [`COARSE_WITHIN_METRES`] on the side each proof may use it: the
+    /// sure obstacles from inside (`0`, for an absence), the obstacles
+    /// from inside (`1`, for no witness at any angle) and the sure ones
+    /// from around (`2`, for a fit somewhere); and the room less `0`
+    /// (`3`), the scope less `1` (`4`) and the room less `2` (`5`), which
+    /// contain the clear parts ([`Self::clear`]) or lie inside them.
+    /// `None` where it keeps more than three quarters of the region's
+    /// corners (the proof would cost about what the exact one does), the
+    /// overlay refuses it or nothing is left. Taken once.
+    fn coarse(&self, which: usize) -> Option<&Region> {
+        self.coarse[which]
+            .get_or_init(|| {
+                if which >= 3 {
+                    let scope = if which == 4 { &self.scope } else { &self.room };
+                    let part = self.coarse(which - 3)?;
+                    return clear_of(scope, part, self.tolerance).ok();
+                }
+                let (region, side) = match which {
+                    0 => (&self.sure, Side::Inside),
+                    1 => (&self.obstacles, Side::Inside),
+                    _ => (&self.sure, Side::Around),
+                };
+                simplified(region, COARSE_WITHIN_METRES, side, self.tolerance).filter(|coarse| {
+                    !coarse.is_empty() && 4 * region_points(coarse) <= 3 * region_points(region)
+                })
+            })
+            .as_ref()
+    }
+
     /// The largest disc in the clear part ([`Self::clear`]) of a witness,
     /// or of an absence (`absence`), estimated by [`inscribed_disc`]: a
     /// hint, never evidence; [`Inscribed::NONE`] where the part has no
@@ -421,24 +507,84 @@ impl Scene {
     /// erosion shrunk by the margin, which rounding cannot empty. `false`
     /// where the erosion is refused or leaves anything: the angle search
     /// then decides.
+    ///
+    /// It is asked first over the coarse clear part ([`Self::coarse`]),
+    /// which contains the exact one: empty there, it is empty here too.
     fn fits_nowhere(&self, absence: bool, half: f64) -> bool {
         let radius = (half - KNIFE_EDGE_METRES) * (1.0 - 1.0e-9);
         if radius <= 0.0 {
             return false;
+        }
+        let octagon = octagon(radius);
+        if self
+            .coarse(if absence { 3 } else { 4 })
+            .is_some_and(|coarse| {
+                coarse
+                    .minkowski_erosion(&octagon, self.tolerance)
+                    .is_ok_and(|free| free.is_empty())
+            })
+        {
+            return true;
         }
         let Ok(clear) = self.clear(absence) else {
             return false;
         };
         clear.is_empty()
             || clear
-                .minkowski_erosion(&octagon(radius), self.tolerance)
+                .minkowski_erosion(&octagon, self.tolerance)
                 .is_ok_and(|free| free.is_empty())
+    }
+
+    /// Whether the centres an absence must rule out for the shrunk `shape`
+    /// ([`Self::free_for`] with `absence`, then [`Self::reaching`] with
+    /// `grown` and [`Self::nowhere_in_domain`]) are surely none, asked
+    /// over the sure obstacles simplified from inside ([`Self::coarse`],
+    /// #427): fewer obstacles leave more centres, so where those are none,
+    /// the exact ones are none too. Summed with the shape as
+    /// [`Self::free_for`] sums, or, past [`OBSTACLE_SUM_POINTS`] corners,
+    /// the room less them eroded, as it erodes; so a proof found here is
+    /// one the exact regions give. `false` where nothing simplifies, the
+    /// overlay refuses or anything is left: the search then asks over the
+    /// regions as built, as it always did.
+    ///
+    /// A piece of curved furniture tessellated into some 280 corners of a
+    /// few millimetres took the overlay more than half a second to sum
+    /// with a 1.8 m rectangle, for each angle interval: every corner's
+    /// hull overlaps every other's.
+    fn surely_absent(&self, shape: &Ring, grown: &Ring) -> bool {
+        let free = if region_points(&self.sure) > OBSTACLE_SUM_POINTS {
+            let Some(clear) = self.coarse(3) else {
+                return false;
+            };
+            clear
+                .minkowski_erosion(shape, self.tolerance)
+                .map_err(|e| unavailable("erosion", e))
+        } else {
+            let Some(sure) = self.coarse(0) else {
+                return false;
+            };
+            summed_free(&self.room, sure, shape, self.tolerance)
+        };
+        free.and_then(|free| self.reaching(free, grown, true))
+            .and_then(|free| self.nowhere_in_domain(&free))
+            .unwrap_or(false)
     }
 
     /// Whether `shape` fits somewhere in the room clear of the sure
     /// obstacles: the room less them, eroded by it, is not empty. `false`
     /// where the erosion is refused or leaves nothing.
+    ///
+    /// It is asked first in the room less the sure obstacles simplified
+    /// from around ([`Self::coarse`]), which lies inside the exact one.
     fn fits_somewhere(&self, shape: &Ring) -> bool {
+        if self.coarse(5).is_some_and(|coarse| {
+            !coarse.is_empty()
+                && coarse
+                    .minkowski_erosion(shape, self.tolerance)
+                    .is_ok_and(|free| !free.is_empty())
+        }) {
+            return true;
+        }
         let Ok(clear) = self.clear(true) else {
             return false;
         };
@@ -461,6 +607,11 @@ fn octagon(corner: f64) -> Ring {
             .collect(),
     }
 }
+
+/// How far a corner a rectangle search's cheap proofs leave out may lie
+/// from the chord between its neighbours ([`Scene::coarse`]): a proof
+/// with less than this to spare is asked again over the regions as built.
+const COARSE_WITHIN_METRES: f64 = 1.0e-3;
 
 /// Obstacle regions with more corners than this are not summed with the
 /// shape ([`Scene::free_for`]).
@@ -955,7 +1106,11 @@ pub(crate) fn fixed_rectangle(
         depth + 2.0 * KNIFE_EDGE_METRES,
         right,
     );
-    let shrunk = scene.free_for(&rectangle(origin, w, d, right), true)?;
+    let shrunk = rectangle(origin, w, d, right);
+    if scene.surely_absent(&shrunk, &grown) {
+        return Ok(Search::Nowhere);
+    }
+    let shrunk = scene.free_for(&shrunk, true)?;
     if scene.nowhere_in_domain(&scene.reaching(shrunk, &grown, true)?)? {
         return Ok(Search::Nowhere);
     }
@@ -1053,8 +1208,12 @@ pub(crate) fn any_rectangle(
         let grown = rectangle(origin, width + 2.0 * shrink, depth + 2.0 * shrink, right);
         let absence = || {
             (w > 0.0 && d > 0.0).then(|| {
+                let inner = rectangle(origin, w, d, right);
+                if scene.surely_absent(&inner, &grown) {
+                    return Ok(true);
+                }
                 scene
-                    .free_for(&rectangle(origin, w, d, right), true)
+                    .free_for(&inner, true)
                     .and_then(|free| scene.reaching(free, &grown, true))
                     .map(|free| free.is_empty())
             })
@@ -1674,7 +1833,217 @@ mod tests {
             clear: Default::default(),
             inscribed: Default::default(),
             simple: Default::default(),
+            coarse: Default::default(),
+            found: Found::default(),
         }
+    }
+
+    /// A ring of `sides` corners round `(x, y)`, every other one `notch`
+    /// further in: a tessellated round table with a jagged outline.
+    fn table(x: f64, y: f64, radius: f64, sides: u32, notch: f64) -> Ring {
+        Ring {
+            points: (0..sides)
+                .map(|i| {
+                    let angle = 2.0 * PI * f64::from(i) / f64::from(sides);
+                    let r = if i % 2 == 0 { radius } else { radius - notch };
+                    Point2::new(x + r * angle.cos(), y + r * angle.sin())
+                })
+                .collect(),
+        }
+    }
+
+    /// A box `w` x `h` centred on `(x, y)`, turned by `turn` radians.
+    fn turned(x: f64, y: f64, w: f64, h: f64, turn: f64) -> Ring {
+        rectangle(Point2::new(x, y), w, h, Axis::at(turn))
+    }
+
+    /// The quarter disc a 0.9 m leaf hinged at `(x, y)` sweeps from along
+    /// +x down to -y, polygonised around it (`around`) or inside it.
+    fn swing(x: f64, y: f64, around: bool) -> Ring {
+        let sides = 16;
+        let radius = if around {
+            0.9 / (PI / 4.0 / f64::from(sides)).cos()
+        } else {
+            0.9
+        };
+        let mut points = vec![Point2::new(x, y)];
+        points.extend((0..=sides).map(|i| {
+            let angle = -PI / 2.0 + PI / 2.0 * f64::from(i) / f64::from(sides);
+            Point2::new(x + radius * angle.cos(), y + radius * angle.sin())
+        }));
+        Ring { points }
+    }
+
+    /// An L-shaped room (6 x 4 m, and 3 x 3 m north of its west half),
+    /// furnished with twenty obstacles: a round table tessellated into 120
+    /// jagged corners, two coarser ones, sixteen boxes (some turned)
+    /// and a door swinging in from the north wall, its sector around the
+    /// swing among the obstacles and inside it among the sure ones. With
+    /// `reach`, a path from that door reaches a strip along the west wall.
+    fn furnished(offset: (f64, f64), reach: bool) -> Scene {
+        let tolerance = Tolerance::new(1.0e-9, 1.0e-9).unwrap();
+        let (x, y) = offset;
+        let at = |ring: Ring| Ring {
+            points: ring
+                .points
+                .iter()
+                .map(|p| Point2::new(p.x + x, p.y + y))
+                .collect(),
+        };
+        let scope = union(
+            &[
+                at(rect(0.0, 0.0, 6.0, 4.0).outer),
+                at(rect(0.0, 4.0, 3.0, 3.0).outer),
+            ],
+            tolerance,
+        )
+        .unwrap();
+        let mut furniture = vec![
+            table(1.6, 1.7, 0.6, 120, 3.0e-4),
+            table(4.6, 2.4, 0.45, 12, 0.0),
+            table(1.4, 5.6, 0.35, 10, 0.0),
+        ];
+        for (cx, cy, w, h, turn) in [
+            (0.3, 3.3, 0.6, 1.2, 0.0),
+            (5.7, 0.6, 0.6, 1.2, 0.0),
+            (3.0, 0.25, 1.6, 0.5, 0.0),
+            (5.6, 3.6, 0.8, 0.8, 0.35),
+            (2.7, 3.0, 0.5, 0.5, 0.8),
+            (0.5, 0.4, 0.8, 0.6, 0.0),
+            (2.6, 6.6, 0.8, 0.8, 0.0),
+            (0.3, 6.5, 0.6, 1.0, 0.0),
+            (4.0, 3.7, 1.2, 0.6, -0.2),
+            (3.6, 1.6, 0.4, 0.4, 0.6),
+            (2.6, 4.9, 0.3, 0.9, 0.0),
+            (0.25, 4.8, 0.5, 0.6, 0.0),
+            (5.0, 1.2, 0.3, 0.3, 0.0),
+            (2.0, 0.3, 0.4, 0.6, 0.1),
+            (1.2, 3.75, 0.9, 0.5, 0.0),
+            (4.9, 0.25, 0.9, 0.5, 0.0),
+        ] {
+            furniture.push(turned(cx, cy, w, h, turn));
+        }
+        let mut possible: Vec<Ring> = furniture.iter().cloned().map(at).collect();
+        let mut certain = possible.clone();
+        possible.push(at(swing(1.9, 7.0, true)));
+        certain.push(at(swing(1.9, 7.0, false)));
+        let reach = reach.then(|| {
+            let strip = |grow: f64| {
+                union(
+                    &[at(rect(-grow, 2.0, 0.9 + 2.0 * grow, 5.0).outer)],
+                    tolerance,
+                )
+                .unwrap()
+            };
+            Reached {
+                inner: strip(0.0),
+                outer: strip(0.01),
+            }
+        });
+        Scene {
+            room: scope.clone(),
+            scope,
+            obstacles: union(&possible, tolerance).unwrap(),
+            sure: union(&certain, tolerance).unwrap(),
+            tolerance,
+            window: None,
+            reach,
+            bracketed: Vec::new(),
+            bounded: Vec::new(),
+            clear: Default::default(),
+            inscribed: Default::default(),
+            simple: Default::default(),
+            coarse: Default::default(),
+            found: Found::default(),
+        }
+    }
+
+    /// A rectangle at a fixed orientation as it was searched before #427:
+    /// the witness, then the absence over the regions as built.
+    fn fixed_rectangle_before(
+        scene: &Scene,
+        width: f64,
+        depth: f64,
+        right: Axis,
+    ) -> Result<Search, FreeSpaceError> {
+        let origin = Point2::new(0.0, 0.0);
+        let shape = rectangle(origin, width, depth, right);
+        let free = scene.reaching(scene.free_for(&shape, false)?, &shape, false)?;
+        let place = |c| rectangle(c, width, depth, right);
+        if !free.is_empty()
+            && let Some(centre) = scene.witness(&free, place, place)?
+        {
+            return Ok(Search::Found { centre, right });
+        }
+        let (w, d) = (
+            width - 2.0 * KNIFE_EDGE_METRES,
+            depth - 2.0 * KNIFE_EDGE_METRES,
+        );
+        let grown = rectangle(
+            origin,
+            width + 2.0 * KNIFE_EDGE_METRES,
+            depth + 2.0 * KNIFE_EDGE_METRES,
+            right,
+        );
+        let shrunk = scene.free_for(&rectangle(origin, w, d, right), true)?;
+        if scene.nowhere_in_domain(&scene.reaching(shrunk, &grown, true)?)? {
+            return Ok(Search::Nowhere);
+        }
+        Ok(Search::Undecided(if free.is_empty() {
+            "the rectangle fits only within the knife-edge margin"
+        } else {
+            "no candidate in the free region verifies"
+        }))
+    }
+
+    /// The cheap proofs over coarse regions and the regions kept between
+    /// searches (#427) change no verdict: in a furnished L-shaped room,
+    /// with a path from the door and without, near the origin and at
+    /// georeferenced coordinates, squares and oblongs that fit and that fit
+    /// nowhere, searched one after another over one scene, get the
+    /// verdict, and a found centre and axis to the bit, that the searches
+    /// over the regions as built give, each over a scene of its own; and
+    /// asked again, the same.
+    #[test]
+    fn a_furnished_room_is_searched_as_over_the_regions_as_built() {
+        let geo = (643_692.0, 5_649_156.0);
+        let cases = [
+            ((0.0, 0.0), false, &[(0.9, 0.9), (1.5, 1.5), (1.8, 1.2)][..]),
+            ((0.0, 0.0), true, &[(0.9, 0.9), (1.8, 1.2)][..]),
+            (geo, false, &[(0.9, 0.9), (1.8, 1.2)][..]),
+        ];
+        let mut verdicts = Vec::new();
+        for (offset, reach, sizes) in cases {
+            let shared = furnished(offset, reach);
+            // The jagged table simplifies, so the cheap proofs are asked.
+            let coarse = region_points(shared.coarse(0).expect("simplified"));
+            assert!(4 * coarse <= 3 * region_points(&shared.sure), "{coarse}");
+            for &(width, depth) in sizes {
+                let case = format!("{width} x {depth} at {offset:?}, reach {reach}");
+                let before = format!(
+                    "{:?}",
+                    any_rectangle_before(&furnished(offset, reach), width, depth)
+                );
+                for _ in 0..2 {
+                    let now = format!("{:?}", any_rectangle(&shared, width, depth));
+                    assert_eq!(now, before, "any orientation, {case}");
+                }
+                let right = Axis::at(0.4);
+                let before_fixed = format!(
+                    "{:?}",
+                    fixed_rectangle_before(&furnished(offset, reach), width, depth, right)
+                );
+                let now = format!("{:?}", fixed_rectangle(&shared, width, depth, right));
+                assert_eq!(now, before_fixed, "turned, {case}");
+                verdicts.push(before);
+            }
+        }
+        // The sizes span both verdicts.
+        assert!(
+            verdicts.iter().any(|v| v.starts_with("Ok(Found")),
+            "{verdicts:?}"
+        );
+        assert!(verdicts.iter().any(|v| v == "Ok(Nowhere)"), "{verdicts:?}");
     }
 
     /// A named room with its possible and its sure obstacles.

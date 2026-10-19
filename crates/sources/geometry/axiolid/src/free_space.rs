@@ -132,6 +132,8 @@ struct KeptScene {
     clear: [OnceCell<Region>; 2],
     inscribed: [OnceCell<Option<placement::Inscribed>>; 2],
     simple: [OnceCell<Option<Region>>; 4],
+    coarse: [OnceCell<Option<Region>>; 6],
+    found: placement::Found,
     floor: f64,
 }
 
@@ -158,16 +160,23 @@ impl KeptScene {
             clear: scene.clear.clone(),
             inscribed: scene.inscribed.clone(),
             simple: scene.simple.clone(),
+            coarse: scene.coarse.clone(),
+            found: scene.found.clone(),
             floor,
         }
     }
 
     /// Keeps what a search of the scene took that this one lacks: its
-    /// clear parts, their largest discs and the simplified regions.
+    /// clear parts, their largest discs, the simplified and coarse
+    /// regions and the centres it found.
     fn keep(&self, scene: &Scene) {
         fill(&self.clear, &scene.clear);
         fill(&self.inscribed, &scene.inscribed);
         fill(&self.simple, &scene.simple);
+        fill(&self.coarse, &scene.coarse);
+        for (side, corners, free) in scene.found.borrow().iter() {
+            placement::keep_found(&self.found, *side, corners, free);
+        }
     }
 
     /// The scene again, as built, with what its searches took.
@@ -185,6 +194,8 @@ impl KeptScene {
             clear: self.clear.clone(),
             inscribed: self.inscribed.clone(),
             simple: self.simple.clone(),
+            coarse: self.coarse.clone(),
+            found: self.found.clone(),
         }
     }
 }
@@ -1099,6 +1110,8 @@ impl AxiolidFreeSpaceService {
             clear: Default::default(),
             inscribed: Default::default(),
             simple: Default::default(),
+            coarse: Default::default(),
+            found: placement::Found::default(),
         };
         Ok((scene, floor))
     }

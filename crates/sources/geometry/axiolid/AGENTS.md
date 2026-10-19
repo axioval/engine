@@ -207,6 +207,20 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   Later intervals take the absence first. Keep the first interval as it
   was: its refusals are what m14's not-evaluated outcomes rest on, and
   `placement::tests` compares the search with the one before it.
+  Rectangle proofs are asked first over `Scene::coarse` (#427): the sure
+  obstacles simplified from inside by `COARSE_WITHIN_METRES` (1 mm) for
+  an interval's absence (`Scene::surely_absent`, summed or eroded as
+  `free_for` would) and `fits_nowhere(true)`, the obstacles from inside
+  for `fits_nowhere(false)`, the sure ones from around for
+  `fits_somewhere`; each only where it keeps at most three quarters of
+  the corners, and the exact proof follows wherever the coarse one
+  leaves anything. Never seek a witness over a coarse region: found
+  centres are reported to the bit. `Scene::found` keeps `free_for`'s
+  regions by the shape's corner bits (`FOUND_POINTS` corners at most,
+  kept with the scene), so the searches of one space over one scene
+  share them; `placement::tests`
+  `a_furnished_room_is_searched_as_over_the_regions_as_built` compares
+  both with the search over the regions as built.
   Witnesses are re-verified by direct overlap;
   `NoPlacement` needs the shape shrunk by `KNIFE_EDGE_METRES` (plus the
   rotation margin) to fit nowhere, so a fit by contact refuses. Never drop a

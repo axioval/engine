@@ -16,7 +16,7 @@ use std::panic::{self, AssertUnwindSafe};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::ServiceRegistry;
-use crate::{derivation, timing};
+use crate::{derivation, memory, timing};
 
 /// How many threads a run evaluates a rule's subjects on, the thread
 /// running the rule among them.
@@ -76,7 +76,10 @@ impl Parallelism {
     /// a serial loop raises it. No item after a panicked one is started.
     ///
     /// The host calls the workers make count towards the rule this thread
-    /// is timing, as they would on this thread.
+    /// is timing, as they would on this thread, and the steps they admit
+    /// are admitted against this thread's memory budget
+    /// ([`memory::current`]), so the memory those steps take together is
+    /// bounded whatever the threads.
     pub fn map_ordered<T, R>(self, items: &[T], map: impl Fn(&T) -> R + Sync) -> Vec<R>
     where
         T: Sync,
@@ -108,6 +111,8 @@ impl Parallelism {
         // Workers work within the derivations this thread is building, so
         // one reading a key this thread builds is a cycle, never a wait.
         let lineage = derivation::lineage();
+        // The workers admit their steps against this thread's budget.
+        let budget = memory::current();
         let mut slots: Vec<Option<std::thread::Result<R>>> =
             std::iter::repeat_with(|| None).take(items.len()).collect();
         std::thread::scope(|scope| {
@@ -118,6 +123,7 @@ impl Parallelism {
                         .name("axioval-subject".into())
                         .stack_size(WORKER_STACK)
                         .spawn_scoped(scope, || {
+                            let _budget = memory::enter(budget.clone());
                             derivation::within(lineage.clone(), || timing::worker(timed, work))
                         })
                         .ok()

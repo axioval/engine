@@ -213,7 +213,12 @@ every template to the implementation it replaced.
    run's budget refuses depends on the order they are spent in, so a run on
    several threads whose budget ran out is run again serially and reports
    that run. Host services are shared between the threads (`Send + Sync`),
-   their caches locked.
+   their caches locked. With `Runtime::with_memory_budget` (the CLI's
+   `--memory-budget`), a heavy geometry step is admitted against the
+   check's memory budget before it is built, on whichever thread runs it,
+   and waits while the steps already admitted would pass it together; only
+   a step estimated past the whole budget is refused, by name
+   ([Memory budget](./memory.md)).
 7. Findings retain rule, source, object, evidence, precision and diagnostic
    provenance; an expression's findings carry an explanation of the path
    that decided them.

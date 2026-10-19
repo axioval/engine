@@ -7,7 +7,8 @@
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use axioval::engine::{RuleObserver, RuleProgress};
+use axioval::engine::memory::Size;
+use axioval::engine::{MemoryBudget, RuleObserver, RuleProgress};
 
 /// Times consecutive phases; silent unless enabled.
 #[derive(Debug)]
@@ -51,6 +52,23 @@ impl Stopwatch {
     pub fn skip(&mut self) {
         if let Some((_, last)) = self.times.as_mut() {
             *last = Instant::now();
+        }
+    }
+
+    /// Prints how the check's memory budget was used, if timings are on
+    /// and there is one: `memory: budget …, at most … admitted at once, the
+    /// largest step …, N steps waited`.
+    pub fn memory(&self, budget: Option<&MemoryBudget>) {
+        if let (true, Some(budget)) = (self.is_on(), budget) {
+            let usage = budget.usage();
+            eprintln!(
+                "memory: budget {}, at most {} admitted at once, the largest step {}, {} steps \
+                 waited",
+                Size(usage.limit),
+                Size(usage.most),
+                Size(usage.largest),
+                usage.waited
+            );
         }
     }
 

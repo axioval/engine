@@ -28,6 +28,9 @@ axioval-mcs.workspace = true
 # `export --profile`: the profiles every export target implements.
 axioval-export.workspace = true
 clap.workspace = true
+# The binary's global allocator (#407): freed pages go back to the system
+# between heavy steps, and memory does not grow with the threads' arenas.
+mimalloc.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 

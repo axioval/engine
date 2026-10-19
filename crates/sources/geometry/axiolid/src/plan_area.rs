@@ -586,11 +586,12 @@ impl PlanAreaService for AxiolidPlanAreaService {
             deviation = deviation.max(footprint.deviation);
         }
         let tolerance = tolerance()?;
-        // Triangle by triangle first; past the overlay budget, over the
-        // united footprints (#419), whose snapping widens the bracket.
+        // Triangle by triangle first; past the overlay budget or the
+        // check's memory budget, over the united footprints (#419, #407),
+        // whose snapping widens the bracket.
         let (covered, united) =
             match triangle_cover(&subject, &soup, deviation, growth_metres, tolerance) {
-                Err(PlanarRefusal::OverBudget(_)) => (
+                Err(PlanarRefusal::OverBudget(_) | PlanarRefusal::Memory(_)) => (
                     united_cover(&subject, &soup, deviation, growth_metres, tolerance),
                     true,
                 ),

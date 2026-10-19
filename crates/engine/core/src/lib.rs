@@ -1157,6 +1157,7 @@ mod linear_quantity;
 mod local_origin;
 mod material_layers;
 mod measured;
+pub mod memory;
 mod metric_routing;
 mod network;
 mod object_frame;
@@ -1304,6 +1305,7 @@ pub use measured::provider::{
     MemberValue, measured_members, measured_members_bound, measured_members_cited,
 };
 pub use measured::{BoundRead, MeasuredRead, MeasuredValues, PreparedRead, measured_value};
+pub use memory::MemoryBudget;
 pub use metric_routing::{
     BlockedMetricRouteEvidence, ClimbLength, CompleteMetricEvidence, ConnectorRouting,
     FarthestPointEvidence, FarthestPointOutcome, FarthestPointRequest, ForcedWalkEvidence,
@@ -1551,6 +1553,7 @@ pub struct Runtime {
     timings: bool,
     evaluation_budget: u64,
     parallelism: Parallelism,
+    memory_budget: Option<Arc<MemoryBudget>>,
     observer: Option<RuleObserver>,
     terrain: Option<TerrainServiceHandle>,
     reuse: bool,
@@ -1566,6 +1569,7 @@ impl Runtime {
             timings: false,
             evaluation_budget: expression::DEFAULT_EVALUATION_BUDGET,
             parallelism: Parallelism::SERIAL,
+            memory_budget: None,
             observer: None,
             terrain: None,
             reuse: true,
@@ -1603,11 +1607,29 @@ impl Runtime {
     /// Which expression nodes the evaluation budget refuses depends on the
     /// order they are spent in, so a run whose budget ran out is run again
     /// serially, its report that serial run's (the rule observer is told
-    /// of each rule again). Memory grows with the threads: each evaluates
-    /// one subject at a time, with what that subject's measurement holds.
+    /// of each rule again). Each thread evaluates one subject at a time,
+    /// with what that subject's measurement holds; the heavy steps of
+    /// those measurements are bounded together by the memory budget
+    /// ([`Self::with_memory_budget`]), not by the threads.
     #[must_use]
     pub fn with_parallelism(mut self, parallelism: Parallelism) -> Self {
         self.parallelism = parallelism;
+        self
+    }
+    /// Admits the heavy steps of each run against `budget` ([`memory`]):
+    /// a step that would pass it beside the steps admitted already waits
+    /// for one of them to finish, so the memory they take together does
+    /// not grow with the threads. Several runtimes, or several runs at
+    /// once, may share one budget. Without one, steps are admitted at
+    /// once.
+    ///
+    /// The report is the one without a budget, byte for byte, but where
+    /// a step's own estimate is more than the whole budget: that step is
+    /// refused by name, whatever else is running, and what needed it is
+    /// not evaluated.
+    #[must_use]
+    pub fn with_memory_budget(mut self, budget: Arc<MemoryBudget>) -> Self {
+        self.memory_budget = Some(budget);
         self
     }
     /// Reports per-rule counts and status ([`Report::rules`]): how many
@@ -1904,6 +1926,10 @@ impl Runtime {
         session: (SessionSources, SourceDisciplines, SourceMetadataIndex),
         plan: ExecutionPlan,
     ) -> Result<(Report, RuleOutcomes), EngineError> {
+        // The run's steps are admitted against its budget, on this thread
+        // and on every worker it fans out to; without one, against any
+        // budget the host entered on this thread.
+        let _budget = self.memory_budget.as_ref().map(MemoryBudget::enter);
         if self.parallelism.is_serial() {
             return self
                 .run_at(

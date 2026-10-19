@@ -50,6 +50,37 @@ All notable changes are documented here. This project follows Semantic Versionin
   panics with the cycle rather than recursing. Its keys must now be
   `Sync`; reports are unchanged.
 
+- **A check's memory budget, and memory returned between steps**
+  ([#407](https://github.com/axioval/engine/issues/407)). A host states
+  how much memory a check's heavy geometry steps may take at once
+  (`axioval_engine::MemoryBudget`, `Runtime::with_memory_budget`; one
+  budget may be shared by the checks a host runs at once), and the CLI
+  takes `--memory-budget SIZE` (else `AXIOVAL_MEMORY_BUDGET`, else half
+  the memory the system reports available, at least 6 GiB). The Axiolid
+  adapter estimates each overlay and morphology from its counted pairs of
+  meeting edges and asks to be admitted before building it, on whichever
+  thread runs it: a step that would pass the budget beside the running
+  ones waits, one alone always runs, and only a step whose own estimate is
+  past the whole budget is refused, by name, the same on any number of
+  threads. Reports are byte-identical under any budget that refuses no
+  step and any number of threads; the determinism gate (#441) runs every
+  case on four threads under a 64M budget too, which makes steps wait. A
+  circle search's disc morphologies are
+  now charged to the search's budgets like a rectangle's, their pairs
+  counted with the notches the fast mode fills left out: a 12 m circle
+  among a storey's walls that built one morphology past 20 GB is refused
+  by the disc budget instead. `MemoryBudget::hold` and `headroom` let a
+  derivation store count what it keeps (#440). The `axioval` binary uses
+  mimalloc as its global allocator, which returns freed pages; no library
+  sets one. On a private sample with four free-floor rules, a check on
+  four threads that was killed at a 20 GB limit after 72 s now finishes in
+  269 s at an 8.8 GiB peak, 4.8 GiB steady and 1.2 GiB at the end
+  (5.4 GiB peak with `--memory-budget 4G`, 588 s); the system allocator
+  held 8.5 GiB steady and 2.4 GiB at the end. On the 157-space sample's
+  circle rule, one thread takes 89.4 s and 2.2 GiB (99.2 s and 2.3 GiB
+  before), four threads 33.0 s and 3.3 GiB (40.3 s and 3.2 GiB), 2.7 GiB
+  steady (3.0 GiB), the reports unchanged.
+
 - **A rule's spaces and objects are evaluated in parallel**
   ([#405](https://github.com/axioval/engine/issues/405)). A template judging
   objects one by one (free floor, clearance, clash and most built-in

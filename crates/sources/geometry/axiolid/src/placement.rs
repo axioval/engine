@@ -43,7 +43,9 @@ use axiolid_overlay::{MorphologyMode, Polygon, Region, Ring, union_soup};
 use axioval_engine::FreeSpaceError;
 
 use crate::geometry::Triangle;
-use crate::planar::budget::{Cost, Refusal, Work, minkowski_cost, overlay_cost};
+use crate::planar::budget::{
+    Cost, Refusal, Step, Work, fast_disc_cost, minkowski_cost, overlay_cost,
+};
 use crate::planar::{projected_polygons, refused_ring};
 
 /// Fits closer than this are not told apart from misses when proving that no
@@ -265,6 +267,13 @@ fn morphology(region: &Region, shape: &Ring, erosion: bool) -> Cost {
     minkowski_cost(region.polygons(), &shape.points, erosion)
 }
 
+/// The cost of a disc morphology of `region` by a disc of `radius`, or
+/// with `erosion` of eroding it, in [`FAST`]'s mode ([`fast_disc_cost`]):
+/// a circle search charges each, as a path's erosion does (#407).
+fn disc(region: &Region, radius: f64, erosion: bool) -> Cost {
+    fast_disc_cost(region.polygons(), radius, erosion, FAST_BUDGET_METRES)
+}
+
 /// The cost of an overlay of `a` and `b` ([`overlay_cost`]).
 fn overlay(a: &Region, b: &Region) -> Cost {
     overlay_cost(&[a.polygons(), b.polygons()])
@@ -457,18 +466,18 @@ impl Scene {
             .map(|(_, _, steps, free)| (steps.clone(), free.clone()));
         if let Some((steps, free)) = kept {
             for (what, cost) in steps {
-                self.work.charge(what, cost).map_err(over_budget)?;
+                self.work.charge_kept(what, cost).map_err(over_budget)?;
             }
             return Ok(free);
         }
         let mut steps = Steps::new();
         let mut step = |what: &'static str, cost: Cost| {
-            self.work.charge(what, cost).map_err(over_budget)?;
+            let admitted = self.work.charge(what, cost).map_err(over_budget)?;
             steps.push((what, cost));
-            Ok(())
+            Ok(admitted)
         };
         let free = if let Some(clear) = clear {
-            step(
+            let _step = step(
                 "erosion of the free floor by the rectangle",
                 morphology(clear, shape, true),
             )?;
@@ -495,7 +504,7 @@ impl Scene {
         } else {
             (&self.scope, &self.obstacles)
         };
-        self.charge_clear(absence)?;
+        let _step = self.charge_clear(absence)?;
         let cell = &self.clear[usize::from(absence)];
         if let Some(clear) = cell.get() {
             return Ok(clear);
@@ -511,17 +520,25 @@ impl Scene {
     /// Charges the step taking the scope less the obstacles
     /// ([`Self::clear`]) to this search, once, whether or not the scene
     /// holds it already: so does every region read from it, whether it
-    /// was taken by this search or kept from another (#441).
-    fn charge_clear(&self, absence: bool) -> Result<(), FreeSpaceError> {
+    /// was taken by this search or kept from another (#441). Admitted
+    /// against the check's memory budget only where it is still to be
+    /// taken, and held while it is ([`Step`], #407).
+    fn charge_clear(&self, absence: bool) -> Result<Step, FreeSpaceError> {
         let (scope, obstacles) = if absence {
             (&self.room, &self.sure)
         } else {
             (&self.scope, &self.obstacles)
         };
+        let alike = || self.scope == self.room && self.obstacles == self.sure;
+        let kept = self.clear[usize::from(absence)].get().is_some()
+            || (self.clear[usize::from(!absence)].get().is_some() && alike());
         self.work
-            .charge_once(u32::from(absence), "floor less the obstacles", || {
-                overlay(scope, obstacles)
-            })
+            .charge_once(
+                u32::from(absence),
+                "floor less the obstacles",
+                || overlay(scope, obstacles),
+                kept,
+            )
             .map_err(over_budget)
     }
 
@@ -538,9 +555,11 @@ impl Scene {
     fn simple(&self, which: usize) -> Option<&Region> {
         // The clear parts are charged as if taken, kept or not; refused,
         // nothing is kept for the next search.
-        if which < 2 {
-            self.charge_clear(which == 1).ok()?;
-        }
+        let _step = if which < 2 {
+            Some(self.charge_clear(which == 1).ok()?)
+        } else {
+            None
+        };
         self.simple[which]
             .get_or_init(|| {
                 let (region, side) = match which {
@@ -578,10 +597,14 @@ impl Scene {
         if which >= 3 {
             let scope = if which == 4 { &self.scope } else { &self.room };
             let part = self.coarse(which - 3)?;
-            self.work
-                .charge_once(key, "floor less the coarse obstacles", || {
-                    overlay(scope, part)
-                })
+            let _step = self
+                .work
+                .charge_once(
+                    key,
+                    "floor less the coarse obstacles",
+                    || overlay(scope, part),
+                    self.coarse[which].get().is_some(),
+                )
                 .ok()?;
             return self.coarse[which]
                 .get_or_init(|| clear_of(scope, part, self.tolerance).ok())
@@ -593,8 +616,14 @@ impl Scene {
             _ => (&self.sure, Side::Around),
         };
         // The simplification is checked against the region by an overlay.
-        self.work
-            .charge_once(key, "coarse obstacles", || overlay(region, region))
+        let _step = self
+            .work
+            .charge_once(
+                key,
+                "coarse obstacles",
+                || overlay(region, region),
+                self.coarse[which].get().is_some(),
+            )
             .ok()?;
         self.coarse[which]
             .get_or_init(|| {
@@ -613,7 +642,7 @@ impl Scene {
     /// area, `None` where the difference is refused. Taken once per scene.
     pub(crate) fn inscribed(&self, absence: bool) -> Option<Inscribed> {
         // As for the simplified regions: charged as if taken.
-        self.charge_clear(absence).ok()?;
+        let _step = self.charge_clear(absence).ok()?;
         *self.inscribed[usize::from(absence)].get_or_init(|| {
             self.clear(absence).ok().map(|clear| {
                 inscribed_disc(clear, INSCRIBED_PRECISION_METRES).unwrap_or(Inscribed::NONE)
@@ -645,10 +674,11 @@ impl Scene {
                     "erosion of the free floor by an octagon",
                     morphology(region, &octagon, true),
                 )
-                .is_ok()
-                && region
-                    .minkowski_erosion(&octagon, self.tolerance)
-                    .is_ok_and(|free| free.is_empty())
+                .is_ok_and(|_step| {
+                    region
+                        .minkowski_erosion(&octagon, self.tolerance)
+                        .is_ok_and(|free| free.is_empty())
+                })
         };
         if self.coarse(if absence { 3 } else { 4 }).is_some_and(empty) {
             return true;
@@ -686,7 +716,7 @@ impl Scene {
                 "erosion of the coarse free floor by the rectangle",
                 morphology(clear, shape, true),
             )
-            .and_then(|()| {
+            .and_then(|_step| {
                 clear
                     .minkowski_erosion(shape, self.tolerance)
                     .map_err(|e| unavailable("erosion", e))
@@ -717,10 +747,11 @@ impl Scene {
                         "erosion of the free floor by the rectangle",
                         morphology(region, shape, true),
                     )
-                    .is_ok()
-                && region
-                    .minkowski_erosion(shape, self.tolerance)
-                    .is_ok_and(|free| !free.is_empty())
+                    .is_ok_and(|_step| {
+                        region
+                            .minkowski_erosion(shape, self.tolerance)
+                            .is_ok_and(|free| !free.is_empty())
+                    })
         };
         if self.coarse(5).is_some_and(fits) {
             return true;
@@ -931,26 +962,30 @@ fn summed_free(
     obstacles: &Region,
     shape: &Ring,
     tolerance: Tolerance,
-    step: &mut dyn FnMut(&'static str, Cost) -> Result<(), FreeSpaceError>,
+    step: &mut dyn FnMut(&'static str, Cost) -> Result<Step, FreeSpaceError>,
 ) -> Result<Region, FreeSpaceError> {
-    step(
-        "erosion of the floor by the rectangle",
-        morphology(scope, shape, true),
-    )?;
-    let room = scope
-        .minkowski_erosion(shape, tolerance)
-        .map_err(|e| unavailable("erosion", e))?;
+    let room = {
+        let _step = step(
+            "erosion of the floor by the rectangle",
+            morphology(scope, shape, true),
+        )?;
+        scope
+            .minkowski_erosion(shape, tolerance)
+            .map_err(|e| unavailable("erosion", e))?
+    };
     if room.is_empty() || obstacles.is_empty() {
         return Ok(room);
     }
-    step(
-        "sum of the obstacles with the rectangle",
-        morphology(obstacles, shape, false),
-    )?;
-    let blocked = obstacles
-        .minkowski_sum(shape, tolerance)
-        .map_err(|e| unavailable("dilation", e))?;
-    step("floor less the summed obstacles", overlay(&room, &blocked))?;
+    let blocked = {
+        let _step = step(
+            "sum of the obstacles with the rectangle",
+            morphology(obstacles, shape, false),
+        )?;
+        obstacles
+            .minkowski_sum(shape, tolerance)
+            .map_err(|e| unavailable("dilation", e))?
+    };
+    let _step = step("floor less the summed obstacles", overlay(&room, &blocked))?;
     room.difference(&blocked, tolerance)
         .map_err(|e| unavailable("difference", e))
 }
@@ -1035,16 +1070,20 @@ impl Scene {
         if target.is_empty() || free.is_empty() {
             return Ok(Region::empty());
         }
-        self.work
-            .charge(
-                "sum of the reached pieces with the rectangle",
-                morphology(target, shape, false),
-            )
-            .map_err(over_budget)?;
-        let near = target
-            .minkowski_sum(shape, self.tolerance)
-            .map_err(|e| unavailable("reach", e))?;
-        self.work
+        let near = {
+            let _step = self
+                .work
+                .charge(
+                    "sum of the reached pieces with the rectangle",
+                    morphology(target, shape, false),
+                )
+                .map_err(over_budget)?;
+            target
+                .minkowski_sum(shape, self.tolerance)
+                .map_err(|e| unavailable("reach", e))?
+        };
+        let _step = self
+            .work
             .charge("centres meeting the reached pieces", overlay(&free, &near))
             .map_err(over_budget)?;
         free.intersection(&near, self.tolerance)
@@ -1067,12 +1106,30 @@ impl Scene {
         if target.is_empty() || free.is_empty() {
             return Ok(Region::empty());
         }
-        let near = if absence {
-            target.dilate_outer_with(radius + KNIFE_EDGE_METRES, self.tolerance, FAST)
-        } else {
-            target.dilate_inner_with(radius, self.tolerance, FAST)
-        }
-        .map_err(|e| unavailable("reach", e))?;
+        let near = {
+            let grow = if absence {
+                radius + KNIFE_EDGE_METRES
+            } else {
+                radius
+            };
+            let _step = self
+                .work
+                .charge(
+                    "dilation of the reached pieces by the disc",
+                    disc(target, grow, false),
+                )
+                .map_err(over_budget)?;
+            if absence {
+                target.dilate_outer_with(grow, self.tolerance, FAST)
+            } else {
+                target.dilate_inner_with(grow, self.tolerance, FAST)
+            }
+            .map_err(|e| unavailable("reach", e))?
+        };
+        let _step = self
+            .work
+            .charge("centres near the reached pieces", overlay(&free, &near))
+            .map_err(over_budget)?;
         free.intersection(&near, self.tolerance)
             .map_err(|e| unavailable("reach", e))
     }
@@ -1474,7 +1531,10 @@ pub(crate) fn circle(scene: &Scene, radius: f64) -> Result<Search, FreeSpaceErro
 /// what an absence must rule out, so a circle within it of fitting is
 /// undecided rather than misjudged. Where no notch lies within it the
 /// result is the exact one bit for bit.
-const FAST: MorphologyMode = MorphologyMode::fast(1.0e-3);
+const FAST: MorphologyMode = MorphologyMode::fast(FAST_BUDGET_METRES);
+
+/// The greatest excess [`FAST`] lets a filled notch add.
+const FAST_BUDGET_METRES: f64 = 1.0e-3;
 
 /// The most corners a region a circle search erodes or dilates by a disc
 /// may have: a safety net, not a cost model (#394, #402, #414). Since
@@ -1585,30 +1645,42 @@ fn circle_witness(
         return Ok(Some(estimate.centre));
     }
     // Contained in the exact free region: any point in it is a true centre.
+    // Each morphology and difference is charged before it is built (#407).
+    let step = |what: &'static str, cost: Cost| scene.work.charge(what, cost).map_err(over_budget);
     let inner = if region_points(&scene.obstacles) > OBSTACLE_SUM_POINTS {
         let clear = match simplest(scene, 0, simple) {
             Some(clear) => clear,
             None => scene.clear(false)?,
         };
-        within_budget(clear, "the free floor")?
-            .erode_inner_with(radius, t, FAST)
-            .map_err(err)?
+        let clear = within_budget(clear, "the free floor")?;
+        let _step = step(
+            "erosion of the free floor by the disc",
+            disc(clear, radius, true),
+        )?;
+        clear.erode_inner_with(radius, t, FAST).map_err(err)?
     } else {
-        let inner = within_budget(&scene.scope, "the floor")?
-            .erode_inner_with(radius, t, FAST)
-            .map_err(err)?;
+        let scope = within_budget(&scene.scope, "the floor")?;
+        let inner = {
+            let _step = step(
+                "erosion of the floor by the disc",
+                disc(scope, radius, true),
+            )?;
+            scope.erode_inner_with(radius, t, FAST).map_err(err)?
+        };
         let obstacles = simplest(scene, 2, simple).unwrap_or(&scene.obstacles);
         if obstacles.is_empty() || inner.is_empty() {
             inner
         } else {
-            inner
-                .difference(
-                    &within_budget(obstacles, "the obstacles' footprint")?
-                        .dilate_outer_with(radius, t, FAST)
-                        .map_err(err)?,
-                    t,
-                )
-                .map_err(err)?
+            let obstacles = within_budget(obstacles, "the obstacles' footprint")?;
+            let grown = {
+                let _step = step(
+                    "dilation of the obstacles by the disc",
+                    disc(obstacles, radius, false),
+                )?;
+                obstacles.dilate_outer_with(radius, t, FAST).map_err(err)?
+            };
+            let _step = step("floor less the dilated obstacles", overlay(&inner, &grown))?;
+            inner.difference(&grown, t).map_err(err)?
         }
     };
     let inner = scene.for_witness(scene.reaching_disc(inner, radius, false)?)?;
@@ -1639,30 +1711,39 @@ fn circle_absent(
             "the circle is too small to prove absent".into(),
         ));
     }
+    // Each morphology and difference is charged before it is built (#407).
+    let step = |what: &'static str, cost: Cost| scene.work.charge(what, cost).map_err(over_budget);
     let outer = if region_points(&scene.sure) > OBSTACLE_SUM_POINTS {
         let clear = match simplest(scene, 1, simple) {
             Some(clear) => clear,
             None => scene.clear(true)?,
         };
-        within_budget(clear, "the free floor")?
-            .erode_outer_with(shrunk, t, FAST)
-            .map_err(err)?
+        let clear = within_budget(clear, "the free floor")?;
+        let _step = step(
+            "erosion of the free floor by the disc",
+            disc(clear, shrunk, true),
+        )?;
+        clear.erode_outer_with(shrunk, t, FAST).map_err(err)?
     } else {
-        let outer = within_budget(&scene.room, "the floor")?
-            .erode_outer_with(shrunk, t, FAST)
-            .map_err(err)?;
+        let room = within_budget(&scene.room, "the floor")?;
+        let outer = {
+            let _step = step("erosion of the floor by the disc", disc(room, shrunk, true))?;
+            room.erode_outer_with(shrunk, t, FAST).map_err(err)?
+        };
         let sure = simplest(scene, 3, simple).unwrap_or(&scene.sure);
         if sure.is_empty() || outer.is_empty() {
             outer
         } else {
-            outer
-                .difference(
-                    &within_budget(sure, "the obstacles' footprint")?
-                        .dilate_inner_with(shrunk, t, FAST)
-                        .map_err(err)?,
-                    t,
-                )
-                .map_err(err)?
+            let sure = within_budget(sure, "the obstacles' footprint")?;
+            let grown = {
+                let _step = step(
+                    "dilation of the obstacles by the disc",
+                    disc(sure, shrunk, false),
+                )?;
+                sure.dilate_inner_with(shrunk, t, FAST).map_err(err)?
+            };
+            let _step = step("floor less the dilated obstacles", overlay(&outer, &grown))?;
+            outer.difference(&grown, t).map_err(err)?
         }
     };
     scene.nowhere_in_domain(&scene.reaching_disc(outer, radius, true)?)
@@ -1915,8 +1996,10 @@ mod tests {
             let scope = Region::new(vec![scope], tolerance).unwrap();
             for turn in [0.0, 0.3] {
                 let shape = rectangle(Point2::new(0.0, 0.0), 0.9, 1.2, Axis::at(turn));
-                let summed =
-                    summed_free(&scope, &obstacles, &shape, tolerance, &mut |_, _| Ok(())).unwrap();
+                let summed = summed_free(&scope, &obstacles, &shape, tolerance, &mut |_, _| {
+                    Ok(Step::NONE)
+                })
+                .unwrap();
                 let eroded = eroded_free(&scope, &obstacles, &shape, tolerance).unwrap();
                 assert!(!summed.is_empty());
                 let gap = summed.difference(&eroded, tolerance).unwrap().area()

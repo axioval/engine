@@ -93,7 +93,8 @@ axioval check --model building.ifc[:DISCIPLINE] [--model other.ifc[:DISCIPLINE] 
   [--zones [ACCURACY=]FILE ...] \
   [--terrain KIND@ACCURACY=FILE[#SURFACE] ... --terrain-in model|map] \
   [--geometry [--no-exact-boundaries] [--mesh-all]] [--locate storeys|containers|geometry] \
-  [--rule-status] [--rule-timings] [--timings] [--threads N] [--report result.json] \
+  [--rule-status] [--rule-timings] [--timings] [--threads N] [--memory-budget SIZE] \
+  [--report result.json] \
   [--decisions decisions.json | --decisions-from reviewed.bcfzip] \
   [--summary [--top N]] [--bcf issues.bcfzip] [--xlsx report.xlsx] \
   [--html report.html [--html-template template.html] [--html-title TEXT]] \
@@ -774,14 +775,15 @@ never depend on them.
 `--threads N` evaluates each rule's subjects (its spaces, its objects) on
 `N` threads (#405). Without it, the environment variable `AXIOVAL_THREADS`
 names the count, and without that the machine's available parallelism
-does, up to 4 (more threads are taken only when asked for, until a check
-budgets its memory, #407); `AXIOVAL_THREADS` set to anything but a positive whole number fails
+does, up to 4 (more threads are taken only when asked for);
+`AXIOVAL_THREADS` set to anything but a positive whole number fails
 the run (status 1). The result is the same on any number of threads, byte
 for byte: subjects are merged in their order, never in the order threads
 finish them, and a run whose expression budget runs out is run again on
-one thread (see [Execution](./architecture.md#execution)). Memory grows
-with the threads, each holding one subject's measurement at a time; a
-memory-bound host lowers `--threads`. Rule timings count every thread's
+one thread (see [Execution](./architecture.md#execution)). Each thread
+holds one subject's measurement at a time; the heavy geometry steps of
+those measurements are bounded together by the memory budget, not by
+the threads. Rule timings count every thread's
 host calls, so the time a rule spent in a service may exceed its wall
 time; its host time is never stated above its wall time.
 
@@ -792,6 +794,27 @@ evaluates the rules in another order wherever the rules they read leave
 it free, and `--no-reuse` keeps nothing built for reuse (a derivation
 store that keeps nothing, and geometry services that keep no placement
 scene or footprint). The result is the same either way, byte for byte.
+
+`--memory-budget SIZE` states how much memory the check's heavy geometry
+steps (an overlay, a morphology of a free-floor search) may take at once
+(#407): a size such as `8G`, `512M` or `1073741824` (`K`, `M`, `G` and `T`
+are powers of 1024, `KiB` and `KB` read alike), or `none`. Without it, the
+environment variable `AXIOVAL_MEMORY_BUDGET` states it, and without that
+it is half the memory the system reports available (`MemAvailable`), at
+least 6 GiB; a stated budget that is not a size fails the run (status 1).
+Each step is estimated from the edges it is handed before it is built: a
+step that would pass the budget beside the steps other threads are
+building waits for one of them to finish, and with none running it runs
+alone. Waiting changes no result. A step whose own estimate is more than
+the whole budget is not built, and what needed it is not evaluated with
+the budget named (`… its estimated 2.3 GiB is more than the check's memory
+budget of 2.0 GiB`), on any number of threads alike. No step the adapter's
+own per-step budgets admit is estimated past 6 GiB, so the default refuses
+none. `--timings` ends with a line `memory: budget …, at most … admitted
+at once, the largest step …, N steps waited`: a budget at least the
+largest step refuses none of that check's steps. The budget bounds the steps, not the process:
+the models, their meshes and the session's caches come on top (see
+[Memory budget](./memory.md)).
 
 Every finding has an `id`, its stable identity over GlobalIds (see
 [Review decisions](./decisions.md#finding-identity)), equal to its BCF topic

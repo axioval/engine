@@ -73,35 +73,44 @@ pub(crate) fn eroded_free(
     let morphology =
         |region: &Region, radius: f64, erosion: bool| disc_cost(region.polygons(), radius, erosion);
     let less = |a: &Region, b: &Region| overlay_cost(&[a.polygons(), b.polygons()]);
-    charge(
-        "erosion of the floor by the path's disc",
-        morphology(&scene.scope, radius, true),
-    )?;
-    let mut inner = scene.scope.erode_inner(radius, t).map_err(err)?;
-    if !scene.obstacles.is_empty() && !inner.is_empty() {
-        charge(
-            "dilation of the obstacles by the path's disc",
-            morphology(&scene.obstacles, radius, false),
+    // Each step is built while its admission is held.
+    let mut inner = {
+        let _step = charge(
+            "erosion of the floor by the path's disc",
+            morphology(&scene.scope, radius, true),
         )?;
-        let grown = scene.obstacles.dilate_outer(radius, t).map_err(err)?;
-        charge("floor less the dilated obstacles", less(&inner, &grown))?;
+        scene.scope.erode_inner(radius, t).map_err(err)?
+    };
+    if !scene.obstacles.is_empty() && !inner.is_empty() {
+        let grown = {
+            let _step = charge(
+                "dilation of the obstacles by the path's disc",
+                morphology(&scene.obstacles, radius, false),
+            )?;
+            scene.obstacles.dilate_outer(radius, t).map_err(err)?
+        };
+        let _step = charge("floor less the dilated obstacles", less(&inner, &grown))?;
         inner = inner.difference(&grown, t).map_err(err)?;
     }
     // For a radius a knife edge smaller, so that a gap exactly as wide
     // as the path keeps a sliver rather than being snapped shut.
     let shrunk = radius - KNIFE_EDGE_METRES;
-    charge(
-        "erosion of the floor by the path's disc",
-        morphology(&scene.room, shrunk, true),
-    )?;
-    let mut outer = scene.room.erode_outer(shrunk, t).map_err(err)?;
-    if !scene.sure.is_empty() && !outer.is_empty() {
-        charge(
-            "dilation of the obstacles by the path's disc",
-            morphology(&scene.sure, shrunk, false),
+    let mut outer = {
+        let _step = charge(
+            "erosion of the floor by the path's disc",
+            morphology(&scene.room, shrunk, true),
         )?;
-        let grown = scene.sure.dilate_inner(shrunk, t).map_err(err)?;
-        charge("floor less the dilated obstacles", less(&outer, &grown))?;
+        scene.room.erode_outer(shrunk, t).map_err(err)?
+    };
+    if !scene.sure.is_empty() && !outer.is_empty() {
+        let grown = {
+            let _step = charge(
+                "dilation of the obstacles by the path's disc",
+                morphology(&scene.sure, shrunk, false),
+            )?;
+            scene.sure.dilate_inner(shrunk, t).map_err(err)?
+        };
+        let _step = charge("floor less the dilated obstacles", less(&outer, &grown))?;
         outer = outer.difference(&grown, t).map_err(err)?;
     }
     Ok((inner, outer))

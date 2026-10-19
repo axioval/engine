@@ -15,6 +15,7 @@ use std::fmt;
 
 use axiolid_core::Point2;
 use axiolid_overlay::Polygon;
+use axioval_engine::memory::{self, Admission, OverBudget as OverMemory};
 
 /// The most pairs of edges whose boxes meet that one plan overlay is
 /// handed. Every crossing the subdivision keeps comes from such a pair (two
@@ -28,6 +29,12 @@ pub(crate) const OVERLAY_PAIRS: u64 = 4_000_000;
 /// [`OVERLAY_PAIRS`], which a test keeps in step.
 pub(crate) const OVER_BUDGET: &str = "the plan overlay was not built: its edges meet in more than 4000000 pairs, \
      past the overlay budget";
+
+/// The refusal's reason where an error holds only a static text and the
+/// overlay's memory estimate alone is more than the check's memory budget
+/// (#407).
+pub(crate) const OVER_MEMORY: &str =
+    "the plan overlay was not built: its estimated memory is more than the check's memory budget";
 
 /// An overlay refused before it was built because its operands' edges meet
 /// in more pairs than [`OVERLAY_PAIRS`].
@@ -52,7 +59,8 @@ impl fmt::Display for OverBudget {
 
 /// Refuses an overlay of `operands` whose edges' boxes meet in more pairs
 /// than [`OVERLAY_PAIRS`]; every ring of every polygon counts, holes too.
-pub(crate) fn admit(operands: &[&[Polygon]]) -> Result<(), OverBudget> {
+/// Admitted, its memory estimate ([`overlay_bytes`]).
+pub(crate) fn admit(operands: &[&[Polygon]]) -> Result<u64, OverBudget> {
     let boxes = edge_boxes(operands);
     let pairs = meeting_pairs(&boxes);
     if pairs > OVERLAY_PAIRS {
@@ -61,7 +69,7 @@ pub(crate) fn admit(operands: &[&[Polygon]]) -> Result<(), OverBudget> {
             pairs,
         });
     }
-    Ok(())
+    Ok(overlay_bytes(boxes.len(), pairs))
 }
 
 /// One edge's closed box: `[x_min, x_max, y_min, y_max]`.
@@ -107,6 +115,22 @@ pub(crate) enum Kind {
 }
 
 impl Cost {
+    /// The memory the step is estimated to take while it builds: the
+    /// pairs at what its kind keeps per pair, and the edges handed over
+    /// (#407). Admitted against the check's memory budget before the
+    /// step is built ([`Work::charge`]).
+    pub(crate) fn bytes(self) -> u64 {
+        let per_pair = match self.kind {
+            Kind::Overlay => OVERLAY_PAIR_BYTES,
+            Kind::Polygon => POLYGON_PAIR_BYTES,
+            Kind::Disc => DISC_PAIR_BYTES,
+        };
+        let edges = u64::try_from(self.edges).unwrap_or(u64::MAX);
+        self.pairs
+            .saturating_mul(per_pair)
+            .saturating_add(edges.saturating_mul(EDGE_BYTES))
+    }
+
     /// Nothing handed over.
     pub(crate) const NONE: Self = Self {
         edges: 0,
@@ -137,6 +161,36 @@ impl Cost {
             Kind::Disc => "disc morphology",
         }
     }
+}
+
+/// What one overlay keeps per pair of meeting edges, about: a grown round
+/// bar meeting in 2.4 million pairs took 0.4 GB, one in 10 million 1.9 GB
+/// ([`OVERLAY_PAIRS`]).
+const OVERLAY_PAIR_BYTES: u64 = 200;
+
+/// What one Minkowski sum or erosion by a polygon keeps per pair, at
+/// most: dense tessellated tables took about a gigabyte a million
+/// ([`POLYGON_PAIRS`]), but the steps of a private sample's rectangle
+/// search took up to 2.7 GB at 1.6 million pairs, about 1.8 KB a pair
+/// (#407). The estimate stays above what was measured.
+const POLYGON_PAIR_BYTES: u64 = 2048;
+
+/// What one disc morphology keeps per counted pair, about: 0.1 GB at 1.0
+/// million, 0.9 GB at 16 million ([`DISC_PAIRS`]).
+const DISC_PAIR_BYTES: u64 = 100;
+
+/// What an arrangement keeps per edge handed over, besides its pairs.
+const EDGE_BYTES: u64 = 256;
+
+/// The memory an overlay of `operands` is estimated to take
+/// ([`Cost::bytes`]), counted as [`admit`] counts its pairs.
+pub(crate) fn overlay_bytes(edges: usize, pairs: u64) -> u64 {
+    Cost {
+        edges,
+        pairs,
+        kind: Kind::Overlay,
+    }
+    .bytes()
 }
 
 /// The cost of an overlay of `operands` ([`admit`]'s count).
@@ -175,6 +229,87 @@ pub(crate) fn minkowski_cost(polygons: &[Polygon], shape: &[Point2], erosion: bo
 /// ([`minkowski_cost`] with the overlay's 64-gon), eroding with `erosion`.
 pub(crate) fn disc_cost(polygons: &[Polygon], radius: f64, erosion: bool) -> Cost {
     shaped_cost(polygons, &disc(radius), erosion, Kind::Disc)
+}
+
+/// The cost of a disc morphology in the overlay's fast mode, whose
+/// notches are filled by chords where that adds at most `budget` (#407):
+/// [`disc_cost`] of the rings with every corner dropped that lies within
+/// `budget` of the chord across it ([`thinned`]). A wall of teeth
+/// shallower than the budget then counts as the few corners the fill
+/// leaves of it, as the overlay builds it in time about its corners,
+/// while every corner farther out still counts.
+pub(crate) fn fast_disc_cost(
+    polygons: &[Polygon],
+    radius: f64,
+    erosion: bool,
+    budget: f64,
+) -> Cost {
+    let thinned: Vec<Polygon> = polygons
+        .iter()
+        .filter_map(|polygon| {
+            Some(Polygon {
+                outer: thinned(&polygon.outer.points, budget)?,
+                holes: polygon
+                    .holes
+                    .iter()
+                    .filter_map(|hole| thinned(&hole.points, budget))
+                    .collect(),
+            })
+        })
+        .collect();
+    disc_cost(&thinned, radius, erosion)
+}
+
+/// `points`, a closed ring, with the corners dropped that lie within
+/// `within` of the chord the corners kept span across them
+/// (Douglas-Peucker from the ring's first corner and the corner farthest
+/// from it); `None` where fewer than three are kept.
+fn thinned(points: &[Point2], within: f64) -> Option<axiolid_overlay::Ring> {
+    let n = points.len();
+    if n < 3 {
+        return None;
+    }
+    let distance = |a: Point2, b: Point2, p: Point2| {
+        let (dx, dy) = (b.x - a.x, b.y - a.y);
+        let length = dx.hypot(dy);
+        if length == 0.0 {
+            return (p.x - a.x).hypot(p.y - a.y);
+        }
+        ((p.x - a.x) * dy - (p.y - a.y) * dx).abs() / length
+    };
+    let far = (1..n)
+        .max_by(|&i, &j| {
+            let d = |k: usize| (points[k].x - points[0].x).hypot(points[k].y - points[0].y);
+            d(i).total_cmp(&d(j))
+        })
+        .unwrap_or(1);
+    let mut keep = vec![false; n];
+    keep[0] = true;
+    keep[far] = true;
+    // Spans of the ring, as indices from `start` to `end` going round.
+    let mut spans = vec![(0, far), (far, n)];
+    while let Some((start, end)) = spans.pop() {
+        let (a, b) = (points[start], points[end % n]);
+        let mut most = (0.0_f64, 0);
+        for (index, point) in points.iter().enumerate().take(end).skip(start + 1) {
+            let d = distance(a, b, *point);
+            if d > most.0 {
+                most = (d, index);
+            }
+        }
+        if most.0 > within {
+            keep[most.1] = true;
+            spans.push((start, most.1));
+            spans.push((most.1, end));
+        }
+    }
+    let kept: Vec<Point2> = points
+        .iter()
+        .zip(&keep)
+        .filter(|(_, keep)| **keep)
+        .map(|(point, _)| *point)
+        .collect();
+    (kept.len() >= 3).then_some(axiolid_overlay::Ring { points: kept })
 }
 
 fn shaped_cost(polygons: &[Polygon], shape: &[Point2], erosion: bool, kind: Kind) -> Cost {
@@ -360,11 +495,30 @@ impl Work {
         SEARCH_STEPS * STEP
     }
 
-    /// Charges a step of `cost`, or refuses it past either budget.
-    pub(crate) fn charge(&self, what: &'static str, cost: Cost) -> Result<(), Refusal> {
+    /// Charges a step of `cost` that is about to be built, or refuses it
+    /// past any budget, and admits it against the check's memory budget
+    /// ([`axioval_engine::memory`]): the step waits there while the steps
+    /// other threads build would pass it together. The step is built
+    /// while the returned [`Step`] is held.
+    pub(crate) fn charge(&self, what: &'static str, cost: Cost) -> Result<Step, Refusal> {
+        self.charge_kept(what, cost)?;
+        // The estimate alone within the budget was checked above, so the
+        // admission only waits, never refuses.
+        let admission =
+            memory::admit(cost.bytes()).map_err(|over| Refusal::Memory { what, cost, over })?;
+        Ok(Step {
+            _admission: admission,
+        })
+    }
+
+    /// Charges a step of `cost` whose result is kept from an earlier
+    /// build, so nothing is built: refused exactly as building it would
+    /// be, the memory budget included, but never waiting for memory.
+    pub(crate) fn charge_kept(&self, what: &'static str, cost: Cost) -> Result<(), Refusal> {
         if cost.pairs > cost.budget() {
             return Err(Refusal::Step { what, cost });
         }
+        memory::check(cost.bytes()).map_err(|over| Refusal::Memory { what, cost, over })?;
         let spent = self.spent.get().saturating_add(cost.share());
         if spent > self.limit() {
             return Err(Refusal::Search { what, cost });
@@ -373,20 +527,28 @@ impl Work {
         Ok(())
     }
 
-    /// Charges the step that builds a kept region, named by `key`, once
-    /// per search: later asks are free.
+    /// Charges the step that builds a region a scene keeps, named by
+    /// `key`, once per search: later asks are free and admitted at once.
+    /// Where the scene holds the region already (`kept`), the step is
+    /// charged as if built ([`Self::charge_kept`]) and never waits.
     pub(crate) fn charge_once(
         &self,
         key: u32,
         what: &'static str,
         cost: impl FnOnce() -> Cost,
-    ) -> Result<(), Refusal> {
+        kept: bool,
+    ) -> Result<Step, Refusal> {
         if self.charged.borrow().contains(&key) {
-            return Ok(());
+            return Ok(Step::NONE);
         }
-        self.charge(what, cost())?;
+        let step = if kept {
+            self.charge_kept(what, cost())?;
+            Step::NONE
+        } else {
+            self.charge(what, cost())?
+        };
         self.charged.borrow_mut().push(key);
-        Ok(())
+        Ok(step)
     }
 
     /// The share of [`SEARCH_STEPS`] spent so far, in millionths of a step.
@@ -396,6 +558,20 @@ impl Work {
     }
 }
 
+/// A step admitted against the check's memory budget while it builds
+/// ([`Work::charge`]); dropping it lets the steps waiting for memory run.
+#[must_use = "a step is admitted only while it is held"]
+#[derive(Debug)]
+pub(crate) struct Step {
+    /// Released when the step is dropped.
+    _admission: Option<Admission>,
+}
+
+impl Step {
+    /// A step that takes nothing: its result is kept.
+    pub(crate) const NONE: Self = Self { _admission: None };
+}
+
 /// A step a search refused before handing it to the overlay (#434).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Refusal {
@@ -403,6 +579,13 @@ pub(crate) enum Refusal {
     Step { what: &'static str, cost: Cost },
     /// The step would take the search past [`SEARCH_STEPS`].
     Search { what: &'static str, cost: Cost },
+    /// The step's memory estimate alone is more than the check's memory
+    /// budget (#407).
+    Memory {
+        what: &'static str,
+        cost: Cost,
+        over: OverMemory,
+    },
 }
 
 impl fmt::Display for Refusal {
@@ -421,6 +604,11 @@ impl fmt::Display for Refusal {
                 f,
                 "the {what} was not built: its {} pairs of meeting edges would take the \
                  search past its budget of {SEARCH_STEPS} steps at their budgets",
+                cost.pairs
+            ),
+            Self::Memory { what, cost, over } => write!(
+                f,
+                "the {what} was not built: at its {} pairs of meeting edges {over}",
                 cost.pairs
             ),
         }
@@ -593,7 +781,7 @@ mod tests {
             },
             holes: Vec::new(),
         };
-        assert_eq!(admit(&[&[square.clone()], &[square]]), Ok(()));
+        assert!(admit(&[&[square.clone()], &[square]]).is_ok());
         // 3,000 long, thin triangles along one line: each meets every other.
         let slivers: Vec<Polygon> = (0..3000)
             .map(|index| {
@@ -656,7 +844,7 @@ mod tests {
         );
         assert_eq!(work.spent(), 0);
         for _ in 0..SEARCH_STEPS {
-            work.charge("sum", step(POLYGON_PAIRS)).unwrap();
+            let _step = work.charge("sum", step(POLYGON_PAIRS)).unwrap();
         }
         let last = work.charge("sum", step(1)).unwrap_err();
         assert!(matches!(last, Refusal::Search { .. }));
@@ -668,9 +856,86 @@ mod tests {
         );
         let kept = Work::default();
         for _ in 0..3 {
-            kept.charge_once(7, "kept", || step(POLYGON_PAIRS / 2))
+            let _step = kept
+                .charge_once(7, "kept", || step(POLYGON_PAIRS / 2), false)
                 .unwrap();
         }
         assert_eq!(kept.spent(), 500_000);
+        // A region the scene holds already is charged alike, once, and
+        // refused alike: as if built, but never admitted.
+        let held = Work::default();
+        for _ in 0..3 {
+            let _step = held
+                .charge_once(7, "kept", || step(POLYGON_PAIRS / 2), true)
+                .unwrap();
+        }
+        assert_eq!(held.spent(), 500_000);
+        assert!(matches!(
+            Work::default().charge_once(8, "kept", || step(POLYGON_PAIRS + 1), true),
+            Err(Refusal::Step { .. })
+        ));
+    }
+
+    /// A step whose memory estimate alone is more than the check's
+    /// budget is refused by name, built or kept alike, whatever else is
+    /// admitted; one within it is admitted while it is held (#407).
+    #[test]
+    fn a_step_past_the_memory_budget_is_refused_by_name() {
+        use axioval_engine::MemoryBudget;
+        use std::sync::Arc;
+        let step = |pairs| Cost {
+            edges: 10,
+            pairs,
+            kind: Kind::Polygon,
+        };
+        // Without a budget, nothing is refused for memory.
+        let _unbudgeted = Work::default().charge("sum", step(POLYGON_PAIRS)).unwrap();
+        let budget = Arc::new(MemoryBudget::new(step(1000).bytes()));
+        let _entered = budget.enter();
+        let work = Work::default();
+        let held = work.charge("sum", step(1000)).unwrap();
+        assert_eq!(budget.in_use(), step(1000).bytes());
+        let refused = work.charge("sum", step(2000)).unwrap_err();
+        assert!(matches!(refused, Refusal::Memory { .. }), "{refused:?}");
+        assert!(
+            refused.to_string().starts_with(
+                "the sum was not built: at its 2000 pairs of meeting edges its estimated"
+            ),
+            "{refused}"
+        );
+        assert!(
+            refused
+                .to_string()
+                .ends_with("more than the check's memory budget of 2.0 MiB"),
+            "{refused}"
+        );
+        drop(held);
+        assert_eq!(work.charge_kept("sum", step(2000)), Err(refused));
+        assert_eq!(budget.in_use(), 0);
+        // A refused step spends nothing of the search's budget.
+        assert_eq!(work.spent(), step(1000).share());
+    }
+
+    /// Each kind's estimate grows with its pairs at what it keeps per
+    /// pair, and the largest step any kind admits is estimated within
+    /// the default budget's floor, so a default budget refuses no step.
+    #[test]
+    fn the_largest_step_fits_the_default_budget() {
+        for (kind, pairs) in [
+            (Kind::Overlay, OVERLAY_PAIRS),
+            (Kind::Polygon, POLYGON_PAIRS),
+            (Kind::Disc, super::DISC_PAIRS),
+        ] {
+            let largest = Cost {
+                edges: 1_000_000,
+                pairs,
+                kind,
+            };
+            assert!(
+                largest.bytes() < axioval_engine::MemoryBudget::FLOOR,
+                "{largest:?}"
+            );
+        }
+        assert_eq!(super::overlay_bytes(4, 10), 10 * 200 + 4 * 256);
     }
 }

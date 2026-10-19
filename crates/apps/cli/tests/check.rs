@@ -17466,6 +17466,75 @@ fn with_geometry_a_check_on_many_threads_reports_what_one_thread_reports() {
     }
 }
 
+/// #407: a check's memory budget changes no report while it refuses no
+/// step, whatever the threads; a budget smaller than a step refuses that
+/// step by name, on one thread as on eight, the same byte for byte.
+#[test]
+fn with_geometry_a_memory_budget_changes_no_report_but_by_its_refusals() {
+    let case = Case::new("geometry-memory-budget");
+    case.write("model.ifc", &washroom_rows(12));
+    let types = [
+        ("space", "IfcSpace"),
+        ("terminal", "IfcSanitaryTerminal"),
+        ("furniture", "IfcFurniture"),
+        ("element", "IfcElement"),
+    ];
+    let capability = "axioval:capability.free-floor-circle";
+    let report = |budget: &str, threads: &str| {
+        let (output, result) = case.geometry_rule_with(
+            &["model.ifc"],
+            &types,
+            (capability, &registry_signature(capability)),
+            entity("space"),
+            json!({
+                "diameter_metres": {"type": "number", "value": 1.5},
+                "height_metres": {"type": "number", "value": 2.0},
+            }),
+            &json!({}),
+            &[
+                "--threads",
+                threads,
+                "--memory-budget",
+                budget,
+                "--rule-status",
+            ],
+        );
+        // 3 with findings, 4 with every space refused.
+        assert!(
+            matches!(output.status.code(), Some(3 | 4)),
+            "{budget} on {threads}: {}",
+            stderr(&output)
+        );
+        (std::fs::read(case.path("result.json")).unwrap(), result)
+    };
+    let (unbudgeted, result) = report("none", "1");
+    assert!(!finding_messages(&result).is_empty(), "{result:#}");
+    for threads in ["1", "8"] {
+        assert!(
+            report("64M", threads).0 == unbudgeted,
+            "a budget refusing nothing changed the report on {threads} threads"
+        );
+    }
+    let (refused, result) = report("1K", "1");
+    let text = result.to_string();
+    assert!(
+        text.contains("is more than the check's memory budget of 1.0 KiB"),
+        "{result:#}"
+    );
+    assert!(
+        report("1K", "8").0 == refused,
+        "the refusals depend on the threads"
+    );
+    // Not a size: refused before anything runs.
+    let output = case.check_file(&case.path("model.ifc"), true, &["--memory-budget", "eight"]);
+    assert_eq!(output.status.code(), Some(1), "{}", stderr(&output));
+    assert!(
+        stderr(&output).contains("--memory-budget: `eight` is not a size"),
+        "{}",
+        stderr(&output)
+    );
+}
+
 /// A disk of `radius` centred at (`x`, `y`), extruded `depth` up from `z`,
 /// as instances `#first` to `#first + 9`: a tessellated body, as round
 /// columns and ducts are. `PL` and `REP` in `product` become its placement

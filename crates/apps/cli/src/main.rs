@@ -34,6 +34,13 @@ mod terrain;
 mod timings;
 mod zones;
 
+/// The binary's allocator (#407). The system's keeps what each thread
+/// freed in arenas of its own and rarely hands it back, so resident memory
+/// stayed near a check's heaviest step and grew with the threads; this one
+/// returns freed pages to the system. Only the binary sets it.
+#[global_allocator]
+static ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 // The IFC to Axiolid geometry bridge (`--geometry`), from the host layer.
 use axioval::ifc_geometry as geometry;
 
@@ -343,7 +350,8 @@ struct CheckArgs {
     /// Evaluate each rule's subjects on this many threads. Without it,
     /// `AXIOVAL_THREADS` names the count, and without that the machine's
     /// available parallelism does, up to 4. The result is the same on any
-    /// number; memory grows with the threads.
+    /// number; the memory the heavy steps take is bounded by
+    /// `--memory-budget`, not by the threads.
     #[arg(long, value_name = "N")]
     threads: Option<std::num::NonZeroUsize>,
     /// Evaluate the rules in another order wherever their dependencies
@@ -358,6 +366,15 @@ struct CheckArgs {
     /// result is the same, only slower.
     #[arg(long, hide = true)]
     no_reuse: bool,
+    /// How much memory the check's heavy geometry steps may take at once,
+    /// such as `8G` or `512M` (powers of 1024), or `none`. A step that
+    /// would pass it beside the ones running waits for one to finish; a
+    /// step estimated at more than the whole budget is not evaluated, by
+    /// name. Without it, `AXIOVAL_MEMORY_BUDGET` names it, and without that
+    /// it is half the memory the system reports available, at least 6G.
+    /// The result is the same under any budget that refuses no step.
+    #[arg(long, value_name = "SIZE")]
+    memory_budget: Option<String>,
     /// Print how long each phase took on stderr, each as it ends: compiling,
     /// reading the models, each geometry phase, each rule, and writing the
     /// outputs. Never changes the result or the exit status.
@@ -1267,12 +1284,9 @@ fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     let stale = results::supply_revisions(&mut plan, &args, &session)?;
     let unknown_pairs = axioval::engine::unknown_relation_objects(&plan, session.project());
     let demand = demand(&args, &plan, &registry, &session);
-    let parallelism = parallelism(args.threads)?;
-    let mut runtime = check_runtime(registry, &args, &clock, supplied.terrain.take())
-        .with_parallelism(parallelism);
-    if args.no_reuse {
-        runtime = runtime.without_reuse();
-    }
+    let budget = memory_budget(args.memory_budget.as_deref())?;
+    let terrain = supplied.terrain.take();
+    let runtime = check_runtime(registry, &args, &clock, (terrain, budget.as_ref()))?;
     let ((session, mut meshed, mut result), demand) = checked(
         &args,
         (&runtime, &mut clock),
@@ -1280,6 +1294,7 @@ fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
         (session, &bytes),
         demand,
     )?;
+    clock.memory(budget.as_deref());
     // The zones are placed against every body of the session as checked.
     let placements = zones::check_placements(&session, &plan, &mut supplied.zone_files);
     supplied.unsupplied.extend(placements);
@@ -1586,9 +1601,10 @@ fn rule_order(text: &str) -> Result<axioval::engine::RuleOrder, String> {
 const THREADS_VARIABLE: &str = "AXIOVAL_THREADS";
 
 /// The most threads `check` uses when neither `--threads` nor
-/// [`THREADS_VARIABLE`] names a count. Memory grows with the threads, and
-/// four keep most of the speed-up: until a check budgets its memory (#407),
-/// more threads are asked for, not taken.
+/// [`THREADS_VARIABLE`] names a count. Four keep most of the speed-up;
+/// the heavy steps' memory is bounded by the memory budget (#407), but
+/// each thread still holds its subject's scene, so more threads are asked
+/// for, not taken.
 const DEFAULT_THREADS: std::num::NonZeroUsize = std::num::NonZeroUsize::new(4).unwrap();
 
 /// How many threads `check` evaluates each rule's subjects on: `--threads`,
@@ -1619,15 +1635,66 @@ fn parallelism(
     }
 }
 
+/// The environment variable naming `check`'s memory budget when
+/// `--memory-budget` does not.
+const MEMORY_BUDGET_VARIABLE: &str = "AXIOVAL_MEMORY_BUDGET";
+
+/// The memory budget `check` admits its heavy steps against:
+/// `--memory-budget`, else [`MEMORY_BUDGET_VARIABLE`], else half the
+/// memory the system reports available, at least
+/// [`MemoryBudget::FLOOR`](axioval::engine::MemoryBudget::FLOOR); `none`
+/// for no budget, as where the system does not say.
+///
+/// # Errors
+///
+/// A stated budget that is not a size or `none`.
+fn memory_budget(
+    stated: Option<&str>,
+) -> Result<Option<std::sync::Arc<axioval::engine::MemoryBudget>>, Box<dyn Error>> {
+    use axioval::engine::{MemoryBudget, memory};
+    let stated = match stated {
+        Some(stated) => Some((stated.to_owned(), "--memory-budget")),
+        None => match std::env::var(MEMORY_BUDGET_VARIABLE) {
+            Ok(value) => Some((value, MEMORY_BUDGET_VARIABLE)),
+            Err(std::env::VarError::NotPresent) => None,
+            Err(std::env::VarError::NotUnicode(_)) => {
+                return Err(format!("{MEMORY_BUDGET_VARIABLE} is not a size").into());
+            }
+        },
+    };
+    let budget = match stated {
+        Some((text, _)) if text.trim().eq_ignore_ascii_case("none") => None,
+        Some((text, name)) => Some(MemoryBudget::new(
+            memory::parse_size(&text).map_err(|error| format!("{name}: {error}"))?,
+        )),
+        None => MemoryBudget::from_available(),
+    };
+    Ok(budget.map(std::sync::Arc::new))
+}
+
 /// The runtime `check` runs its plan with: located, summarizing and timing
-/// rules as its arguments ask.
+/// rules, on as many threads and reusing as much, as its arguments ask,
+/// against the terrain and memory budget given.
+///
+/// # Errors
+///
+/// [`THREADS_VARIABLE`] set to anything but a positive whole number.
 fn check_runtime(
     registry: axioval::engine::CapabilityRegistry,
     args: &CheckArgs,
     clock: &timings::Stopwatch,
-    terrain: Option<axioval::engine::TerrainServiceHandle>,
-) -> Runtime {
-    let mut runtime = Runtime::new(registry);
+    (terrain, budget): (
+        Option<axioval::engine::TerrainServiceHandle>,
+        Option<&std::sync::Arc<axioval::engine::MemoryBudget>>,
+    ),
+) -> Result<Runtime, Box<dyn Error>> {
+    let mut runtime = Runtime::new(registry).with_parallelism(parallelism(args.threads)?);
+    if args.no_reuse {
+        runtime = runtime.without_reuse();
+    }
+    if let Some(budget) = budget {
+        runtime = runtime.with_memory_budget(budget.clone());
+    }
     if let Some(terrain) = terrain {
         runtime = runtime.with_terrain(terrain);
     }
@@ -1643,7 +1710,7 @@ fn check_runtime(
     if let Some(observer) = clock.rules() {
         runtime = runtime.with_rule_observer(observer);
     }
-    runtime
+    Ok(runtime)
 }
 
 /// Reads each `--relations` file by its relation's declared columns and

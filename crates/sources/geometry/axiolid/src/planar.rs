@@ -21,6 +21,9 @@ pub(crate) enum PlanarRefusal {
     Overlay(OverlayError),
     /// The operands' edges meet in more pairs than one overlay is handed.
     OverBudget(budget::OverBudget),
+    /// The overlay's memory estimate alone is more than the check's
+    /// memory budget (#407).
+    Memory(axioval_engine::memory::OverBudget),
 }
 
 impl PlanarRefusal {
@@ -30,6 +33,7 @@ impl PlanarRefusal {
         match self {
             Self::Overlay(error) => overlay_refusal(error),
             Self::OverBudget(_) => budget::OVER_BUDGET,
+            Self::Memory(_) => budget::OVER_MEMORY,
         }
     }
 
@@ -40,6 +44,7 @@ impl PlanarRefusal {
         match self {
             Self::Overlay(_) => String::new(),
             Self::OverBudget(over) => format!(": {over}"),
+            Self::Memory(over) => format!(": the plan overlay was not built: {over}"),
         }
     }
 }
@@ -49,6 +54,7 @@ impl std::fmt::Display for PlanarRefusal {
         match self {
             Self::Overlay(error) => f.write_str(overlay_refusal(error)),
             Self::OverBudget(over) => over.fmt(f),
+            Self::Memory(over) => write!(f, "the plan overlay was not built: {over}"),
         }
     }
 }
@@ -57,7 +63,8 @@ impl std::fmt::Display for PlanarRefusal {
 /// their edges meet in more pairs than the overlay budget allows (#419).
 /// Every overlay this module builds goes through here, so none can grow
 /// without bound; a union passing one set as both operands counts its
-/// edges once.
+/// edges once. It is built once admitted against the check's memory
+/// budget (#407), refused where its estimate alone is more than that.
 pub(crate) fn plan_overlay(
     first: &OverlayInput,
     second: &OverlayInput,
@@ -65,12 +72,13 @@ pub(crate) fn plan_overlay(
     fill: FillRule,
     tolerance: axiolid_core::Tolerance,
 ) -> Result<OverlayResult, PlanarRefusal> {
-    if std::ptr::eq(first, second) {
+    let estimate = if std::ptr::eq(first, second) {
         budget::admit(&[&first.polygons])
     } else {
         budget::admit(&[&first.polygons, &second.polygons])
     }
     .map_err(PlanarRefusal::OverBudget)?;
+    let _admitted = axioval_engine::memory::admit(estimate).map_err(PlanarRefusal::Memory)?;
     axiolid_overlay::overlay(first, second, operation, fill, tolerance)
         .map_err(PlanarRefusal::Overlay)
 }

@@ -52,6 +52,15 @@ const VARIANTS: &[(&str, &[&str])] = &[
         "shuffled (seed 2), 1 thread, no reuse",
         &["--threads", "1", "--rule-order", "shuffled:2", "--no-reuse"],
     ),
+    // A memory budget smaller than the steps running at once on four
+    // threads, so they wait for each other (#407): the `coverage` case's
+    // overlays wait on the public architecture models, whose largest step
+    // is estimated at 37 MiB. Above every one step's estimate, it refuses
+    // none.
+    (
+        "plan, 4 threads, a small memory budget",
+        &["--threads", "4", "--memory-budget", "64M"],
+    ),
 ];
 
 /// The parity cases whose rulesets the gate runs.

@@ -99,6 +99,25 @@ All notable changes are documented here. This project follows Semantic Versionin
   piece went from 6.6 s to 2.3 s per first search. The first interval's
   witness and mapping the path remain.
 
+- **Free floors of up to 20,000 corners are searched for a disc**
+  ([#414](https://github.com/axioval/engine/issues/414)). The disc search
+  refused a free floor past 5,000 corners, since a disc morphology along
+  dense teeth round a hole still cost about 17 s and 300 MB at 5,000
+  corners and minutes at 10,000. It now moves to axiolid-overlay 0.3.18
+  and takes its fast mode with a 1 mm budget: a notch within it is filled
+  by a chord, each result stays on the side the search asks of it (inner
+  within the exact one for a witness, outer around it for an absence), so
+  every verdict holds as before and a circle within the excess of fitting
+  is undecided rather than misjudged. Where no notch lies within the
+  budget the morphology is the exact one bit for bit. Around a 1 x 1
+  column toothed 0.5 mm deep, an erosion by a 0.4 m disc took 14 to 36 s
+  and 7.5 GB at 10,000 corners and now 0.04 s; 0.08 s at 20,000 and 0.2 s
+  at 50,000 (release). A whole search, both verdicts, takes 0.5 s at
+  10,000 corners, 3.6 s and 100 MB at 20,000, and 21 s and 250 MB at
+  50,000, where the simplified regions now cost most, so the bound is
+  raised to 20,000 corners and a larger floor is still refused by name.
+  Reports are byte-identical.
+
 - **Findings name the facet an IDS states, and every property by the names
   it binds to** ([#375](https://github.com/axioval/engine/issues/375)).
   With `check --ids`, findings named the concepts the translation

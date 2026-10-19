@@ -39,7 +39,7 @@ use std::cell::{OnceCell, RefCell};
 use std::f64::consts::PI;
 
 use axiolid_core::{Point2, Tolerance};
-use axiolid_overlay::{Polygon, Region, Ring, union_soup};
+use axiolid_overlay::{MorphologyMode, Polygon, Region, Ring, union_soup};
 use axioval_engine::FreeSpaceError;
 
 use crate::geometry::Triangle;
@@ -909,9 +909,9 @@ impl Scene {
             return Ok(Region::empty());
         }
         let near = if absence {
-            target.dilate_outer(radius + KNIFE_EDGE_METRES, self.tolerance)
+            target.dilate_outer_with(radius + KNIFE_EDGE_METRES, self.tolerance, FAST)
         } else {
-            target.dilate_inner(radius, self.tolerance)
+            target.dilate_inner_with(radius, self.tolerance, FAST)
         }
         .map_err(|e| unavailable("reach", e))?;
         free.intersection(&near, self.tolerance)
@@ -1288,15 +1288,32 @@ pub(crate) fn circle(scene: &Scene, radius: f64) -> Result<Search, FreeSpaceErro
     }
 }
 
+/// How much farther a circle search's disc morphology may lie from the
+/// exact one, in metres, where it fills a notch by a chord rather than
+/// keeping its every cusp (#414, axiolid-overlay's fast mode, ADR 0087 of
+/// the kernel): each result stays on the side the search asks of it, an
+/// inner one within the exact region and an outer one around it, so a
+/// witness found in it and an absence proven over it hold as over the
+/// exact one. The excess only narrows what a witness may use and widens
+/// what an absence must rule out, so a circle within it of fitting is
+/// undecided rather than misjudged. Where no notch lies within it the
+/// result is the exact one bit for bit.
+const FAST: MorphologyMode = MorphologyMode::fast(1.0e-3);
+
 /// The most corners a region a circle search erodes or dilates by a disc
-/// may have: a safety net, not a cost model (#394, #402). Since
-/// axiolid-overlay 0.3.16 a disc morphology no longer builds one hull per
-/// edge against every neighbour, and a toothed floor of 1,202 corners is
-/// eroded in about 0.3 s, but the cost still grows faster than the edges
-/// where dense teeth line a hole: at 2,400 corners such an erosion takes
-/// about 2.5 s, at 5,000 about 17 s and 300 MB, at 10,000 over two
-/// minutes. A search past it is refused with the count.
-pub(crate) const MORPHOLOGY_POINTS: usize = 5_000;
+/// may have: a safety net, not a cost model (#394, #402, #414). Since
+/// axiolid-overlay 0.3.18 the search fills a notch within [`FAST`]'s
+/// budget by a chord, and a disc morphology of a toothed floor costs
+/// about its corners: around a 1 x 1 column whose sides are toothed
+/// 0.5 mm deep, an erosion by a disc of 0.4 m takes about 0.04 s at
+/// 10,000 corners, 0.08 s at 20,000 and 0.2 s at 50,000 (the exact one
+/// 14 to 36 s and 7.5 GB at 10,000). The rest of the search does not
+/// yet: a whole search takes up to 0.5 s at 10,000 corners, 3.6 s and
+/// 100 MB at 20,000, and 21 s and 250 MB at 50,000, where the regions
+/// simplified from around cost most. Teeth far deeper than they are
+/// apart fill no notch within the budget and still cost what the exact
+/// morphology does. A search past it is refused with the count.
+pub(crate) const MORPHOLOGY_POINTS: usize = 20_000;
 
 /// `region` where a disc search may erode or dilate it, else the refusal
 /// naming its corners ([`MORPHOLOGY_POINTS`]).
@@ -1395,11 +1412,11 @@ fn circle_witness(
             None => scene.clear(false)?,
         };
         within_budget(clear, "the free floor")?
-            .erode_inner(radius, t)
+            .erode_inner_with(radius, t, FAST)
             .map_err(err)?
     } else {
         let inner = within_budget(&scene.scope, "the floor")?
-            .erode_inner(radius, t)
+            .erode_inner_with(radius, t, FAST)
             .map_err(err)?;
         let obstacles = simplest(scene, 2, simple).unwrap_or(&scene.obstacles);
         if obstacles.is_empty() || inner.is_empty() {
@@ -1408,7 +1425,7 @@ fn circle_witness(
             inner
                 .difference(
                     &within_budget(obstacles, "the obstacles' footprint")?
-                        .dilate_outer(radius, t)
+                        .dilate_outer_with(radius, t, FAST)
                         .map_err(err)?,
                     t,
                 )
@@ -1449,11 +1466,11 @@ fn circle_absent(
             None => scene.clear(true)?,
         };
         within_budget(clear, "the free floor")?
-            .erode_outer(shrunk, t)
+            .erode_outer_with(shrunk, t, FAST)
             .map_err(err)?
     } else {
         let outer = within_budget(&scene.room, "the floor")?
-            .erode_outer(shrunk, t)
+            .erode_outer_with(shrunk, t, FAST)
             .map_err(err)?;
         let sure = simplest(scene, 3, simple).unwrap_or(&scene.sure);
         if sure.is_empty() || outer.is_empty() {
@@ -1462,7 +1479,7 @@ fn circle_absent(
             outer
                 .difference(
                     &within_budget(sure, "the obstacles' footprint")?
-                        .dilate_inner(shrunk, t)
+                        .dilate_inner_with(shrunk, t, FAST)
                         .map_err(err)?,
                     t,
                 )
@@ -2227,8 +2244,36 @@ mod tests {
         assert!(matches!(circle(&deep, 0.4), Ok(Search::Found { .. })));
     }
 
-    /// A free floor of more corners than a disc search erodes is refused
-    /// with their count (#394), not eroded until memory runs out; a disc
+    /// A free floor past the 5,000-corner budget of #394 (a 1 x 1 column
+    /// toothed 0.5 mm deep along two sides, 10,002 corners) is decided
+    /// both ways since the search fills its notches within [`FAST`]'s
+    /// budget (#414): no disc of 1 m radius fits in the 1 m band round it,
+    /// and one of 0.4 m does. The erosion took the fast route, with an
+    /// excess within the budget.
+    #[test]
+    fn a_floor_past_the_old_corner_budget_of_394_is_decided() {
+        let mut deep = scene((0.0, 0.0), (3.0, 3.0), &[], &[]);
+        let column = Region::new(
+            vec![Polygon {
+                outer: jagged(1.0, 1.0, 1.0, 1.0 / 5_000.0, 5.0e-4),
+                holes: Vec::new(),
+            }],
+            deep.tolerance,
+        )
+        .unwrap();
+        assert_eq!(column.polygons()[0].outer.points.len(), 10_002);
+        deep.obstacles = column.clone();
+        deep.sure = column;
+        let clear = deep.clear(true).unwrap();
+        assert!(region_points(clear) > 10_000);
+        let eroded = clear.erode_outer_with(0.4, deep.tolerance, FAST).unwrap();
+        assert!(eroded.excess().is_some_and(|e| (0.0..=1.0e-3).contains(&e)));
+        assert!(matches!(circle(&deep, 1.0), Ok(Search::Nowhere)));
+        assert!(matches!(circle(&deep, 0.4), Ok(Search::Found { .. })));
+    }
+
+    /// A free floor of more corners than a disc search erodes (20,006) is
+    /// refused with their count (#394), not eroded until memory runs out; a disc
     /// that fits at the floor's estimated pole is still found there.
     #[test]
     fn a_floor_past_the_corner_budget_is_refused_by_name() {
@@ -2246,7 +2291,7 @@ mod tests {
         assert!(region_points(scene.clear(true).unwrap()) > MORPHOLOGY_POINTS);
         let refused = circle(&scene, 1.0).expect_err("refused");
         assert!(
-            refused.to_string().contains("corners, more than the 5000"),
+            refused.to_string().contains("corners, more than the 20000"),
             "{refused}"
         );
         assert!(matches!(circle(&scene, 0.4), Ok(Search::Found { .. })));

@@ -192,10 +192,16 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   clear part and the obstacles, each checked on its side by the overlay),
   and again over the regions as built only where that is undecided or
   refused; a disc morphology's cost grows faster than the edges,
-  sub-millimetre ones included. A region past `MORPHOLOGY_POINTS` (5,000)
-  corners is refused by name (#394), never eroded; it is a safety net
-  since axiolid-overlay 0.3.16 (#402), not a cost model, so raise it only
-  with timings of a hole lined by dense teeth. Keep the pole first, which
+  sub-millimetre ones included. Every disc morphology of the circle
+  search (and `reaching_disc`) takes `placement::FAST`, the overlay's
+  fast mode with a 1 mm budget (#414, 0.3.18): it keeps the side asked,
+  so inner stays inner for witnesses and outer outer for absences; never
+  use a fast result on the other side, nor read a distance from it
+  without adding `Region::excess`. A region past `MORPHOLOGY_POINTS`
+  (20,000) corners is refused by name (#394), never eroded; it is a
+  safety net (#402, #414), not a cost model, so raise it only with
+  timings of a hole lined by dense teeth (the whole search, not only the
+  morphology: past 20,000 the simplified regions cost most). Keep the pole first, which
   needs no morphology. `any_rectangle` takes its first interval
   witness first, as it always did, then may end the search over every
   angle at once (#371): `Scene::fits_nowhere` (the clear part eroded by an

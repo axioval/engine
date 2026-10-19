@@ -105,7 +105,7 @@ axiolid-measure = "0.3.10"
 # collinear vertices only; 0.3.17 skips a chord whose trimmed hulls would
 # be zero-area slivers, so footprints 0.3.16 refused give 0.3.15's results
 # bit for bit again (#331).
-axiolid-overlay = "0.3.17"
+axiolid-overlay = "0.3.18"
 axiolid-ray-mesh = "0.4.0"
 axiolid-route = "0.3.7"
 axiolid-spatial = "0.3.0"

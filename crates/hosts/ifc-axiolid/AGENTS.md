@@ -21,6 +21,9 @@ benchmark) is its first consumer.
   private; a host must never need a second reading of the IFC model to use
   what `attach` registered. `Options` and `GeometryReport` are
   `non_exhaustive`, so fields are additive. Document every public item.
+- `Options::reuse` (on by default, `with_reuse`) is handed to the
+  free-space service; off, it keeps nothing for a later request, only for
+  the determinism gate (#441). It never changes an answer.
 - `Options::timings` prints `timing: <seconds> s geometry: <phase>` on
   stderr (`src/timings.rs`), the CLI's `--timings` format; it never changes
   the result.

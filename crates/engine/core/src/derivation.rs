@@ -26,6 +26,13 @@
 //! depends on an adapter to read or build an adapter's derivations.
 //! [`crate::MeasuredMemo`]'s shared table is a view of the same store.
 //!
+//! **Keeping nothing.** A store made by [`DerivationStore::forgetful`]
+//! builds every read afresh and keeps no value, still one build of a key at
+//! a time, so a run shows that no report depends on what was reused: the
+//! determinism gate of [#441](https://github.com/axioval/engine/issues/441)
+//! runs every check with the store kept and forgetful, and requires the
+//! same bytes. [`crate::Runtime::without_reuse`] installs one.
+//!
 //! [ADR 0006]: https://github.com/axioval/engine/blob/main/docs/src/adr-0006.md
 
 use std::any::{Any, TypeId};
@@ -156,6 +163,8 @@ struct Shared {
     state: Mutex<State>,
     /// Signalled when a build that others wait for ends, however it ends.
     ended: Condvar,
+    /// Whether no value is kept once built ([`DerivationStore::forgetful`]).
+    forgets: bool,
 }
 
 #[derive(Default)]
@@ -256,6 +265,26 @@ impl DerivationStore {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// A store that keeps nothing: every read builds its key afresh (one
+    /// build of a key at a time, its waiters then building it again), and
+    /// whatever is put in it is dropped. Since a value is a pure function
+    /// of its key, every answer is what a keeping store gives, only built
+    /// more often: the determinism gate (#441) compares the two.
+    #[must_use]
+    pub fn forgetful() -> Self {
+        Self(Arc::new(Shared {
+            forgets: true,
+            ..Shared::default()
+        }))
+    }
+
+    /// Whether the store keeps the values it builds (not
+    /// [`Self::forgetful`]).
+    #[must_use]
+    pub fn keeps(&self) -> bool {
+        !self.0.forgets
     }
 
     /// The value of `key` of kind `D`, built once: by this caller, or by
@@ -380,6 +409,9 @@ impl DerivationStore {
         K: Hash + Eq + Send + Sync + 'static,
         S: Send + 'static,
     {
+        if self.0.forgets {
+            return;
+        }
         let mut state = self.lock();
         let table = state.table::<Marker, K, S>(kind);
         match table
@@ -406,6 +438,9 @@ impl DerivationStore {
         K: Hash + Eq + Send + Sync + 'static,
         S: Default + Send + 'static,
     {
+        if self.0.forgets {
+            return;
+        }
         let mut state = self.lock();
         let table = state.table::<Marker, K, S>(kind);
         let fresh = || Slot::Ready {
@@ -559,6 +594,14 @@ where
             && let Slot::Building { flight, waiters } = *slot
             && flight == self.flight
         {
+            if self.store.0.forgets {
+                // Nothing is kept: whoever waited builds the key again.
+                table.entries.remove(&*self.key);
+                if waiters > 0 {
+                    self.store.0.ended.notify_all();
+                }
+                return answer;
+            }
             *slot = Slot::Ready { value, bytes };
             table.statistics.bytes += bytes;
             if waiters > 0 {

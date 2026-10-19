@@ -65,6 +65,9 @@ pub struct AxiolidFreeSpaceService {
     /// How many threads searched at once, at most: each searches its own
     /// space, so [`KEPT_SCENES`] are kept for each.
     searching: Searching,
+    /// Whether footprints, columns and scenes are kept for later requests
+    /// ([`Self::with_reuse`]).
+    reuse: bool,
 }
 
 /// How many placement scenes a service keeps for each thread searching
@@ -219,11 +222,24 @@ impl AxiolidFreeSpaceService {
             columns: Mutex::new(BTreeMap::new()),
             scenes: Mutex::new(Vec::new()),
             searching: Searching::default(),
+            reuse: true,
         }
+    }
+
+    /// The same, keeping no footprint, column or placement scene for a
+    /// later request unless `reuse` is set (on by default). Every answer
+    /// is the same either way, since what a search may spend is a function
+    /// of its request alone (#434); off, only to show that (#441).
+    #[must_use]
+    pub fn with_reuse(self, reuse: bool) -> Self {
+        Self { reuse, ..self }
     }
 
     /// [`solid_column`] of `obstacle` about `level`, built once per service.
     fn solid_column(&self, obstacle: &ObjectId, mesh: &TriMesh, level: f64, half: f64) -> Column {
+        if !self.reuse {
+            return solid_column(obstacle, mesh, level, half);
+        }
         let key = (obstacle.clone(), level.to_bits(), half.to_bits());
         let cached = self
             .columns
@@ -251,6 +267,9 @@ impl AxiolidFreeSpaceService {
         low: f64,
         high: f64,
     ) -> Result<Plan, String> {
+        if !self.reuse {
+            return band_footprint(obstacle, mesh, low, high);
+        }
         let key = (obstacle.clone(), low.to_bits(), high.to_bits());
         let cached = self
             .footprints
@@ -665,7 +684,7 @@ impl AxiolidFreeSpaceService {
         tolerance: axiolid_core::Tolerance,
     ) -> Result<(Scene, f64), FreeSpaceError> {
         let key = SceneKey::of(request);
-        {
+        if self.reuse {
             let kept = self.scenes.lock().unwrap_or_else(PoisonError::into_inner);
             if let Some(kept) = kept.iter().find(|kept| kept.key == key) {
                 return Ok((kept.scene(), kept.floor));
@@ -680,6 +699,9 @@ impl AxiolidFreeSpaceService {
             tolerance,
             None,
         )?;
+        if !self.reuse {
+            return Ok((scene, floor));
+        }
         let mut kept = self.scenes.lock().unwrap_or_else(PoisonError::into_inner);
         kept.retain(|kept| kept.key != key);
         kept.push(KeptScene::of(key, &scene, floor));

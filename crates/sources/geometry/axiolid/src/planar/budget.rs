@@ -333,16 +333,40 @@ pub(crate) const SEARCH_STEPS: u64 = 100;
 pub(crate) struct Work {
     spent: Cell<u64>,
     charged: RefCell<Vec<u32>>,
+    /// A smaller budget than [`SEARCH_STEPS`], in millionths of a step,
+    /// for a test placing a search at its threshold.
+    #[cfg(test)]
+    limit: Option<u64>,
 }
 
 impl Work {
+    /// A search's work within `limit` millionths of a step rather than
+    /// [`SEARCH_STEPS`].
+    #[cfg(test)]
+    pub(crate) fn within(limit: u64) -> Self {
+        Self {
+            limit: Some(limit),
+            ..Self::default()
+        }
+    }
+
+    /// The most a search may spend, in millionths of a step.
+    #[cfg_attr(not(test), allow(clippy::unused_self))]
+    fn limit(&self) -> u64 {
+        #[cfg(test)]
+        if let Some(limit) = self.limit {
+            return limit;
+        }
+        SEARCH_STEPS * STEP
+    }
+
     /// Charges a step of `cost`, or refuses it past either budget.
     pub(crate) fn charge(&self, what: &'static str, cost: Cost) -> Result<(), Refusal> {
         if cost.pairs > cost.budget() {
             return Err(Refusal::Step { what, cost });
         }
         let spent = self.spent.get().saturating_add(cost.share());
-        if spent > SEARCH_STEPS * STEP {
+        if spent > self.limit() {
             return Err(Refusal::Search { what, cost });
         }
         self.spent.set(spent);

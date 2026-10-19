@@ -785,6 +785,14 @@ memory-bound host lowers `--threads`. Rule timings count every thread's
 host calls, so the time a rule spent in a service may exceed its wall
 time; its host time is never stated above its wall time.
 
+Two hidden switches exist only for the determinism gate (#441, see
+[Parity harness](./parity.md#the-determinism-gate)) and change nothing but
+how long a check takes: `--rule-order plan|reversed|shuffled:SEED`
+evaluates the rules in another order wherever the rules they read leave
+it free, and `--no-reuse` keeps nothing built for reuse (a derivation
+store that keeps nothing, and geometry services that keep no placement
+scene or footprint). The result is the same either way, byte for byte.
+
 Every finding has an `id`, its stable identity over GlobalIds (see
 [Review decisions](./decisions.md#finding-identity)), equal to its BCF topic
 GUID. `--decisions FILE` carries the decisions in `FILE` (written by

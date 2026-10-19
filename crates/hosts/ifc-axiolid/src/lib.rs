@@ -589,6 +589,12 @@ pub struct Options {
     /// The only objects whose bodies are asked about ([`Self::with_only`],
     /// #410); every object when `None`, the default.
     pub only: Option<BTreeSet<ObjectId>>,
+    /// Whether the geometry services keep what they built for later
+    /// requests: the free-space service's placement scenes and obstacle
+    /// footprints. On by default. Off only to show that no answer depends
+    /// on what was kept (the determinism gate, #441); every answer is
+    /// then built afresh, and the same.
+    pub reuse: bool,
 }
 
 impl Default for Options {
@@ -622,7 +628,15 @@ impl Options {
             derived_matching: Matching::ById,
             derived_tolerance_metres: DEFAULT_TOLERANCE_METRES,
             only: None,
+            reuse: true,
         }
+    }
+
+    /// The same, the services keeping nothing for later requests unless
+    /// `reuse` is set ([`Self::reuse`]).
+    #[must_use]
+    pub fn with_reuse(self, reuse: bool) -> Self {
+        Self { reuse, ..self }
     }
 
     /// The same, meshing only what measuring `objects` as among all the
@@ -1553,19 +1567,26 @@ pub fn attach(
     clock.lap("geometry: alignments and facades");
     // Object frames and door leaves in the frame the bodies are measured in.
     let session = session.with_local_origins(origins)?;
-    let session = register(session, &snapshots, geometry, space, envelope, routes)?
-        .with_host_service(FacadeAreaServiceHandle::new(Arc::new(facade)), &snapshots)?
-        .with_host_service(LeafGlazingServiceHandle::new(Arc::new(glazing)), &snapshots)?
-        .with_derived_relationships(
-            DerivedRelationshipServiceHandle::new(Arc::new(derived)),
-            &snapshots,
-        )?
-        // Stations, offsets and heights of reference points along the
-        // sources' alignments.
-        .with_host_service(
-            AlignmentServiceHandle::new(Arc::new(alignments)),
-            &snapshots,
-        )?;
+    let session = register(
+        session,
+        &snapshots,
+        (geometry, options.reuse),
+        space,
+        envelope,
+        routes,
+    )?
+    .with_host_service(FacadeAreaServiceHandle::new(Arc::new(facade)), &snapshots)?
+    .with_host_service(LeafGlazingServiceHandle::new(Arc::new(glazing)), &snapshots)?
+    .with_derived_relationships(
+        DerivedRelationshipServiceHandle::new(Arc::new(derived)),
+        &snapshots,
+    )?
+    // Stations, offsets and heights of reference points along the
+    // sources' alignments.
+    .with_host_service(
+        AlignmentServiceHandle::new(Arc::new(alignments)),
+        &snapshots,
+    )?;
     clock.lap("geometry: register services");
     // Copies a derived source keeps of its original's objects, compared
     // through the services just registered, in the shared world frame.
@@ -3316,7 +3337,7 @@ fn with_boundaries(
 fn register(
     session: EvidenceSession,
     snapshots: &[SourceSnapshot],
-    geometry: AxiolidGeometry,
+    (geometry, reuse): (AxiolidGeometry, bool),
     (space, shelves, boundaries, plan_areas): (
         AxiolidSpaceService,
         AxiolidLinearQuantityService,
@@ -3338,10 +3359,9 @@ fn register(
             bound,
         )?
         .with_host_service(
-            FreeSpaceServiceHandle::new(Arc::new(AxiolidFreeSpaceService::new(
-                geometry.clone(),
-                source.clone(),
-            ))),
+            FreeSpaceServiceHandle::new(Arc::new(
+                AxiolidFreeSpaceService::new(geometry.clone(), source.clone()).with_reuse(reuse),
+            )),
             bound,
         )?
         .with_host_service(SpaceServiceHandle::new(Arc::new(space)), bound)?

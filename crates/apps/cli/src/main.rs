@@ -346,6 +346,18 @@ struct CheckArgs {
     /// number; memory grows with the threads.
     #[arg(long, value_name = "N")]
     threads: Option<std::num::NonZeroUsize>,
+    /// Evaluate the rules in another order wherever their dependencies
+    /// leave it free: `plan` (the default), `reversed` or `shuffled:SEED`.
+    /// A diagnostic of the determinism gate (#441): the result is the same
+    /// in every order.
+    #[arg(long, value_name = "ORDER", default_value = "plan", value_parser = rule_order, hide = true)]
+    rule_order: axioval::engine::RuleOrder,
+    /// Keep nothing built for reuse: no derivation, measurement or shared
+    /// selection of the run, and no placement scene or footprint of the
+    /// geometry services. A diagnostic of the determinism gate (#441): the
+    /// result is the same, only slower.
+    #[arg(long, hide = true)]
+    no_reuse: bool,
     /// Print how long each phase took on stderr, each as it ends: compiling,
     /// reading the models, each geometry phase, each rule, and writing the
     /// outputs. Never changes the result or the exit status.
@@ -1186,7 +1198,8 @@ fn geometry_options(
             DerivedMatch::Id => geometry::Matching::ById,
             DerivedMatch::IdOrGeometry => geometry::Matching::ByIdOrGeometry,
         })
-        .with_derived_tolerance(args.derived_tolerance);
+        .with_derived_tolerance(args.derived_tolerance)
+        .with_reuse(!args.no_reuse);
     let documents: Vec<&SourceId> = session
         .snapshots()
         .map(axioval::engine::SourceSnapshot::source)
@@ -1233,7 +1246,8 @@ fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
         None => packages(&args.definitions, &args.rulesets)?,
     };
     let registry = axioval::default_registry()?;
-    let mut plan = compile_rulesets(&registry, &definitions, &rulesets)?;
+    let mut plan =
+        compile_rulesets(&registry, &definitions, &rulesets)?.evaluate_in(args.rule_order);
     let mut supplied = supply_inputs(&mut plan, &args)?;
     if args.locate == Locate::Geometry && !args.geometry {
         return Err("`--locate geometry` needs `--geometry` to derive spaces from bodies".into());
@@ -1254,8 +1268,11 @@ fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     let unknown_pairs = axioval::engine::unknown_relation_objects(&plan, session.project());
     let demand = demand(&args, &plan, &registry, &session);
     let parallelism = parallelism(args.threads)?;
-    let runtime = check_runtime(registry, &args, &clock, supplied.terrain.take())
+    let mut runtime = check_runtime(registry, &args, &clock, supplied.terrain.take())
         .with_parallelism(parallelism);
+    if args.no_reuse {
+        runtime = runtime.without_reuse();
+    }
     let ((session, mut meshed, mut result), demand) = checked(
         &args,
         (&runtime, &mut clock),
@@ -1548,6 +1565,20 @@ fn supply_inputs(plan: &mut ExecutionPlan, args: &CheckArgs) -> Result<Supplied,
         terrain: terrain.service,
         unsupplied,
     })
+}
+
+/// `--rule-order`: `plan`, `reversed` or `shuffled:SEED`.
+fn rule_order(text: &str) -> Result<axioval::engine::RuleOrder, String> {
+    use axioval::engine::RuleOrder;
+    match text {
+        "plan" => Ok(RuleOrder::Plan),
+        "reversed" => Ok(RuleOrder::Reversed),
+        _ => text
+            .strip_prefix("shuffled:")
+            .and_then(|seed| seed.parse().ok())
+            .map(RuleOrder::Shuffled)
+            .ok_or_else(|| format!("`{text}` is not `plan`, `reversed` or `shuffled:SEED`")),
+    }
 }
 
 /// The environment variable naming how many threads `check` evaluates a

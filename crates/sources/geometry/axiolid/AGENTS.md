@@ -175,6 +175,9 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   with the differences their searches took (`keep_clear`): a space is
   searched over one scene several times (undecided obstacles first, a
   path and none, the bracket of the largest shape, #391).
+  `AxiolidFreeSpaceService::with_reuse(false)` keeps no scene, footprint
+  or column, for the determinism gate (#441); every answer must stay the
+  same either way.
   `Scene::inscribed` (#400) estimates the largest disc of each clear
   part in floating point (`placement::inscribed_disc`, the pole of
   inaccessibility over at most `INSCRIBED_CELLS` cells), kept with the
@@ -244,8 +247,9 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   and past `SEARCH_STEPS` steps at those budgets per search, by name.
   `Work` is never kept with a scene; a kept region is charged as it was
   built (`Scene::found` keeps each region's steps, `charge_once` the
-  clear and coarse parts), so a search's verdict never depends on the
-  searches before it. A cheap proof refused by the budget is no proof,
+  clear and coarse parts, and `charge_clear` the clear part behind a
+  kept largest disc or simplified region, #441), so a search's verdict
+  never depends on the searches before it. A cheap proof refused by the budget is no proof,
   never a cached `None`. Never call a Minkowski or disc operation on a
   scene's regions without charging it; raise a budget only with timings
   and peak memory (`placement::tests`

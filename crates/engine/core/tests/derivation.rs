@@ -400,3 +400,67 @@ fn a_memo_measurement_needing_itself_panics_rather_than_hangs() {
     let inner = memo.clone();
     memo.get_or_measure(1_u8, || inner.get_or_measure(1_u8, || 1_u8));
 }
+
+static FORGOTTEN_BUILDS: AtomicUsize = AtomicUsize::new(0);
+
+/// A key's double, slowly, counting its builds.
+struct SlowDouble;
+
+impl DerivationKind for SlowDouble {
+    const NAME: &'static str = "slow-double";
+    type Key = u64;
+    type Value = u64;
+
+    fn build(key: &u64, _: &Inputs<'_>) -> Result<u64, DerivationError> {
+        FORGOTTEN_BUILDS.fetch_add(1, Ordering::SeqCst);
+        std::thread::sleep(Duration::from_millis(20));
+        Ok(key * 2)
+    }
+}
+
+/// A store that keeps nothing (#441) answers every read as a keeping one
+/// does, building each: callers waiting for a build build the key again
+/// rather than read a value never kept, and neither the memo's shared nor
+/// its per-rule tables hold anything.
+#[test]
+fn a_forgetful_store_builds_every_read_and_keeps_nothing() {
+    let store = DerivationStore::forgetful();
+    assert!(!store.keeps() && DerivationStore::new().keeps());
+    let threads = 4;
+    let start = Arc::new(Barrier::new(threads));
+    let answers = ends({
+        let store = store.clone();
+        move || {
+            let handles: Vec<_> = (0..threads)
+                .map(|_| {
+                    let store = store.clone();
+                    let start = Arc::clone(&start);
+                    std::thread::spawn(move || {
+                        start.wait();
+                        *store
+                            .derive::<SlowDouble>(&ServiceRegistry::new(), &21)
+                            .expect("no cycle")
+                    })
+                })
+                .collect();
+            handles
+                .into_iter()
+                .map(|handle| handle.join().expect("no panic"))
+                .collect::<Vec<u64>>()
+        }
+    });
+    assert_eq!(answers, vec![42; threads]);
+    assert_eq!(FORGOTTEN_BUILDS.load(Ordering::SeqCst), threads);
+    assert!(store.held::<SlowDouble>(&21).is_none());
+
+    let memo = MeasuredMemo::on(store);
+    let measured = AtomicUsize::new(0);
+    for _ in 0..3 {
+        memo.get_or_measure("wall", || measured.fetch_add(1, Ordering::SeqCst));
+        memo.get_or_measure_for_rule("wall", || measured.fetch_add(1, Ordering::SeqCst));
+    }
+    assert_eq!(measured.load(Ordering::SeqCst), 6);
+    memo.insert("door", 1_u32);
+    memo.update("door", |value: &mut u32| *value += 1);
+    assert_eq!(memo.get::<&str, u32>(&"door"), None);
+}

@@ -88,7 +88,8 @@ jobs:
         run: ./scripts/package.sh --structure-only
 
   # The parity harness on the pinned public IFC models: every built-in
-  # capability beside its re-expression, through the real binary. The models
+  # capability beside its re-expression, through the real binary, and the
+  # determinism gate (#441) over the same models. The models
   # are openly licensed but not vendored; they are fetched once per manifest
   # and verified against their pinned SHA-256 on every run.
   parity:
@@ -110,10 +111,10 @@ jobs:
           key: parity-models-${{ hashFiles('fixtures/parity/models.json') }}
       - name: Fetch and verify the public models
         run: python3 scripts/parity_models.py fetch "$HOME/.cache/axioval/parity-models"
-      - name: Hold re-expressions to parity on the public models
+      - name: Hold re-expressions to parity and results to determinism on the public models
         run: |
           AXIOVAL_PARITY_MODELS="$HOME/.cache/axioval/parity-models" \
-            cargo test -p axioval-cli --test parity -- --ignored --nocapture
+            cargo test -p axioval-cli --test parity --test determinism -- --ignored --nocapture
 
   # Each capability rebuilt as a template timed and weighed against the
   # implementation it replaced, on a generated fixture and the public models

@@ -335,8 +335,8 @@ impl Budget {
 }
 
 /// The answers a walk was given, by anchor and the index of the
-/// relationship asked.
-type Memo = RefCell<BTreeMap<(ObjectId, usize), Vec<ObjectId>>>;
+/// relationship asked, each with how many citations it carried.
+type Memo = RefCell<BTreeMap<(ObjectId, usize), (Vec<ObjectId>, usize)>>;
 
 /// One walk of a step: its service, universes and how it may skip.
 struct Walk<'w> {
@@ -356,7 +356,9 @@ struct Walk<'w> {
 impl Walk<'_> {
     /// One query of the step's `index`th relationship, its evidence kept and
     /// its answer charged to `budget`; a query asked before is answered from
-    /// the memo, its evidence kept already.
+    /// the memo, its evidence kept already, and charged as if asked (#441):
+    /// what a walk may read is a function of its request alone, never of
+    /// which of its answers were reused.
     fn hop(
         &self,
         anchor: &ObjectId,
@@ -369,8 +371,8 @@ impl Walk<'_> {
             .memo
             .as_ref()
             .and_then(|memo| memo.borrow().get(&key).cloned());
-        if let Some(answer) = known {
-            self.charge(budget, anchor, answer.len())?;
+        if let Some((answer, cited)) = known {
+            self.charge(budget, anchor, answer.len() + cited)?;
             return Ok(answer);
         }
         // A single hop, or a chain through one relationship, asks over the
@@ -396,7 +398,8 @@ impl Walk<'_> {
         evidence.extend(selection.evidence().iter().cloned());
         let answer = selection.candidates().to_vec();
         if let Some(memo) = &self.memo {
-            memo.borrow_mut().insert(key, answer.clone());
+            memo.borrow_mut()
+                .insert(key, (answer.clone(), selection.evidence().len()));
         }
         Ok(answer)
     }
@@ -715,6 +718,64 @@ mod tests {
         let (_, asked_closed) = walked("a|b:either+", true, &[3, 0, 17], &everything);
         assert_eq!(asked_every, 60);
         assert_eq!(asked_closed, 29);
+    }
+
+    /// The least budget a walk of `step` from `starts` is admitted
+    /// within, and the queries the service answered.
+    fn least_budget(step: &str, closed: bool, starts: &[usize]) -> (usize, usize) {
+        let (graph, handle) = graph(closed);
+        let step = PathSegment::parse(step).unwrap();
+        let everything = universe(0..30);
+        let starts: Vec<ObjectId> = starts.iter().copied().map(object).collect();
+        let walk = |limit| {
+            step.walk_from_each_within(
+                &handle,
+                &starts,
+                (&everything, &everything),
+                step.chain(),
+                AbsentEndPolicy::Refuse,
+                limit,
+            )
+        };
+        let (mut low, mut high) = (0, 100_000);
+        assert!(walk(high).is_ok());
+        while low < high {
+            let middle = usize::midpoint(low, high);
+            if walk(middle).is_ok() {
+                high = middle;
+            } else {
+                low = middle + 1;
+            }
+        }
+        graph.asked.store(0, Ordering::Relaxed);
+        walk(low).unwrap();
+        (low, graph.asked.load(Ordering::Relaxed))
+    }
+
+    /// A query a walk from several starts answers from its memo is charged
+    /// as if asked (#441): the walk is admitted within exactly the budget
+    /// the walks from each start alone need together, though the service
+    /// answered fewer queries, so whether an answer was reused never moves
+    /// a refusal.
+    #[test]
+    fn a_walk_is_charged_for_the_answers_it_reuses_as_if_asked() {
+        for step in ["a|b:either+", "a|b:forward+", "a|b:backward+"] {
+            let starts = [3, 0, 17, 4, 5];
+            let (together, asked) = least_budget(step, false, &starts);
+            let alone: Vec<(usize, usize)> = starts
+                .iter()
+                .map(|start| least_budget(step, false, &[*start]))
+                .collect();
+            assert_eq!(
+                together,
+                alone.iter().map(|(budget, _)| budget).sum::<usize>(),
+                "{step}"
+            );
+            assert!(
+                asked < alone.iter().map(|(_, asked)| asked).sum::<usize>(),
+                "{step}: the memo answered nothing"
+            );
+        }
     }
 
     #[test]

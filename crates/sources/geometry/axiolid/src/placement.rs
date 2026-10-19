@@ -495,11 +495,7 @@ impl Scene {
         } else {
             (&self.scope, &self.obstacles)
         };
-        self.work
-            .charge_once(u32::from(absence), "floor less the obstacles", || {
-                overlay(scope, obstacles)
-            })
-            .map_err(over_budget)?;
+        self.charge_clear(absence)?;
         let cell = &self.clear[usize::from(absence)];
         if let Some(clear) = cell.get() {
             return Ok(clear);
@@ -510,6 +506,23 @@ impl Scene {
             _ => clear_of(scope, obstacles, self.tolerance)?,
         };
         Ok(cell.get_or_init(|| clear))
+    }
+
+    /// Charges the step taking the scope less the obstacles
+    /// ([`Self::clear`]) to this search, once, whether or not the scene
+    /// holds it already: so does every region read from it, whether it
+    /// was taken by this search or kept from another (#441).
+    fn charge_clear(&self, absence: bool) -> Result<(), FreeSpaceError> {
+        let (scope, obstacles) = if absence {
+            (&self.room, &self.sure)
+        } else {
+            (&self.scope, &self.obstacles)
+        };
+        self.work
+            .charge_once(u32::from(absence), "floor less the obstacles", || {
+                overlay(scope, obstacles)
+            })
+            .map_err(over_budget)
     }
 
     /// One of the regions a circle search erodes or dilates, simplified
@@ -523,6 +536,11 @@ impl Scene {
     /// and checking it by an overlay cost more than the search (12 s at
     /// 50,000 corners for 16 fewer). Taken once.
     fn simple(&self, which: usize) -> Option<&Region> {
+        // The clear parts are charged as if taken, kept or not; refused,
+        // nothing is kept for the next search.
+        if which < 2 {
+            self.charge_clear(which == 1).ok()?;
+        }
         self.simple[which]
             .get_or_init(|| {
                 let (region, side) = match which {
@@ -594,6 +612,8 @@ impl Scene {
     /// hint, never evidence; [`Inscribed::NONE`] where the part has no
     /// area, `None` where the difference is refused. Taken once per scene.
     pub(crate) fn inscribed(&self, absence: bool) -> Option<Inscribed> {
+        // As for the simplified regions: charged as if taken.
+        self.charge_clear(absence).ok()?;
         *self.inscribed[usize::from(absence)].get_or_init(|| {
             self.clear(absence).ok().map(|clear| {
                 inscribed_disc(clear, INSCRIBED_PRECISION_METRES).unwrap_or(Inscribed::NONE)
@@ -2125,6 +2145,113 @@ mod tests {
         };
         assert_eq!(format!("{:?}", any_rectangle(&again, 1.8, 1.2)), first);
         assert_eq!(again.work.spent(), spent);
+    }
+
+    /// The same for circles (#441): a circle search over a scene that kept
+    /// its clear parts, their largest discs and its simplified regions
+    /// from earlier searches (a rectangle rule's and a circle rule's over
+    /// the same space) spends what one over the scene as built does, so
+    /// its budget refuses alike whatever searches came before.
+    #[test]
+    fn a_circle_search_spends_what_its_request_takes_whatever_the_scene_keeps() {
+        let scenes: [(&dyn Fn() -> Scene, f64); 4] = [
+            (&|| furnished((0.0, 0.0), false), 0.75),
+            (&|| furnished((0.0, 0.0), true), 0.6),
+            (&|| jagged_scene((0.0, 0.0), 0.05), 0.4),
+            (&|| crowded(8.0, 12, 64), 0.9),
+        ];
+        for (scene, radius) in scenes {
+            let fresh = scene();
+            let first = format!("{:?}", circle(&fresh, radius));
+            let spent = fresh.work.spent();
+            // A rectangle search over the same scene, as a rectangle rule
+            // over the same space asks it.
+            let _ = any_rectangle(&fresh, 1.2, 0.8);
+            let kept = Scene {
+                clear: fresh.clear.clone(),
+                inscribed: fresh.inscribed.clone(),
+                simple: fresh.simple.clone(),
+                coarse: fresh.coarse.clone(),
+                found: fresh.found.clone(),
+                ..scene()
+            };
+            assert_eq!(format!("{:?}", circle(&kept, radius)), first);
+            assert_eq!(kept.work.spent(), spent, "radius {radius}");
+        }
+    }
+
+    /// Searches at their budget's threshold (#441): a circle and a
+    /// rectangle searched within exactly what they spend, and within one
+    /// millionth of a step less, decide alike over a scene as built and
+    /// over one keeping what a circle and a rectangle search took, in
+    /// either order. Within less, the rectangle is refused by name.
+    #[test]
+    fn searches_at_their_budget_decide_alike_whatever_the_scene_keeps() {
+        let make = || furnished((0.0, 0.0), true);
+        let searched = |scene: &Scene, rectangle: bool| {
+            if rectangle {
+                format!("{:?}", any_rectangle(scene, 1.8, 1.2))
+            } else {
+                format!("{:?}", circle(scene, 0.6))
+            }
+        };
+        for rectangle in [false, true] {
+            let fresh = make();
+            let decided = searched(&fresh, rectangle);
+            let spent = fresh.work.spent();
+            assert!(spent > 0, "rectangle {rectangle}");
+            // Both rules searched the scene already, in either order.
+            let kept: Vec<Scene> = [[false, true], [true, false]]
+                .iter()
+                .map(|order| {
+                    let mut held = make();
+                    for rule in order {
+                        // Each search with its own budget, over what the
+                        // ones before it kept.
+                        let scene = clone_kept(&held, make());
+                        let _ = searched(&scene, *rule);
+                        held = scene;
+                    }
+                    held
+                })
+                .collect();
+            for limit in [spent, spent - 1] {
+                let within = |scene: Scene| {
+                    searched(
+                        &Scene {
+                            work: Work::within(limit),
+                            ..scene
+                        },
+                        rectangle,
+                    )
+                };
+                let alone = within(make());
+                if limit == spent {
+                    assert_eq!(alone, decided, "rectangle {rectangle}");
+                } else if rectangle {
+                    assert!(alone.contains("past its budget"), "{alone}");
+                }
+                for earlier in &kept {
+                    assert_eq!(
+                        within(clone_kept(earlier, make())),
+                        alone,
+                        "rectangle {rectangle} within {limit}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// `scene` (as built) holding what `earlier` kept.
+    fn clone_kept(earlier: &Scene, scene: Scene) -> Scene {
+        Scene {
+            clear: earlier.clear.clone(),
+            inscribed: earlier.inscribed.clone(),
+            simple: earlier.simple.clone(),
+            coarse: earlier.coarse.clone(),
+            found: earlier.found.clone(),
+            ..scene
+        }
     }
 
     /// A box `w` x `h` centred on `(x, y)`, turned by `turn` radians.

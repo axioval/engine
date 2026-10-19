@@ -11,6 +11,7 @@ use axioval_rules::register_builtins;
 use common::runtime::{definitions, entity, plan, rule, ruleset, run, session};
 use common::{Model, id};
 use serde_json::{Value, json};
+use std::collections::BTreeSet;
 
 const EXISTS: &str = "axioval:capability.property-exists";
 
@@ -359,6 +360,102 @@ mod compilation {
         ])
         .unwrap();
         assert_eq!(order, ["c", "b", "a", "d"]);
+    }
+
+    /// Evaluated in another order (#441), a plan keeps every rule after
+    /// the rules it reads, in one ruleset and across rulesets compiled
+    /// together, and reports what its own order reports.
+    #[test]
+    fn another_order_keeps_every_rule_after_the_rules_it_reads() {
+        use axioval_engine::RuleOrder;
+        let rules = || {
+            vec![
+                child("a", gate("b", "allIfFailed")),
+                child("b", gate("c", "passedObjects")),
+                parent("c"),
+                parent("d"),
+                child("e", gate("c", "failedObjects")),
+                parent("f"),
+            ]
+        };
+        let registry = registry();
+        let definitions = definitions(
+            &registry,
+            &[EXISTS],
+            &["door"],
+            &["Kind", "FireRating", "Hardware"],
+            &[],
+        );
+        let packaged = |id: &str| {
+            let mut set = ruleset(rules());
+            set.package.id = id.into();
+            set
+        };
+        let reports = |order: RuleOrder| {
+            let single = plan(&registry, &definitions, rules())
+                .unwrap()
+                .evaluate_in(order);
+            let merged = axioval_engine::compile_rulesets(
+                &registry,
+                std::slice::from_ref(&definitions),
+                &[packaged("p1"), packaged("p2")],
+            )
+            .unwrap()
+            .evaluate_in(order);
+            let ids = |plan: &axioval_engine::ExecutionPlan| -> Vec<String> {
+                plan.rules()
+                    .iter()
+                    .map(|rule| rule.id.to_string())
+                    .collect()
+            };
+            let (single_order, merged_order) = (ids(&single), ids(&merged));
+            for (order, prefix) in [
+                (&single_order, ""),
+                (&merged_order, "p1/"),
+                (&merged_order, "p2/"),
+            ] {
+                let at = |id: &str| {
+                    order
+                        .iter()
+                        .position(|rule| *rule == format!("{prefix}{id}"))
+                        .unwrap()
+                };
+                assert!(
+                    at("c") < at("b") && at("b") < at("a") && at("c") < at("e"),
+                    "{order:?}"
+                );
+            }
+            let report = |plan| {
+                serde_json::to_string(
+                    &run(registry.clone(), plan, &session(doors()), |runtime| {
+                        runtime.with_rule_summaries()
+                    })
+                    .unwrap(),
+                )
+                .unwrap()
+            };
+            (single_order, report(single), report(merged))
+        };
+        let (own, single, merged) = reports(RuleOrder::Plan);
+        assert_eq!(own, ["c", "b", "a", "d", "e", "f"]);
+        let mut orders = BTreeSet::new();
+        for order in [
+            RuleOrder::Reversed,
+            RuleOrder::Shuffled(1),
+            RuleOrder::Shuffled(2),
+            RuleOrder::Shuffled(3),
+        ] {
+            let (evaluated, other_single, other_merged) = reports(order);
+            assert_eq!(other_single, single, "{order:?}");
+            assert_eq!(other_merged, merged, "{order:?}");
+            orders.insert(evaluated);
+        }
+        // The orders differ from the plan's and from one another.
+        assert!(!orders.contains(&own) && orders.len() > 2, "{orders:?}");
+        assert_eq!(
+            reports(RuleOrder::Reversed).0,
+            ["f", "d", "c", "e", "b", "a"]
+        );
     }
 
     #[test]

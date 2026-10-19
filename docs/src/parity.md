@@ -172,6 +172,81 @@ reason and a decision; a recorded one no longer shown fails as well.
   recorded. Once the variable is set, a missing, empty or unreadable case
   fails rather than skips, and any difference fails.
 
+## The determinism gate
+
+A check's result is the same, byte for byte, whatever order its rules are
+evaluated in, on however many threads, and whether or not what one rule
+built is kept for another (ADR 0006, #441). `crates/apps/cli/tests/determinism.rs`
+holds every check to that through the real binary: it runs each in six
+variants and requires each variant's standard output to be the first's.
+
+| Variant | Rule order | Threads | Reuse |
+|---|---|---|---|
+| reference | the plan's | 1 | kept |
+| | reversed | 1 | kept |
+| | the plan's | 4 | kept |
+| | shuffled (seed 1) | 4 | kept |
+| | reversed | 4 | none |
+| | shuffled (seed 2) | 1 | none |
+
+Two hidden `check` switches make the variants. `--rule-order`
+(`ExecutionPlan::evaluate_in` with a `RuleOrder`) evaluates the rules in
+another order wherever their dependencies leave it free: each rule still
+follows every rule whose outcomes it reads. `--no-reuse`
+(`Runtime::without_reuse`, and the bridge's `Options::with_reuse`)
+installs a derivation store that keeps nothing (`DerivationStore::forgetful`:
+every read is built again, the memo's shared and per-rule tables
+included), and the free-space service then keeps no placement scene,
+obstacle footprint or column. The harness only runs variants and compares
+bytes, so a later switch, such as a memory budget that makes evaluation
+wait (#407), is one more row.
+
+The checks are the parity cases whose rules share the most: `floors`
+(free-floor circle and rectangle searches, clearances and circulation over
+the same spaces), `counts` (relationship walks), `coverage` and `spans`
+(measured values and selections shared between rules) and `judges`
+(shared selections and property reads).
+
+- **A generated building, in every gate.** A storey of three furnished
+  rooms between walls on a slab, which the free-floor rules search rather
+  than refuse: some rules find a room too small for their shape, others
+  pass every room. Four circulation rules of `floors` are left out for
+  time. It adds about 8 s to the `test` section (debug build, four checks
+  at a time).
+- **The public models, with `AXIOVAL_PARITY_MODELS`.** Every case over
+  every pinned model, beside the parity test in the gate's `test` section
+  and in CI's `parity` job: 300 checks in about 9 s.
+
+**Cost charged as if built.** A refusal must not depend on what was
+reused, so every budget charges a reused value as if it were built:
+
+- *The free-floor work budget* (#434, `planar/budget.rs` `Work`) charges
+  each step a search takes whether or not its scene kept the result. A
+  circle search reading a clear part, its largest disc or a simplified
+  region another search kept is charged the overlay that built the clear
+  part, as one taking it afresh is (`charge_clear`). Before #441 a circle
+  search over a kept scene spent nothing where one over the scene as
+  built spent that overlay; no decision changed, since a circle search
+  spends only that one step. `a_circle_search_spends_what_its_request_takes_whatever_the_scene_keeps`
+  holds the spending equal, and
+  `searches_at_their_budget_decide_alike_whatever_the_scene_keeps` runs
+  a circle and a rectangle search within exactly what they spend and one
+  millionth of a step less, over a scene as built and over ones keeping
+  what a circle and a rectangle search took in either order: they decide
+  alike, and the rectangle is refused by name below its threshold.
+- *The walk budget* (#428, `WALK_BUDGET`) charges a query a walk answers
+  from its memo as if asked: its objects and, since #441, its citations
+  too. `a_walk_is_charged_for_the_answers_it_reuses_as_if_asked` holds a
+  walk from several starts to the budget the walks from each start need
+  together.
+- *The overlay budget* (#419) counts each overlay from its operands, and a
+  refused obstacle footprint is kept by the very key it was refused for,
+  so it refuses alike whether built or kept.
+- *The expression evaluation budget* is one count for a whole run: once
+  spent, whichever rule runs next is left open, so which rule that is
+  depends on the order (#447). A run on several threads is run again
+  serially; no fixture or public model comes near the default budget.
+
 **Recorded outcomes.** A template replaces its capability under the
 capability's id, so a case cannot run both side by side. A case's
 `recorded` entries (`{"rule", "reason"}`, with a pair's `comparison`,

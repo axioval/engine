@@ -10,9 +10,9 @@
 #   deny   dependency policy (cargo-deny)
 #   lint   architecture and packaging self-tests, formatting, clippy
 #   test   workspace tests, the IDS corpus when IDS_TEST_CASES is set, the
-#          public parity models when AXIOVAL_PARITY_MODELS names their
-#          cache (scripts/parity_models.py fetch), and private parity cases
-#          when AXIOVAL_PARITY_CASES is set
+#          public parity models and the determinism gate over them when
+#          AXIOVAL_PARITY_MODELS names their cache (scripts/parity_models.py
+#          fetch), and private parity cases when AXIOVAL_PARITY_CASES is set
 #   docs   rustdoc and the mdBook
 set -euo pipefail
 
@@ -66,9 +66,11 @@ check_test() {
     cargo test -p axioval-ids -- --ignored corpus
   fi
   # Parity of re-expressions on the pinned public models, which are not
-  # vendored: CI fetches them into a cache and runs this in its own job.
+  # vendored, and the determinism gate over them (#441: the same result in
+  # any rule order, on any threads, with or without reuse): CI fetches them
+  # into a cache and runs this in its own job.
   if [[ -n "${AXIOVAL_PARITY_MODELS:-}" ]]; then
-    cargo test -p axioval-cli --test parity -- --ignored --nocapture
+    cargo test -p axioval-cli --test parity --test determinism -- --ignored --nocapture
   fi
   # Parity of expression rewrites on private models, likewise opt-in.
   if [[ -n "${AXIOVAL_PARITY_CASES:-}" ]]; then

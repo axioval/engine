@@ -890,12 +890,53 @@ pub struct ExecutionPlan {
     values: Arc<BTreeMap<String, schema::Expression>>,
     /// The types the ruleset declares for its expressions' reads.
     types: Arc<expression::DeclaredTypes>,
+    /// The rules each rule reads the outcomes of, through gates,
+    /// `ruleOutcome` selectors and severity overrides: what any order of
+    /// evaluation must keep ([`Self::evaluate_in`]).
+    dependencies: BTreeMap<RuleId, BTreeSet<RuleId>>,
 }
+
+/// The order a plan's rules are evaluated in, as far as their
+/// dependencies leave it free ([`ExecutionPlan::evaluate_in`]).
+///
+/// A report never depends on it: every rule is a function of the model,
+/// its parameters and the outcomes it reads, and whatever one rule builds
+/// for another is a pure function of its key, charged as if built
+/// (ADR 0006). The determinism gate (#441) evaluates a check in several
+/// orders and requires the same bytes. The one exception still open is a
+/// run whose expression evaluation budget runs out, which leaves open
+/// whichever rule comes next (#447).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum RuleOrder {
+    /// The plan's own: by rule id, after the rules each reads.
+    #[default]
+    Plan,
+    /// The plan's reversed: the last rule first, unless it reads another.
+    Reversed,
+    /// A shuffle of the plan's, the same for the same seed.
+    Shuffled(u64),
+}
+
 impl ExecutionPlan {
     /// Rules in execution order: every rule after the rules its gates and
     /// `ruleOutcome` selectors read, and otherwise by stable rule ID.
     pub fn rules(&self) -> &[CompiledRule] {
         &self.rules
+    }
+    /// The same plan evaluating its rules in `order` wherever their
+    /// dependencies leave it free: each rule still after every rule whose
+    /// outcomes it reads. Only to show that the order changes nothing
+    /// (#441); the plan's own order is the one a check uses.
+    #[must_use]
+    pub fn evaluate_in(mut self, order: RuleOrder) -> Self {
+        let mut preferred = std::mem::take(&mut self.rules);
+        match order {
+            RuleOrder::Plan => {}
+            RuleOrder::Reversed => preferred.reverse(),
+            RuleOrder::Shuffled(seed) => rule_outcomes::shuffle(&mut preferred, seed),
+        }
+        self.rules = rule_outcomes::preferred_order(preferred, &self.dependencies);
+        self
     }
     /// Rules compiled but not executable as authored, ordered by rule ID.
     pub fn deferred(&self) -> &[DeferredRule] {
@@ -1504,6 +1545,7 @@ pub struct Runtime {
     parallelism: Parallelism,
     observer: Option<RuleObserver>,
     terrain: Option<TerrainServiceHandle>,
+    reuse: bool,
 }
 impl Runtime {
     /// Creates a runtime from a host-controlled registry.
@@ -1518,6 +1560,7 @@ impl Runtime {
             parallelism: Parallelism::SERIAL,
             observer: None,
             terrain: None,
+            reuse: true,
         }
     }
     /// Installs what a run's expressions need: the plan's derived values
@@ -1610,6 +1653,19 @@ impl Runtime {
     #[must_use]
     pub fn with_terrain(mut self, terrain: TerrainServiceHandle) -> Self {
         self.terrain = Some(terrain);
+        self
+    }
+    /// Keeps nothing a run builds for reuse: every run's derivation store
+    /// is forgetful ([`DerivationStore::forgetful`]), so each derivation,
+    /// measurement and shared selection is built every time it is read.
+    /// The report is the same byte for byte, only slower: every value is a
+    /// pure function of its key, and a budget charges a reused value as if
+    /// built (ADR 0006). Only to show that (the determinism gate, #441);
+    /// services a host built keep their own caches unless it turns them
+    /// off too.
+    #[must_use]
+    pub fn without_reuse(mut self) -> Self {
+        self.reuse = false;
         self
     }
     /// Adds adapter-provided host services to subsequent evaluations.
@@ -1926,7 +1982,11 @@ impl Runtime {
         services.replace(plan.zones.clone());
         // One derivation store per check: nothing built in one run answers
         // another, whatever a host registered.
-        services.replace(DerivationStore::new());
+        services.replace(if self.reuse {
+            DerivationStore::new()
+        } else {
+            DerivationStore::forgetful()
+        });
         self.registry.install_measured(&mut services, project);
         // Measured values are answered through the host's resolver in
         // every run; classifications are derived first when the plan has

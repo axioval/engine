@@ -508,6 +508,54 @@ pub(crate) fn dependency_order(
     }
 }
 
+/// `rules` in the order they come, but each after the rules it depends on:
+/// the first rule whose dependencies are all placed is placed next. The
+/// rules must hold no cycle (a plan's never do); should they, the rest
+/// keep the order they come in.
+pub(crate) fn preferred_order(
+    rules: Vec<CompiledRule>,
+    dependencies: &BTreeMap<RuleId, BTreeSet<RuleId>>,
+) -> Vec<CompiledRule> {
+    let mut pending: Vec<CompiledRule> = rules;
+    let mut placed: BTreeSet<RuleId> = BTreeSet::new();
+    let ids: BTreeSet<RuleId> = pending.iter().map(|rule| rule.id.clone()).collect();
+    let mut ordered = Vec::with_capacity(pending.len());
+    while !pending.is_empty() {
+        let next = pending
+            .iter()
+            .position(|rule| {
+                dependencies.get(&rule.id).is_none_or(|needs| {
+                    needs
+                        .iter()
+                        .all(|need| placed.contains(need) || !ids.contains(need))
+                })
+            })
+            .unwrap_or(0);
+        let rule = pending.remove(next);
+        placed.insert(rule.id.clone());
+        ordered.push(rule);
+    }
+    ordered
+}
+
+/// Shuffles `items` by a Fisher-Yates shuffle drawn from `seed`
+/// (splitmix64): the same seed, the same order, on every platform.
+pub(crate) fn shuffle<T>(items: &mut [T], seed: u64) {
+    let mut state = seed;
+    let mut draw = || {
+        state = state.wrapping_add(0x9e37_79b9_7f4a_7c15);
+        let mut z = state;
+        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+        z ^ (z >> 31)
+    };
+    for index in (1..items.len()).rev() {
+        let bound = u64::try_from(index + 1).unwrap_or(u64::MAX);
+        let other = usize::try_from(draw() % bound).unwrap_or(0);
+        items.swap(index, other);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

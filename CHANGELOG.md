@@ -6,6 +6,26 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **A determinism gate** ([#441](https://github.com/axioval/engine/issues/441),
+  [ADR 0006](docs/src/adr-0006.md)). `crates/apps/cli/tests/determinism.rs`
+  runs the parity cases whose rules share the most (`floors`, `counts`,
+  `coverage`, `spans`, `judges`) in six variants: the plan's order,
+  reversed and two seeded shuffles, on one and on four threads, keeping
+  what is built and keeping nothing; every result must be the first's,
+  byte for byte. It runs over a generated building in every gate and over
+  the public parity models with `AXIOVAL_PARITY_MODELS` (the gate's `test`
+  section and CI's `parity` job). The variants come from
+  `ExecutionPlan::evaluate_in` (`RuleOrder::Plan`, `Reversed`,
+  `Shuffled(seed)`: each rule still after the rules it reads),
+  `Runtime::without_reuse` (`DerivationStore::forgetful`, a store that
+  builds every read and keeps nothing, the memo's tables included) and
+  the bridge's `Options::with_reuse` (the free-space service keeps no
+  placement scene, footprint or column, `AxiolidFreeSpaceService::with_reuse`),
+  through the hidden `check` switches `--rule-order` and `--no-reuse`.
+  The run-wide expression evaluation budget can still refuse a different
+  rule in another order once spent (#447); nothing in the gate comes near
+  it.
+
 - **A derivation store that builds each key once**
   ([#437](https://github.com/axioval/engine/issues/437)), the foundation of
   [ADR 0006](docs/src/adr-0006.md). `axioval_engine::derivation` states
@@ -78,6 +98,15 @@ All notable changes are documented here. This project follows Semantic Versionin
   archives stay byte-identical.
 
 ### Changed
+
+- **Budgets charge a reused value as if built** (#441). A circle search
+  over a placement scene that kept its clear parts, their largest discs
+  or its simplified regions from an earlier search is charged the overlay
+  that built the clear part, as one over the scene as built is; it spent
+  nothing before, though no decision changed. A relationship walk charges
+  a query answered from its memo with the answer's citations too, as when
+  it was asked, so a walk from several starts needs exactly the budget
+  the walks from each start need together.
 
 - **Repeated relationship steps ask each chain once**
   ([#428](https://github.com/axioval/engine/issues/428)). A path step with

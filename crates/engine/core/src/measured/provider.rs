@@ -508,12 +508,16 @@ impl MeasuredMemo {
     }
 
     /// The value kept for `key` while the rule being evaluated runs, or
-    /// `measure`'s, kept: what only that rule reads.
+    /// `measure`'s, kept: what only that rule reads. Over a store that
+    /// keeps nothing ([`DerivationStore::forgetful`]), measured every time.
     pub fn get_or_measure_for_rule<K, V>(&self, key: K, measure: impl FnOnce() -> V) -> V
     where
         K: Hash + Eq + Send + 'static,
         V: Clone + Send + 'static,
     {
+        if !self.store.keeps() {
+            return measure();
+        }
         let table = TypeId::of::<Table<K, V>>();
         if let Ok(entries) = self.rule.lock()
             && let Some(value) = entries
@@ -798,7 +802,8 @@ impl Hash for ArgumentsKey {
 
 /// Installs `providers` for a run over `project`, if there are any, with an
 /// empty [`MeasuredMemo`] over an empty [`DerivationStore`], installed
-/// too.
+/// too: one keeping nothing where the services hold such a store
+/// ([`DerivationStore::forgetful`]).
 pub(crate) fn install(
     services: &mut ServiceRegistry,
     providers: &[Arc<dyn MeasuredProvider>],
@@ -807,7 +812,14 @@ pub(crate) fn install(
     if providers.is_empty() {
         return;
     }
-    let store = DerivationStore::new();
+    let store = if services
+        .get::<DerivationStore>()
+        .is_some_and(|store| !store.keeps())
+    {
+        DerivationStore::forgetful()
+    } else {
+        DerivationStore::new()
+    };
     services.replace(store.clone());
     services.replace(MeasuredMemo::on(store));
     services.replace(Providers {

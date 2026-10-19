@@ -136,6 +136,7 @@ pub fn compile(
         catalogues: crate::Catalogues::declared(&catalogues),
         zones: crate::SuppliedZones::default(),
         values: Arc::new(values),
+        dependencies,
     })
 }
 
@@ -861,6 +862,7 @@ pub fn compile_rulesets(
     let mut gates = BTreeMap::new();
     let mut recorded = BTreeSet::new();
     let mut auxiliary = BTreeSet::new();
+    let mut dependencies: BTreeMap<RuleId, BTreeSet<RuleId>> = BTreeMap::new();
     let mut derived: Derived = (Vec::new(), Vec::new(), Vec::new());
     let mut values: BTreeMap<String, axioval_ir::contract::Expression> = BTreeMap::new();
     let mut types = crate::expression::DeclaredTypes::default();
@@ -910,6 +912,13 @@ pub fn compile_rulesets(
         for id in plan.auxiliary {
             auxiliary.insert(qualify(&id)?);
         }
+        for (id, needs) in plan.dependencies {
+            let needs = needs
+                .iter()
+                .map(qualify)
+                .collect::<Result<BTreeSet<_>, EngineError>>()?;
+            dependencies.insert(qualify(&id)?, needs);
+        }
         merge_derived(
             &mut derived,
             (plan.classifications, plan.groupings, plan.relations),
@@ -952,6 +961,7 @@ pub fn compile_rulesets(
         zones: crate::SuppliedZones::default(),
         values: Arc::new(values),
         types: Arc::new(types),
+        dependencies,
     })
 }
 

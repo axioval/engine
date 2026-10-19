@@ -712,6 +712,7 @@ impl EvidenceSession {
                         .objects()
                         .map(|object| object.id.clone())
                         .collect(),
+                    universe: std::sync::OnceLock::new(),
                 },
             )));
         Ok(self)

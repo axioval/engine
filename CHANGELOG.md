@@ -55,6 +55,39 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **Repeated relationship steps ask each chain once**
+  ([#428](https://github.com/axioval/engine/issues/428)). A path step with
+  `+` mixing relationships (`A|B+`) asked each relationship's chain again
+  from every object the walk reached, and a step after a first one walked
+  from every object of its frontier alone, so a step reaching the objects
+  of a model asked each chain from each of them and read the square of
+  them. An `escape-route` rule whose `exit_path` repeated steps took
+  minutes where the same exits spelled out took seconds, with no time in
+  host services. A relationship service may now declare the chains of a
+  relationship closed (`RelationshipSelectionService::closes_chains`,
+  default `false`): a chain asked from what a chain answer reached adds
+  nothing to it. The IFC adapter declares it for every relationship, a
+  federation where all its members do; derived identities, declared
+  relations, groups and the flow never do. A walk
+  (`PathSegment::walk_from_each`, which every step of a rule's
+  relationship path now takes) then asks no chain from an object a chain of the same relationship
+  reached and walks from no start another start's walk reached, and
+  answers each request once. A federation looks a universe's part up
+  before scanning it, and the stated-first `adjacent-across` builds the
+  universe it looks through once per answer rather than per step. A walk
+  whose answers hold more than `axioval_engine::WALK_BUDGET` (5,000,000
+  objects and citations, each query counting one more) is refused with the
+  step named (`RelationshipSelectionError::OverBudget`, not evaluated as
+  `resource_limit`), never walked on. On four generated federated models
+  of about 5,500 objects with 17 rooms (one thread, release, three runs
+  each), an exit path mixing aggregation and containment either way with
+  `+` took 61.1 to 61.4 s and now 0.54 to 0.57 s, one climbing aggregation
+  with `+` and descending with `+` 3.1 to 3.2 s and now 0.66 s,
+  and the same exits spelled out 0.38 to 0.39 s and now 0.37 to 0.38 s;
+  the whole check 65.1 to 65.4 s and now 2.0 s. Reports are byte-identical,
+  pinned against the earlier binary's report in `tests/check.rs`.
+  **Breaking** for code matching `RelationshipSelectionError` exhaustively.
+
 - **Relationship walks share their candidate universe**
   ([#429](https://github.com/axioval/engine/issues/429)). A `related`
   selector tested on each object asked the relationship service over a

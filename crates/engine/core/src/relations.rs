@@ -665,6 +665,17 @@ impl RelationshipSelectionService for RelationRelationships {
         }
     }
 
+    /// Every other identity is the host's to close; a declared relation cites each anchor.
+    fn closes_chains(&self, relationship: &crate::SemanticRelationship) -> bool {
+        !relationship
+            .as_str()
+            .starts_with(RELATION_RELATIONSHIP_PREFIX)
+            && self
+                .inner
+                .as_ref()
+                .is_some_and(|inner| inner.closes_chains(relationship))
+    }
+
     fn edges(
         &self,
         request: &RelationshipEdgesRequest,

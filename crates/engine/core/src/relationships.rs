@@ -28,6 +28,11 @@ pub enum RelationshipSelectionError {
     /// The source cannot currently provide a conclusive selection.
     #[error("relationship selection unavailable: {0}")]
     Unavailable(String),
+    /// A walk read more than its budget allows and was refused rather than
+    /// walked on (#428): the reason names the step, what it read and the
+    /// budget.
+    #[error("relationship walk refused: {0}")]
+    OverBudget(String),
 }
 
 /// A host-registered semantic relationship or grouping identity.
@@ -198,8 +203,13 @@ pub struct CandidateUniverse(Arc<Universe>);
 struct Universe {
     objects: Box<[ObjectId]>,
     /// The parts already asked for, one per set of sources, at most
-    /// [`PARTS`] of them.
-    parts: std::sync::Mutex<Vec<(std::collections::BTreeSet<SourceId>, CandidateUniverse)>>,
+    /// [`PARTS`] of them; `None` where the part is the whole universe.
+    parts: std::sync::Mutex<
+        Vec<(
+            std::collections::BTreeSet<SourceId>,
+            Option<CandidateUniverse>,
+        )>,
+    >,
 }
 
 /// How many parts of one universe are kept: a federation asks one per
@@ -250,34 +260,37 @@ impl CandidateUniverse {
     /// universe itself when it holds no other, else a part kept with it.
     #[must_use]
     pub fn within_sources(&self, sources: &std::collections::BTreeSet<SourceId>) -> Self {
-        if self
-            .0
-            .objects
-            .iter()
-            .all(|object| sources.contains(&object.source))
-        {
-            return self.clone();
-        }
         let mut parts = self
             .0
             .parts
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
+        // A part asked for before is never looked for again (#428): a walk
+        // asks one per hop, and looking cost a pass over every object.
         if let Some((_, part)) = parts.iter().find(|(kept, _)| kept == sources) {
-            return part.clone();
+            return part.clone().unwrap_or_else(|| self.clone());
         }
-        let part = Self::canonical(
-            self.0
-                .objects
-                .iter()
-                .filter(|object| sources.contains(&object.source))
-                .cloned()
-                .collect(),
-        );
+        let part = if self
+            .0
+            .objects
+            .iter()
+            .all(|object| sources.contains(&object.source))
+        {
+            None
+        } else {
+            Some(Self::canonical(
+                self.0
+                    .objects
+                    .iter()
+                    .filter(|object| sources.contains(&object.source))
+                    .cloned()
+                    .collect(),
+            ))
+        };
         if parts.len() < PARTS {
             parts.push((sources.clone(), part.clone()));
         }
-        part
+        part.unwrap_or_else(|| self.clone())
     }
 }
 
@@ -608,6 +621,24 @@ pub trait RelationshipSelectionService: Send + Sync {
         request: &RelationshipSelectionRequest,
     ) -> Result<CompleteRelationshipSelection, RelationshipSelectionError>;
 
+    /// Whether this service's chains of `relationship` are closed (#428):
+    /// for a chain request (`follow_chain`) from `x` answered with `y` among
+    /// its candidates, the same request from `y` (same relationship,
+    /// direction, universe and absent-end policy) is answered too, with no
+    /// candidate outside `x`'s candidates and `x` itself, and no evidence
+    /// outside `x`'s evidence.
+    ///
+    /// A walk then never asks a chain from an object another chain of the
+    /// same relationship already reached, since the answer could add
+    /// nothing. The default is `false`, so the walk asks every chain; a
+    /// service citing each anchor of its own (a derived router does) must
+    /// keep it so.
+    // gate: reads
+    fn closes_chains(&self, relationship: &SemanticRelationship) -> bool {
+        let _ = relationship;
+        false
+    }
+
     /// Lists every edge of a relationship within the request's universe.
     ///
     /// The default refuses: a service that cannot list edges is never read
@@ -641,6 +672,13 @@ impl RelationshipSelectionServiceHandle {
         request: &RelationshipSelectionRequest,
     ) -> Result<CompleteRelationshipSelection, RelationshipSelectionError> {
         validate_selection(request, self.0.select(request)?)
+    }
+
+    /// Whether the service's chains of `relationship` are closed
+    /// ([`RelationshipSelectionService::closes_chains`]).
+    #[must_use]
+    pub fn closes_chains(&self, relationship: &SemanticRelationship) -> bool {
+        self.0.closes_chains(relationship)
     }
 
     /// Lists edges and validates their request binding, order and evidence.

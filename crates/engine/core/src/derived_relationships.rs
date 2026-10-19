@@ -33,9 +33,10 @@ use axioval_ir::measured::{LocalizedText, en_de};
 use axioval_ir::{Evidence, ObjectId};
 
 use crate::relationships::{
-    CompleteRelationshipSelection, RelationshipKind, RelationshipQuery, RelationshipSelectionError,
-    RelationshipSelectionRequest, RelationshipSelectionService, RelationshipSelectionServiceHandle,
-    SemanticRelationship, TraversalDirection, validate_selection,
+    CandidateUniverse, CompleteRelationshipSelection, RelationshipKind, RelationshipQuery,
+    RelationshipSelectionError, RelationshipSelectionRequest, RelationshipSelectionService,
+    RelationshipSelectionServiceHandle, SemanticRelationship, TraversalDirection,
+    validate_selection,
 };
 use crate::session::{SnapshotBoundService, SourceSnapshot};
 
@@ -809,6 +810,41 @@ pub(crate) struct RoutedRelationships {
     /// Every object of the session's project: the universe a stated
     /// boundary is looked for in, whatever universe a request names.
     pub(crate) objects: Arc<[ObjectId]>,
+    /// `objects` as a universe, built at the first stated-first answer and
+    /// shared by every one after it (#428).
+    pub(crate) universe: std::sync::OnceLock<Result<CandidateUniverse, RelationshipSelectionError>>,
+}
+
+impl RoutedRelationships {
+    /// The universe a stated-first answer looks through: the project's
+    /// objects and the request's, built once per answer rather than once per
+    /// step, and the project's own shared by every request within it.
+    fn looked_through(
+        &self,
+        request: &RelationshipSelectionRequest,
+    ) -> Result<CandidateUniverse, RelationshipSelectionError> {
+        let objects = self
+            .universe
+            .get_or_init(|| {
+                let mut objects = self.objects.to_vec();
+                objects.sort();
+                objects.dedup();
+                CandidateUniverse::try_new(objects)
+            })
+            .clone()?;
+        if request
+            .candidate_universe()
+            .iter()
+            .all(|object| objects.contains(object))
+        {
+            return Ok(objects);
+        }
+        let mut universe = objects.objects().to_vec();
+        universe.extend(request.candidate_universe().iter().cloned());
+        universe.sort();
+        universe.dedup();
+        CandidateUniverse::try_new(universe)
+    }
 }
 
 impl RelationshipSelectionService for RoutedRelationships {
@@ -828,7 +864,7 @@ impl RelationshipSelectionService for RoutedRelationships {
                 return StatedFirst {
                     semantic,
                     derived: &self.derived,
-                    objects: &self.objects,
+                    universe: self.looked_through(request)?,
                     request,
                     identity: derivation.to_string(),
                 }
@@ -842,6 +878,18 @@ impl RelationshipSelectionService for RoutedRelationships {
                 "no semantic relationship service is registered".into(),
             )),
         }
+    }
+
+    /// A derived identity is never taken as closed (a stated-first answer
+    /// cites its anchor); every other is the semantic service's to close.
+    fn closes_chains(&self, relationship: &SemanticRelationship) -> bool {
+        !relationship
+            .as_str()
+            .starts_with(DERIVED_RELATIONSHIP_PREFIX)
+            && self
+                .semantic
+                .as_ref()
+                .is_some_and(|semantic| semantic.closes_chains(relationship))
     }
 
     fn edges(
@@ -880,7 +928,8 @@ impl RelationshipSelectionService for RoutedRelationships {
 struct StatedFirst<'r> {
     semantic: &'r RelationshipSelectionServiceHandle,
     derived: &'r DerivedRelationshipServiceHandle,
-    objects: &'r [ObjectId],
+    /// Every object of the project and of the request's universe.
+    universe: CandidateUniverse,
     request: &'r RelationshipSelectionRequest,
     identity: String,
 }
@@ -961,19 +1010,15 @@ impl StatedFirst<'_> {
         // Every step looks through the whole project: an element's stated
         // boundaries win wherever they lead, and a chain passes through
         // objects outside the request's universe.
-        let mut universe = self.objects.to_vec();
-        universe.extend(self.request.candidate_universe().iter().cloned());
-        universe.sort();
-        universe.dedup();
-        let request = RelationshipSelectionRequest::try_new(
+        let request = RelationshipSelectionRequest::within(
             from.clone(),
-            universe,
+            self.universe.clone(),
             RelationshipQuery::Related {
                 relationship: relationship.clone(),
                 direction,
                 follow_chain: false,
             },
-        )?
+        )
         .with_absent_ends(self.request.absent_ends());
         let answer = if relationship
             .as_str()

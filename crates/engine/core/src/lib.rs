@@ -1258,7 +1258,7 @@ pub use pairwise::{
     CandidatePair, CandidateSearchError, candidate_pairs, projected_candidate_pairs,
 };
 pub use parallel::Parallelism;
-pub use path::PathSegment;
+pub use path::{PathSegment, WALK_BUDGET};
 pub use plan_area::{
     ElevationCover, ElevationRequest, FootprintOutline, FootprintPerimeter, PlanArea,
     PlanAreaError, PlanAreaService, PlanAreaServiceHandle, PlanBand,

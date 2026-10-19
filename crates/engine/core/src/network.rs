@@ -609,6 +609,15 @@ impl RelationshipSelectionService for FlowRelationships {
         }
     }
 
+    /// Every other identity is the host's to close; the flow is never taken as closed.
+    fn closes_chains(&self, relationship: &crate::SemanticRelationship) -> bool {
+        !relationship.as_str().starts_with(FLOW_RELATIONSHIP)
+            && self
+                .inner
+                .as_ref()
+                .is_some_and(|inner| inner.closes_chains(relationship))
+    }
+
     fn edges(
         &self,
         request: &RelationshipEdgesRequest,

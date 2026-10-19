@@ -28,7 +28,7 @@ use axioval_engine::{
     AbsentEndPolicy, CandidateUniverse, CompleteRelationshipEdges, CompleteRelationshipSelection,
     RELATIONSHIP_KIND_PREFIX, RelationshipEdge, RelationshipEdgesRequest, RelationshipKind,
     RelationshipQuery, RelationshipSelectionError, RelationshipSelectionRequest,
-    RelationshipSelectionService, SourceSnapshot, TraversalDirection,
+    RelationshipSelectionService, SemanticRelationship, SourceSnapshot, TraversalDirection,
 };
 use axioval_ir::{Evidence, ObjectId};
 use ifc_model::{EntityId, Model, Value};
@@ -197,6 +197,13 @@ impl RelationshipSelectionService for IfcRelationshipService {
             .collect();
         let evidence = self.evidence(&relationship, used);
         CompleteRelationshipSelection::try_new(request.clone(), candidates, evidence)
+    }
+
+    /// A chain is a breadth-first closure over the type's index, the
+    /// universe only filtering what it answers: a chain from any object it
+    /// reaches reaches nothing more and reads no edge it did not.
+    fn closes_chains(&self, _relationship: &SemanticRelationship) -> bool {
+        true
     }
 
     /// Every edge of the type whose two ends lie in the universe, read from

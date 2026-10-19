@@ -25860,3 +25860,313 @@ fn counts_over_federated_models_keep_their_report_in_bounded_time() {
     // test build; the bound leaves room for a loaded machine.
     assert!(elapsed < std::time::Duration::from_secs(15), "{elapsed:?}");
 }
+
+/// One generated IFC4 model `name` for the escape-route walks of #428: a
+/// project, site, building and three storeys; `spaces` 5 x 5 m rooms in a
+/// row on the first storey (x 0..5, 5..10, ...), aggregated by it, with a
+/// door between each two neighbours and one past each end, contained in it
+/// (none without rooms); and `per_kind` 0.5 m boxes of each of `kinds` in a
+/// grid from y = `band` on, contained in the upper storeys. Every model
+/// shares one frame, so all are meshed together.
+#[allow(clippy::too_many_lines)] // one generated model, written in file order
+fn escape_corridor_model(
+    name: &str,
+    spaces: usize,
+    kinds: &[&str],
+    per_kind: usize,
+    band: f64,
+) -> String {
+    let space = "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,.INTERNAL.,$)";
+    let door = "IFCDOOR('GID',$,$,$,$,PL,REP,$,2.1,1.,$,$,$)";
+    let mut data = String::new();
+    let mut next: u32 = 100;
+    let mut rooms = Vec::new();
+    let mut doors = Vec::new();
+    for i in 0..spaces {
+        let x = 5.0 * f64::from(u32::try_from(i).unwrap());
+        data.push_str(&placed_box(
+            next,
+            [x + 2.5, 2.5, 0.0],
+            [5.0, 5.0, 3.0],
+            space,
+        ));
+        rooms.push(next + 9);
+        next += 10;
+    }
+    for i in (0..=spaces).filter(|_| spaces > 0) {
+        // Inner doors straddle the shared face; the end doors lie outside.
+        let x = 5.0 * f64::from(u32::try_from(i).unwrap());
+        let x = match i {
+            0 => -0.05,
+            i if i == spaces => x + 0.05,
+            _ => x,
+        };
+        data.push_str(&placed_box(next, [x, 2.5, 0.0], [0.1, 1.0, 2.1], door));
+        doors.push(next + 9);
+        next += 10;
+    }
+    // Fillers stand in a grid on the upper storeys, far from the rooms.
+    let mut contained: Vec<Vec<u32>> = vec![doors, Vec::new(), Vec::new()];
+    let mut placed = 0_u32;
+    for kind in kinds {
+        for i in 0..per_kind {
+            let (x, y) = (f64::from(placed % 50), band + f64::from(placed / 50));
+            let storey = 1 + i % 2;
+            let z = 3.0 * f64::from(u32::try_from(storey).unwrap());
+            let product = format!("{kind}('GID',$,'{kind}-{i}',$,$,PL,REP,$,$)");
+            data.push_str(&placed_box(next, [x, y, z], [0.5, 0.5, 0.5], &product));
+            contained[storey].push(next + 9);
+            next += 10;
+            placed += 1;
+        }
+    }
+    let mut add = |text: &str| {
+        let id = next;
+        next += 1;
+        writeln!(
+            data,
+            "#{id}={};",
+            text.replace("GID", &format!("{:022}", 1_000_000 + id))
+        )
+        .unwrap();
+        id
+    };
+    let refs = |ids: &[u32]| {
+        ids.iter()
+            .map(|id| format!("#{id}"))
+            .collect::<Vec<_>>()
+            .join(",")
+    };
+    let site = add("IFCSITE('GID',$,'S',$,$,#3,$,$,.ELEMENT.,$,$,$,$,$)");
+    let building = add("IFCBUILDING('GID',$,'B',$,$,#3,$,$,.ELEMENT.,$,$,$)");
+    let storeys: Vec<u32> = (0..3)
+        .map(|i| {
+            add(&format!(
+                "IFCBUILDINGSTOREY('GID',$,'L{i}',$,$,#3,$,$,.ELEMENT.,{}.)",
+                3 * i
+            ))
+        })
+        .collect();
+    add(&format!("IFCRELAGGREGATES('GID',$,$,$,#8,(#{site}))"));
+    add(&format!(
+        "IFCRELAGGREGATES('GID',$,$,$,#{site},(#{building}))"
+    ));
+    add(&format!(
+        "IFCRELAGGREGATES('GID',$,$,$,#{building},({}))",
+        refs(&storeys)
+    ));
+    if !rooms.is_empty() {
+        add(&format!(
+            "IFCRELAGGREGATES('GID',$,$,$,#{},({}))",
+            storeys[0],
+            refs(&rooms)
+        ));
+    }
+    for (storey, elements) in storeys.iter().zip(&contained) {
+        if elements.is_empty() {
+            continue;
+        }
+        add(&format!(
+            "IFCRELCONTAINEDINSPATIALSTRUCTURE('GID',$,$,$,({}),#{storey})",
+            refs(elements)
+        ));
+    }
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\n\
+         FILE_NAME('{name}','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         {data}ENDSEC;\nEND-ISO-10303-21;\n"
+    )
+}
+
+/// The definitions and ruleset of
+/// [`escape_routes_over_repeated_steps_keep_their_report_in_bounded_time`]:
+/// one `escape-route` rule per `exit_path`, each over every space.
+fn escape_paths_packages(case: &Case, paths: &[(&str, &[&str])]) {
+    let definitions = case.definitions(true);
+    let mut definitions: Value =
+        serde_json::from_str(&std::fs::read_to_string(definitions).unwrap()).unwrap();
+    for (key, name) in [("door", "IfcDoor"), ("space", "IfcSpace")] {
+        let id = format!("axioval:example.ifc.{key}");
+        definitions["objectTypes"][&id] = json!({
+            "id": id,
+            "name": {"default": name, "translations": {}},
+            "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": name}],
+            "citations": [],
+        });
+    }
+    definitions["definitions"]["axioval:bench.escape"] = json!({
+        "id": "axioval:bench.escape",
+        "name": {"default": "Escape route", "translations": {}},
+        "description": {"default": "Escape route", "translations": {}},
+        "capability": "axioval:capability.escape-route",
+        "parameters": registry_signature("axioval:capability.escape-route"),
+        "citations": [],
+        "tags": [],
+    });
+    case.write("definitions.json", &definitions.to_string());
+    let text = std::fs::read_to_string(format!("{FIXTURES}/ruleset.json")).unwrap();
+    let mut ruleset: Value = serde_json::from_str(&text).unwrap();
+    let base = ruleset["root"]["rules"][0].clone();
+    ruleset["root"]["rules"] = paths
+        .iter()
+        .map(|(id, path)| {
+            let mut rule = base.clone();
+            rule["id"] = json!(id);
+            rule["definitionId"] = json!("axioval:bench.escape");
+            rule["explanatoryImages"] = json!([]);
+            rule["applicability"]["groups"]["walls"]["selector"] = entity("space");
+            rule["parameters"] = json!({
+                "uses": {"type": "table", "value": [
+                    {"label": {"type": "string", "value": "office"},
+                     "spaces": {"type": "selector", "value": entity("space")},
+                     "maximum_travel": {"type": "number", "value": 3.0},
+                     "exits": {"type": "integer", "value": 2}},
+                ]},
+                "exit_path": {"type": "stringList", "value": path},
+                "exit_selector": {"type": "selector", "value": entity("door")},
+                "walking_height": {"type": "number", "value": 2.0},
+                "walking_step": {"type": "number", "value": 0.05},
+            });
+            rule
+        })
+        .collect();
+    case.write("ruleset.json", &ruleset.to_string());
+}
+
+/// Escape routes whose `exit_path` repeats steps with `+` (#428), over four
+/// federated models of about 5,500 objects: 17 rooms in a row on one
+/// storey, a door between each two and one past each end, every door
+/// contained in the storey, and bodies of other kinds on other storeys and
+/// in the other models. Each rule reaches every door from every room:
+///
+/// - `spelled`: up to the storey and down to what it contains, written out;
+/// - `repeated`: aggregation or containment either way, repeated, which
+///   climbs and descends through the whole model;
+/// - `climbed`: aggregation up, repeated, then aggregation or containment
+///   down, repeated.
+///
+/// The golden report was written by the binary before #428, which asked
+/// every chain again from every object a chain reached: `repeated` took a
+/// minute in release. It must stay byte for byte the same; rewrite it with
+/// `AXIOVAL_BLESS=1` only for a change meant to alter the report.
+#[test]
+#[allow(clippy::too_many_lines)] // four models, three rules, one report
+fn escape_routes_over_repeated_steps_keep_their_report_in_bounded_time() {
+    let case = Case::new("escape-repeated-steps");
+    for (name, spaces, kinds, per_kind, band) in [
+        (
+            "arch.ifc",
+            17,
+            &["IFCWALL", "IFCSLAB", "IFCWINDOW"][..],
+            500,
+            20.0,
+        ),
+        (
+            "structure.ifc",
+            0,
+            &["IFCBEAM", "IFCCOLUMN", "IFCSLAB"],
+            500,
+            60.0,
+        ),
+        (
+            "mep.ifc",
+            0,
+            &["IFCDUCTSEGMENT", "IFCPIPEFITTING", "IFCAIRTERMINAL"],
+            500,
+            100.0,
+        ),
+        ("electrical.ifc", 0, &["IFCCABLESEGMENT"], 1000, 140.0),
+    ] {
+        case.write(
+            name,
+            &escape_corridor_model(name, spaces, kinds, per_kind, band),
+        );
+    }
+    escape_paths_packages(
+        &case,
+        &[
+            (
+                "spelled",
+                &[
+                    "IfcRelAggregates:backward",
+                    "IfcRelContainedInSpatialStructure:forward",
+                ],
+            ),
+            (
+                "repeated",
+                &["IfcRelAggregates|IfcRelContainedInSpatialStructure:either+"],
+            ),
+            (
+                "climbed",
+                &[
+                    "IfcRelAggregates:backward+",
+                    "IfcRelAggregates|IfcRelContainedInSpatialStructure:forward+",
+                ],
+            ),
+        ],
+    );
+    let started = std::time::Instant::now();
+    let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+        .current_dir(&case.dir)
+        .arg("check")
+        .args(["--model", "arch.ifc:architecture"])
+        .args(["--model", "structure.ifc:structure"])
+        .args(["--model", "mep.ifc:mep"])
+        .args(["--model", "electrical.ifc:electrical"])
+        .args(["--definitions", "definitions.json"])
+        .args(["--ruleset", "ruleset.json"])
+        .args(["--geometry", "--threads", "1", "--report", "report.json"])
+        .env("SOURCE_DATE_EPOCH", "1790416800")
+        .output()
+        .unwrap();
+    let elapsed = started.elapsed();
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let report = std::fs::read_to_string(case.path("report.json")).unwrap();
+    let parsed: Value = serde_json::from_str(&report).unwrap();
+    // Every rule finds every room's farthest point too far from its doors,
+    // with the same message whichever way the doors were reached.
+    let findings = |rule: &str| -> Vec<(String, String)> {
+        parsed["report"]["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|finding| finding["rule_id"] == rule)
+            .map(|finding| {
+                (
+                    finding["object_id"]["local_id"]
+                        .as_str()
+                        .unwrap()
+                        .to_owned(),
+                    finding["message"].as_str().unwrap().to_owned(),
+                )
+            })
+            .collect()
+    };
+    let spelled = findings("spelled");
+    assert_eq!(spelled.len(), 17, "{report}");
+    assert_eq!(findings("repeated"), spelled);
+    assert_eq!(findings("climbed"), spelled);
+    let golden =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden/escape-repeated-steps.json");
+    if std::env::var_os("AXIOVAL_BLESS").is_some() {
+        std::fs::write(&golden, &report).unwrap();
+    }
+    assert!(
+        report == std::fs::read_to_string(&golden).unwrap(),
+        "the report differs from {}; rewrite it with AXIOVAL_BLESS=1 only for a change \
+         meant to alter it",
+        golden.display()
+    );
+    // Before #428 the repeated step took a minute in release. Each chain is
+    // now asked once per relationship and object at most: seconds in a test
+    // build; the bound leaves room for a loaded machine.
+    assert!(elapsed < std::time::Duration::from_secs(30), "{elapsed:?}");
+}

@@ -185,6 +185,15 @@ impl RelationshipSelectionService for Router<RelationshipSelectionServiceHandle>
         )
     }
 
+    /// A chain stays in its anchor's member, whose part of the universe
+    /// every object it reaches is asked over again: closed where every
+    /// member's is.
+    fn closes_chains(&self, relationship: &crate::SemanticRelationship) -> bool {
+        self.members
+            .iter()
+            .all(|(_, member)| member.closes_chains(relationship))
+    }
+
     /// Each member lists the edges among its own part of the universe; no
     /// member relates objects it does not hold, so the union is complete.
     fn edges(

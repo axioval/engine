@@ -545,13 +545,20 @@ impl Traversal {
         for (index, step) in self.steps.iter().enumerate() {
             let last = index + 1 == self.steps.len();
             let scope = if last { universe } else { everything };
-            let mut reached = BTreeSet::new();
-            for from in &frontier {
-                let chain = self.follow_chain || step.chain();
-                let (found, cited) = self.step(service, step, from, everything, scope, chain)?;
-                reached.extend(found);
-                evidence.extend(cited);
-            }
+            // One walk from the whole frontier: a closed chain is never
+            // asked again from what it reached (#428).
+            let chain = self.follow_chain || step.chain();
+            let (mut reached, cited) = step
+                .walk_from_each(
+                    service,
+                    &frontier,
+                    everything,
+                    scope,
+                    chain,
+                    self.absent_ends,
+                )
+                .map_err(refused)?;
+            evidence.extend(cited);
             // The anchor is never its own relative, even through a round trip.
             reached.remove(anchor);
             frontier = reached.into_iter().collect();
@@ -603,6 +610,9 @@ pub(crate) fn refused(error: RelationshipSelectionError) -> Unavailable {
     match error {
         RelationshipSelectionError::Unavailable(message) => {
             (NotEvaluatedReason::BackendUnavailable, message)
+        }
+        RelationshipSelectionError::OverBudget(_) => {
+            (NotEvaluatedReason::ResourceLimit, error.to_string())
         }
         RelationshipSelectionError::InvalidRequest
         | RelationshipSelectionError::DuplicateCandidate => invalid(error.to_string()),

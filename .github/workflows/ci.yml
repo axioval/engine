@@ -120,7 +120,8 @@ jobs:
   # implementation it replaced, on a generated fixture and the public models
   # (scripts/bench.py). A report, never a gate: a shared runner's timings are
   # too noisy to fail a commit on, so `check` does not need this job and a
-  # failing step does not fail the run. Rebuild PRs run the gate locally.
+  # failing step does not fail the run. Rebuild PRs run the gate locally,
+  # and a release publishes only a commit scripts/release-gate.sh passed.
   bench:
     name: Template benchmark (report)
     runs-on: ubuntu-latest

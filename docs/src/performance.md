@@ -89,7 +89,11 @@ on it as it stands, its id copied once; only a scope's stand-in is placed
 anew (#296). What only one rule reads (a provider's rows, patterns or
 whole-rule lists) is kept for that rule
 (`MeasuredMemo::of_rule`) and dropped once it is evaluated, never held for
-the whole run.
+the whole run. A read finds its value's provider by one lookup in an index
+the registry builds as providers are registered, not by asking each
+provider for its names, and a provider keys what it keeps for the run by
+its arguments' values and selections' identities, never by formatting them
+([#446](https://github.com/axioval/engine/issues/446)).
 
 **Members supplied, not walked.** No template walks a relationship path
 per object: the runner supplies an anchor's members, and a scope's objects,
@@ -237,6 +241,43 @@ depend on a machine's load. CI runs the report in its own job
 (`Template benchmark (report)`), which `check` does not need; it prints the
 table into the job summary and keeps the records as the
 `template-benchmark` artifact.
+
+### Where the gate runs
+
+A rebuild's gate runs where it was rebuilt, and every release runs it again
+on the commit it publishes
+([#446](https://github.com/axioval/engine/issues/446)):
+
+```sh
+./scripts/release-gate.sh    # on the pushed release commit
+```
+
+`scripts/release-gate.sh` builds the bench, runs `bench.py gate` on the
+committed HEAD with the machine's build lock taken exclusively
+(`AXIOVAL_GATE_LOCK`, default `~/.cache/axioval/gate.lock`), and records
+the verdict on GitHub as the commit status `template-gate`, `success` or
+`failure`. The `Release` workflow publishes only a commit whose latest
+`template-gate` status is `success`; `verify-only` does not ask for it.
+`--no-status` runs the gate without recording it.
+
+Before #446 nothing ran the gate once a rebuild had landed: CI only
+reports, and `./scripts/check.sh` never runs it. Two later changes moved
+three inputs over the budget unseen: one made `slab-contact`'s reference
+faster, the other made `effective-coverage`'s slower, lifting it above the
+floor, where its template's cost, hidden among the small inputs until then,
+was judged alone (see
+[A faster reference, a reference over the floor](#a-faster-reference-a-reference-over-the-floor)).
+
+The gate is not a CI job, blocking or not, because a shared runner cannot
+judge a ratio to its resolution. The interleaved, paired runs absorb a
+machine's drift within a process, not which machine it is: a runner's
+processor and neighbours move every round alike, so more rounds only
+narrow the interval around that runner's own ratio. The
+`template-benchmark` records of CI runs on main show it: on two runs whose
+code differed only in version numbers, `effective-coverage` on the IFC4x3
+architecture model read 1.44× and 1.55×, and its reference took 84 µs on
+one runner and 120 µs on the other, below the 100 µs floor and above it. A
+blocking job would pass or fail the same commit by the runner it drew.
 
 ### Adding a rebuild
 
@@ -660,6 +701,55 @@ plans. The reference still compiles them every run. Outcomes, messages and
 the descriptors are unchanged. Three exclusive gates gave the pair
 0.35× (0.31 to 0.40), 0.35× (0.16 to 0.75) and 0.36× (0.16 to 0.82), and
 every other `table-allocation` input 0.41 to 0.72×.
+
+### A faster reference, a reference over the floor
+
+Three inputs passed when #296 landed and failed on main twelve days later
+([#446](https://github.com/axioval/engine/issues/446)), none of their
+templates changed. Bisected on the three inputs alone (`--only`, three
+rounds per commit under the build lock):
+
+- `slab-contact` on the infra road went from 1.15× to 1.25× with the
+  shared relationship candidate universes of 97f0099f
+  ([#429](https://github.com/axioval/engine/issues/429)): its reference,
+  which walks each slab to its storey, went from about 670 µs to 430 µs,
+  while the template's own cost per object stayed. Asking each closed
+  chain once (b2fc5ff4, [#428](https://github.com/axioval/engine/issues/428))
+  and the derivation store (#437) took it to 1.30×.
+- `effective-coverage` on the IFC4 and IFC4x3 architecture models ran at
+  1.40 to 1.50× all along, but its reference took 82 to 85 µs, under the
+  100 µs floor, so it was judged with the small inputs, which hold
+  together. Bounding plan overlays by a budget (a0928e14,
+  [#419](https://github.com/axioval/engine/issues/419)) made both sides
+  measure more, and the reference's 104 µs put the input above the floor,
+  judged alone.
+
+What the reference never paid was formatting: `effective-coverage`'s
+provider keyed each element's measurement by its arguments written out
+with `Debug` (eleven of them, at each of the four values every element
+reads) and copied its sources' selection at each read; `slab-contact`'s
+keyed its storey traversal by five arguments written out, for every
+object. Both now key by the arguments' values and the selections'
+identities (`effective-coverage` by one small key per argument, worded
+nothing), borrow the bound selection, and word the element's locator
+once. Every read found its provider by asking each of the registry's
+providers for its names, twice; it now looks the name up in an index the
+registry builds as providers are registered. A prepared read hashes its key
+with `foldhash` rather than SipHash, and a contact measurement keeps the
+service's evidence rather than copying it. Outcomes and reports are
+unchanged; the parity harness holds them byte for byte.
+
+Judged by the gate's rule over 20 rounds under the build lock (before, on
+122f2b31, four alternating rounds beside the fix):
+
+| capability | input | before | after |
+| --- | --- | --- | --- |
+| slab-contact | infra road (IFC4) | 1.306 (1.279 to 1.333) | 1.199 (1.192 to 1.206) |
+| effective-coverage | building architecture (IFC4) | 1.387 (1.359 to 1.417) | 1.216 (1.209 to 1.224) |
+| effective-coverage | building architecture (IFC4x3) | 1.389 (1.374 to 1.405) | 1.215 (1.206 to 1.223) |
+
+The gate now runs on every release
+([Where the gate runs](#where-the-gate-runs)).
 
 ### Judged with a stated confidence
 

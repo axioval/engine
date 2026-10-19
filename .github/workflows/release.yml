@@ -33,6 +33,7 @@ jobs:
     permissions:
       contents: read
       actions: read # read CI's verdict on the released commit
+      statuses: read # read the template gate's verdict on it
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master 2026-08-31
@@ -64,6 +65,23 @@ jobs:
             sleep 30
           done
           echo "::error::no finished CI run on $GITHUB_SHA after 60 minutes"; exit 1
+      - name: Require the template gate to have passed on this commit
+        # The template benchmark gate judges a template's run time over its
+        # reference's to about 1%, which a shared runner cannot (#446), so
+        # it runs on a quiet machine: scripts/release-gate.sh records its
+        # verdict as the commit status `template-gate`, latest first. Only a
+        # publish needs it; `verify-only` still tests the tooling without.
+        if: inputs.release_action == 'publish'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          state="$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/statuses" \
+            --jq '[.[] | select(.context == "template-gate")][0].state // "missing"')"
+          if [ "$state" != success ]; then
+            echo "::error::the template gate is $state on $GITHUB_SHA; run scripts/release-gate.sh on it where nothing else builds"
+            exit 1
+          fi
+          echo "template-gate passed on $GITHUB_SHA"
 
   publish:
     name: Publish to crates.io

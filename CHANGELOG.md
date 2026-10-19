@@ -108,6 +108,35 @@ All notable changes are documented here. This project follows Semantic Versionin
   it was asked, so a walk from several starts needs exactly the budget
   the walks from each start need together.
 
+- **`slab-contact` and `effective-coverage` are back under the template
+  budget, and every release runs the template gate**
+  ([#446](https://github.com/axioval/engine/issues/446)). Two changes to
+  shared code moved three inputs over 1.25 times their replaced
+  implementation's run time with no template changed: sharing relationship
+  candidate universes (#429) made `slab-contact`'s reference on the infra
+  road faster, and bounding plan overlays (#419) lifted
+  `effective-coverage`'s reference on the architecture models above the
+  benchmark's 100 µs floor, where its template, 1.4 to 1.5 times as slow
+  all along, was judged alone. Their providers keyed each measurement by
+  arguments formatted with `Debug` at every read; they now key by values
+  and selection identities, borrow the bound selection and word a
+  locator once. A run finds a measured value's provider through an index
+  the registry builds as providers are registered instead of asking every
+  provider for its names at each read, a prepared read hashes its key with
+  `foldhash`, and `ContactEvidence::into_touching_and_evidence` hands over
+  what a caller keeps. Run time over the reference's, judged by the gate
+  (99% interval): `slab-contact` on the infra road 1.306 (1.279 to 1.333)
+  to 1.199 (1.192 to 1.206), `effective-coverage` on the IFC4 architecture
+  model 1.387 (1.359 to 1.417) to 1.216 (1.209 to 1.224) and on the IFC4x3
+  one 1.389 (1.374 to 1.405) to 1.215 (1.206 to 1.223); reports are
+  byte-identical. Nothing had caught it, since CI only reports the bench:
+  a shared runner's ratios move with the runner (one reference took 84 µs
+  on one run and 120 µs on the next, for the same code), so a CI gate
+  would fail and pass a commit by chance. `scripts/release-gate.sh` runs
+  the gate on the pushed release commit under the build lock and records
+  its verdict as the commit status `template-gate`, and the `Release`
+  workflow publishes only a commit where it is `success`.
+
 - **Repeated relationship steps ask each chain once**
   ([#428](https://github.com/axioval/engine/issues/428)). A path step with
   `+` mixing relationships (`A|B+`) asked each relationship's chain again

@@ -125,7 +125,7 @@ use axiolid_measure::{
     one_sided_boundary_hausdorff_with_budget, plan_boundary_clearance, plan_boundary_distance,
     plan_overlap,
 };
-use axiolid_mesh::{TriMesh, audit_mesh};
+use axiolid_mesh::TriMesh;
 use axiolid_spatial::{Bvh, SpatialItem};
 use axioval_engine::{
     BodyContainment, BodyVolume, Bounds3, ConvexPlanRegion, FaceDistanceError,
@@ -145,14 +145,15 @@ use axioval_ir::{
 };
 
 use crate::exact_boundary::ExactBody;
-use crate::geometry::{AxiolidGeometry, Triangle, triangles};
+use crate::geometry::{AxiolidGeometry, Triangle};
 use crate::planar::{BoundedOverlap, bounded_plan_overlap, plan_overlap_area, polygon_area};
 
+mod bodies;
 mod shells;
 mod zero_area;
 
 pub(crate) use zero_area::Winding;
-use zero_area::{Surface, point_triangle_distance, segment_hit, triangle_pair_distance};
+use zero_area::{point_triangle_distance, segment_hit, triangle_pair_distance};
 
 /// Linear tolerance for mesh audits, overlay and crossing tests.
 ///
@@ -432,51 +433,15 @@ impl AxiolidProximityService {
         )
     }
 
+    /// `object`'s body: its mesh, measured as its void's in the view
+    /// measuring voids, with the index the check builds of it once
+    /// ([`bodies::IndexedBodies`], #408).
     pub(crate) fn body(&self, object: &ObjectId) -> Result<Body<'_>, ProximityError> {
-        let mesh = if self.geometry.has_no_body(object) {
-            // A void is measured only in the view measuring voids, and then
-            // as the solid of space it keeps free; it is never material.
-            match self.geometry.void(object).filter(|_| self.voids) {
-                Some(Ok(mesh)) => mesh,
-                Some(Err(_)) => return Err(ProximityError::Unavailable),
-                None => return Err(ProximityError::NoBody),
-            }
-        } else {
-            self.geometry
-                .mesh(object)
-                .ok_or(ProximityError::Unavailable)?
-        };
-        let triangles = triangles(mesh);
-        let tolerance = tolerance()?;
-        let health = audit_mesh(mesh, tolerance);
-        // Every coordinate feeds a measurement reported as evidence; a mesh
-        // with bad indices or non-finite positions cannot be measured at all.
-        if health.invalid_indices == 0
-            && health.non_finite_positions == 0
-            && health.usable_triangles == 0
-            && health.degenerate_triangles > 0
-        {
-            return Err(ProximityError::Refused(
-                "every triangle of the body's mesh has zero area, so it bounds no surface",
-            ));
-        }
-        if triangles.is_empty() || !health.is_surface_usable() {
-            return Err(ProximityError::Unavailable);
-        }
-        let boxes: Vec<Bounds3> = triangles.iter().map(triangle_box).collect();
-        // Zero-area triangles add no surface. A mesh closed only with them
-        // (a T-junction closed by a sliver) still bounds a solid, whose
-        // winding number is taken without them.
-        let surface = Surface::of(mesh, health.degenerate_triangles);
-        let solid = match &surface {
-            None => health.is_closed_two_manifold(),
-            Some(surface) => surface.closed,
-        };
+        let key = bodies::BodyKey::new(&self.geometry, object, self.voids);
+        let mesh = key.mesh(&self.geometry)?;
         Ok(Body {
             mesh,
-            soup: Indexed::build(triangles, boxes)?,
-            solid,
-            surface,
+            indexed: bodies::indexed(&key)?,
         })
     }
 
@@ -891,14 +856,20 @@ impl<T> Indexed<T> {
     }
 }
 
+/// A body's mesh with its index ([`bodies::IndexedBody`]: its triangles
+/// in a hierarchy, whether it is solid, its surface without zero-area
+/// triangles), which it reads through.
 pub(crate) struct Body<'a> {
     pub(crate) mesh: &'a TriMesh,
-    pub(crate) soup: Indexed<Triangle>,
-    /// Closed and consistently wound, zero-area triangles counted, so it
-    /// has an inside.
-    pub(crate) solid: bool,
-    /// The mesh without its zero-area triangles, when it holds any.
-    surface: Option<Surface>,
+    indexed: Arc<bodies::IndexedBody>,
+}
+
+impl std::ops::Deref for Body<'_> {
+    type Target = bodies::IndexedBody;
+
+    fn deref(&self) -> &bodies::IndexedBody {
+        &self.indexed
+    }
 }
 
 impl Body<'_> {

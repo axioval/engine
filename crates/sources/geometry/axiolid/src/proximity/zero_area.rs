@@ -268,6 +268,12 @@ impl Surface {
     pub(crate) fn omitted_area(&self) -> f64 {
         self.omitted_area
     }
+
+    /// The bytes its mesh holds.
+    pub(crate) fn bytes(&self) -> usize {
+        self.mesh.positions.len() * std::mem::size_of::<axiolid_core::Point3>()
+            + self.mesh.indices.len() * std::mem::size_of::<u32>()
+    }
 }
 
 /// Whether the triangles form a closed, consistently wound chain: every

@@ -16,6 +16,7 @@ use std::sync::{Arc, Mutex};
 use axioval_ir::measured::{MeasuredArgument, MeasuredCall};
 use axioval_ir::{Evidence, ObjectId, Project, QuantityDimension, SourceId};
 
+use crate::derivation::{DerivationStore, Keyed};
 use crate::properties::PropertyResolutionError;
 use crate::{RuleContext, ServiceRegistry};
 
@@ -453,10 +454,13 @@ pub(crate) fn measure_subject(
     }
 }
 
-/// One table of the run's memo: its entries by key, hashed by a fast keyed
-/// hasher (each table seeded apart), since every value a template reads
-/// looks one up.
+/// One per-rule table of the run's memo: its entries by key, hashed by a
+/// fast keyed hasher (each table seeded apart).
 type Table<K, V> = HashMap<K, V, foldhash::fast::RandomState>;
+
+/// The marker of the memo's shared tables in the run's
+/// [`DerivationStore`], apart from any derivation kind.
+struct Shared;
 
 /// What providers measured in one run, shared by every rule and template
 /// of it.
@@ -470,8 +474,11 @@ type Table<K, V> = HashMap<K, V, foldhash::fast::RandomState>;
 /// copy), so nothing measured in one run answers another; outside a run
 /// there is none and a provider measures every time.
 ///
-/// Entries are kept by key and value type: two providers using distinct
-/// key types never share entries.
+/// Its shared tables are a view of the run's [`DerivationStore`]: each key
+/// and value type is a derivation kind whose build is the measurement a
+/// caller passes, measured at most once at a time (single flight; see
+/// [`crate::derivation`]). Entries are kept by key and value type: two
+/// providers using distinct key types never share entries.
 ///
 /// What only one rule reads (a rule's own table or patterns, prepared from
 /// its arguments) is kept for that rule alone ([`MeasuredMemo::of_rule`]):
@@ -479,12 +486,27 @@ type Table<K, V> = HashMap<K, V, foldhash::fast::RandomState>;
 /// ([`MeasuredMemo::end_rule`]), so a run of many rules does not hold every
 /// rule's preparation at once.
 #[derive(Clone, Default)]
-pub struct MeasuredMemo(
-    Arc<Mutex<HashMap<TypeId, Box<dyn Any + Send>>>>,
-    Arc<Mutex<HashMap<TypeId, Box<dyn Any + Send>>>>,
-);
+pub struct MeasuredMemo {
+    store: DerivationStore,
+    rule: Arc<Mutex<HashMap<TypeId, Box<dyn Any + Send>>>>,
+}
 
 impl MeasuredMemo {
+    /// A memo whose shared tables are kept in `store`.
+    #[must_use]
+    pub fn on(store: DerivationStore) -> Self {
+        Self {
+            store,
+            rule: Arc::default(),
+        }
+    }
+
+    /// The derivation store its shared tables are kept in.
+    #[must_use]
+    pub fn store(&self) -> &DerivationStore {
+        &self.store
+    }
+
     /// The value kept for `key` while the rule being evaluated runs, or
     /// `measure`'s, kept: what only that rule reads.
     pub fn get_or_measure_for_rule<K, V>(&self, key: K, measure: impl FnOnce() -> V) -> V
@@ -492,7 +514,25 @@ impl MeasuredMemo {
         K: Hash + Eq + Send + 'static,
         V: Clone + Send + 'static,
     {
-        Self::kept_in(&self.1, key, measure)
+        let table = TypeId::of::<Table<K, V>>();
+        if let Ok(entries) = self.rule.lock()
+            && let Some(value) = entries
+                .get(&table)
+                .and_then(|entries| entries.downcast_ref::<Table<K, V>>())
+                .and_then(|entries| entries.get(&key))
+        {
+            return value.clone();
+        }
+        let value = measure();
+        if let Ok(mut entries) = self.rule.lock()
+            && let Some(entries) = entries
+                .entry(table)
+                .or_insert_with(|| Box::new(Table::<K, V>::default()))
+                .downcast_mut::<Table<K, V>>()
+        {
+            entries.entry(key).or_insert_with(|| value.clone());
+        }
+        value
     }
 
     /// `measure` of `key` kept for the rule being evaluated in `services`'
@@ -510,7 +550,7 @@ impl MeasuredMemo {
 
     /// Drops what was kept for the rule just evaluated.
     pub fn end_rule(&self) {
-        if let Ok(mut entries) = self.1.lock() {
+        if let Ok(mut entries) = self.rule.lock() {
             entries.clear();
         }
     }
@@ -518,69 +558,50 @@ impl MeasuredMemo {
     /// The value memoized for `key`, or `measure`'s, memoized.
     ///
     /// `measure` runs without the memo locked, so it may read the memo
-    /// itself; a measurement made twice meanwhile keeps the first.
+    /// itself. A key is measured at most once at a time: a caller asking
+    /// for a key another thread is measuring waits for it and gets its
+    /// value. A measurement that panics memoizes nothing, and whoever waited
+    /// for it measures the key itself.
+    ///
+    /// # Panics
+    ///
+    /// When measuring `key` needs `key` itself (a cycle,
+    /// [`crate::DerivationError::Cycle`]), rather than waiting forever; and when
+    /// `measure` panics.
     pub fn get_or_measure<K, V>(&self, key: K, measure: impl FnOnce() -> V) -> V
     where
-        K: Hash + Eq + Send + 'static,
+        K: Hash + Eq + Send + Sync + 'static,
         V: Clone + Send + 'static,
     {
-        Self::kept_in(&self.0, key, measure)
-    }
-
-    /// [`Self::get_or_measure`] in `tables`.
-    fn kept_in<K, V>(
-        tables: &Mutex<HashMap<TypeId, Box<dyn Any + Send>>>,
-        key: K,
-        measure: impl FnOnce() -> V,
-    ) -> V
-    where
-        K: Hash + Eq + Send + 'static,
-        V: Clone + Send + 'static,
-    {
-        let table = TypeId::of::<Table<K, V>>();
-        if let Ok(entries) = tables.lock()
-            && let Some(value) = entries
-                .get(&table)
-                .and_then(|entries| entries.downcast_ref::<Table<K, V>>())
-                .and_then(|entries| entries.get(&key))
-        {
-            return value.clone();
+        match self.store.get_or_build::<Shared, K, V, V>(
+            std::any::type_name::<(K, V)>(),
+            Keyed::Owned(key),
+            || Ok((measure(), 0)),
+            V::clone,
+        ) {
+            Ok(value) => value,
+            Err(error) => panic!("{error}"),
         }
-        let value = measure();
-        if let Ok(mut entries) = tables.lock()
-            && let Some(entries) = entries
-                .entry(table)
-                .or_insert_with(|| Box::new(Table::<K, V>::default()))
-                .downcast_mut::<Table<K, V>>()
-        {
-            entries.entry(key).or_insert_with(|| value.clone());
-        }
-        value
     }
 
     /// The value memoized for `key`, if any.
     pub fn get<K, V>(&self, key: &K) -> Option<V>
     where
-        K: Hash + Eq + Send + 'static,
+        K: Hash + Eq + Send + Sync + 'static,
         V: Clone + Send + 'static,
     {
         self.get_with(key, V::clone)
     }
 
     /// What `read` reads of the value memoized for `key`, if any, without
-    /// copying the whole value. `read` runs with the memo locked, so it
-    /// must not read the memo itself.
+    /// copying the whole value; a key being measured has none yet. `read`
+    /// runs with the memo locked, so it must not read the memo itself.
     pub fn get_with<K, V, R>(&self, key: &K, read: impl FnOnce(&V) -> R) -> Option<R>
     where
-        K: Hash + Eq + Send + 'static,
+        K: Hash + Eq + Send + Sync + 'static,
         V: Send + 'static,
     {
-        let entries = self.0.lock().ok()?;
-        entries
-            .get(&TypeId::of::<Table<K, V>>())?
-            .downcast_ref::<Table<K, V>>()?
-            .get(key)
-            .map(read)
+        self.store.read_held::<Shared, K, V, R>(key, read)
     }
 
     /// Memoizes `value` for `key`, replacing what was memoized: for a
@@ -588,17 +609,11 @@ impl MeasuredMemo {
     /// of a body whose frame it measured already.
     pub fn insert<K, V>(&self, key: K, value: V)
     where
-        K: Hash + Eq + Send + 'static,
+        K: Hash + Eq + Send + Sync + 'static,
         V: Clone + Send + 'static,
     {
-        if let Ok(mut entries) = self.0.lock()
-            && let Some(entries) = entries
-                .entry(TypeId::of::<Table<K, V>>())
-                .or_insert_with(|| Box::new(Table::<K, V>::default()))
-                .downcast_mut::<Table<K, V>>()
-        {
-            entries.insert(key, value);
-        }
+        self.store
+            .put::<Shared, K, V>(std::any::type_name::<(K, V)>(), key, value);
     }
 
     /// Changes what is memoized for `key` (starting from the default) by
@@ -607,24 +622,22 @@ impl MeasuredMemo {
     /// locked, so it must not read the memo itself.
     pub fn update<K, V>(&self, key: K, change: impl FnOnce(&mut V))
     where
-        K: Hash + Eq + Send + 'static,
+        K: Hash + Eq + Send + Sync + 'static,
         V: Default + Send + 'static,
     {
-        if let Ok(mut entries) = self.0.lock()
-            && let Some(entries) = entries
-                .entry(TypeId::of::<Table<K, V>>())
-                .or_insert_with(|| Box::new(Table::<K, V>::default()))
-                .downcast_mut::<Table<K, V>>()
-        {
-            change(entries.entry(key).or_default());
-        }
+        self.store
+            .change::<Shared, K, V>(std::any::type_name::<(K, V)>(), key, change);
     }
 
     /// `measure` of `key` memoized in `services`' memo when a run installed
     /// one, else measured.
+    ///
+    /// # Panics
+    ///
+    /// As [`Self::get_or_measure`].
     pub fn of<K, V>(services: &ServiceRegistry, key: K, measure: impl FnOnce() -> V) -> V
     where
-        K: Hash + Eq + Send + 'static,
+        K: Hash + Eq + Send + Sync + 'static,
         V: Clone + Send + 'static,
     {
         match services.get::<Self>() {
@@ -784,7 +797,8 @@ impl Hash for ArgumentsKey {
 }
 
 /// Installs `providers` for a run over `project`, if there are any, with an
-/// empty [`MeasuredMemo`].
+/// empty [`MeasuredMemo`] over an empty [`DerivationStore`], installed
+/// too.
 pub(crate) fn install(
     services: &mut ServiceRegistry,
     providers: &[Arc<dyn MeasuredProvider>],
@@ -793,7 +807,9 @@ pub(crate) fn install(
     if providers.is_empty() {
         return;
     }
-    services.replace(MeasuredMemo::default());
+    let store = DerivationStore::new();
+    services.replace(store.clone());
+    services.replace(MeasuredMemo::on(store));
     services.replace(Providers {
         providers: Arc::new(providers.to_vec()),
         project: Arc::new(project.clone()),

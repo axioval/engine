@@ -33,7 +33,16 @@ per process, not once per read.
 `MeasuredMemo` beside its measured-value providers; a provider keeps there
 what several values or rules read, keyed by everything it depends on (the
 object and the call's parameters, never a rule's). Nothing measured in one
-run answers another. `body-extent`'s provider keeps one entry per body: its
+run answers another. The memo's shared table is a view of the run's
+derivation store ([ADR 0006](./adr-0006.md),
+[#437](https://github.com/axioval/engine/issues/437)): each key and value
+type is a kind of the store, measured at most once at a time. A thread
+asking for a key another thread is measuring waits for that measurement
+and reads its value, instead of measuring it a second time and keeping the
+first, so a rule evaluated on several threads holds one copy of each value
+while it is measured. A hit costs what it cost before: one lock, a table
+found by type and a key hashed with `foldhash`, the value cloned under the
+lock. `body-extent`'s provider keeps one entry per body: its
 frame, measured once, and its extent along each axis read, measured once.
 Its three values (`body_extent` and both `body_position` ends), along every
 axis and in every rule, share them, so a run asks each service once per

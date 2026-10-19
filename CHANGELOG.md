@@ -6,6 +6,30 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **A derivation store that builds each key once**
+  ([#437](https://github.com/axioval/engine/issues/437)), the foundation of
+  [ADR 0006](docs/src/adr-0006.md). `axioval_engine::derivation` states
+  expensive, reusable work as a `DerivationKind`: a key, a value and a pure
+  build that reads only its key, other derivations (`Inputs::derive`) and
+  the check's services, never a rule. Every run installs one empty
+  `DerivationStore` in its services, so the engine and geometry adapters
+  reach it like any other service. It keeps values by kind and key behind
+  `Arc`, keys compared field by field and hashed with `foldhash`, and
+  builds a key at most once at a time: a second caller waits for the first
+  build and reads its value, and no lock is held while building, so a
+  build may read other derivations. A build that would wait on itself,
+  directly, through other threads' waits or on a worker of the thread
+  building it, returns `DerivationError::Cycle` instead of hanging; a build
+  that panics leaves nothing behind and its waiters build the key
+  themselves. `DerivationStore::statistics` counts each kind's entries,
+  hits, builds, waits, releases and the bytes its `size_hint` states, and
+  `release` drops a value, for the reuse report (#442) and planned release
+  (#440) to come. `MeasuredMemo`'s shared table is now a view of the
+  run's store (`MeasuredMemo::on`, `MeasuredMemo::store`), so two threads
+  asking for one measurement take it once; a measurement needing itself
+  panics with the cycle rather than recursing. Its keys must now be
+  `Sync`; reports are unchanged.
+
 - **A rule's spaces and objects are evaluated in parallel**
   ([#405](https://github.com/axioval/engine/issues/405)). A template judging
   objects one by one (free floor, clearance, clash and most built-in

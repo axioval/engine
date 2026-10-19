@@ -1088,6 +1088,7 @@ mod context_zones;
 mod coordinate_system;
 mod corridor_end;
 mod coverage;
+pub mod derivation;
 mod derived;
 mod derived_relationships;
 mod discipline_map;
@@ -1187,6 +1188,9 @@ pub use coordinate_system::{
 };
 pub use corridor_end::{CorridorEnd, CorridorEndRequest, CorridorEnds, EndWall, WallContact};
 pub use coverage::{CoverageEvidence, CoverageRequest, EffectMeets, EffectReach, Participant};
+pub use derivation::{
+    DerivationError, DerivationKind, DerivationStatistics, DerivationStore, Inputs,
+};
 pub use derived::{ClassOutcome, Classifications};
 pub use derived_relationships::{
     AdjacentSide, DERIVATIONS, DERIVED_RELATIONSHIP_PREFIX, Derivation, DerivationEntry,
@@ -1920,6 +1924,9 @@ impl Runtime {
         // The context zones are the plan's: a host copy could state zones
         // it never supplied through the plan.
         services.replace(plan.zones.clone());
+        // One derivation store per check: nothing built in one run answers
+        // another, whatever a host registered.
+        services.replace(DerivationStore::new());
         self.registry.install_measured(&mut services, project);
         // Measured values are answered through the host's resolver in
         // every run; classifications are derived first when the plan has

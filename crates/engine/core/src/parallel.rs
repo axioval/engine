@@ -16,7 +16,7 @@ use std::panic::{self, AssertUnwindSafe};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::ServiceRegistry;
-use crate::timing;
+use crate::{derivation, timing};
 
 /// How many threads a run evaluates a rule's subjects on, the thread
 /// running the rule among them.
@@ -105,6 +105,9 @@ impl Parallelism {
             done
         };
         let timed = timing::fanning_out();
+        // Workers work within the derivations this thread is building, so
+        // one reading a key this thread builds is a cycle, never a wait.
+        let lineage = derivation::lineage();
         let mut slots: Vec<Option<std::thread::Result<R>>> =
             std::iter::repeat_with(|| None).take(items.len()).collect();
         std::thread::scope(|scope| {
@@ -114,7 +117,9 @@ impl Parallelism {
                     std::thread::Builder::new()
                         .name("axioval-subject".into())
                         .stack_size(WORKER_STACK)
-                        .spawn_scoped(scope, || timing::worker(timed, work))
+                        .spawn_scoped(scope, || {
+                            derivation::within(lineage.clone(), || timing::worker(timed, work))
+                        })
                         .ok()
                 })
                 .collect();

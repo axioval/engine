@@ -194,8 +194,10 @@ every template to the implementation it replaced.
    parameters folded into constants; the capability keeps the plans it
    bound), its values read in
    batches through the run's `MeasuredValues`, measurements memoized for
-   the run in a `MeasuredMemo`, and selections shared between the rules of
-   the run; nothing measured in one run answers another
+   the run in a `MeasuredMemo` (a view of the run's `DerivationStore`,
+   which builds each key once, [ADR 0006](./adr-0006.md)), and selections
+   shared between the rules of the run; nothing measured in one run
+   answers another
    ([Template performance](./performance.md)). Other capabilities evaluate
    semantic facts and typed evidence directly.
    With `Runtime::with_parallelism` (serial unless a host sets it; the CLI's

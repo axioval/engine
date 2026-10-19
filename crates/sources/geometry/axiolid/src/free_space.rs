@@ -31,6 +31,7 @@ use axioval_ir::{Evidence, ObjectId, SourceId};
 
 use crate::geometry::{AxiolidGeometry, Extent, Triangle, extent_gap, mesh_extent, triangles};
 use crate::placement::{self, Axis, Scene, Search, Window};
+use crate::planar::budget::Work;
 use crate::planar::{enclosing_hull, plan_frame, polygon_area, projected_polygons};
 use crate::walkable::{ON_SURFACE, Plan, band_footprint, solid_column, trapezoids};
 use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, Polygon, Region, Ring, overlay};
@@ -174,8 +175,8 @@ impl KeptScene {
         fill(&self.inscribed, &scene.inscribed);
         fill(&self.simple, &scene.simple);
         fill(&self.coarse, &scene.coarse);
-        for (side, corners, free) in scene.found.borrow().iter() {
-            placement::keep_found(&self.found, *side, corners, free);
+        for (side, corners, steps, free) in scene.found.borrow().iter() {
+            placement::keep_found(&self.found, *side, corners, steps, free);
         }
     }
 
@@ -196,6 +197,7 @@ impl KeptScene {
             simple: self.simple.clone(),
             coarse: self.coarse.clone(),
             found: self.found.clone(),
+            work: Work::default(),
         }
     }
 }
@@ -1112,6 +1114,7 @@ impl AxiolidFreeSpaceService {
             simple: Default::default(),
             coarse: Default::default(),
             found: placement::Found::default(),
+            work: Work::default(),
         };
         Ok((scene, floor))
     }

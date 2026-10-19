@@ -219,6 +219,35 @@ All notable changes are documented here. This project follows Semantic Versionin
   handed over as fans from each corner, with fewer long edges, which
   halves the overlay's time and memory where it is still built.
 
+- **A free-floor search too large to build is refused by name, never
+  exhausting the host's memory**
+  ([#434](https://github.com/axioval/engine/issues/434)). A
+  free-floor-rectangle rule over a 116-space, 7-storey sample, densely
+  tessellated obstacles in its spaces and an access path through the space
+  beside each, ran for more than two hours on one core and grew to 29.7 GB
+  until the kernel killed the host, losing every other rule's results. Each
+  rectangle's Minkowski sum or erosion hands the overlay one hull per
+  obstacle edge, and along a tessellated body every hull meets every other
+  within the rectangle's reach: dense round tables in a 20 m hall eroded
+  by a 1.8 m rectangle took 20 s and 9.7 GB for a single angle, and an
+  angle search asks for one per interval. The Axiolid placement search
+  now counts, before each step is built, the pairs of edges whose boxes
+  meet in what that step hands the overlay: the hulls of a Minkowski sum
+  or erosion by the rectangle or an octagon (past 2,000,000 pairs, about
+  2 GB and 4 s), the 64-gon's hulls of the path's disc morphology, which
+  maps the reach from the entrances and a circulation map's pieces (past
+  16,000,000 pairs, whose hulls the overlay trims to about a tenth, about
+  1 GB and 4 s), and the overlays between them (past 4,000,000 pairs, as
+  in #419). A search also spends at most what 100 such steps would
+  together, so a search whose every step passes cannot run for hours; a
+  region the scene keeps is charged as it was when built, so what a
+  search may spend depends on its request alone. Past either budget the
+  space is not evaluated, its reason naming the step, its pairs and the
+  budget, and every other space and rule keeps running: the hall above is
+  refused in milliseconds. The public parity models and two private
+  houses of 17 and 157 spaces are decided as before, byte for byte, their
+  heaviest search spending 42 of the 100 steps.
+
 ### Security
 
 - Moved to zip 9 and rust_xlsxwriter 0.100, past RUSTSEC-2026-0367, -0368

@@ -11,7 +11,7 @@ use axiolid_overlay::{
 
 use crate::geometry::Triangle;
 
-mod budget;
+pub(crate) mod budget;
 
 /// Why a plan measurement was not built: the overlay refused its operands,
 /// or they were past the overlay budget (#419).

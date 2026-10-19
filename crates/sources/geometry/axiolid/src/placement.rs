@@ -43,6 +43,7 @@ use axiolid_overlay::{MorphologyMode, Polygon, Region, Ring, union_soup};
 use axioval_engine::FreeSpaceError;
 
 use crate::geometry::Triangle;
+use crate::planar::budget::{Cost, Refusal, Work, minkowski_cost, overlay_cost};
 use crate::planar::{projected_polygons, refused_ring};
 
 /// Fits closer than this are not told apart from misses when proving that no
@@ -198,11 +199,20 @@ pub(crate) struct Scene {
     /// side: a space's searches over one scene ask the same rectangles
     /// at the same angles (#427).
     pub(crate) found: Found,
+    /// What this search has handed the overlay so far (#434): each step
+    /// within its kind's budget, all of them within
+    /// [`SEARCH_STEPS`](crate::planar::budget::SEARCH_STEPS) steps at those
+    /// budgets. Never kept with a scene: every search starts afresh.
+    pub(crate) work: Work,
 }
 
 /// Centres a scene's rectangle searches found ([`Scene::found`]): whether
-/// for an absence, the shape's corners' bits, and the region.
-pub(crate) type Found = RefCell<Vec<(bool, Vec<u64>, Region)>>;
+/// for an absence, the shape's corners' bits, the steps that built the
+/// region, charged again when it is taken ([`Work`]), and the region.
+pub(crate) type Found = RefCell<Vec<(bool, Vec<u64>, Steps, Region)>>;
+
+/// The overlay steps that built a region, each with its cost.
+pub(crate) type Steps = Vec<(&'static str, Cost)>;
 
 /// How many corners the regions a scene keeps in [`Scene::found`] may
 /// have together (some 4 MB); past it, more are computed but not kept.
@@ -211,21 +221,37 @@ pub(crate) const FOUND_POINTS: usize = 250_000;
 /// Keeps `free`, found for an absence (`absence`) or a witness by the
 /// shape whose corners have `bits`, in `found` while it is within
 /// [`FOUND_POINTS`] and not kept already.
-pub(crate) fn keep_found(found: &Found, absence: bool, bits: &[u64], free: &Region) {
+pub(crate) fn keep_found(found: &Found, absence: bool, bits: &[u64], steps: &Steps, free: &Region) {
     let mut found = found.borrow_mut();
     if found
         .iter()
-        .any(|(side, corners, _)| *side == absence && corners == bits)
+        .any(|(side, corners, _, _)| *side == absence && corners == bits)
     {
         return;
     }
     let kept: usize = found
         .iter()
-        .map(|(_, _, region)| region_points(region))
+        .map(|(_, _, _, region)| region_points(region))
         .sum();
     if kept + region_points(free) <= FOUND_POINTS {
-        found.push((absence, bits.to_vec(), free.clone()));
+        found.push((absence, bits.to_vec(), steps.clone(), free.clone()));
     }
+}
+
+/// A step refused by the search's budget, as the search's refusal.
+fn over_budget(refusal: Refusal) -> FreeSpaceError {
+    FreeSpaceError::Unavailable(refusal.to_string())
+}
+
+/// The cost of summing `region` with the convex `shape`, or with
+/// `erosion` of eroding it by the shape ([`minkowski_cost`]).
+fn morphology(region: &Region, shape: &Ring, erosion: bool) -> Cost {
+    minkowski_cost(region.polygons(), &shape.points, erosion)
+}
+
+/// The cost of an overlay of `a` and `b` ([`overlay_cost`]).
+fn overlay(a: &Region, b: &Region) -> Cost {
+    overlay_cost(&[a.polygons(), b.polygons()])
 }
 
 /// The pieces of the free area eroded by half a path's width that come
@@ -387,34 +413,56 @@ impl Scene {
     ///
     /// Each region is kept with the scene ([`Self::found`]) by the
     /// shape's corners, so a search asking for it again, at the same angle
-    /// and size, takes it as it was found; a refusal is not kept.
+    /// and size, takes it as it was found; a refusal is not kept. Its
+    /// steps are charged to the search ([`Self::work`]) either way, as
+    /// they were when it was built.
     fn free_for(&self, shape: &Ring, absence: bool) -> Result<Region, FreeSpaceError> {
         let bits: Vec<u64> = shape
             .points
             .iter()
             .flat_map(|p| [p.x.to_bits(), p.y.to_bits()])
             .collect();
-        if let Some((_, _, free)) = self
-            .found
-            .borrow()
-            .iter()
-            .find(|(side, corners, _)| *side == absence && *corners == bits)
-        {
-            return Ok(free.clone());
-        }
         let (scope, obstacles) = if absence {
             (&self.room, &self.sure)
         } else {
             (&self.scope, &self.obstacles)
         };
-        let free = if region_points(obstacles) > OBSTACLE_SUM_POINTS {
-            self.clear(absence)?
+        let eroded = region_points(obstacles) > OBSTACLE_SUM_POINTS;
+        let clear = if eroded {
+            Some(self.clear(absence)?)
+        } else {
+            None
+        };
+        let kept = self
+            .found
+            .borrow()
+            .iter()
+            .find(|(side, corners, _, _)| *side == absence && *corners == bits)
+            .map(|(_, _, steps, free)| (steps.clone(), free.clone()));
+        if let Some((steps, free)) = kept {
+            for (what, cost) in steps {
+                self.work.charge(what, cost).map_err(over_budget)?;
+            }
+            return Ok(free);
+        }
+        let mut steps = Steps::new();
+        let mut step = |what: &'static str, cost: Cost| {
+            self.work.charge(what, cost).map_err(over_budget)?;
+            steps.push((what, cost));
+            Ok(())
+        };
+        let free = if let Some(clear) = clear {
+            step(
+                "erosion of the free floor by the rectangle",
+                morphology(clear, shape, true),
+            )?;
+            clear
                 .minkowski_erosion(shape, self.tolerance)
                 .map_err(|e| unavailable("erosion", e))?
         } else {
-            summed_free(scope, obstacles, shape, self.tolerance)?
+            summed_free(scope, obstacles, shape, self.tolerance, &mut step)?
         };
-        keep_found(&self.found, absence, &bits, &free);
+        keep_found(&self.found, absence, &bits, &steps, &free);
         Ok(free)
     }
 
@@ -428,6 +476,11 @@ impl Scene {
         } else {
             (&self.scope, &self.obstacles)
         };
+        self.work
+            .charge_once(u32::from(absence), "floor less the obstacles", || {
+                overlay(scope, obstacles)
+            })
+            .map_err(over_budget)?;
         let cell = &self.clear[usize::from(absence)];
         if let Some(clear) = cell.get() {
             return Ok(clear);
@@ -465,20 +518,33 @@ impl Scene {
     /// contain the clear parts ([`Self::clear`]) or lie inside them.
     /// `None` where it keeps more than three quarters of the region's
     /// corners (the proof would cost about what the exact one does), the
-    /// overlay refuses it or nothing is left. Taken once.
+    /// overlay refuses it or nothing is left. Taken once; `None` too where
+    /// the search's budget refuses it, which is not kept.
     fn coarse(&self, which: usize) -> Option<&Region> {
+        let key = 2 + u32::try_from(which).unwrap_or(u32::MAX - 2);
+        if which >= 3 {
+            let scope = if which == 4 { &self.scope } else { &self.room };
+            let part = self.coarse(which - 3)?;
+            self.work
+                .charge_once(key, "floor less the coarse obstacles", || {
+                    overlay(scope, part)
+                })
+                .ok()?;
+            return self.coarse[which]
+                .get_or_init(|| clear_of(scope, part, self.tolerance).ok())
+                .as_ref();
+        }
+        let (region, side) = match which {
+            0 => (&self.sure, Side::Inside),
+            1 => (&self.obstacles, Side::Inside),
+            _ => (&self.sure, Side::Around),
+        };
+        // The simplification is checked against the region by an overlay.
+        self.work
+            .charge_once(key, "coarse obstacles", || overlay(region, region))
+            .ok()?;
         self.coarse[which]
             .get_or_init(|| {
-                if which >= 3 {
-                    let scope = if which == 4 { &self.scope } else { &self.room };
-                    let part = self.coarse(which - 3)?;
-                    return clear_of(scope, part, self.tolerance).ok();
-                }
-                let (region, side) = match which {
-                    0 => (&self.sure, Side::Inside),
-                    1 => (&self.obstacles, Side::Inside),
-                    _ => (&self.sure, Side::Around),
-                };
                 simplified(region, COARSE_WITHIN_METRES, side, self.tolerance).filter(|coarse| {
                     !coarse.is_empty() && 4 * region_points(coarse) <= 3 * region_points(region)
                 })
@@ -516,23 +582,24 @@ impl Scene {
             return false;
         }
         let octagon = octagon(radius);
-        if self
-            .coarse(if absence { 3 } else { 4 })
-            .is_some_and(|coarse| {
-                coarse
+        let empty = |region: &Region| {
+            self.work
+                .charge(
+                    "erosion of the free floor by an octagon",
+                    morphology(region, &octagon, true),
+                )
+                .is_ok()
+                && region
                     .minkowski_erosion(&octagon, self.tolerance)
                     .is_ok_and(|free| free.is_empty())
-            })
-        {
+        };
+        if self.coarse(if absence { 3 } else { 4 }).is_some_and(empty) {
             return true;
         }
         let Ok(clear) = self.clear(absence) else {
             return false;
         };
-        clear.is_empty()
-            || clear
-                .minkowski_erosion(&octagon, self.tolerance)
-                .is_ok_and(|free| free.is_empty())
+        clear.is_empty() || empty(clear)
     }
 
     /// Whether the centres an absence must rule out for the shrunk `shape`
@@ -552,18 +619,26 @@ impl Scene {
     /// with a 1.8 m rectangle, for each angle interval: every corner's
     /// hull overlaps every other's.
     fn surely_absent(&self, shape: &Ring, grown: &Ring) -> bool {
+        let mut step =
+            |what: &'static str, cost: Cost| self.work.charge(what, cost).map_err(over_budget);
         let free = if region_points(&self.sure) > OBSTACLE_SUM_POINTS {
             let Some(clear) = self.coarse(3) else {
                 return false;
             };
-            clear
-                .minkowski_erosion(shape, self.tolerance)
-                .map_err(|e| unavailable("erosion", e))
+            step(
+                "erosion of the coarse free floor by the rectangle",
+                morphology(clear, shape, true),
+            )
+            .and_then(|()| {
+                clear
+                    .minkowski_erosion(shape, self.tolerance)
+                    .map_err(|e| unavailable("erosion", e))
+            })
         } else {
             let Some(sure) = self.coarse(0) else {
                 return false;
             };
-            summed_free(&self.room, sure, shape, self.tolerance)
+            summed_free(&self.room, sure, shape, self.tolerance, &mut step)
         };
         free.and_then(|free| self.reaching(free, grown, true))
             .and_then(|free| self.nowhere_in_domain(&free))
@@ -577,21 +652,26 @@ impl Scene {
     /// It is asked first in the room less the sure obstacles simplified
     /// from around ([`Self::coarse`]), which lies inside the exact one.
     fn fits_somewhere(&self, shape: &Ring) -> bool {
-        if self.coarse(5).is_some_and(|coarse| {
-            !coarse.is_empty()
-                && coarse
+        let fits = |region: &Region| {
+            !region.is_empty()
+                && self
+                    .work
+                    .charge(
+                        "erosion of the free floor by the rectangle",
+                        morphology(region, shape, true),
+                    )
+                    .is_ok()
+                && region
                     .minkowski_erosion(shape, self.tolerance)
                     .is_ok_and(|free| !free.is_empty())
-        }) {
+        };
+        if self.coarse(5).is_some_and(fits) {
             return true;
         }
         let Ok(clear) = self.clear(true) else {
             return false;
         };
-        !clear.is_empty()
-            && clear
-                .minkowski_erosion(shape, self.tolerance)
-                .is_ok_and(|free| !free.is_empty())
+        fits(clear)
     }
 }
 
@@ -783,26 +863,36 @@ fn region_points(region: &Region) -> usize {
         .sum()
 }
 
-/// `scope` eroded by `shape`, less `obstacles` summed with it.
+/// `scope` eroded by `shape`, less `obstacles` summed with it, each step
+/// handed to `step` with its cost before it is built, which may refuse it
+/// ([`Work`]).
 fn summed_free(
     scope: &Region,
     obstacles: &Region,
     shape: &Ring,
     tolerance: Tolerance,
+    step: &mut dyn FnMut(&'static str, Cost) -> Result<(), FreeSpaceError>,
 ) -> Result<Region, FreeSpaceError> {
-    {
-        let room = scope
-            .minkowski_erosion(shape, tolerance)
-            .map_err(|e| unavailable("erosion", e))?;
-        if room.is_empty() || obstacles.is_empty() {
-            return Ok(room);
-        }
-        let blocked = obstacles
-            .minkowski_sum(shape, tolerance)
-            .map_err(|e| unavailable("dilation", e))?;
-        room.difference(&blocked, tolerance)
-            .map_err(|e| unavailable("difference", e))
+    step(
+        "erosion of the floor by the rectangle",
+        morphology(scope, shape, true),
+    )?;
+    let room = scope
+        .minkowski_erosion(shape, tolerance)
+        .map_err(|e| unavailable("erosion", e))?;
+    if room.is_empty() || obstacles.is_empty() {
+        return Ok(room);
     }
+    step(
+        "sum of the obstacles with the rectangle",
+        morphology(obstacles, shape, false),
+    )?;
+    let blocked = obstacles
+        .minkowski_sum(shape, tolerance)
+        .map_err(|e| unavailable("dilation", e))?;
+    step("floor less the summed obstacles", overlay(&room, &blocked))?;
+    room.difference(&blocked, tolerance)
+        .map_err(|e| unavailable("difference", e))
 }
 
 /// `scope` less `obstacles`, which [`eroded_free`] erodes.
@@ -885,9 +975,18 @@ impl Scene {
         if target.is_empty() || free.is_empty() {
             return Ok(Region::empty());
         }
+        self.work
+            .charge(
+                "sum of the reached pieces with the rectangle",
+                morphology(target, shape, false),
+            )
+            .map_err(over_budget)?;
         let near = target
             .minkowski_sum(shape, self.tolerance)
             .map_err(|e| unavailable("reach", e))?;
+        self.work
+            .charge("centres meeting the reached pieces", overlay(&free, &near))
+            .map_err(over_budget)?;
         free.intersection(&near, self.tolerance)
             .map_err(|e| unavailable("reach", e))
     }
@@ -1736,7 +1835,8 @@ mod tests {
             let scope = Region::new(vec![scope], tolerance).unwrap();
             for turn in [0.0, 0.3] {
                 let shape = rectangle(Point2::new(0.0, 0.0), 0.9, 1.2, Axis::at(turn));
-                let summed = summed_free(&scope, &obstacles, &shape, tolerance).unwrap();
+                let summed =
+                    summed_free(&scope, &obstacles, &shape, tolerance, &mut |_, _| Ok(())).unwrap();
                 let eroded = eroded_free(&scope, &obstacles, &shape, tolerance).unwrap();
                 assert!(!summed.is_empty());
                 let gap = summed.difference(&eroded, tolerance).unwrap().area()
@@ -1852,6 +1952,7 @@ mod tests {
             simple: Default::default(),
             coarse: Default::default(),
             found: Found::default(),
+            work: Work::default(),
         }
     }
 
@@ -1867,6 +1968,103 @@ mod tests {
                 })
                 .collect(),
         }
+    }
+
+    /// A hall `side` metres square crowded with `count` round tables of
+    /// `sides` corners (radius 0.3 m, every other corner 2 mm in), on a
+    /// grid of 0.5 m with each row shifted, so that neighbours overlap
+    /// into clusters: tessellated furniture densely packed.
+    fn crowded(side: f64, count: u32, sides: u32) -> Scene {
+        let mut scene = scene((0.0, 0.0), (side, side), &[], &[]);
+        let per_row = ((side - 1.0) / 0.5).floor().max(1.0);
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let per_row = per_row as u32;
+        let rings: Vec<Ring> = (0..count)
+            .map(|i| {
+                let (row, column) = (i / per_row, i % per_row);
+                let shift = if row % 2 == 0 { 0.0 } else { 0.25 };
+                table(
+                    0.5 + shift + 0.5 * f64::from(column),
+                    0.5 + 0.55 * f64::from(row),
+                    0.3,
+                    sides,
+                    2.0e-3,
+                )
+            })
+            .collect();
+        let tables = union(&rings, scene.tolerance).unwrap();
+        scene.obstacles = tables.clone();
+        scene.sure = tables;
+        scene
+    }
+
+    /// A hall crowded with tessellated tables (#434): eroding its free
+    /// floor by a 1.8 m rectangle hands the overlay some 9.4 million
+    /// pairs of meeting edges, which took 20 s and 9.7 GB in a release
+    /// build for one angle, and an angle search asks for one per
+    /// interval. The search is refused by name before any of it is built,
+    /// at either orientation.
+    #[test]
+    fn a_hall_crowded_with_tessellated_tables_is_refused_within_the_budget() {
+        let scene = crowded(20.0, 40, 128);
+        let start = std::time::Instant::now();
+        for search in [
+            any_rectangle(&scene, 1.8, 1.8),
+            fixed_rectangle(&scene, 1.8, 1.8, Axis::at(0.3)),
+        ] {
+            let Err(FreeSpaceError::Unavailable(why)) = search else {
+                panic!("{search:?}");
+            };
+            assert!(
+                why.starts_with("the erosion of the free floor by the rectangle was not built")
+                    && why.ends_with(&format!(
+                        "past the polygon morphology budget of {} pairs",
+                        crate::planar::budget::POLYGON_PAIRS
+                    )),
+                "{why}"
+            );
+        }
+        // Only the clear floor was built: no arrangement of the erosion.
+        assert!(start.elapsed().as_secs() < 30, "{:?}", start.elapsed());
+        assert!(scene.found.borrow().is_empty());
+    }
+
+    /// The path's reach through the same hall (#434): dilating its
+    /// tables by a 0.9 m path's disc is refused by name too, before the
+    /// arrangement is built.
+    #[test]
+    fn a_path_through_a_crowded_hall_is_refused_within_the_budget() {
+        let scene = crowded(30.0, 100, 256);
+        let refused = crate::circulation::eroded_free(&scene, 0.9, &Work::default())
+            .map(|_| ())
+            .unwrap_err();
+        let FreeSpaceError::Unavailable(why) = refused else {
+            panic!("{refused:?}");
+        };
+        assert!(
+            why.starts_with("the dilation of the obstacles by the path's disc was not built")
+                && why.contains("past the disc morphology budget"),
+            "{why}"
+        );
+    }
+
+    /// What a search spends is a function of its request alone (#434):
+    /// taking a region the scene kept charges what building it did, so a
+    /// second search over a furnished room's scene, which takes the
+    /// regions the first one kept, spends what the first did and decides
+    /// as it did.
+    #[test]
+    fn a_search_spends_what_its_request_takes_whatever_the_scene_keeps() {
+        let scene = furnished((0.0, 0.0), false);
+        let first = format!("{:?}", any_rectangle(&scene, 1.8, 1.2));
+        let spent = scene.work.spent();
+        assert!(spent > 0 && !scene.found.borrow().is_empty());
+        let again = Scene {
+            work: Work::default(),
+            ..scene
+        };
+        assert_eq!(format!("{:?}", any_rectangle(&again, 1.8, 1.2)), first);
+        assert_eq!(again.work.spent(), spent);
     }
 
     /// A box `w` x `h` centred on `(x, y)`, turned by `turn` radians.
@@ -1972,6 +2170,7 @@ mod tests {
             simple: Default::default(),
             coarse: Default::default(),
             found: Found::default(),
+            work: Work::default(),
         }
     }
 

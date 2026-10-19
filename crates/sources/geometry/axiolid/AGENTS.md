@@ -227,6 +227,21 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   share them; `placement::tests`
   `a_furnished_room_is_searched_as_over_the_regions_as_built` compares
   both with the search over the regions as built.
+  Every rectangle step (`free_for`, the coarse proofs, `reaching`) and
+  the path's disc morphology (`circulation::eroded_free`, shared by
+  `reached` and circulation maps) is charged to `Scene::work`
+  (`planar::budget::Work`, #434) before it is built: its pairs of
+  meeting edge boxes (`minkowski_cost`, `disc_cost`, `overlay_cost`),
+  refused past `POLYGON_PAIRS`, `DISC_PAIRS` or `OVERLAY_PAIRS` per step
+  and past `SEARCH_STEPS` steps at those budgets per search, by name.
+  `Work` is never kept with a scene; a kept region is charged as it was
+  built (`Scene::found` keeps each region's steps, `charge_once` the
+  clear and coarse parts), so a search's verdict never depends on the
+  searches before it. A cheap proof refused by the budget is no proof,
+  never a cached `None`. Never call a Minkowski or disc operation on a
+  scene's regions without charging it; raise a budget only with timings
+  and peak memory (`placement::tests`
+  `a_hall_crowded_with_tessellated_tables_is_refused_within_the_budget`).
   Witnesses are re-verified by direct overlap;
   `NoPlacement` needs the shape shrunk by `KNIFE_EDGE_METRES` (plus the
   rotation margin) to fit nowhere, so a fit by contact refuses. Never drop a

@@ -10,6 +10,7 @@
 - [ADR 0003: neutral object identity blocks the runtime move](./adr-0003.md)
 - [ADR 0004: decompose plan-shaped evidence](./adr-0004.md)
 - [ADR 0005: built-in capabilities are templates](./adr-0005.md)
+- [ADR 0006: compute once, a derivation store](./adr-0006.md)
 - [Source-neutral IR](./ir.md)
 - [Concept binding](./concept-binding.md)
 - [Typed host services](./services.md)

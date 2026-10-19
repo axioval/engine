@@ -22,21 +22,17 @@ use std::sync::{Arc, Mutex, PoisonError};
 
 use axiolid_overlay::Region;
 use axioval_engine::{
-    DerivationError, DerivationKind, DerivationStore, ElevationBand, FreeSpaceError, Inputs,
-    SweptDoor, derivation,
+    DerivationError, DerivationKind, DerivationStore, DerivationVersion, ElevationBand,
+    FreeSpaceError, Inputs, SweptDoor, derivation,
 };
 use axioval_ir::ObjectId;
 
 use super::Measuring;
-use crate::derivations::{self, Over};
+use crate::derivations::{
+    self, AXIOLID_CORE, AXIOLID_MEASURE, AXIOLID_MESH, AXIOLID_OVERLAY, Over,
+};
 use crate::placement::{self, Inscribed, Scene, region_points};
 use crate::planar::budget::Work;
-
-/// The version of how a scene is built from its key: bumped whenever the
-/// same key could build another scene (the footprints, the bracketing of
-/// tessellated bodies, the overlay or its kernel crates changing what they
-/// return), so a value kept across checks (#409) is never read for another.
-pub(crate) const SCENE_VERSION: u32 = 1;
 
 /// A list of obstacles, interned by the service ([`Lists`]): equal lists
 /// share one allocation, so a key compares and hashes the list by its
@@ -140,7 +136,8 @@ pub(crate) enum Precision {
 /// Everything a placement scene is built from (#408, #439): the service
 /// state (its geometry, by identity), the scope and merged scopes, the
 /// obstacles, the swept doors, the band's limits and the tolerance by their
-/// bits, the precision and [`SCENE_VERSION`]. Never the shape, its domain
+/// bits and the precision; the kind's version
+/// ([`PlacementScenes::VERSION`]) beside it. Never the shape, its domain
 /// or its entrance reach, which a search sets on its copy. The scene's
 /// plan frame (the scope's corner, `Measuring::floor_scene`) is a function
 /// of the geometry and the scope.
@@ -154,7 +151,6 @@ pub(crate) struct SceneKey {
     pub(crate) band: [u64; 2],
     pub(crate) tolerance: [u64; 2],
     pub(crate) precision: Precision,
-    pub(crate) version: u32,
 }
 
 impl SceneKey {
@@ -177,7 +173,6 @@ impl SceneKey {
             band: [band.from_metres().to_bits(), band.to_metres().to_bits()],
             tolerance: [tolerance.linear().to_bits(), tolerance.angular().to_bits()],
             precision: Precision::Exact,
-            version: SCENE_VERSION,
         }
     }
 
@@ -213,6 +208,14 @@ pub(crate) struct PlacementScenes;
 
 impl DerivationKind for PlacementScenes {
     const NAME: &'static str = "placement scene";
+    /// Bumped whenever the same key could build another scene: the
+    /// footprints, the bracketing of tessellated bodies, the overlay or its
+    /// kernel crates changing what they return, so a value kept across
+    /// checks (#409) is never read for another.
+    const VERSION: DerivationVersion = DerivationVersion::new(
+        1,
+        &[AXIOLID_CORE, AXIOLID_MEASURE, AXIOLID_MESH, AXIOLID_OVERLAY],
+    );
     type Key = SceneKey;
     /// A scene the service refuses to build is refused alike for every
     /// rule asking for it.
@@ -431,7 +434,9 @@ mod tests {
     use super::*;
     use crate::free_space::AxiolidFreeSpaceService;
     use crate::geometry::AxiolidGeometry;
-    use axioval_engine::{MetricDirection, SwingSector};
+    use axiolid_core::Point3;
+    use axiolid_mesh::TriMesh;
+    use axioval_engine::{KeyCompleteness, MetricDirection, SwingSector};
     use axioval_ir::SourceId;
 
     fn id(local: &str) -> ObjectId {
@@ -454,20 +459,69 @@ mod tests {
         SweptDoor::try_new(id(local), vec![sector]).unwrap()
     }
 
+    /// A closed, outward-wound box.
+    fn cuboid(min: [f64; 3], max: [f64; 3]) -> TriMesh {
+        let [x0, y0, z0] = min;
+        let [x1, y1, z1] = max;
+        let positions = vec![
+            Point3::new(x0, y0, z0),
+            Point3::new(x1, y0, z0),
+            Point3::new(x1, y1, z0),
+            Point3::new(x0, y1, z0),
+            Point3::new(x0, y0, z1),
+            Point3::new(x1, y0, z1),
+            Point3::new(x1, y1, z1),
+            Point3::new(x0, y1, z1),
+        ];
+        let indices = vec![
+            0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 1, 2, 6, 1, 6, 5, 2, 3, 7, 2, 7,
+            6, 3, 0, 4, 3, 4, 7,
+        ];
+        TriMesh::new(positions, indices)
+    }
+
+    /// A 5 m by 4 m room beside a 3 m by 4 m hall, with a table, a chair
+    /// and a shelf hung a metre above the floor.
+    fn furnished() -> AxiolidGeometry {
+        AxiolidGeometry::new()
+            .with_mesh(id("room"), cuboid([0.0, 0.0, 0.0], [5.0, 4.0, 3.0]))
+            .with_mesh(id("hall"), cuboid([5.0, 0.0, 0.0], [8.0, 4.0, 3.0]))
+            .with_mesh(id("table"), cuboid([0.0, 0.0, 0.0], [1.2, 0.8, 0.75]))
+            .with_mesh(id("chair"), cuboid([2.0, 2.0, 0.0], [2.5, 2.5, 0.9]))
+            .with_mesh(id("shelf"), cuboid([4.0, 3.0, 1.0], [5.0, 4.0, 2.5]))
+    }
+
     fn service() -> AxiolidFreeSpaceService {
-        AxiolidFreeSpaceService::new(AxiolidGeometry::new(), SourceId::new("cad", "m").unwrap())
+        AxiolidFreeSpaceService::new(furnished(), SourceId::new("cad", "m").unwrap())
+    }
+
+    /// What of a scene a test compares: the areas of its scope and room,
+    /// its obstacles' outlines, its floor, or why it was refused.
+    fn fingerprint(value: &Result<KeptScene, FreeSpaceError>) -> String {
+        match value {
+            Ok(scene) => format!(
+                "scope {:.6}, room {:.6}, obstacles {:?} (surely {:?}), floor {:.6}",
+                scene.scope.area(),
+                scene.room.area(),
+                scene.obstacles.boundary_rings(),
+                scene.sure.boundary_rings(),
+                scene.floor
+            ),
+            Err(error) => format!("refused: {error:?}"),
+        }
     }
 
     /// Every input a scene is built from is in its key (#439): changing any
-    /// one of them changes the key, and the same inputs give the same key.
+    /// one of them changes the key, and the scene where it builds another;
+    /// the same inputs give the same key.
     #[test]
     #[allow(clippy::too_many_lines)]
     fn changing_any_input_of_a_scene_changes_its_key() {
         let (one, other) = (service(), service());
         let tolerance = axiolid_core::Tolerance::new(1.0e-9, 1.0e-9).unwrap();
         let band = ElevationBand::try_new(0.0, 2.0).unwrap();
-        let obstacles = [id("table"), id("chair")];
-        let swept = [door("door", [0.0, 0.0, 0.0], 0.9, false)];
+        let obstacles = [id("table"), id("chair"), id("shelf")];
+        let swept = [door("door", [3.0, 0.0, 0.0], 0.9, false)];
         let key = |over: &AxiolidFreeSpaceService,
                    (scope, merged): (&ObjectId, &[ObjectId]),
                    (obstacles, swept): (&[ObjectId], &[SweptDoor]),
@@ -481,36 +535,20 @@ mod tests {
                 tolerance,
             )
         };
-        let base = key(
-            &one,
-            (&id("room"), &[]),
-            (&obstacles, &swept),
-            band,
-            tolerance,
-        );
-        assert!(
-            base == key(
-                &one,
-                (&id("room"), &[]),
-                (&obstacles, &swept),
-                band,
-                tolerance
+        let room = (&id("room"), &[][..]);
+        let base = key(&one, room, (&obstacles, &swept), band, tolerance);
+        KeyCompleteness::<PlacementScenes, _>::new(base.clone(), fingerprint)
+            .same(
+                "the same inputs",
+                key(&one, room, (&obstacles, &swept), band, tolerance),
             )
-        );
-
-        let changed = [
-            (
-                "service",
-                key(
-                    &other,
-                    (&id("room"), &[]),
-                    (&obstacles, &swept),
-                    band,
-                    tolerance,
-                ),
-            ),
-            (
-                "scope",
+            // Another service over equal geometry builds an equal scene.
+            .input(
+                "the service",
+                key(&other, room, (&obstacles, &swept), band, tolerance),
+            )
+            .changes_value(
+                "the scope",
                 key(
                     &one,
                     (&id("hall"), &[]),
@@ -518,9 +556,9 @@ mod tests {
                     band,
                     tolerance,
                 ),
-            ),
-            (
-                "merged scopes",
+            )
+            .changes_value(
+                "the merged scopes",
                 key(
                     &one,
                     (&id("room"), &[id("hall")]),
@@ -528,123 +566,113 @@ mod tests {
                     band,
                     tolerance,
                 ),
-            ),
-            (
-                "obstacles",
+            )
+            .changes_value(
+                "the obstacles",
+                key(&one, room, (&obstacles[..1], &swept), band, tolerance),
+            )
+            // The scene unites them in any order.
+            .input(
+                "the obstacles' order",
                 key(
                     &one,
-                    (&id("room"), &[]),
-                    (&obstacles[..1], &swept),
+                    room,
+                    (&[id("chair"), id("table"), id("shelf")], &swept),
                     band,
                     tolerance,
                 ),
-            ),
-            (
-                "obstacle order",
-                key(
-                    &one,
-                    (&id("room"), &[]),
-                    (&[id("chair"), id("table")], &swept),
-                    band,
-                    tolerance,
-                ),
-            ),
-            (
+            )
+            .changes_value(
                 "no swept door",
-                key(&one, (&id("room"), &[]), (&obstacles, &[]), band, tolerance),
-            ),
-            (
+                key(&one, room, (&obstacles, &[]), band, tolerance),
+            )
+            // The same sector of another door.
+            .input(
                 "the swept door",
                 key(
                     &one,
-                    (&id("room"), &[]),
-                    (&obstacles, &[door("other", [0.0, 0.0, 0.0], 0.9, false)]),
+                    room,
+                    (&obstacles, &[door("other", [3.0, 0.0, 0.0], 0.9, false)]),
                     band,
                     tolerance,
                 ),
-            ),
-            (
+            )
+            .changes_value(
                 "the hinge",
                 key(
                     &one,
-                    (&id("room"), &[]),
-                    (&obstacles, &[door("door", [0.0, 1.0e-12, 0.0], 0.9, false)]),
+                    room,
+                    (&obstacles, &[door("door", [2.0, 0.0, 0.0], 0.9, false)]),
                     band,
                     tolerance,
                 ),
-            ),
-            (
+            )
+            .changes_value(
                 "the radius",
                 key(
                     &one,
-                    (&id("room"), &[]),
-                    (&obstacles, &[door("door", [0.0, 0.0, 0.0], 0.91, false)]),
+                    room,
+                    (&obstacles, &[door("door", [3.0, 0.0, 0.0], 0.8, false)]),
                     band,
                     tolerance,
                 ),
-            ),
-            (
+            )
+            .changes_value(
                 "double-acting",
                 key(
                     &one,
-                    (&id("room"), &[]),
-                    (&obstacles, &[door("door", [0.0, 0.0, 0.0], 0.9, true)]),
+                    room,
+                    (&obstacles, &[door("door", [3.0, 0.0, 0.0], 0.9, true)]),
                     band,
                     tolerance,
                 ),
-            ),
-            (
+            )
+            // Above the table and below the chair's top.
+            .changes_value(
                 "the band's bottom",
                 key(
                     &one,
-                    (&id("room"), &[]),
+                    room,
                     (&obstacles, &swept),
-                    ElevationBand::try_new(0.1, 2.0).unwrap(),
+                    ElevationBand::try_new(0.8, 2.0).unwrap(),
                     tolerance,
                 ),
-            ),
-            (
+            )
+            // Below the shelf.
+            .changes_value(
                 "the band's top",
                 key(
                     &one,
-                    (&id("room"), &[]),
+                    room,
                     (&obstacles, &swept),
-                    ElevationBand::try_new(0.0, 2.1).unwrap(),
+                    ElevationBand::try_new(0.0, 0.95).unwrap(),
                     tolerance,
                 ),
-            ),
-            (
+            )
+            // The overlay snaps within a tolerance no corner here is near.
+            .input(
                 "the linear tolerance",
                 key(
                     &one,
-                    (&id("room"), &[]),
+                    room,
                     (&obstacles, &swept),
                     band,
                     axiolid_core::Tolerance::new(1.0e-6, 1.0e-9).unwrap(),
                 ),
-            ),
-            (
+            )
+            .input(
                 "the angular tolerance",
                 key(
                     &one,
-                    (&id("room"), &[]),
+                    room,
                     (&obstacles, &swept),
                     band,
                     axiolid_core::Tolerance::new(1.0e-9, 1.0e-6).unwrap(),
                 ),
-            ),
-            (
-                "the version",
-                SceneKey {
-                    version: SCENE_VERSION + 1,
-                    ..base.clone()
-                },
-            ),
-        ];
-        for (input, key) in changed {
-            assert!(key != base, "changing {input} leaves the scene's key alike");
-        }
-        // The precision has one class today; a Fast one would be a variant.
+            )
+            .check();
+        // The precision has one class today; a Fast one would be a variant,
+        // and an input of this test.
         assert_eq!(base.precision, Precision::Exact);
     }
 

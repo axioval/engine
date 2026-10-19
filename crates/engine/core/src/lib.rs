@@ -1239,7 +1239,8 @@ pub use coordinate_system::{
 pub use corridor_end::{CorridorEnd, CorridorEndRequest, CorridorEnds, EndWall, WallContact};
 pub use coverage::{CoverageEvidence, CoverageRequest, EffectMeets, EffectReach, Participant};
 pub use derivation::{
-    DerivationError, DerivationKind, DerivationStatistics, DerivationStore, Inputs,
+    DerivationError, DerivationKind, DerivationStatistics, DerivationStore, DerivationVersion,
+    Inputs, Kernel, KeyCompleteness,
 };
 pub use derived::{ClassOutcome, Classifications};
 pub use derived_relationships::{

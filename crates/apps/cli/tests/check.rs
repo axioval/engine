@@ -5852,6 +5852,92 @@ fn with_geometry_timings_show_envelope_declarations_read_only_for_an_envelope_ru
     assert_eq!(declarations(&output), 0, "{}", stderr(&output));
 }
 
+/// `--stats` prints how the check reused its derivations on stderr (#442):
+/// a header, then one line per kind with its version, hits, builds, waits,
+/// build time, peak bytes, releases and evictions. The fields are pinned,
+/// the build time only as a number; the result is byte for byte the one
+/// without it, and `--timings` prints no derivation lines.
+#[test]
+fn with_geometry_stats_report_each_derivation_kind_outside_the_result() {
+    let case = Case::new("geometry-stats");
+    let check = |args: &[&str]| {
+        case.write("model.ifc", &slab_in_a_turned_wall());
+        let (output, _) = case.geometry_rule_with(
+            &["model.ifc"],
+            &[("slab", "IfcSlab"), ("wall", "IfcWall")],
+            (
+                "axioval:capability.clash",
+                &registry_signature("axioval:capability.clash"),
+            ),
+            entity("slab"),
+            json!({
+                "counterparts": {"type": "selector", "value": entity("wall")},
+                "penetration_tolerance_metres": {"type": "number", "value": 0.0},
+            }),
+            &json!({}),
+            args,
+        );
+        let report = std::fs::read(case.path("result.json")).expect("report written");
+        (output, report)
+    };
+    let (plain, plain_report) = check(&[]);
+    let (counted, counted_report) = check(&["--stats"]);
+    assert_eq!(counted.status.code(), Some(3), "{}", stderr(&counted));
+    assert_eq!(counted.status.code(), plain.status.code());
+    assert_eq!(counted.stdout, plain.stdout);
+    assert_eq!(counted_report, plain_report);
+    assert!(!stderr(&plain).contains("stats\t"), "{}", stderr(&plain));
+
+    let lines: Vec<Vec<String>> = stderr(&counted)
+        .lines()
+        .filter_map(|line| line.strip_prefix("stats\t"))
+        .map(|line| line.split('\t').map(str::to_owned).collect())
+        .collect();
+    assert_eq!(
+        lines.first().map(Vec::as_slice),
+        Some(
+            &[
+                "kind",
+                "version",
+                "hits",
+                "builds",
+                "waits",
+                "build_seconds",
+                "peak_bytes",
+                "released",
+                "evicted",
+            ]
+            .map(String::from)[..]
+        ),
+        "{}",
+        stderr(&counted)
+    );
+    for line in &lines[1..] {
+        assert_eq!(line.len(), 9, "{line:?}");
+        for count in [&line[2], &line[3], &line[4], &line[6], &line[7], &line[8]] {
+            count.parse::<u64>().expect("a count");
+        }
+        line[5].parse::<f64>().expect("seconds");
+    }
+    // The slab and the wall are indexed once each, then read for the pair.
+    let bodies = lines
+        .iter()
+        .find(|line| line[0] == "indexed body")
+        .unwrap_or_else(|| panic!("{}", stderr(&counted)));
+    assert!(bodies[1].starts_with("1 (axiolid-core "), "{bodies:?}");
+    assert_eq!(bodies[3], "2", "{bodies:?}");
+    assert_ne!(bodies[6], "0", "{bodies:?}");
+    assert_eq!((&*bodies[7], &*bodies[8]), ("0", "0"), "{bodies:?}");
+
+    let (timed, _) = check(&["--timings"]);
+    assert!(stderr(&timed).contains("timing:"), "{}", stderr(&timed));
+    assert!(
+        !stderr(&timed).contains("derivation:") && !stderr(&timed).contains("stats\t"),
+        "{}",
+        stderr(&timed)
+    );
+}
+
 /// The zone flag is gone: the rule states its bounding spaces.
 #[test]
 fn the_envelope_zone_flag_is_rejected() {

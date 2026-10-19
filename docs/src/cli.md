@@ -93,7 +93,7 @@ axioval check --model building.ifc[:DISCIPLINE] [--model other.ifc[:DISCIPLINE] 
   [--zones [ACCURACY=]FILE ...] \
   [--terrain KIND@ACCURACY=FILE[#SURFACE] ... --terrain-in model|map] \
   [--geometry [--no-exact-boundaries] [--mesh-all]] [--locate storeys|containers|geometry] \
-  [--rule-status] [--rule-timings] [--timings] [--threads N] [--memory-budget SIZE] \
+  [--rule-status] [--rule-timings] [--timings] [--stats] [--threads N] [--memory-budget SIZE] \
   [--report result.json] \
   [--decisions decisions.json | --decisions-from reviewed.bcfzip] \
   [--summary [--top N]] [--bcf issues.bcfzip] [--xlsx report.xlsx] \
@@ -753,6 +753,28 @@ timing:      2.077 s read models
 timing:      1.872 s geometry: mesh
 timing:     41.310 s rule element-clash
 ```
+
+`--stats` prints on stderr, at the end of the check, how it reused what
+it built ([ADR 0006](./adr-0006.md#the-reuse-report)): a header, then one
+tab-separated line per derivation kind of the check's store (and per table
+of its measurement memo), each starting with `stats`. The fields are the
+kind, its version (a revision and the kernel crates it is stated for, `-`
+for a memo table), hits (reads answered by a kept value), builds (the
+reads none answered), waits (reads that waited for another thread's
+build), the seconds its builds took, summed over threads, the most bytes
+held at once, and the values released and evicted. A kind that builds
+about as often as it is read is not reused. The result and the exit
+status are those of a run without it, byte for byte; a run whose
+expression budget runs out is run again on one thread and prints a second
+table.
+
+```text
+stats	kind	version	hits	builds	waits	build_seconds	peak_bytes	released	evicted
+stats	indexed body	1 (axiolid-core 0.3.2, axiolid-measure 0.3.10, axiolid-mesh 0.3.3, axiolid-spatial 0.3.3)	2	2	0	0.000109	4416	0	0
+```
+
+`--timings` prints no derivation lines: it keeps to phases, and `--stats`
+reports reuse.
 
 `--rule-timings` keeps each rule's time in the result instead, beside its
 status (it implies `--rule-status`): every rule summary carries a `timing`

@@ -1,11 +1,37 @@
 //! What the adapter's derivations share (ADR 0006): the identity of the
-//! state a value is built over, and how much of a kind the check's store
-//! keeps.
+//! state a value is built over, the kernel crates their versions name
+//! (#439), and how much of a kind the check's store keeps.
 
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
-use axioval_engine::memory;
+use axioval_engine::{Kernel, memory};
+
+/// The kernel crates the adapter's derivations call, at the versions their
+/// versions are stated for: the ones the workspace locks, which every
+/// kind's key-completeness test holds them to. Upgrading one means
+/// stating it here, and bumping the revision of each kind naming it whose
+/// results can change.
+pub(crate) const AXIOLID_CORE: Kernel = Kernel {
+    name: "axiolid-core",
+    version: "0.3.2",
+};
+pub(crate) const AXIOLID_MEASURE: Kernel = Kernel {
+    name: "axiolid-measure",
+    version: "0.3.10",
+};
+pub(crate) const AXIOLID_MESH: Kernel = Kernel {
+    name: "axiolid-mesh",
+    version: "0.3.3",
+};
+pub(crate) const AXIOLID_OVERLAY: Kernel = Kernel {
+    name: "axiolid-overlay",
+    version: "0.3.18",
+};
+pub(crate) const AXIOLID_SPATIAL: Kernel = Kernel {
+    name: "axiolid-spatial",
+    version: "0.3.3",
+};
 
 /// A value's state, compared and hashed by its address: two keys over one
 /// service's state are equal in this field, keys over two services never,

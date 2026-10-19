@@ -820,8 +820,10 @@ derivations of the check's store since
 thread reading the same space, obstacles, swept doors and band, and a
 body is indexed once for every pair reading it. Before, the free-space
 service kept the last two scenes of each searching thread, and each pair
-indexed both its bodies afresh. `check --timings` prints the store's
-statistics, one line a kind:
+indexed both its bodies afresh. The store's statistics, one line a kind,
+as `check --timings` printed them when these were measured (`check
+--stats` prints them now, with each kind's version, build time, peak
+bytes and evictions, see [The reuse report](./adr-0006.md#the-reuse-report)):
 
 ```text
 derivation: placement scene: 157 built, 989 read again (0 waited), 0 released, 5.7 MiB held

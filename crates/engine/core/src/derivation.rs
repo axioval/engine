@@ -50,9 +50,14 @@ use std::hash::Hash;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
+use std::time::{Duration, Instant};
 
 use crate::ServiceRegistry;
 use crate::memory::{self, Held};
+
+mod key;
+
+pub use key::{DerivationVersion, Kernel, KeyCompleteness};
 
 /// A kind of derivation: a key, a value and the pure function building the
 /// value of a key.
@@ -68,10 +73,19 @@ use crate::memory::{self, Held};
 /// parameters, and for a geometric derivation its precision class, so a
 /// Fast value never answers an Exact question
 /// ([#438](https://github.com/axioval/engine/issues/438),
-/// [#439](https://github.com/axioval/engine/issues/439)).
+/// [#439](https://github.com/axioval/engine/issues/439)). Keys are compared
+/// field by field (`Eq`), never by a formatted string, and every kind has a
+/// key-completeness test ([`KeyCompleteness`]), which the architecture gate
+/// requires.
 pub trait DerivationKind: 'static {
     /// The kind's name, as a run's statistics show it.
     const NAME: &'static str;
+
+    /// The kind's version: a revision its crate bumps whenever the same key
+    /// could build another value, and the kernel crates its build calls.
+    /// Every value of the kind is keyed by it as by its key (#439), so a
+    /// value is never read under another version (#409).
+    const VERSION: DerivationVersion;
 
     /// What a value is a function of, compared field by field.
     type Key: Hash + Eq + Clone + Send + Sync + 'static;
@@ -151,24 +165,41 @@ impl Inputs<'_> {
 }
 
 /// How a run reused one derivation kind (or one table of the run's
-/// [`crate::MeasuredMemo`]).
+/// [`crate::MeasuredMemo`]): the reuse report of
+/// [#442](https://github.com/axioval/engine/issues/442).
+///
+/// Every read is a hit or a build (a miss); a hit may have waited for
+/// another caller's build. Counts are taken under the store's lock; the
+/// build time is read from a clock around each build. None of it reaches a
+/// report.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DerivationStatistics {
     /// The kind's name.
     pub kind: &'static str,
+    /// The kind's version; `None` for a table of the memo, which keeps
+    /// nothing past its run.
+    pub version: Option<DerivationVersion>,
     /// Values held now.
     pub entries: usize,
     /// Reads answered by a held value, a waited-for one included.
     pub hits: u64,
-    /// Builds started.
+    /// Builds started: the reads no held value answered.
     pub builds: u64,
     /// Reads that waited for another caller's build.
     pub waits: u64,
-    /// Values released.
+    /// The time spent in the builds that ended with a value, summed over
+    /// threads.
+    pub build_time: Duration,
+    /// Values released by name ([`DerivationStore::release`]).
     pub released: u64,
+    /// Values released to keep the kind within its bound
+    /// ([`DerivationKind::keep_bytes`]).
+    pub evicted: u64,
     /// The bytes held now, as the kinds' [`DerivationKind::size_hint`]s
     /// state them.
     pub bytes: u64,
+    /// The most bytes held at once.
+    pub peak_bytes: u64,
 }
 
 /// One store of derivations per check, shared by its rules and threads.
@@ -272,7 +303,7 @@ impl<K: Hash + Eq, S> Table<K, S> {
             let Some((_, key)) = oldest else { break };
             if let Some(Slot::Ready { value, bytes, .. }) = self.entries.remove(&*key) {
                 self.statistics.bytes -= bytes;
-                self.statistics.released += 1;
+                self.statistics.evicted += 1;
                 evicted.push(value);
             }
         }
@@ -423,7 +454,7 @@ impl DerivationStore {
         key: &D::Key,
     ) -> Result<Arc<D::Value>, DerivationError> {
         self.get_or_build::<Typed<D>, D::Key, Arc<D::Value>, _>(
-            (D::NAME, D::keep_bytes()),
+            (D::NAME, Some(D::VERSION), D::keep_bytes()),
             Keyed::Borrowed(key, D::Key::clone),
             || {
                 let value = D::build(
@@ -498,6 +529,7 @@ impl DerivationStore {
         {
             let bytes = bytes as u64;
             table.statistics.bytes = table.statistics.bytes - *counted + bytes;
+            table.statistics.peak_bytes = table.statistics.peak_bytes.max(table.statistics.bytes);
             *counted = bytes;
             // The bytes held before are returned as the new ones are held.
             *held = hold(bytes);
@@ -587,7 +619,7 @@ impl DerivationStore {
             return;
         }
         let mut state = self.lock();
-        let table = state.table::<Marker, K, S>(kind);
+        let table = state.table::<Marker, K, S>(kind, None);
         let now = table.tick();
         match table
             .entries
@@ -617,7 +649,7 @@ impl DerivationStore {
             return;
         }
         let mut state = self.lock();
-        let table = state.table::<Marker, K, S>(kind);
+        let table = state.table::<Marker, K, S>(kind, None);
         let now = table.tick();
         let fresh = || Slot::ready(S::default(), 0, now);
         let slot = match table.entries.get_mut(&key) {
@@ -641,10 +673,11 @@ impl DerivationStore {
     /// `build` (with the bytes it holds) and held.
     ///
     /// Past `keep` bytes held in the table, the values read least recently
-    /// are released when this one lands.
+    /// are released when this one lands. The table is named `kind`, of
+    /// `version` where it is a kind's.
     pub(crate) fn get_or_build<Marker, K, S, R>(
         &self,
-        (kind, keep): (&'static str, Option<u64>),
+        (kind, version, keep): (&'static str, Option<DerivationVersion>, Option<u64>),
         key: Keyed<'_, K>,
         build: impl FnOnce() -> Result<(S, u64), DerivationError>,
         read: impl FnOnce(&S) -> R,
@@ -656,7 +689,7 @@ impl DerivationStore {
     {
         let mut state = self.lock();
         let (key, flight) = loop {
-            let table = state.table::<Marker, K, S>(kind);
+            let table = state.table::<Marker, K, S>(kind, version);
             let now = table.tick();
             let building = match table.entries.get_mut(key.get()) {
                 Some(Slot::Ready {
@@ -681,7 +714,7 @@ impl DerivationStore {
             if state.blocks(building, &within) {
                 return Err(DerivationError::Cycle { kind });
             }
-            let table = state.table::<Marker, K, S>(kind);
+            let table = state.table::<Marker, K, S>(kind, version);
             table.statistics.waits += 1;
             if let Some(Slot::Building { waiters, .. }) = table.entries.get_mut(key.get()) {
                 *waiters += 1;
@@ -713,8 +746,9 @@ impl DerivationStore {
             marker: PhantomData,
         };
         LINEAGE.with(|lineage| lineage.borrow_mut().push(flight));
+        let started = Instant::now();
         let (value, bytes) = build()?;
-        Ok(landing.land(value, bytes, read))
+        Ok(landing.land(value, bytes, started.elapsed(), read))
     }
 }
 
@@ -765,7 +799,7 @@ where
     K: Hash + Eq + Send + Sync + 'static,
     S: Send + 'static,
 {
-    fn land<R>(mut self, value: S, bytes: u64, read: impl FnOnce(&S) -> R) -> R {
+    fn land<R>(mut self, value: S, bytes: u64, took: Duration, read: impl FnOnce(&S) -> R) -> R {
         // Should reading panic, the build is dropped unlanded.
         let answer = read(&value);
         self.landed = true;
@@ -778,6 +812,7 @@ where
             && let Slot::Building { flight, waiters } = *slot
             && flight == self.flight
         {
+            table.statistics.build_time += took;
             if self.store.0.forgets {
                 // Nothing is kept: whoever waited builds the key again.
                 table.entries.remove(&*self.key);
@@ -792,6 +827,7 @@ where
                 *read = now;
             }
             table.statistics.bytes += bytes;
+            table.statistics.peak_bytes = table.statistics.peak_bytes.max(table.statistics.bytes);
             if let Some(limit) = self.keep {
                 evicted = table.evict(limit, &self.key);
             }
@@ -843,8 +879,13 @@ impl State {
             .downcast_mut::<Table<K, S>>()
     }
 
-    /// `Marker`'s table, made under `kind`'s name when it has none.
-    fn table<Marker: 'static, K, S>(&mut self, kind: &'static str) -> &mut Table<K, S>
+    /// `Marker`'s table, made under `kind`'s name (and `version`) when it
+    /// has none.
+    fn table<Marker: 'static, K, S>(
+        &mut self,
+        kind: &'static str,
+        version: Option<DerivationVersion>,
+    ) -> &mut Table<K, S>
     where
         K: Send + Sync + 'static,
         S: Send + 'static,
@@ -856,6 +897,7 @@ impl State {
                     entries: HashMap::default(),
                     statistics: DerivationStatistics {
                         kind,
+                        version,
                         ..DerivationStatistics::default()
                     },
                     clock: 0,

@@ -30,6 +30,7 @@ mod export;
 mod ids;
 mod results;
 mod server;
+mod stats;
 mod terrain;
 mod timings;
 mod zones;
@@ -380,6 +381,13 @@ struct CheckArgs {
     /// outputs. Never changes the result or the exit status.
     #[arg(long)]
     timings: bool,
+    /// Print on stderr, at the end of the check, how it reused what it
+    /// built: per derivation kind, its version, hits, builds, waits, build
+    /// time, the most bytes held at once, and the values released and
+    /// evicted, as tab-separated lines starting with `stats`. Never changes
+    /// the result or the exit status.
+    #[arg(long)]
+    stats: bool,
     /// Carry the decisions in this file (written by `axioval decide`) over
     /// to the findings with the same identity; decisions whose finding is
     /// gone are listed as stale. Never changes the exit status.
@@ -1710,8 +1718,8 @@ fn check_runtime(
     if let Some(observer) = clock.rules() {
         runtime = runtime.with_rule_observer(observer);
     }
-    if let Some(observer) = clock.derivations() {
-        runtime = runtime.with_derivation_observer(observer);
+    if args.stats {
+        runtime = runtime.with_derivation_observer(stats::observer());
     }
     Ok(runtime)
 }

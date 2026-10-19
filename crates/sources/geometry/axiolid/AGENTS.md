@@ -177,11 +177,13 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   built from: the service's `Measuring` state by address
   (`derivations::Over`), scope, merged scopes, obstacles (interned per
   service, `Lists`, so a key compares them by address), swept doors by
-  their sectors' bits, band and tolerance bits, the precision and
-  `SCENE_VERSION`; never the shape's footprint, domain or reach, which are
-  set on a copy. Bump `SCENE_VERSION` whenever a key could build another
-  scene, and extend `changing_any_input_of_a_scene_changes_its_key` with
-  any new input. A scene keeps what its searches took (`Derived::keep`:
+  their sectors' bits, band and tolerance bits and the precision; never
+  the shape's footprint, domain or reach, which are set on a copy. Bump
+  the revision of `PlacementScenes::VERSION` whenever a key could build
+  another scene, and extend `changing_any_input_of_a_scene_changes_its_key`
+  (a `KeyCompleteness` test, #439; the architecture gate requires one per
+  kind) with any new input, by `changes_value` wherever the fixture can
+  show it. A scene keeps what its searches took (`Derived::keep`:
   clear parts, discs, simple and coarse regions, found regions) and states
   its bytes again (`DerivationStore::resize`).
   `AxiolidFreeSpaceService::with_reuse(false)` keeps no scene, footprint
@@ -722,9 +724,15 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   (`proximity/bodies.rs`, `IndexedBodies`, #408: triangles, boxes and
   hierarchy, solidity, zero-area surface), keyed by the geometry's `Arc`
   by address, the object, whether its void is measured (only for a
-  bodiless object, so both views share every other body), the tolerance
-  bits and `INDEX_VERSION`; bump it whenever a key could index another
-  body. Measurements: separation from `closest_points_on_triangles`, plan overlap from
+  bodiless object, so both views share every other body) and the audit
+  tolerance bits, which the build reads (never the module's constants);
+  bump the revision of `IndexedBodies::VERSION` whenever a key could index
+  another body, and keep `changing_any_input_of_an_indexed_body_changes_its_key`
+  changing every input (#439). Each kind's version names the kernel crates
+  its build calls (`derivations.rs`: `AXIOLID_CORE` and the rest, at the
+  versions the workspace locks; the key-completeness test fails on any
+  other): on a kernel upgrade, state the new version there and bump each
+  kind naming it whose results can change. Measurements: separation from `closest_points_on_triangles`, plan overlap from
   the oriented footprint overlay in `planar.rs` (only when the request asks,
   `ProximityRequest::with_plan_overlap`: an overlay per pair), and penetration witnessed by
   sampling points (including midpoints between an edge's crossings of the

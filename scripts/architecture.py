@@ -634,6 +634,40 @@ def self_test() -> None:
     )
     assert duplicated_tolerances({"a.rs": "fn f() {}"}), "an empty scan must fail"
 
+    # ADR 0006 (#439): every derivation kind has a key-completeness test in
+    # its crate; a kind without one, or keyed by a formatted string, is a
+    # rejected mutation. A kind only quoted in a comment is none.
+    kind = "impl DerivationKind for Scenes {\n    type Key = SceneKey;\n}\n"
+    tested = "KeyCompleteness::<Scenes, _>::new(key, print).check();\n"
+    assert derivation_kind_violations({"c": {"src/a.rs": kind, "tests/k.rs": tested}}) == []
+    assert derivation_kind_violations({"c": {"src/a.rs": kind + "#[cfg(test)]\n" + tested}}) == []
+    assert derivation_kind_violations({"c": {"src/a.rs": kind}}) == [
+        "c/src/a.rs: derivation kind `Scenes` has no key-completeness test "
+        "(`KeyCompleteness::<Scenes, _>`) in its crate"
+    ]
+    # Another crate's test, a test only in a comment, or of a kind whose
+    # name merely starts alike, holds nothing.
+    assert derivation_kind_violations(
+        {"c": {"src/a.rs": kind}, "d": {"tests/k.rs": tested}}
+    ) == ["c/src/a.rs: derivation kind `Scenes` has no key-completeness test "
+          "(`KeyCompleteness::<Scenes, _>`) in its crate"]
+    assert derivation_kind_violations({"c": {"src/a.rs": kind + "// " + tested}})
+    assert derivation_kind_violations(
+        {"c": {"src/a.rs": kind, "tests/k.rs": "KeyCompleteness::<ScenesOld, _>::new(k, p);"}}
+    )
+    assert derivation_kind_violations(
+        {"c": {"src/a.rs": "impl axioval_engine::DerivationKind for Scenes {}", "tests/k.rs": ""}}
+    )
+    assert derivation_kind_violations(
+        {"c": {"src/a.rs": "impl DerivationKind for Named {\n    type Key = String;\n}\n"
+                           "fn t() { KeyCompleteness::<Named, _>::new(k, p); }"}}
+    ) == ["c/src/a.rs: derivation kind keyed by a formatted string (`type Key = String`); "
+          "key it by its fields"]
+    # A kind in a test is the store's own fixture, not a derivation.
+    assert derivation_kind_violations({"c": {"tests/k.rs": kind}}) == []
+    # A doc comment's example is no kind either.
+    assert derivation_kind_violations({"c": {"src/a.rs": "/// " + kind.replace("\n", "\n/// ")}}) == []
+
     vocabulary = '{"stems": ["StairRule", "free_floor_space"]}'
     stems = rule_stems(vocabulary)
     assert stems == {"stair", "free_floor_space"}
@@ -962,6 +996,67 @@ def catalogue_violations(files: dict[str, str], texts: str) -> list[str]:
     return failures
 
 
+# Complete keys (ADR 0006, #439): an input missing from a derivation's key
+# hands one question's answer to another, the one way reuse can change a
+# verdict. Every `DerivationKind` a crate's `src/` implements is named by a
+# key-completeness test (`KeyCompleteness::<Kind`) somewhere in that crate,
+# its unit tests or its `tests/`, and no kind is keyed by a formatted
+# string. Kinds of `tests/` are the store's own fixtures.
+DERIVATION_KIND = re.compile(r"\bimpl\s+(?:[A-Za-z_]\w*::)*DerivationKind\s+for\s+([A-Za-z_]\w*)")
+FORMATTED_KEY = re.compile(
+    r"\btype\s+Key\s*=\s*(String|&'static\s+str|Box<str>|Arc<str>|Rc<str>|Cow<[^>]*str>)\s*;"
+)
+
+
+def derivation_kind_violations(crates: dict[str, dict[str, str]]) -> list[str]:
+    """Derivation kinds without a key-completeness test, or keyed by a string.
+
+    `crates` maps each crate's directory to its Rust files, by path relative
+    to it (`src/…`, `tests/…`).
+    """
+    failures: list[str] = []
+    for crate, files in sorted(crates.items()):
+        scans = {path: strip_noise(text) for path, text in files.items()}
+        everything = "\n".join(scans.values())
+        for path, scan in sorted(scans.items()):
+            if not path.startswith("src/"):
+                continue
+            for match in DERIVATION_KIND.finditer(scan):
+                kind = match.group(1)
+                if not re.search(rf"\bKeyCompleteness\s*::\s*<\s*{kind}\b", everything):
+                    failures.append(
+                        f"{crate}/{path}: derivation kind `{kind}` has no key-completeness test "
+                        f"(`KeyCompleteness::<{kind}, _>`) in its crate"
+                    )
+            for match in FORMATTED_KEY.finditer(scan):
+                failures.append(
+                    f"{crate}/{path}: derivation kind keyed by a formatted string "
+                    f"(`type Key = {match.group(1)}`); key it by its fields"
+                )
+    return failures
+
+
+def derivation_kinds(root: Path) -> list[str]:
+    """`derivation_kind_violations` over every crate, failing an inert scan."""
+    crates = {
+        crate_root.relative_to(root).as_posix(): {
+            source.relative_to(crate_root).as_posix(): source.read_text(encoding="utf-8")
+            for directory in ("src", "tests")
+            for source in sorted((crate_root / directory).rglob("*.rs"))
+        }
+        for _, crate_root in crate_manifests(root)
+    }
+    kinds = sum(
+        len(DERIVATION_KIND.findall(strip_noise(text)))
+        for files in crates.values()
+        for path, text in files.items()
+        if path.startswith("src/")
+    )
+    if not kinds:
+        return ["no derivation kind found in any crate; the key-completeness check is inert"]
+    return derivation_kind_violations(crates)
+
+
 def composability(root: Path) -> list[str]:
     rules = root / "crates" / "engine" / "rules" / "src"
     files = {
@@ -1029,6 +1124,7 @@ def check(root: Path) -> list[str]:
         for detail in workflow_violations(workflow.read_text(encoding="utf-8")):
             failures.append(f"{workflow.relative_to(root)}: {detail}")
     failures.extend(composability(root))
+    failures.extend(derivation_kinds(root))
     return failures
 
 

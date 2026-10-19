@@ -6,6 +6,35 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **`axioval check --stats`: a check's reuse per derivation kind**
+  ([#442](https://github.com/axioval/engine/issues/442),
+  [ADR 0006](docs/src/adr-0006.md#the-reuse-report)). At the end of the
+  check it prints on stderr a header and one tab-separated line per
+  derivation kind (and per table of the measurement memo): its version,
+  hits, builds, waits, the seconds its builds took, the most bytes held at
+  once, and the values released and evicted. `DerivationStatistics` gains
+  `version`, `build_time`, `peak_bytes` and `evicted` (values released to
+  keep within `keep_bytes`, which `released` counted before; it now counts
+  releases by name only). The result is byte-identical with and without
+  it, which `tests/check.rs` pins with its fields.
+
+- **Every derivation key held to all of its inputs**
+  ([#439](https://github.com/axioval/engine/issues/439),
+  [ADR 0006](docs/src/adr-0006.md#complete-keys)). `DerivationKind` gains
+  a required `VERSION` (`DerivationVersion`: a revision bumped whenever
+  the same key could build another value, and the `Kernel` crates the
+  build calls), which keys every value of the kind beside its key; the
+  adapter's `PlacementScenes` and `IndexedBodies` state theirs in place of
+  the `version` fields of their keys. `KeyCompleteness::<Kind, _>` tests a
+  kind's key: each input changed in turn must change the key, and where it
+  affects the value, the value too, compared by a fingerprint; it also
+  holds the kernels named to the workspace's `Cargo.lock`. The
+  architecture gate refuses a `DerivationKind` in a crate's `src/` that no
+  such test of its crate names, and a kind keyed by a formatted string.
+  The scene and body index tests now build values and show each input
+  that changes them. An indexed body is audited at its key's tolerance
+  rather than the module's, which is the same today.
+
 - **A determinism gate** ([#441](https://github.com/axioval/engine/issues/441),
   [ADR 0006](docs/src/adr-0006.md)). `crates/apps/cli/tests/determinism.rs`
   runs the parity cases whose rules share the most (`floors`, `counts`,
@@ -130,6 +159,11 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **`check --timings` prints no derivation lines**
+  ([#442](https://github.com/axioval/engine/issues/442)). It keeps to
+  phases; how the check reused its derivations is `--stats`', with more
+  fields.
+
 - **Placement scenes and body indexes are built once per check**
   ([#408](https://github.com/axioval/engine/issues/408),
   [ADR 0006](docs/src/adr-0006.md) stage 1). A space's placement scene is
@@ -148,7 +182,7 @@ All notable changes are documented here. This project follows Semantic Versionin
   adapter's kinds a quarter of the budget each), releasing the values read
   least recently; releasing after a value's last reader is #440.
   `Runtime::with_derivation_observer` reports each kind's builds, hits,
-  waits, releases and bytes, which `check --timings` prints. On a private
+  waits, releases and bytes, which `check --stats` prints (#442). On a private
   sample of 157 spaces, two circles and two rectangles among every physical
   element build 157 scenes for 1146 reads, and the check takes 1621 s
   instead of 1712 s at the same peak (3.4 GiB); on a private house's six

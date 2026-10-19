@@ -10,8 +10,8 @@ use std::sync::{Arc, Barrier};
 use std::time::Duration;
 
 use axioval_engine::{
-    DerivationError, DerivationKind, DerivationStore, Inputs, MeasuredMemo, MemoryBudget,
-    Parallelism, ServiceRegistry,
+    DerivationError, DerivationKind, DerivationStore, DerivationVersion, Inputs, MeasuredMemo,
+    MemoryBudget, Parallelism, ServiceRegistry,
 };
 
 /// `work` on a thread of its own, failing the test should it not end: a
@@ -36,6 +36,7 @@ struct SlowSquare;
 
 impl DerivationKind for SlowSquare {
     const NAME: &'static str = "slow-square";
+    const VERSION: DerivationVersion = DerivationVersion::new(1, &[]);
     type Key = u64;
     type Value = u64;
 
@@ -86,6 +87,11 @@ fn many_threads_asking_for_one_key_build_it_once() {
     assert_eq!(square.builds, 1);
     assert_eq!(square.hits, threads as u64 - 1);
     assert_eq!(square.bytes, 8);
+    // The reuse report (#442): the kind's version, the time its one build
+    // took (it sleeps 50 ms), and the most it held.
+    assert_eq!(square.version, Some(DerivationVersion::new(1, &[])));
+    assert!(square.build_time >= Duration::from_millis(50));
+    assert_eq!(square.peak_bytes, 8);
     // Released, a key is built again, to the same value.
     assert!(store.release::<SlowSquare>(&7));
     assert!(store.held::<SlowSquare>(&7).is_none());
@@ -104,6 +110,7 @@ struct Base;
 
 impl DerivationKind for Base {
     const NAME: &'static str = "base";
+    const VERSION: DerivationVersion = DerivationVersion::new(1, &[]);
     type Key = u32;
     type Value = u32;
 
@@ -118,6 +125,7 @@ struct Sum;
 
 impl DerivationKind for Sum {
     const NAME: &'static str = "sum";
+    const VERSION: DerivationVersion = DerivationVersion::new(1, &[]);
     type Key = u32;
     type Value = u32;
 
@@ -162,6 +170,7 @@ struct Flaky;
 
 impl DerivationKind for Flaky {
     const NAME: &'static str = "flaky";
+    const VERSION: DerivationVersion = DerivationVersion::new(1, &[]);
     type Key = ();
     type Value = &'static str;
 
@@ -226,6 +235,7 @@ struct Selfish;
 
 impl DerivationKind for Selfish {
     const NAME: &'static str = "selfish";
+    const VERSION: DerivationVersion = DerivationVersion::new(1, &[]);
     type Key = u8;
     type Value = u8;
 
@@ -255,6 +265,7 @@ struct Right;
 
 impl DerivationKind for Left {
     const NAME: &'static str = "left";
+    const VERSION: DerivationVersion = DerivationVersion::new(1, &[]);
     type Key = ();
     type Value = ();
 
@@ -268,6 +279,7 @@ impl DerivationKind for Left {
 
 impl DerivationKind for Right {
     const NAME: &'static str = "right";
+    const VERSION: DerivationVersion = DerivationVersion::new(1, &[]);
     type Key = ();
     type Value = ();
 
@@ -304,6 +316,7 @@ struct Fanned;
 
 impl DerivationKind for Fanned {
     const NAME: &'static str = "fanned";
+    const VERSION: DerivationVersion = DerivationVersion::new(1, &[]);
     type Key = ();
     type Value = Vec<bool>;
 
@@ -335,6 +348,7 @@ struct Fallible;
 
 impl DerivationKind for Fallible {
     const NAME: &'static str = "fallible";
+    const VERSION: DerivationVersion = DerivationVersion::new(1, &[]);
     type Key = u8;
     type Value = Result<u8, String>;
 
@@ -408,6 +422,7 @@ struct SlowDouble;
 
 impl DerivationKind for SlowDouble {
     const NAME: &'static str = "slow-double";
+    const VERSION: DerivationVersion = DerivationVersion::new(1, &[]);
     type Key = u64;
     type Value = u64;
 
@@ -472,6 +487,7 @@ struct Kilo;
 
 impl DerivationKind for Kilo {
     const NAME: &'static str = "kilo";
+    const VERSION: DerivationVersion = DerivationVersion::new(1, &[]);
     type Key = u64;
     type Value = u64;
 
@@ -509,8 +525,13 @@ fn a_kind_past_its_bound_releases_the_values_read_least_recently() {
         .into_iter()
         .find(|kind| kind.kind == "kilo")
         .expect("counted");
-    assert_eq!((kilo.builds, kilo.hits, kilo.released), (4, 1, 1));
+    assert_eq!(
+        (kilo.builds, kilo.hits, kilo.evicted, kilo.released),
+        (4, 1, 1, 0)
+    );
     assert_eq!((kilo.entries, kilo.bytes), (3, 3 * 1024));
+    // The fourth value was held beside the three before one was evicted.
+    assert_eq!(kilo.peak_bytes, 4 * 1024);
     // A released value is built again, to the same value.
     assert_eq!(read(2), 2);
     assert_eq!(KILOS_BUILT.load(Ordering::SeqCst), 5);
@@ -521,6 +542,7 @@ struct Eight;
 
 impl DerivationKind for Eight {
     const NAME: &'static str = "eight";
+    const VERSION: DerivationVersion = DerivationVersion::new(1, &[]);
     type Key = u64;
     type Value = u64;
 
@@ -553,6 +575,16 @@ fn kept_values_are_held_against_the_check_memory_budget_until_released() {
     assert!(store.release::<Eight>(&3));
     assert_eq!(budget.in_use(), 0);
     assert!(!store.resize::<Eight>(&3, 100));
+    let eight = store
+        .statistics()
+        .into_iter()
+        .find(|kind| kind.kind == "eight")
+        .expect("counted");
+    // Released by name, not evicted; the peak outlives the value.
+    assert_eq!(
+        (eight.released, eight.evicted, eight.bytes, eight.peak_bytes),
+        (1, 0, 0, 100)
+    );
 }
 
 static TRIPLES_BUILT: AtomicUsize = AtomicUsize::new(0);
@@ -562,6 +594,7 @@ struct Triple;
 
 impl DerivationKind for Triple {
     const NAME: &'static str = "triple";
+    const VERSION: DerivationVersion = DerivationVersion::new(1, &[]);
     type Key = u64;
     type Value = u64;
 

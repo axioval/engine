@@ -238,6 +238,33 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **Facade areas beside bodies warped within a small width**
+  ([#454](https://github.com/axioval/engine/issues/454)). The facade-area
+  service no longer refuses because another body within reach is a
+  tessellation, as a body with a face warped off its plane by a slab `w`
+  wide is since #452. That body lies within its deviation `d` of its mesh
+  (`w` for a warp), so only a sample whose probe comes within `d` of the
+  mesh can read it otherwise: its start, or its ray before the first exact
+  body met where meeting the tessellation would change what it sees (a
+  space met, or another body hiding a space or the object). Such a sample
+  is undecided and its face counts as possibly facade, widening the upper
+  bound only; every other sample reads the true body as its mesh, and the
+  area stays exact where none is undecided. A tessellated subject still
+  widens by `2·P·d + π·d²`, at least `d` times each facade face's
+  perimeter. The outward faces and enclosed volumes, which close an
+  envelope across their neighbours, still refuse a tessellation within
+  reach. Unallocated regions beside a tessellated storey body are now
+  refused by name, as incomplete evidence, instead of as inexact
+  evidence: a region's area is a point, and a deviation can join or part
+  regions, which no band bounds. On the public IFC2X3 structural model,
+  beside a chimney warped 3.4e-7 m, the wall facades (45.26 m² behind the
+  chimney), the storey's facade area (116.83 m²) and its window-to-wall
+  ratio are values again, exactly as before #452, and the six facade
+  divergences #452 recorded are gone. Space validation is not evaluated
+  as incomplete evidence again, as it was then; its divergence is
+  narrowed to the message, which now names why. Every other public report
+  is byte for byte unchanged.
+
 - **The kernel's re-based volume properties and certified faceted faces**
   ([#452](https://github.com/axioval/engine/issues/452),
   axiolid/kernel#343). The workspace moves to axiolid-measure 0.3.11,

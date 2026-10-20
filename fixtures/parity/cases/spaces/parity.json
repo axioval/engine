@@ -38,9 +38,9 @@
     {
       "model": "bs-ifc2x3-building-structural.ifc",
       "recorded": "valid-spaces",
-      "difference": "project: capability not evaluated (IncompleteEvidence), expression not evaluated (InvalidEvidence)",
-      "reason": "axiolid-mesh-compile 0.3.31 (axiolid/kernel#343, #452) reports a faceted B-rep face without a surface Certified with its slab width unless its corners are exactly coplanar. One body of this model has a face whose corners span 3.4e-7 m about its plane, within the tolerance, which 0.3.30 counted as planar; it is now declared within that width, a tessellation, and the services that measure only exact bodies there leave the value open.",
-      "decision": "Accepted: the body was called exact while its face is warped, so the recorded value rested on a claim the kernel no longer makes. The rule fails closed instead; widths no larger than the 1e-9 m the services read as one point stay rounding."
+      "difference": "project: capability not evaluated (IncompleteEvidence), expression not evaluated (IncompleteEvidence); messages [\"space measurement is unavailable for the requested aspect\"] against [\"the geometry kernel refused the space measurement: a tessellated storey body moves the unallocated regions' boundaries within its deviation, which can join or part regions, and a region's area is a point\"]",
+      "reason": "Since axiolid-mesh-compile 0.3.31 (#452) one body of this model, a chimney with a face whose corners span 3.4e-7 m about its plane, is a tessellation within that width. Its storey's unallocated regions are refused by name beside it (#454): a region states its area as a point, and a deviation can join two regions closer than twice it or part one at a narrower neck, which no band on an area bounds. The recording, which read the body as exact, could not measure the regions either and said so without a reason.",
+      "decision": "Accepted: both leave the project not evaluated as incomplete evidence; only the message differs, and the new one names why. Measuring the regions beside a tessellation needs an interval for each region's area and a check that no two of their boundaries lie within twice the deviation."
     }
   ]
 }

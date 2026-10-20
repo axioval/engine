@@ -221,6 +221,26 @@ fn unallocated_floor_area_is_reported_per_storey() {
     assert!((gross - 100.0).abs() < 1e-6, "got {gross}");
 }
 
+/// A storey body declared within a deviation, even one a warped face makes
+/// a tessellation within 0.34 µm (engine#454), can join or part regions,
+/// which a region's point area cannot hold: the regions are refused by
+/// name, as incomplete evidence, never read off the mesh.
+#[test]
+fn unallocated_regions_beside_a_tessellated_storey_body_are_refused_by_name() {
+    let geometry = AxiolidGeometry::new()
+        .with_tessellated_mesh(id("floor"), body(0.0, 10.0, 0.0, 10.0, 0.0, 0.2), 3.4e-7)
+        .with_mesh(id("space"), body(0.0, 5.0, 0.0, 10.0, 0.2, 3.0));
+    let service = AxiolidSpaceService::new(geometry, source())
+        .with_space(id("space"))
+        .with_slab(id("floor"))
+        .with_storey(id("floor"), id("level-0"))
+        .with_storey(id("space"), id("level-0"));
+    assert!(matches!(
+        service.measure_unallocated_regions(),
+        Err(SpaceError::Refused(reason)) if reason.contains("join or part regions")
+    ));
+}
+
 /// Support counts report what the model has, not a decision about it.
 #[test]
 fn support_counts_report_declared_cap_elements() {

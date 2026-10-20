@@ -725,7 +725,12 @@ its deviation inside its outline, missed only farther outside; between,
 with no other element covering it, the gaps are refused, and so are a
 tessellated space's own (its boundary is chords). What a deviation could
 tip stays `SpaceError::InexactEvidence`; a deviation that bounds nothing
-refuses. Evidence stays exact, since every decision holds for every body
+refuses. Unallocated regions beside any tessellated storey body, a body
+curved or with a face warped off its plane, are refused by name
+(`SpaceError::Refused`, incomplete evidence, #454): a region states its
+area as a point, and the deviation can join two regions closer than `2·d`
+or part one at a neck narrower than that, which no band on an area
+bounds. Evidence stays exact, since every decision holds for every body
 within the deviation; a bracketed clear height names the space in its
 locator (`:within-chord-deviation=`).
 
@@ -1115,8 +1120,20 @@ first (an inner face). Meeting nothing, or another body first, is outside: a
 facade across a courtyard counts. A triangle whose samples disagree is partly
 covered and widens the interval by its area with approximate evidence. A
 tessellated subject widens by `2·P·d + π·d²` over the facade triangles'
-perimeter `P`. A tessellated body within reach, an unmeasured body anywhere,
-or a declared space without a body refuses. Walls from IFC are meshed net of
+perimeter `P`, at least `d` times each facade face's perimeter; a body
+whose only curvature is a face warped off its plane by a slab `w` wide is
+such a subject within `w` (#454). Another tessellated body within reach,
+declared within `d`, may lie anywhere within `d` of its mesh. A sample
+whose probe it could change is undecided, and its triangle counts as
+possibly facade (in the upper bound only): the probe's start lies within
+`d` of that mesh (inside it or not is then open), or its ray comes within
+`d` of it before the first exact body it meets (to 1 m without one) and
+meeting the tessellation there would read otherwise, a declared space
+being met or another body hiding a space or the object behind it. Every
+other sample reads the true body as its mesh, so a facade beside a
+chimney warped 0.34 µm stays exact where no probe passes within that of
+it. An unmeasured body anywhere, or a declared space without a body,
+refuses. Walls from IFC are meshed net of
 their openings, so a wall's facade excludes its windows, and a window's
 facade is its own outer face.
 
@@ -1138,7 +1155,10 @@ centroid, and is `Outside` where all four samples look outside, `Partly`
 where only some do. Probed along its normal, a face meets the object itself
 at any distance, not only within 1 m: a reveal looks across its opening
 into its own wall however wide the opening is, so it is never listed. An
-open surface has no outside and refuses.
+open surface has no outside and refuses, and so does a tessellated body
+within reach of the object: the envelope closes across its neighbours,
+and a face its deviation leaves undecided would leave that closure
+unbounded.
 `measure_enclosed_volume` gathers the faces looking outside of every object
 asked about, wound outward, and refuses where the faces do not close: every
 edge is matched against the edges on its line (within 1 nm), and each

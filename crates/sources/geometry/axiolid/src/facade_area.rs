@@ -28,9 +28,25 @@
 //! surface; each facade triangle's true patch then differs from it at most
 //! inside a band of width `2d` along its edges, so the area widens by
 //! `2·P·d + π·d²` for the facade triangles' summed perimeter `P`, and is
-//! never a point. A tessellated body within reach, an unmeasured body
-//! anywhere or an unmeasured or bodiless space could change which faces
-//! count, so the measurement refuses.
+//! never a point. A face warped off its plane by a slab width `w` makes its
+//! body a tessellation within `w` (engine#454), so the same band holds it:
+//! `2·P·w` is at least `w` times each face's perimeter.
+//!
+//! Another body near the subject that is a tessellation within `d` may lie
+//! anywhere within `d` of its mesh, which can change what a sample sees
+//! only where the sample's probe (its start, and its ray up to the first
+//! exact body it meets or [`REACH`]) comes within `d` of that mesh, and
+//! meeting it there would change the reading (`Scene::settled_look`). Such
+//! a sample is undecided: its face counts as possibly facade (in the upper
+//! bound only, never the lower), as a partly covered face does, so the
+//! interval holds every reading of the body. Every other sample reads the
+//! true body as its mesh, and the area stays exact when no face is
+//! undecided.
+//! The outward faces (`measure_facade_faces`, `measure_enclosed_volume`)
+//! close an envelope across their neighbours, which an undecided face
+//! leaves unbounded, so they still refuse a tessellation within reach. An
+//! unmeasured body anywhere or an unmeasured or bodiless space could
+//! change which faces count, so every measurement refuses.
 //!
 //! Outward faces (of any slope, probed along their normal) meet the object
 //! itself at any distance, so a reveal is never one, however wide its
@@ -43,7 +59,7 @@
 use std::collections::BTreeSet;
 
 use axiolid_core::{Point3, Ray3, Tolerance, Vec3};
-use axiolid_measure::WindingMesh;
+use axiolid_measure::{WindingMesh, closest_point_on_triangle, closest_points_on_segments};
 use axiolid_mesh::{TriMesh, audit_mesh};
 use axiolid_ray_mesh::intersect_triangle;
 use axioval_engine::{
@@ -87,6 +103,10 @@ enum Met {
 struct Near<'a> {
     id: &'a ObjectId,
     met: Met,
+    /// The chord deviation of another body that is a tessellation, within
+    /// which its true surface lies of its mesh; `None` for an exact body
+    /// and for the subject, whose own deviation widens the area instead.
+    deviation: Option<f64>,
     mesh: &'a TriMesh,
     triangles: Vec<Triangle>,
     extent: Extent,
@@ -139,20 +159,44 @@ impl AxiolidFacadeAreaService {
     }
 
     /// The bodies within reach of `extent`, with the subject among them.
+    ///
+    /// Another body that is a tessellation within chord deviation `d` lies
+    /// up to `d` beyond its mesh, so it is within reach unless its mesh
+    /// lies farther than the reach, the probe's offset and `d`. The facade
+    /// area ([`Faces::Steep`]) takes it with `d` and leaves a sample its
+    /// true body could change undecided ([`Look::Undecided`]); the outward
+    /// faces ([`Faces::All`]) close an envelope across it, which no such
+    /// sample bounds, so they refuse it.
     fn near<'s>(
         &'s self,
         subject: &'s ObjectId,
         extent: &Extent,
+        faces: Faces,
     ) -> Result<Vec<Near<'s>>, FacadeAreaError> {
         let mut near = Vec::new();
         for (id, mesh) in self.geometry.objects() {
             let Some(body) = mesh_extent(mesh) else {
                 continue;
             };
-            if extent_gap(extent, &body, false) > REACH + ON_SURFACE {
+            let deviation = if id == subject {
+                None
+            } else {
+                match self.geometry.fidelity(id) {
+                    Ok(GeometryFidelity::Exact) => None,
+                    Ok(GeometryFidelity::Tessellated {
+                        chord_deviation_metres,
+                    }) => Some(chord_deviation_metres),
+                    Err(_) => return Err(FacadeAreaError::InvalidMeasurement),
+                }
+            };
+            let reach = match (deviation, faces) {
+                (Some(deviation), Faces::Steep) => REACH + PROBE_OFFSET + deviation + ON_SURFACE,
+                _ => REACH + ON_SURFACE,
+            };
+            if extent_gap(extent, &body, false) > reach {
                 continue;
             }
-            if id != subject && self.geometry.is_tessellated(id) {
+            if deviation.is_some() && faces == Faces::All {
                 return Err(FacadeAreaError::Unavailable(format!(
                     "{id} is a tessellation within reach of {subject}, so which faces it \
                      covers is approximate"
@@ -168,6 +212,7 @@ impl AxiolidFacadeAreaService {
             near.push(Near {
                 id,
                 met,
+                deviation,
                 mesh,
                 triangles: triangles(mesh),
                 extent: body,
@@ -207,6 +252,12 @@ enum Look {
     Space,
     /// The subject's own body first: a reveal, a niche.
     Itself,
+    /// A tessellated body near the probe could change what it sees: its
+    /// true surface may contain the probe's start or cross its ray where
+    /// its mesh does not, or miss them where its mesh meets them. Either
+    /// reading may be the true one, so the sample counts as possibly
+    /// outside, never surely ([`Faces::Steep`] only).
+    Undecided,
 }
 
 /// A subject ready to be probed: its triangles, their winding, the bodies
@@ -231,8 +282,11 @@ impl AxiolidFacadeAreaService {
             let Some(looks) = scene.looks(*triangle)? else {
                 continue;
             };
+            // A face with an undecided sample is possibly facade, never
+            // surely: it counts with fewer than every sample outside.
             let outside = looks.iter().filter(|look| **look == Look::Outside).count();
-            if outside > 0 {
+            let undecided = looks.contains(&Look::Undecided);
+            if outside > 0 || undecided {
                 looked.push((index, outside));
             }
         }
@@ -352,7 +406,7 @@ impl AxiolidFacadeAreaService {
         let extent = mesh_extent(mesh).ok_or_else(|| {
             FacadeAreaError::Unavailable(format!("the mesh of {object} is empty"))
         })?;
-        let near = self.near(object, &extent)?;
+        let near = self.near(object, &extent, faces)?;
         let windings = near
             .iter()
             .map(|body| {
@@ -403,9 +457,83 @@ impl Scene<'_> {
         let mut looks = [Look::Outside; SAMPLES];
         for (look, sample) in looks.iter_mut().zip(samples(triangle)) {
             let start = sample + outward * PROBE_OFFSET;
-            *look = look_from(&self.near, &self.windings, start, outward, self.faces)?;
+            *look = if self.faces == Faces::Steep {
+                self.settled_look(start, outward)?
+            } else {
+                look_from(&self.near, &self.windings, start, outward, self.faces)?
+            };
         }
         Ok(Some(looks))
+    }
+
+    /// What the probe from `start` along `outward` sees, or
+    /// [`Look::Undecided`] where a tessellated body near the subject could
+    /// change it.
+    ///
+    /// A body declared within chord deviation `d` has its true surface
+    /// within `d` of its mesh and its mesh within `d` of its true surface,
+    /// so the true body and the mesh hold the same points farther than `d`
+    /// from the mesh, and a set farther than `d` from the mesh meets
+    /// neither surface. The probe reads such a body twice:
+    ///
+    /// - at its start, inside the body or not: decided unless the start
+    ///   lies within `d` of the mesh, or inside an exact body, which covers
+    ///   it whatever the tessellation does;
+    /// - along its ray, by what it meets first. The exact bodies' first
+    ///   meeting is known; the tessellated body changes the look only by
+    ///   being met before it (or at it, within [`ON_SURFACE`]), and only
+    ///   when that changes the reading: another body met first where the
+    ///   exact bodies leave nothing or another body reads the same,
+    ///   outside. Otherwise the ray up to that meeting (to [`REACH`] where
+    ///   there is none) must lie farther than `d` from the mesh.
+    ///
+    /// Distances are taken within `d` plus [`ON_SURFACE`] for their
+    /// rounding, and a distance the kernel cannot measure leaves the sample
+    /// undecided. Boxes only rule triangles out: the gap between two boxes
+    /// never exceeds the distance between what they hold. A decided sample
+    /// reads every true body as its mesh, so it sees what the meshes show.
+    fn settled_look(&self, start: Point3, outward: Vec3) -> Result<Look, FacadeAreaError> {
+        let tessellated: Vec<&Near<'_>> = self
+            .near
+            .iter()
+            .filter(|body| body.deviation.is_some())
+            .collect();
+        if tessellated.is_empty() {
+            return look_from(&self.near, &self.windings, start, outward, self.faces);
+        }
+        let exact = |body: &Near<'_>| body.deviation.is_none();
+        if covered(&self.near, &self.windings, start, exact)? {
+            return Ok(Look::Covered);
+        }
+        let near = |body: &Near<'_>, to: Point3| {
+            let margin = body.deviation.unwrap_or(0.0) + ON_SURFACE;
+            let segment: Extent = (start.min(to).to_array(), start.max(to).to_array());
+            extent_gap(&segment, &body.extent, false) <= margin
+                && body.triangles.iter().any(|triangle| {
+                    let boxed: Extent = (
+                        triangle[0].min(triangle[1]).min(triangle[2]).to_array(),
+                        triangle[0].max(triangle[1]).max(triangle[2]).to_array(),
+                    );
+                    extent_gap(&segment, &boxed, false) <= margin
+                        && segment_gap(start, to, *triangle).is_none_or(|gap| gap <= margin)
+                })
+        };
+        if tessellated.iter().any(|body| near(body, start)) {
+            return Ok(Look::Undecided);
+        }
+        let first = first_met_at(&self.near, start, outward, self.faces, exact)?;
+        let reach = first.map_or(REACH, |(t, _)| (t + ON_SURFACE).min(REACH));
+        let to = start + outward * reach;
+        let changes = |body: &Near<'_>| {
+            body.met != Met::Other || first.is_some_and(|(_, met)| met != Met::Other)
+        };
+        if tessellated
+            .iter()
+            .any(|body| changes(body) && near(body, to))
+        {
+            return Ok(Look::Undecided);
+        }
+        look_from(&self.near, &self.windings, start, outward, self.faces)
     }
 
     /// The triangles of the other bodies and spaces near the subject that
@@ -739,7 +867,7 @@ fn look_from(
     outward: Vec3,
     faces: Faces,
 ) -> Result<Look, FacadeAreaError> {
-    if covered(near, windings, start)? {
+    if covered(near, windings, start, |_| true)? {
         return Ok(Look::Covered);
     }
     Ok(match first_met(near, start, outward, faces)? {
@@ -754,10 +882,14 @@ fn covered(
     near: &[Near<'_>],
     windings: &[WindingMesh<'_, TriMesh>],
     point: Point3,
+    counted: impl Fn(&Near<'_>) -> bool,
 ) -> Result<bool, FacadeAreaError> {
     let probe: Extent = (point.to_array(), point.to_array());
     for (body, winding) in near.iter().zip(windings) {
-        if body.met == Met::Itself || extent_gap(&probe, &body.extent, false) > ON_SURFACE {
+        if body.met == Met::Itself
+            || !counted(body)
+            || extent_gap(&probe, &body.extent, false) > ON_SURFACE
+        {
             continue;
         }
         let number = winding.winding_number(point).map_err(|error| {
@@ -785,6 +917,18 @@ fn first_met(
     direction: Vec3,
     faces: Faces,
 ) -> Result<Option<Met>, FacadeAreaError> {
+    Ok(first_met_at(near, start, direction, faces, |_| true)?.map(|(_, met)| met))
+}
+
+/// [`first_met`] among the bodies `counted` keeps, with the distance along
+/// the ray at which it is met.
+fn first_met_at(
+    near: &[Near<'_>],
+    start: Point3,
+    direction: Vec3,
+    faces: Faces,
+    counted: impl Fn(&Near<'_>) -> bool,
+) -> Result<Option<(f64, Met)>, FacadeAreaError> {
     let ray = Ray3 {
         origin: start,
         direction,
@@ -793,7 +937,7 @@ fn first_met(
     let segment: Extent = (start.min(end).to_array(), start.max(end).to_array());
     let tolerance = tolerance()?;
     let mut first: Option<(f64, Met)> = None;
-    for body in near {
+    for body in near.iter().filter(|body| counted(body)) {
         let unbounded = faces == Faces::All && body.met == Met::Itself;
         if !unbounded && extent_gap(&segment, &body.extent, false) > ON_SURFACE {
             continue;
@@ -814,7 +958,47 @@ fn first_met(
             });
         }
     }
-    Ok(first.map(|(_, met)| met))
+    Ok(first)
+}
+
+/// The distance from the segment `[from, to]` to `triangle`; `None` where
+/// the kernel cannot measure it.
+///
+/// A segment that crosses the triangle is at distance zero; otherwise the
+/// nearest points pair an end of the segment with the triangle or an edge
+/// of the triangle with the segment. A triangle without area is its edges,
+/// which the edge distances already cover.
+fn segment_gap(from: Point3, to: Point3, triangle: Triangle) -> Option<f64> {
+    let tolerance = tolerance().ok()?;
+    let ray = Ray3 {
+        origin: from,
+        direction: to - from,
+    };
+    let flat = (triangle[1] - triangle[0])
+        .cross(triangle[2] - triangle[0])
+        .length_squared()
+        == 0.0;
+    let mut gap = f64::INFINITY;
+    if !flat {
+        if from != to
+            && intersect_triangle(&ray, triangle, tolerance, 0)
+                .ok()?
+                .is_some_and(|hit| (0.0..=1.0).contains(&hit.t))
+        {
+            return Some(0.0);
+        }
+        for point in [from, to] {
+            let closest = closest_point_on_triangle(point, triangle).ok()?;
+            gap = gap.min(closest.distance(point));
+        }
+    }
+    for edge in 0..3 {
+        let pair =
+            closest_points_on_segments([triangle[edge], triangle[(edge + 1) % 3]], [from, to])
+                .ok()?;
+        gap = gap.min(pair.distance_squared.sqrt());
+    }
+    Some(gap)
 }
 
 /// At most this many face edges are matched to prove an envelope closed.

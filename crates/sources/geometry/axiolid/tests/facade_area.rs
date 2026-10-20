@@ -189,13 +189,25 @@ fn a_tessellated_wall_measures_an_interval_around_its_mesh() {
 }
 
 #[test]
-fn a_tessellation_within_reach_refuses_and_one_beyond_it_does_not() {
+fn a_tessellation_within_reach_leaves_undecided_only_the_faces_it_could_change() {
+    // A room within 1 mm of its mesh, flush with the inner face: every
+    // probe of that face starts inside the mesh, within the deviation of
+    // its surface, so the face may look into the room or be held against
+    // nothing. It counts as possibly facade; the outer face and the ends,
+    // whose probes stay farther than 1 mm from the room, are decided.
     let near = AxiolidGeometry::new()
         .with_mesh(id("wall"), wall())
         .with_tessellated_mesh(id("room"), room(), 0.001);
     let service = AxiolidFacadeAreaService::new(near).with_space(id("room"));
+    let area = service.measure_facade_area(&id("wall")).unwrap();
+    assert!(!area.is_exact() && !area.evidence().exact, "{area:?}");
+    assert!(close(area.lower_square_metres(), 31.8), "{area:?}");
+    assert!(close(area.upper_square_metres(), 61.8), "{area:?}");
+    assert!(area.evidence().locator.ends_with(":partial=2"), "{area:?}");
+    // The outward faces close an envelope across it, which an undecided
+    // face leaves unbounded: they still refuse.
     assert!(matches!(
-        service.measure_facade_area(&id("wall")),
+        service.measure_facade_faces(&id("wall")),
         Err(FacadeAreaError::Unavailable(_))
     ));
 
@@ -207,7 +219,56 @@ fn a_tessellation_within_reach_refuses_and_one_beyond_it_does_not() {
             0.001,
         );
     let service = AxiolidFacadeAreaService::new(far);
-    assert!(service.measure_facade_area(&id("wall")).is_ok());
+    assert!(service.measure_facade_area(&id("wall")).unwrap().is_exact());
+}
+
+#[test]
+fn a_tessellation_whose_reading_changes_nothing_keeps_the_area_exact() {
+    // Bodies with a face warped 0.34 µm (engine#454): one 0.5 m in front
+    // of the outer face, which every probe of that face meets squarely and
+    // which reads as outside whether met or not, and a chimney against the
+    // wall's east end, deep inside which every probe of that end starts.
+    let warped = 3.4e-7;
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("wall"), wall())
+        .with_tessellated_mesh(
+            id("opposite"),
+            cuboid([0.0, -1.0, 0.0], [10.0, -0.8, 3.0]),
+            warped,
+        )
+        .with_tessellated_mesh(
+            id("chimney"),
+            cuboid([10.0, -0.5, 0.0], [10.6, 0.2, 3.0]),
+            warped,
+        )
+        .with_mesh(id("room"), room());
+    let service = AxiolidFacadeAreaService::new(geometry).with_space(id("room"));
+    let area = service.measure_facade_area(&id("wall")).unwrap();
+    // The outer face and the west end; the east end is held.
+    assert!(area.is_exact() && area.evidence().exact, "{area:?}");
+    assert!(close(area.lower_square_metres(), 30.9), "{area:?}");
+    assert!(area.evidence().locator.ends_with(":partial=0"), "{area:?}");
+}
+
+#[test]
+fn a_tessellation_before_a_space_leaves_the_probes_passing_it_undecided() {
+    // A room declared 0.2 m behind the inner face, and between them a
+    // tessellated lining whose top the inner face's probes pass within its
+    // deviation: they may meet the lining (outside) or reach the room past
+    // it (interior). The outer face and the ends stay decided.
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("wall"), wall())
+        .with_tessellated_mesh(
+            id("lining"),
+            cuboid([0.0, 0.05, 0.0], [10.0, 0.1, 2.25]),
+            0.02,
+        )
+        .with_mesh(id("room"), cuboid([0.0, 0.2, 0.0], [10.0, 4.0, 3.0]));
+    let service = AxiolidFacadeAreaService::new(geometry).with_space(id("room"));
+    let area = service.measure_facade_area(&id("wall")).unwrap();
+    assert!(!area.is_exact(), "{area:?}");
+    assert!(close(area.lower_square_metres(), 31.8), "{area:?}");
+    assert!(close(area.upper_square_metres(), 61.8), "{area:?}");
 }
 
 #[test]

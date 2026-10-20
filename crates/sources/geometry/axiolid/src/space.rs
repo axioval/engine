@@ -410,6 +410,21 @@ const SLIVERS_EXCEED_ROUNDING: &str = "the slivers of near-vertical faces the pl
      refuses (RepeatedVertex, ZeroArea) could change the area by more than the overlay's \
      rounding";
 
+/// Why unallocated regions are refused beside a tessellated storey body
+/// (engine#454).
+///
+/// Such a body lies anywhere within its chord deviation `d` of its mesh: a
+/// curved one, or one with a face warped off its plane by a slab `d` wide.
+/// A region's area would move by at most `2·P·d + π·d²` along its boundary
+/// of length `P`, but which regions there are can change too: two regions
+/// closer than `2·d` may be one, and a neck narrower than that may part
+/// one in two, which no band on an area bounds. A region states its area
+/// as a point, so the decision cannot be bounded and is refused rather
+/// than read off the mesh.
+const TESSELLATED_REGIONS: &str = "a tessellated storey body moves the unallocated regions' \
+     boundaries within its deviation, which can join or part regions, and a region's area is a \
+     point";
+
 /// A plan-overlay refusal that leaving the slivers out did not remove,
 /// with the overlay's reason, or the overlay budget's (#419); never a zero
 /// area.
@@ -1064,13 +1079,14 @@ impl SpaceService for AxiolidSpaceService {
         self.complete(SpaceAspect::UnallocatedRegions)?;
         let tolerance = tolerance()?;
         // Regions are cut from every storey-assigned body, so any tessellated
-        // one makes them estimates.
+        // one (a curved body, or a face warped off its plane) moves their
+        // boundaries; a region's area is a point, so it is refused by name.
         if self
             .storeys
             .keys()
             .any(|object| self.geometry.is_tessellated(object))
         {
-            return Err(SpaceError::InexactEvidence);
+            return Err(SpaceError::Refused(TESSELLATED_REGIONS));
         }
         let mut per_storey: BTreeMap<ObjectId, StoreyBodies> = BTreeMap::new();
         for (object, storey) in &self.storeys {

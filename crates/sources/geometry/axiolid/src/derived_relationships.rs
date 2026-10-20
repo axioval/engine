@@ -13,17 +13,19 @@
 //! unmeasured or bodiless space, since it could be the answer, and a point
 //! lying on a space's boundary, where inside and outside are undecided.
 
+mod kept;
+
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::Arc;
 
 use axiolid_core::{Point2, Point3, Ray3, Tolerance, Vec2, Vec3};
 use axiolid_measure::{WindingMesh, closest_point_on_triangle};
 use axiolid_mesh::{TriMesh, TriangleMeshView, audit_mesh};
 use axiolid_ray_mesh::intersect_triangle;
 use axioval_engine::{
-    CompleteRelationshipSelection, Derivation, DerivedRelationshipService, ProximityError,
-    ProximityRequest, ProximityService, RelationshipQuery, RelationshipSelectionError,
-    RelationshipSelectionRequest, TraversalDirection,
+    CompleteRelationshipSelection, Derivation, DerivationStore, DerivedRelationshipService,
+    ProximityError, ProximityRequest, ProximityService, RelationshipQuery,
+    RelationshipSelectionError, RelationshipSelectionRequest, TraversalDirection,
 };
 use axioval_ir::{Evidence, ObjectId};
 
@@ -49,7 +51,7 @@ const TOUCHING_VOLUME: f64 = 1e-12;
 
 /// One derived edge from a subject to a space, and how it was found.
 #[derive(Clone, Debug)]
-struct Edge {
+pub(crate) struct Edge {
     target: ObjectId,
     note: String,
 }
@@ -57,7 +59,7 @@ struct Edge {
 /// Everything derived for one subject: its edges and the notes that make
 /// the absence of an edge reviewable (an opening's outside side).
 #[derive(Debug, Default)]
-struct Derived {
+pub(crate) struct Derived {
     edges: Vec<Edge>,
     notes: Vec<String>,
 }
@@ -81,11 +83,20 @@ struct Shape<'a> {
     tessellated: bool,
 }
 
-/// A declared space ready to be probed.
+/// A declared space ready to be probed, as the check's store keeps it
+/// ([`kept::SpaceBodies`]).
+pub(crate) struct KeptSpace {
+    id: ObjectId,
+    triangles: Vec<Triangle>,
+    extent: Extent,
+    tessellated: bool,
+}
+
+/// A declared space ready to be probed, read from what the store keeps.
 struct SpaceBody<'a> {
     id: &'a ObjectId,
     mesh: &'a TriMesh,
-    triangles: Vec<Triangle>,
+    triangles: &'a [Triangle],
     extent: Extent,
     tessellated: bool,
 }
@@ -98,7 +109,19 @@ struct SpaceBody<'a> {
 /// void cut into a wall, is probed through the shape given with
 /// [`Self::with_opening_void`].
 pub struct AxiolidDerivedRelationshipService {
-    geometry: AxiolidGeometry,
+    declared: Arc<Declared>,
+}
+
+/// What a derived-relationship service derives over: the geometry and the
+/// host's declarations. What it derives of them (each subject's edges, the
+/// declared spaces' bodies, each pair's intersection) is the check's
+/// derivation store's, keyed over this state ([`kept`], #443): it keeps
+/// nothing of its own.
+#[derive(Clone)]
+pub(crate) struct Declared {
+    /// Shared with the proximity measurements `intersects` reads, whose
+    /// bodies the store indexes over it.
+    geometry: Arc<AxiolidGeometry>,
     spaces: BTreeSet<ObjectId>,
     /// Each declared level's height band, bottom and top (open above for
     /// the highest), or why it has none.
@@ -107,11 +130,6 @@ pub struct AxiolidDerivedRelationshipService {
     /// Walls and slabs, the subjects of `adjacent-across`.
     separators: BTreeSet<ObjectId>,
     voids: BTreeMap<ObjectId, Void>,
-    cache: Mutex<BTreeMap<(String, ObjectId), Cached>>,
-    /// The proximity measurements `intersects` reads, built on first use.
-    proximity: OnceLock<AxiolidProximityService>,
-    /// Each pair `intersects` decided, the lesser identity first.
-    pairs: Mutex<BTreeMap<(ObjectId, ObjectId), Pair>>,
 }
 
 impl AxiolidDerivedRelationshipService {
@@ -119,24 +137,35 @@ impl AxiolidDerivedRelationshipService {
     #[must_use]
     pub fn new(geometry: AxiolidGeometry) -> Self {
         Self {
-            geometry,
-            spaces: BTreeSet::new(),
-            levels: BTreeMap::new(),
-            openings: BTreeSet::new(),
-            separators: BTreeSet::new(),
-            voids: BTreeMap::new(),
-            cache: Mutex::new(BTreeMap::new()),
-            proximity: OnceLock::new(),
-            pairs: Mutex::new(BTreeMap::new()),
+            declared: Arc::new(Declared {
+                geometry: Arc::new(geometry),
+                spaces: BTreeSet::new(),
+                levels: BTreeMap::new(),
+                openings: BTreeSet::new(),
+                separators: BTreeSet::new(),
+                voids: BTreeMap::new(),
+            }),
+        }
+    }
+
+    /// The declarations, changed by `declare`: unshared while the host
+    /// declares, so changed in place.
+    fn declare(self, declare: impl FnOnce(&mut Declared)) -> Self {
+        let mut declared =
+            Arc::try_unwrap(self.declared).unwrap_or_else(|shared| (*shared).clone());
+        declare(&mut declared);
+        Self {
+            declared: Arc::new(declared),
         }
     }
 
     /// Declares a space: a target of every derivation and a subject of the
     /// group-space derivation.
     #[must_use]
-    pub fn with_space(mut self, space: ObjectId) -> Self {
-        self.spaces.insert(space);
-        self
+    pub fn with_space(self, space: ObjectId) -> Self {
+        self.declare(|declared| {
+            declared.spaces.insert(space);
+        })
     }
 
     /// Declares a level (a storey) and its height band, the target of
@@ -144,7 +173,7 @@ impl AxiolidDerivedRelationshipService {
     /// or open above for the highest level. Which objects are levels and
     /// which level comes next is semantic, so the host states both.
     #[must_use]
-    pub fn with_level(mut self, level: ObjectId, bottom: f64, top: Option<f64>) -> Self {
+    pub fn with_level(self, level: ObjectId, bottom: f64, top: Option<f64>) -> Self {
         let band = if bottom.is_finite() && top.is_none_or(|top| top.is_finite() && top > bottom) {
             Ok((bottom, top))
         } else {
@@ -152,24 +181,27 @@ impl AxiolidDerivedRelationshipService {
                 "level {level} has no height band from {bottom} to {top:?}"
             ))
         };
-        self.levels.insert(level, band);
-        self
+        self.declare(|declared| {
+            declared.levels.insert(level, band);
+        })
     }
 
     /// Declares a level whose band the host could not state, such as one
     /// sharing its elevation with another level. A `spans-level` request
     /// refuses while it could be the answer.
     #[must_use]
-    pub fn with_unmeasured_level(mut self, level: ObjectId, reason: impl Into<String>) -> Self {
-        self.levels.insert(level, Err(reason.into()));
-        self
+    pub fn with_unmeasured_level(self, level: ObjectId, reason: impl Into<String>) -> Self {
+        self.declare(|declared| {
+            declared.levels.insert(level, Err(reason.into()));
+        })
     }
 
     /// Declares a door, window or opening, the subjects of `adjacent-space`.
     #[must_use]
-    pub fn with_opening(mut self, opening: ObjectId) -> Self {
-        self.openings.insert(opening);
-        self
+    pub fn with_opening(self, opening: ObjectId) -> Self {
+        self.declare(|declared| {
+            declared.openings.insert(opening);
+        })
     }
 
     /// Declares a separating element, a wall or a slab, the subject of
@@ -177,47 +209,56 @@ impl AxiolidDerivedRelationshipService {
     /// host declares them; the derivation refuses one whose body is neither
     /// a straight wall nor a flat slab.
     #[must_use]
-    pub fn with_separating_element(mut self, element: ObjectId) -> Self {
-        self.separators.insert(element);
-        self
+    pub fn with_separating_element(self, element: ObjectId) -> Self {
+        self.declare(|declared| {
+            declared.separators.insert(element);
+        })
     }
 
     /// Declares an opening and the exact planar shape of its void, for an
     /// opening the geometry declares bodiless.
     #[must_use]
-    pub fn with_opening_void(mut self, opening: ObjectId, mesh: TriMesh) -> Self {
-        self.openings.insert(opening.clone());
-        self.voids.insert(opening, Void::Mesh(mesh, None));
-        self
+    pub fn with_opening_void(self, opening: ObjectId, mesh: TriMesh) -> Self {
+        self.declare(|declared| {
+            declared.openings.insert(opening.clone());
+            declared.voids.insert(opening, Void::Mesh(mesh, None));
+        })
     }
 
     /// Declares an opening whose void is a tessellation of curved faces. It
     /// is never probed: its faces are approximate.
     #[must_use]
     pub fn with_tessellated_opening_void(
-        mut self,
+        self,
         opening: ObjectId,
         mesh: TriMesh,
         chord_deviation_metres: f64,
     ) -> Self {
-        self.openings.insert(opening.clone());
-        self.voids
-            .insert(opening, Void::Mesh(mesh, Some(chord_deviation_metres)));
-        self
+        self.declare(|declared| {
+            declared.openings.insert(opening.clone());
+            declared
+                .voids
+                .insert(opening, Void::Mesh(mesh, Some(chord_deviation_metres)));
+        })
     }
 
     /// Declares an opening whose void the host could not mesh.
     #[must_use]
     pub fn with_unmeasured_opening_void(
-        mut self,
+        self,
         opening: ObjectId,
         reason: impl Into<String>,
     ) -> Self {
-        self.openings.insert(opening.clone());
-        self.voids.insert(opening, Void::Unmeasured(reason.into()));
-        self
+        self.declare(|declared| {
+            declared.openings.insert(opening.clone());
+            declared
+                .voids
+                .insert(opening, Void::Unmeasured(reason.into()));
+        })
     }
+}
 
+impl Declared {
     /// Whether `object` can have edges under `derivation`.
     fn is_subject(&self, derivation: &Derivation, object: &ObjectId) -> bool {
         match derivation {
@@ -273,7 +314,7 @@ impl AxiolidDerivedRelationshipService {
     }
 
     /// Every declared space with a closed exact-or-tessellated body.
-    fn space_bodies(&self) -> Result<Vec<SpaceBody<'_>>, String> {
+    fn space_bodies(&self) -> Result<Vec<KeptSpace>, String> {
         self.spaces
             .iter()
             .map(|space| {
@@ -295,9 +336,8 @@ impl AxiolidDerivedRelationshipService {
                 }
                 let extent =
                     mesh_extent(mesh).ok_or_else(|| format!("space {space} has an empty mesh"))?;
-                Ok(SpaceBody {
-                    id: space,
-                    mesh,
+                Ok(KeptSpace {
+                    id: space.clone(),
                     triangles: triangles(mesh),
                     extent,
                     tessellated: self.geometry.is_tessellated(space),
@@ -306,26 +346,52 @@ impl AxiolidDerivedRelationshipService {
             .collect()
     }
 
-    /// The edges of one subject, derived once per derivation and cached.
-    fn derived<'s>(
-        &'s self,
+    /// The kept spaces as bodies to probe, each with its mesh.
+    fn bodies<'a>(&'a self, kept: &'a [KeptSpace]) -> Result<Vec<SpaceBody<'a>>, String> {
+        kept.iter()
+            .map(|space| {
+                let mesh = self
+                    .geometry
+                    .mesh(&space.id)
+                    .ok_or_else(|| format!("space {} has no body", space.id))?;
+                Ok(SpaceBody {
+                    id: &space.id,
+                    mesh,
+                    triangles: &space.triangles,
+                    extent: space.extent,
+                    tessellated: space.tessellated,
+                })
+            })
+            .collect()
+    }
+
+    /// The edges of one subject under `derivation`: the check's, derived
+    /// once for every request, rule and thread asking ([`kept::DerivedEdges`]).
+    fn derived(self: &Arc<Self>, derivation: &Derivation, subject: &ObjectId) -> Cached {
+        let key = kept::EdgesKey::new(self, derivation, subject);
+        DerivationStore::derive_current::<kept::DerivedEdges>(&key)
+            .map_err(|error| error.to_string())?
+            .as_ref()
+            .clone()
+    }
+
+    /// The edges of one subject under `derivation`, the declared spaces'
+    /// bodies read from `spaces` where the derivation probes them.
+    fn derive_edges(
+        &self,
         derivation: &Derivation,
         subject: &ObjectId,
-        spaces: &mut Option<Result<Vec<SpaceBody<'s>>, String>>,
+        spaces: impl FnOnce() -> Result<Arc<Result<Vec<KeptSpace>, String>>, String>,
     ) -> Cached {
-        let key = (derivation.to_string(), subject.clone());
-        if let Some(cached) = self.cache.lock().map_err(|_| poisoned())?.get(&key) {
-            return cached.clone();
-        }
-        let result = if let (true, Derivation::SpansLevel { overlap_metres }) =
+        if let (true, Derivation::SpansLevel { overlap_metres }) =
             (self.is_subject(derivation, subject), derivation)
         {
             self.spans(subject, *overlap_metres).map(Arc::new)
         } else if self.is_subject(derivation, subject) {
-            let spaces = spaces
-                .get_or_insert_with(|| self.space_bodies())
-                .as_ref()
-                .map_err(Clone::clone)?;
+            let kept = spaces()?;
+            let kept = kept.as_ref().as_ref().map_err(Clone::clone)?;
+            let spaces = self.bodies(kept)?;
+            let spaces = spaces.as_slice();
             match derivation {
                 Derivation::ContainedInSpace {
                     horizontal_metres,
@@ -349,12 +415,7 @@ impl AxiolidDerivedRelationshipService {
             .map(Arc::new)
         } else {
             Ok(Arc::new(Derived::default()))
-        };
-        self.cache
-            .lock()
-            .map_err(|_| poisoned())?
-            .insert(key, result.clone());
-        result
+        }
     }
 
     /// The spaces containing a subject's reference point, the centre of its
@@ -394,7 +455,7 @@ impl AxiolidDerivedRelationshipService {
             if gap > reach {
                 continue;
             }
-            let nearest = nearest_point(point, &space.triangles)?;
+            let nearest = nearest_point(point, space.triangles)?;
             let distance = (nearest - point).length();
             if distance <= ON_SURFACE {
                 return Err(format!(
@@ -510,7 +571,7 @@ impl AxiolidDerivedRelationshipService {
                 if gap > 0.0 {
                     continue;
                 }
-                let nearest = nearest_point(*start, &space.triangles)?;
+                let nearest = nearest_point(*start, space.triangles)?;
                 if (nearest - *start).length() <= ON_SURFACE {
                     return Err(format!(
                         "a probe from opening {subject} starts on the boundary of space {}",
@@ -520,7 +581,7 @@ impl AxiolidDerivedRelationshipService {
                 if inside(space.mesh, *start)? {
                     inside_at.entry(space.id).or_default()[index] = true;
                     entries[index].push((0.0, space.id));
-                } else if let Some(t) = first_hit(*start, direction, reach, &space.triangles)? {
+                } else if let Some(t) = first_hit(*start, direction, reach, space.triangles)? {
                     entries[index].push((t, space.id));
                 }
             }
@@ -688,24 +749,15 @@ impl AxiolidDerivedRelationshipService {
     /// no more than rounding, only touch. A bodiless object shares nothing;
     /// an unmeasured one, two open surfaces, or a volume that may be either
     /// is undecided.
-    fn intersects(&self, a: &ObjectId, b: &ObjectId) -> Pair {
+    fn intersects(self: &Arc<Self>, a: &ObjectId, b: &ObjectId) -> Pair {
         if a == b {
             return Ok(None);
         }
-        let key = if a < b {
-            (a.clone(), b.clone())
-        } else {
-            (b.clone(), a.clone())
-        };
-        if let Some(known) = self.pairs.lock().map_err(|_| poisoned())?.get(&key) {
-            return known.clone();
-        }
-        let decided = self.measure_intersection(&key.0, &key.1);
-        self.pairs
-            .lock()
-            .map_err(|_| poisoned())?
-            .insert(key, decided.clone());
-        decided
+        let key = kept::PairKey::new(self, a, b);
+        DerivationStore::derive_current::<kept::IntersectingPairs>(&key)
+            .map_err(|error| error.to_string())?
+            .as_ref()
+            .clone()
     }
 
     fn measure_intersection(&self, a: &ObjectId, b: &ObjectId) -> Pair {
@@ -723,9 +775,9 @@ impl AxiolidDerivedRelationshipService {
         if extent_gap(&first, &second, false) > slack + ON_SURFACE {
             return Ok(None);
         }
-        let proximity = self
-            .proximity
-            .get_or_init(|| AxiolidProximityService::new(self.geometry.clone()));
+        // A view of the same geometry: its bodies are indexed once per
+        // check, keyed over it.
+        let proximity = AxiolidProximityService::over(Arc::clone(&self.geometry));
         let request = ProximityRequest::try_new(a.clone(), b.clone())
             .map_err(|error| format!("{a} and {b} cannot be measured: {error:?}"))?;
         let measured = match proximity.measure_proximity(&request) {
@@ -807,7 +859,7 @@ impl AxiolidDerivedRelationshipService {
             ));
         }
         let tolerance = tolerance()?;
-        let (area, _) = footprint_measure(&own.triangles, tolerance)
+        let (area, _) = footprint_measure(own.triangles, tolerance)
             .ok_or_else(|| format!("the footprint of {subject} cannot be computed"))?;
         if area <= ON_SURFACE {
             return Err(format!("space {subject} has no footprint"));
@@ -828,10 +880,10 @@ impl AxiolidDerivedRelationshipService {
             if plan_gap > 0.0 || rise > vertical {
                 continue;
             }
-            let (other_area, _) = footprint_measure(&other.triangles, tolerance)
+            let (other_area, _) = footprint_measure(other.triangles, tolerance)
                 .ok_or_else(|| format!("the footprint of {} cannot be computed", other.id))?;
-            let overlap = plan_overlap_area(&own.triangles, &other.triangles, tolerance)
-                .ok_or_else(|| {
+            let overlap =
+                plan_overlap_area(own.triangles, other.triangles, tolerance).ok_or_else(|| {
                     format!(
                         "the overlap of {subject} and {} cannot be computed",
                         other.id
@@ -851,17 +903,15 @@ impl AxiolidDerivedRelationshipService {
 
 /// One request's traversal: the subjects' edges and the evidence cited.
 struct Walk<'s> {
-    service: &'s AxiolidDerivedRelationshipService,
+    service: &'s Arc<Declared>,
     derivation: Derivation,
     identity: String,
-    spaces: Option<Result<Vec<SpaceBody<'s>>, String>>,
     cited: BTreeSet<String>,
 }
 
 impl Walk<'_> {
     fn edges(&mut self, subject: &ObjectId) -> Cached {
-        self.service
-            .derived(&self.derivation, subject, &mut self.spaces)
+        self.service.derived(&self.derivation, subject)
     }
 
     /// Cites a subject's edges (only those to `target` when given) and its
@@ -1002,10 +1052,9 @@ impl DerivedRelationshipService for AxiolidDerivedRelationshipService {
         let anchor = request.anchor();
         let universe = request.candidate_universe();
         let mut walk = Walk {
-            service: self,
+            service: &self.declared,
             derivation: *derivation,
             identity: identity.clone(),
-            spaces: None,
             cited: BTreeSet::new(),
         };
         let mut reached = walk
@@ -1027,16 +1076,12 @@ impl DerivedRelationshipService for AxiolidDerivedRelationshipService {
         let scanned = if matches!(derivation, Derivation::Intersects) {
             format!("{} candidate(s)", universe.len())
         } else {
-            format!("{} space(s)", self.spaces.len())
+            format!("{} space(s)", self.declared.spaces.len())
         };
         let mut evidence = vec![cite(format!("{identity}:derived-from:{anchor}:{scanned}"))];
         evidence.extend(walk.cited.into_iter().map(cite));
         CompleteRelationshipSelection::try_new(request.clone(), candidates, evidence)
     }
-}
-
-fn poisoned() -> String {
-    "the derivation cache is poisoned".into()
 }
 
 fn tolerance() -> Result<Tolerance, String> {

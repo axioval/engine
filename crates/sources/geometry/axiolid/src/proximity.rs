@@ -112,8 +112,7 @@
 //! decided the same way: a tessellated end may move by the deviation, so ends
 //! nearer each other than the combined deviation leave the side open.
 
-use std::collections::BTreeMap;
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::Arc;
 
 use axiolid_core::{Aabb, Point3, Ray3, Tolerance};
 use axiolid_inspect::{enclosed_volume, intersection_volume};
@@ -149,6 +148,7 @@ use crate::geometry::{AxiolidGeometry, Triangle};
 use crate::planar::{BoundedOverlap, bounded_plan_overlap, plan_overlap_area, polygon_area};
 
 mod bodies;
+mod kept;
 mod shells;
 mod zero_area;
 
@@ -201,15 +201,12 @@ pub struct AxiolidProximityService {
     /// Whether a bodiless object's registered void is measured as the
     /// solid of that void ([`Self::measuring_voids`]).
     voids: bool,
-    /// Each whole measured through its parts' enclosed volume
-    /// (`union_volume`), taken once: every pair the whole is in reads it,
-    /// and it costs a mesh boolean per two of its pieces.
-    volumes: Mutex<BTreeMap<ObjectId, Volume>>,
-    /// Each body's closed shells, where it has several (`shells::shells`),
-    /// split once: a body the volume kernel refuses as self-intersecting is
-    /// measured shell by shell against every closed body it meets.
-    shells: Mutex<BTreeMap<ObjectId, Option<Arc<Vec<shells::Shell>>>>>,
 }
+
+// What the service measures of one body for every pair it is in (its
+// index, its closed shells, a whole's volume through its parts) is the
+// check's derivation store's, keyed over the geometry ([`bodies`],
+// [`kept`], #443): the service keeps nothing of its own.
 
 impl AxiolidProximityService {
     /// Creates a service over the supplied geometry.
@@ -218,8 +215,16 @@ impl AxiolidProximityService {
         Self {
             geometry: Arc::new(geometry),
             voids: false,
-            volumes: Mutex::new(BTreeMap::new()),
-            shells: Mutex::new(BTreeMap::new()),
+        }
+    }
+
+    /// A view of `geometry` measuring bodies, sharing it: the bodies it
+    /// measures are indexed over it in the check's store, as for any
+    /// service over the same geometry.
+    pub(crate) fn over(geometry: Arc<AxiolidGeometry>) -> Self {
+        Self {
+            geometry,
+            voids: false,
         }
     }
 
@@ -237,8 +242,6 @@ impl AxiolidProximityService {
         Self {
             geometry: Arc::clone(&self.geometry),
             voids: true,
-            volumes: Mutex::new(BTreeMap::new()),
-            shells: Mutex::new(BTreeMap::new()),
         }
     }
 
@@ -300,22 +303,10 @@ impl AxiolidProximityService {
         if let [single] = pieces.as_slice() {
             return self.piece_volume(single);
         }
-        let cached = self
-            .volumes
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .get(object)
-            .copied();
-        if let Some(volume) = cached {
-            return volume;
-        }
-        // Measured outside the lock: two rules may ask for two wholes at once.
-        let volume = self.pieces_volume(&pieces);
-        self.volumes
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .insert(object.clone(), volume);
-        volume
+        // The check's, measured once for every pair the whole is in.
+        let key = kept::VolumeKey::new(&self.geometry, object, self.voids);
+        *axioval_engine::DerivationStore::derive_current::<kept::UnionVolumes>(&key)
+            .map_err(|_| ProximityError::Unavailable)?
     }
 
     /// The enclosed volume of the union of several pieces (`union_volume`).
@@ -378,24 +369,14 @@ impl AxiolidProximityService {
         .ok()
     }
 
-    /// One body's closed shells where it has several, split once.
-    fn shells_of(&self, object: &ObjectId, body: &Body<'_>) -> Option<Arc<Vec<shells::Shell>>> {
-        let cached = self
-            .shells
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .get(object)
-            .cloned();
-        if let Some(shells) = cached {
-            return shells;
-        }
-        // Split outside the lock: two rules may ask for two bodies at once.
-        let split = shells::shells(body.mesh).map(Arc::new);
-        self.shells
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .insert(object.clone(), split.clone());
-        split
+    /// One body's closed shells where it has several: the check's, split
+    /// once for every pair the body is in ([`kept::BodyShells`]).
+    fn shells_of(&self, object: &ObjectId) -> Option<Arc<Vec<shells::Shell>>> {
+        let key = bodies::BodyKey::new(&self.geometry, object, self.voids);
+        axioval_engine::DerivationStore::derive_current::<kept::BodyShells>(&key)
+            .ok()?
+            .as_ref()
+            .clone()
     }
 
     /// The volume a pair shares when one body is several closed shells
@@ -414,8 +395,8 @@ impl AxiolidProximityService {
             return None;
         }
         let split = (
-            self.shells_of(request.subject(), subject),
-            self.shells_of(request.counterpart(), counterpart),
+            self.shells_of(request.subject()),
+            self.shells_of(request.counterpart()),
         );
         let (shells, other, shells_are_subject) = match split {
             (Some(shells), None) => (shells, counterpart, true),

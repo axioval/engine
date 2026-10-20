@@ -16,6 +16,10 @@ pub(crate) const AXIOLID_CORE: Kernel = Kernel {
     name: "axiolid-core",
     version: "0.3.2",
 };
+pub(crate) const AXIOLID_INSPECT: Kernel = Kernel {
+    name: "axiolid-inspect",
+    version: "0.3.6",
+};
 pub(crate) const AXIOLID_MEASURE: Kernel = Kernel {
     name: "axiolid-measure",
     version: "0.3.10",
@@ -27,6 +31,10 @@ pub(crate) const AXIOLID_MESH: Kernel = Kernel {
 pub(crate) const AXIOLID_OVERLAY: Kernel = Kernel {
     name: "axiolid-overlay",
     version: "0.3.18",
+};
+pub(crate) const AXIOLID_RAY_MESH: Kernel = Kernel {
+    name: "axiolid-ray-mesh",
+    version: "0.4.0",
 };
 pub(crate) const AXIOLID_SPATIAL: Kernel = Kernel {
     name: "axiolid-spatial",

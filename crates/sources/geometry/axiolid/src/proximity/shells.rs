@@ -47,6 +47,21 @@ pub(crate) struct Shell {
     max: [f64; 3],
 }
 
+impl Shell {
+    /// The bytes the shell holds: its mesh's corners and triangles.
+    pub(crate) fn bytes(&self) -> usize {
+        self.mesh.positions.len() * std::mem::size_of::<axiolid_core::Point3>()
+            + self.mesh.indices.len() * std::mem::size_of::<u32>()
+            + std::mem::size_of::<Self>()
+    }
+
+    /// Its certified `(lower, upper)` enclosed volume.
+    #[cfg(test)]
+    pub(crate) fn volume(&self) -> (f64, f64) {
+        self.volume
+    }
+}
+
 /// The closed shells of `mesh`: its triangles grouped by the corner indices
 /// they share. `None` unless there are at least two and each is a closed,
 /// consistently wound two-manifold whose volume the kernel certifies; a

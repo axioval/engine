@@ -10,13 +10,15 @@
 //! boundary or overlap request that names its own elements replaces the
 //! declared defaults: the rule then says what bounds or intersects a space.
 
+mod areas;
+
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::{Arc, Mutex, OnceLock, PoisonError};
+use std::sync::{Arc, OnceLock};
 
 use axioval_engine::{
     BoundaryRequest, Cap, CapCoverage, CapRequest, ClearHeightEvidence, Containment,
-    OverlapRequest, SpaceAspect, SpaceError, SpaceOverlap, SpaceService, SupportCounts,
-    UnallocatedRegion,
+    DerivationStore, OverlapRequest, SpaceAspect, SpaceError, SpaceOverlap, SpaceService,
+    SupportCounts, UnallocatedRegion,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
@@ -70,36 +72,20 @@ enum Role {
 
 /// Measures space geometry using Axiolid.
 pub struct AxiolidSpaceService {
-    geometry: AxiolidGeometry,
+    /// Shared with the plan areas the check's store keeps of it
+    /// ([`areas`]).
+    geometry: Arc<AxiolidGeometry>,
     source: SourceId,
     roles: BTreeMap<ObjectId, Role>,
     /// Which storey each object belongs to, as the host declares it.
     storeys: BTreeMap<ObjectId, ObjectId>,
     buildings: BTreeSet<ObjectId>,
-    /// What the aspects measure of the same bodies again and again, kept
-    /// from the first time (#371).
-    memo: Memo,
-}
-
-/// Measurements of one service's geometry, each taken once and kept.
-///
-/// The geometry does not change after the service is built, and every
-/// entry is a pure function of the bodies it names (their triangles and
-/// the shared [`tolerance`]), so reading one back is the measurement
-/// taken again, its refusal included. A large model asks for the same
-/// footprints for every space beside them and for the same pairs in the
-/// overlaps and both caps; measured each time, the plan overlay took most
-/// of the rule's run.
-#[derive(Default)]
-struct Memo {
     /// Each object's enclosing extent, in [`AxiolidGeometry::objects`]
-    /// order.
+    /// order, taken once: an index of the geometry the service measures,
+    /// as the geometry's own, not a measurement the check's store keeps.
+    /// The plan areas the aspects measure of the same bodies again and
+    /// again (#371) are the store's ([`areas`], #443).
     extents: OnceLock<Vec<Option<Extent>>>,
-    /// Each object's [`plan_area`].
-    footprints: Mutex<BTreeMap<ObjectId, Result<Arc<PlanArea>, SpaceError>>>,
-    /// The [`shared_area`] of a space's body (first) and a candidate's
-    /// (second), as its bounds.
-    shared: Mutex<BTreeMap<(ObjectId, ObjectId), Result<SharedArea, SpaceError>>>,
 }
 
 impl AxiolidSpaceService {
@@ -107,12 +93,12 @@ impl AxiolidSpaceService {
     #[must_use]
     pub fn new(geometry: AxiolidGeometry, source: SourceId) -> Self {
         Self {
-            geometry,
+            geometry: Arc::new(geometry),
             source,
             roles: BTreeMap::new(),
             storeys: BTreeMap::new(),
             buildings: BTreeSet::new(),
-            memo: Memo::default(),
+            extents: OnceLock::new(),
         }
     }
 
@@ -269,7 +255,7 @@ impl AxiolidSpaceService {
         &'s self,
         subject: Option<&'s Extent>,
     ) -> impl Iterator<Item = (&'s ObjectId, &'s TriMesh)> + 's {
-        let extents = self.memo.extents.get_or_init(|| {
+        let extents = self.extents.get_or_init(|| {
             self.geometry
                 .objects()
                 .map(|(object, _)| self.geometry.enclosing_extent(object))
@@ -286,50 +272,35 @@ impl AxiolidSpaceService {
             .map(|(entry, _)| entry)
     }
 
-    /// [`plan_area`] of `object`'s body, `body` its mesh's triangles,
-    /// measured once per service (refusal included).
+    /// [`plan_area`] of `object`'s body: the check's, measured once for
+    /// every aspect, rule and thread asking ([`areas::PlanFootprints`]),
+    /// refusal included; outside a check, measured for this read alone.
     fn footprint(
         &self,
         object: &ObjectId,
-        body: &[Triangle],
         tolerance: axiolid_core::Tolerance,
     ) -> Result<Arc<PlanArea>, SpaceError> {
-        let footprints = || {
-            self.memo
-                .footprints
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-        };
-        if let Some(kept) = footprints().get(object) {
-            return kept.clone();
-        }
-        let measured = plan_area(body, tolerance).map(Arc::new);
-        footprints().insert(object.clone(), measured.clone());
-        measured
+        let key = areas::FootprintKey::new(&self.geometry, object, tolerance);
+        DerivationStore::derive_current::<areas::PlanFootprints>(&key)
+            .map_err(|_| SpaceError::Unavailable)?
+            .as_ref()
+            .clone()
     }
 
-    /// [`shared_area`] of `space`'s body and `candidate`'s, `subject` and
-    /// `other` their meshes' triangles, measured once per service for the
-    /// pair in this order (refusal included).
+    /// [`shared_area`] of `space`'s body and `candidate`'s: the check's,
+    /// measured once for the pair in this order ([`areas::SharedPlanAreas`]),
+    /// refusal included.
     fn shared(
         &self,
-        (space, subject): (&ObjectId, &[Triangle]),
-        (candidate, other): (&ObjectId, &[Triangle]),
+        space: &ObjectId,
+        candidate: &ObjectId,
         tolerance: axiolid_core::Tolerance,
     ) -> Result<SharedArea, SpaceError> {
-        let shared = || {
-            self.memo
-                .shared
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-        };
-        let key = (space.clone(), candidate.clone());
-        if let Some(kept) = shared().get(&key) {
-            return kept.clone();
-        }
-        let measured = shared_area(subject, other, tolerance).map(|area| SharedArea::of(&area));
-        shared().insert(key, measured.clone());
-        measured
+        let key = areas::SharedKey::new(&self.geometry, (space, candidate), tolerance);
+        DerivationStore::derive_current::<areas::SharedPlanAreas>(&key)
+            .map_err(|_| SpaceError::Unavailable)?
+            .as_ref()
+            .clone()
     }
 
     fn role(&self, object: &ObjectId) -> Option<Role> {
@@ -370,7 +341,7 @@ impl AxiolidSpaceService {
 
 /// A plan area measured without the slivers the overlay refuses: the true
 /// area lies in `[lower, upper]`, and `polygons` hold the measured part.
-struct PlanArea {
+pub(crate) struct PlanArea {
     lower: f64,
     upper: f64,
     polygons: Vec<Polygon>,
@@ -405,7 +376,7 @@ impl PlanArea {
 /// The bounds of a plan area two bodies share, as [`PlanArea`]'s: the
 /// decisions read no more of it, so a service keeps no more (#371).
 #[derive(Clone, Copy, Debug)]
-struct SharedArea {
+pub(crate) struct SharedArea {
     lower: f64,
     upper: f64,
 }
@@ -666,28 +637,26 @@ impl SpaceService for AxiolidSpaceService {
             let subject_area = if let Some(area) = &subject_area {
                 area
             } else {
-                let measured = self.footprint(space, &subject, tolerance)?;
+                let measured = self.footprint(space, tolerance)?;
                 let band = deviation_band(&measured.polygons, deviation, None);
                 subject_area.insert(measured.widened(band))
             };
-            let measured = self.footprint(candidate, &other, tolerance)?;
+            let measured = self.footprint(candidate, tolerance)?;
             let other_area =
                 measured.widened(deviation_band(&measured.polygons, other_deviation, None));
             // The shared area moves by what either outline may move within
             // the other's box.
-            let shared = self
-                .shared((space, &subject), (candidate, &other), tolerance)?
-                .widened(
-                    deviation_band(
-                        &subject_area.polygons,
-                        deviation,
-                        plan_box(&other_area.polygons, other_deviation),
-                    ) + deviation_band(
-                        &other_area.polygons,
-                        other_deviation,
-                        plan_box(&subject_area.polygons, deviation),
-                    ),
-                );
+            let shared = self.shared(space, candidate, tolerance)?.widened(
+                deviation_band(
+                    &subject_area.polygons,
+                    deviation,
+                    plan_box(&other_area.polygons, other_deviation),
+                ) + deviation_band(
+                    &other_area.polygons,
+                    other_deviation,
+                    plan_box(&subject_area.polygons, deviation),
+                ),
+            );
             // A pair the slivers left out, or a chord deviation, could make
             // or unmake is refused, never passed.
             let mutual = match (
@@ -772,10 +741,7 @@ impl SpaceService for AxiolidSpaceService {
             let deviation = self.deviation(candidate)?;
             if deviation > 0.0 {
                 let body = triangles(mesh);
-                let outline = self
-                    .footprint(candidate, &body, tolerance)?
-                    .polygons
-                    .clone();
+                let outline = self.footprint(candidate, tolerance)?.polygons.clone();
                 curved.insert(candidate.clone(), (body, outline, deviation));
             }
         }
@@ -879,12 +845,12 @@ impl SpaceService for AxiolidSpaceService {
                 if possible <= 0.0 {
                     continue;
                 }
-                let shared = self.shared((space, &subject), (candidate, &other), tolerance)?;
+                let shared = self.shared(space, candidate, tolerance)?;
                 let outline = match &subject_outline {
                     Some(outline) => outline,
-                    None => subject_outline.insert(self.footprint(space, &subject, tolerance)?),
+                    None => subject_outline.insert(self.footprint(space, tolerance)?),
                 };
-                let other_outline = self.footprint(candidate, &other, tolerance)?;
+                let other_outline = self.footprint(candidate, tolerance)?;
                 let band = deviation_band(
                     &outline.polygons,
                     deviation,
@@ -903,17 +869,17 @@ impl SpaceService for AxiolidSpaceService {
             if height <= 0.0 {
                 continue;
             }
-            let shared = self.shared((space, &subject), (candidate, &other), tolerance)?;
+            let shared = self.shared(space, candidate, tolerance)?;
             if shared.upper <= AREA_EPSILON_M2 {
                 continue;
             }
             let subject_area = match &subject_area {
                 Some(area) => area,
-                None => subject_area.insert(self.footprint(space, &subject, tolerance)?),
+                None => subject_area.insert(self.footprint(space, tolerance)?),
             };
             let class = containment(
                 subject_area,
-                &*self.footprint(candidate, &other, tolerance)?,
+                &*self.footprint(candidate, tolerance)?,
                 &shared,
             )
             .ok_or(SpaceError::Refused(SLIVERS_COULD_DECIDE))?;
@@ -969,7 +935,7 @@ impl SpaceService for AxiolidSpaceService {
             |candidate| self.caps(request, candidate),
         )?;
         let tolerance = tolerance()?;
-        let whole = self.footprint(space, &subject, tolerance)?;
+        let whole = self.footprint(space, tolerance)?;
         // A footprint measured empty is an incoherent quantity; one only the
         // slivers left out could give area is not measured at all.
         if whole.lower <= 0.0 && whole.uncertain() {
@@ -1016,8 +982,8 @@ impl SpaceService for AxiolidSpaceService {
                 if !may {
                     continue;
                 }
-                let shared = self.shared((space, &subject), (candidate, &other), tolerance)?;
-                let outline = self.footprint(candidate, &other, tolerance)?;
+                let shared = self.shared(space, candidate, tolerance)?;
+                let outline = self.footprint(candidate, tolerance)?;
                 let band = deviation_band(
                     &outline.polygons,
                     other_deviation,
@@ -1046,7 +1012,7 @@ impl SpaceService for AxiolidSpaceService {
             if plane < low - CAP_PLANE_TOLERANCE_M || plane > high + CAP_PLANE_TOLERANCE_M {
                 continue;
             }
-            let shared = self.shared((space, &subject), (candidate, &other), tolerance)?;
+            let shared = self.shared(space, candidate, tolerance)?;
             if shared.upper <= AREA_EPSILON_M2 {
                 continue;
             }

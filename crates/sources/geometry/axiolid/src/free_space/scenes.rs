@@ -9,8 +9,9 @@
 //! depends on, the service state it is built over included.
 //!
 //! The value keeps what searches of the scene took (its clear parts, their
-//! largest discs, simplified and coarse regions, and the regions found for
-//! a shape, #427), merged back after each search ([`KeptScene::keep`]).
+//! largest discs, simplified and coarse regions, the regions found for
+//! a shape and the rectangle searches asked, #427), merged back after each
+//! search ([`KeptScene::keep`]).
 //! Every search is charged what it takes as if it had built them
 //! (`planar::budget::Work`, #434), so no search decides otherwise for
 //! what another kept (#441).
@@ -327,6 +328,7 @@ struct Memo {
     simple: [OnceCell<Option<Region>>; 4],
     coarse: [OnceCell<Option<Region>>; 6],
     found: placement::Found,
+    searched: placement::Searched,
     /// The greatest excess a kept region states; `None` while none does.
     excess: Option<f64>,
 }
@@ -402,6 +404,7 @@ impl KeptScene {
                 simple: Default::default(),
                 coarse: Default::default(),
                 found: placement::Found::default(),
+                searched: placement::Searched::default(),
                 excess: None,
             }),
         };
@@ -456,10 +459,15 @@ impl KeptScene {
         fill(&memo.coarse, &scene.coarse, |region| {
             region.as_ref().is_none_or(&mut admits)
         });
-        for (side, corners, steps, free) in scene.found.borrow().iter() {
+        for (what, corners, steps, free) in scene.found.borrow().iter() {
             if admits(free) {
-                placement::keep_found(&memo.found, *side, corners, steps, free);
+                placement::keep_found(&memo.found, *what, corners, steps, free);
             }
+        }
+        // A search's verdict states no excess: it holds in the scene's
+        // class, over which it was searched.
+        for asked in scene.searched.borrow().iter() {
+            placement::keep_searched(&memo.searched, asked);
         }
         memo.excess = excess;
     }
@@ -474,6 +482,7 @@ impl KeptScene {
             simple: memo.simple.clone(),
             coarse: memo.coarse.clone(),
             found: memo.found.clone(),
+            searched: memo.searched.clone(),
             ..self.bare()
         }
     }
@@ -495,6 +504,7 @@ impl KeptScene {
             simple: Default::default(),
             coarse: Default::default(),
             found: placement::Found::default(),
+            searched: placement::Searched::default(),
             work: Work::default(),
         }
     }
@@ -518,9 +528,13 @@ impl KeptScene {
             .iter()
             .map(|(_, _, _, region)| region_points(region))
             .sum::<usize>();
-        let points = built + clear + cell_points(&memo.simple) + cell_points(&memo.coarse) + found;
+        let searched = memo.searched.borrow();
+        let reached = searched.iter().map(placement::Asked::points).sum::<usize>();
+        let points =
+            built + clear + cell_points(&memo.simple) + cell_points(&memo.coarse) + found + reached;
         points * CORNER_BYTES
             + std::mem::size_of::<Self>()
+            + searched.len() * std::mem::size_of::<placement::Asked>()
             + self.bracketed.len() * std::mem::size_of::<(ObjectId, f64)>()
             + self.bounded.len() * std::mem::size_of::<ObjectId>()
     }

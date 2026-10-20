@@ -288,7 +288,32 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   kept with the scene), so the searches of one space over one scene
   share them; `placement::tests`
   `a_furnished_room_is_searched_as_over_the_regions_as_built` compares
-  both with the search over the regions as built.
+  both with the search over the regions as built. `Scene::found` also
+  keeps the coarse proofs' centres (`Centres::Coarse`, `Centres::Around`),
+  and `Scene::searched` keeps every `any_rectangle` asked of the scene by
+  its sizes' bits, reached pieces and starting `WorkState`, with its
+  verdict and ending state (#427): asked again, it is taken as it ended
+  (the bracket of the largest rectangle asks one size several times).
+  Never key it by less: a search's steps depend on all three. After the
+  first interval, without a reach, `angle_search` learns within one
+  search (`Learnt`, never kept with the scene, so a verdict never depends
+  on earlier searches): centres where an absence's shrunk rectangle
+  stands with `STANDING_MARGIN_METRES` to spare (`Scene::stands`, a
+  floating-point edge test against the room and the sure obstacles, no
+  overlay), the coarse centres' own candidates, and centres among the
+  sure obstacles simplified from around (`Scene::stands_somewhere`) show
+  an absence unprovable without its Minkowski steps; and an interval
+  whose shrunk rectangle has no witness centres holds no witness at any
+  rotation, so none is sought in it or below (`Learnt::bare`, tried only
+  under a parent with an empty witness region, backing off eightfold
+  after a miss). Each decides only what the spared step would have:
+  never let one decide an absence *proven*, never seek or report a
+  witness from anything but `free_for` over the regions as built, and
+  keep the first interval as it was. A spared step is not charged
+  (`Work` bounds what is built); `placement::tests`
+  `an_angle_search_learning_within_itself_decides_as_before` compares
+  a search running out of its intervals, and its neighbours, with the
+  search before #371.
   Every rectangle step (`free_for`, the coarse proofs, `reaching`) and
   the path's disc morphology (`circulation::eroded_free`, shared by
   `reached` and circulation maps) is charged to `Scene::work`

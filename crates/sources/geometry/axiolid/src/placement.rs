@@ -44,7 +44,7 @@ use axioval_engine::FreeSpaceError;
 
 use crate::geometry::Triangle;
 use crate::planar::budget::{
-    Cost, Refusal, Step, Work, fast_disc_cost, minkowski_cost, overlay_cost,
+    Cost, Refusal, Step, Work, WorkState, fast_disc_cost, minkowski_cost, overlay_cost,
 };
 use crate::planar::{projected_polygons, refused_ring};
 
@@ -73,6 +73,16 @@ fn ring_box(ring: &Ring) -> Option<(Point2, Point2)> {
 
 /// Fixed-orientation checks an any-orientation search may spend.
 const ANGLE_BUDGET: usize = 512;
+
+/// How many centres an angle search keeps to show an absence unprovable
+/// ([`Scene::stands`]).
+const STANDING: usize = 16;
+
+/// How far clear of every sure obstacle and inside the room a shrunk
+/// rectangle must stand for [`Scene::stands`]: far above the overlay's
+/// snapping, so its centres, as the overlay computes them, hold a
+/// neighbourhood of the centre.
+const STANDING_MARGIN_METRES: f64 = 1.0e-5;
 
 /// Sides of the polygon that verifies a circle witness.
 const VERIFY_SIDES: u32 = 64;
@@ -213,10 +223,17 @@ pub(crate) struct Scene {
     /// simplified coarsely on the side each proof may use them
     /// ([`Self::coarse`]); taken once.
     pub(crate) coarse: [OnceCell<Option<Region>>; 6],
-    /// The centres [`Self::free_for`] found, by the shape's corners and
-    /// side: a space's searches over one scene ask the same rectangles
-    /// at the same angles (#427).
+    /// The centres [`Self::free_for`] and [`Self::surely_absent`] found,
+    /// by the shape's corners and what they were taken for
+    /// ([`Centres`]): a space's searches over one scene ask the same
+    /// rectangles at the same angles, and an angle search descending to
+    /// the end of its period asks the same ones again (#427).
     pub(crate) found: Found,
+    /// The rectangle searches over every angle asked of the scene, by
+    /// their request and the work they started from ([`any_rectangle`],
+    /// #427): the rules measuring the largest rectangle ask one size
+    /// several times.
+    pub(crate) searched: Searched,
     /// What this search has handed the overlay so far (#434): each step
     /// within its kind's budget, all of them within
     /// [`SEARCH_STEPS`](crate::planar::budget::SEARCH_STEPS) steps at those
@@ -224,10 +241,68 @@ pub(crate) struct Scene {
     pub(crate) work: Work,
 }
 
-/// Centres a scene's rectangle searches found ([`Scene::found`]): whether
-/// for an absence, the shape's corners' bits, the steps that built the
-/// region, charged again when it is taken ([`Work`]), and the region.
-pub(crate) type Found = RefCell<Vec<(bool, Vec<u64>, Steps, Region)>>;
+/// Centres a scene's rectangle searches found ([`Scene::found`]): what
+/// for, the shape's corners' bits, the steps that built the region,
+/// charged again when it is taken ([`Work`]), and the region.
+pub(crate) type Found = RefCell<Vec<(Centres, Vec<u64>, Steps, Region)>>;
+
+/// What a region of [`Scene::found`] holds the centres for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Centres {
+    /// A witness ([`Scene::free_for`]).
+    Witness,
+    /// An absence over the regions as built ([`Scene::free_for`]).
+    Absence,
+    /// An absence over the coarse ones ([`Scene::surely_absent`]).
+    Coarse,
+    /// An absence over the sure obstacles simplified from around
+    /// ([`Scene::stands_somewhere`]), whose emptiness alone is read.
+    Around,
+}
+
+/// The rectangle searches a scene was asked ([`Scene::searched`]).
+pub(crate) type Searched = RefCell<Vec<Asked>>;
+
+/// A rectangle search over every angle and what it decided: the
+/// request (the shape's sizes by their bits and the reached pieces), the
+/// work it started from and ended at, and its verdict or refusal. A
+/// search's steps and verdict are a function of these alone (#434,
+/// #441), so asked again from the same work it ends alike.
+#[derive(Clone)]
+pub(crate) struct Asked {
+    sizes: [u64; 2],
+    reach: Option<(Region, Region)>,
+    before: WorkState,
+    after: WorkState,
+    search: Result<Search, FreeSpaceError>,
+}
+
+impl Asked {
+    /// Whether `other` is the same request from the same work.
+    fn asks_as(&self, other: &Self) -> bool {
+        self.sizes == other.sizes && self.reach == other.reach && self.before == other.before
+    }
+
+    /// The corners of its reached pieces.
+    pub(crate) fn points(&self) -> usize {
+        self.reach.as_ref().map_or(0, |(inner, outer)| {
+            region_points(inner) + region_points(outer)
+        })
+    }
+}
+
+/// How many searches a scene keeps in [`Scene::searched`]; past it, more
+/// are searched but not kept.
+const SEARCHED: usize = 256;
+
+/// Keeps `asked` in `searched` while within [`SEARCHED`] and not kept
+/// already.
+pub(crate) fn keep_searched(searched: &Searched, asked: &Asked) {
+    let mut searched = searched.borrow_mut();
+    if searched.len() < SEARCHED && !searched.iter().any(|kept| kept.asks_as(asked)) {
+        searched.push(asked.clone());
+    }
+}
 
 /// The overlay steps that built a region, each with its cost.
 pub(crate) type Steps = Vec<(&'static str, Cost)>;
@@ -236,14 +311,14 @@ pub(crate) type Steps = Vec<(&'static str, Cost)>;
 /// have together (some 4 MB); past it, more are computed but not kept.
 pub(crate) const FOUND_POINTS: usize = 250_000;
 
-/// Keeps `free`, found for an absence (`absence`) or a witness by the
-/// shape whose corners have `bits`, in `found` while it is within
-/// [`FOUND_POINTS`] and not kept already.
-pub(crate) fn keep_found(found: &Found, absence: bool, bits: &[u64], steps: &Steps, free: &Region) {
+/// Keeps `free`, found for `what` by the shape whose corners have
+/// `bits`, in `found` while it is within [`FOUND_POINTS`] and not kept
+/// already.
+pub(crate) fn keep_found(found: &Found, what: Centres, bits: &[u64], steps: &Steps, free: &Region) {
     let mut found = found.borrow_mut();
     if found
         .iter()
-        .any(|(side, corners, _, _)| *side == absence && corners == bits)
+        .any(|(kind, corners, _, _)| *kind == what && corners == bits)
     {
         return;
     }
@@ -252,7 +327,7 @@ pub(crate) fn keep_found(found: &Found, absence: bool, bits: &[u64], steps: &Ste
         .map(|(_, _, _, region)| region_points(region))
         .sum();
     if kept + region_points(free) <= FOUND_POINTS {
-        found.push((absence, bits.to_vec(), steps.clone(), free.clone()));
+        found.push((what, bits.to_vec(), steps.clone(), free.clone()));
     }
 }
 
@@ -442,11 +517,6 @@ impl Scene {
     /// steps are charged to the search ([`Self::work`]) either way, as
     /// they were when it was built.
     fn free_for(&self, shape: &Ring, absence: bool) -> Result<Region, FreeSpaceError> {
-        let bits: Vec<u64> = shape
-            .points
-            .iter()
-            .flat_map(|p| [p.x.to_bits(), p.y.to_bits()])
-            .collect();
         let (scope, obstacles) = if absence {
             (&self.room, &self.sure)
         } else {
@@ -458,11 +528,48 @@ impl Scene {
         } else {
             None
         };
+        let what = if absence {
+            Centres::Absence
+        } else {
+            Centres::Witness
+        };
+        self.taken(what, shape, |step| {
+            if let Some(clear) = clear {
+                let _step = step(
+                    "erosion of the free floor by the rectangle",
+                    morphology(clear, shape, true),
+                )?;
+                clear
+                    .minkowski_erosion(shape, self.tolerance)
+                    .map_err(|e| unavailable("erosion", e))
+            } else {
+                summed_free(scope, obstacles, shape, self.tolerance, step)
+            }
+        })
+    }
+
+    /// The centres for `what` by `shape`, as [`Self::found`] keeps them,
+    /// their steps charged again, or else as `build` takes them, each
+    /// step handed to it charged ([`Work::charge`]); a region built is
+    /// kept, a refusal is not.
+    fn taken(
+        &self,
+        what: Centres,
+        shape: &Ring,
+        build: impl FnOnce(
+            &mut dyn FnMut(&'static str, Cost) -> Result<Step, FreeSpaceError>,
+        ) -> Result<Region, FreeSpaceError>,
+    ) -> Result<Region, FreeSpaceError> {
+        let bits: Vec<u64> = shape
+            .points
+            .iter()
+            .flat_map(|p| [p.x.to_bits(), p.y.to_bits()])
+            .collect();
         let kept = self
             .found
             .borrow()
             .iter()
-            .find(|(side, corners, _, _)| *side == absence && *corners == bits)
+            .find(|(kind, corners, _, _)| *kind == what && *corners == bits)
             .map(|(_, _, steps, free)| (steps.clone(), free.clone()));
         if let Some((steps, free)) = kept {
             for (what, cost) in steps {
@@ -476,18 +583,8 @@ impl Scene {
             steps.push((what, cost));
             Ok(admitted)
         };
-        let free = if let Some(clear) = clear {
-            let _step = step(
-                "erosion of the free floor by the rectangle",
-                morphology(clear, shape, true),
-            )?;
-            clear
-                .minkowski_erosion(shape, self.tolerance)
-                .map_err(|e| unavailable("erosion", e))?
-        } else {
-            summed_free(scope, obstacles, shape, self.tolerance, &mut step)?
-        };
-        keep_found(&self.found, absence, &bits, &steps, &free);
+        let free = build(&mut step)?;
+        keep_found(&self.found, what, &bits, &steps, &free);
         Ok(free)
     }
 
@@ -706,30 +803,61 @@ impl Scene {
     /// with a 1.8 m rectangle, for each angle interval: every corner's
     /// hull overlaps every other's.
     fn surely_absent(&self, shape: &Ring, grown: &Ring) -> bool {
-        let mut step =
-            |what: &'static str, cost: Cost| self.work.charge(what, cost).map_err(over_budget);
+        self.coarse_centres(shape, grown)
+            .is_some_and(|free| self.nowhere_in_domain(&free).unwrap_or(false))
+    }
+
+    /// The centres of `shape` among the sure obstacles simplified from
+    /// around ([`Self::coarse`] `2`, which holds them), summed or eroded
+    /// as [`Self::free_for`] would, where there are any (#427): they lie
+    /// among the centres an absence asks to be none, which then are not.
+    /// `None` where they are none, nothing simplifies, or the overlay or
+    /// the budget refuses.
+    fn stands_somewhere(&self, shape: &Ring) -> Option<Region> {
         let free = if region_points(&self.sure) > OBSTACLE_SUM_POINTS {
-            let Some(clear) = self.coarse(3) else {
-                return false;
-            };
-            step(
-                "erosion of the coarse free floor by the rectangle",
-                morphology(clear, shape, true),
-            )
-            .and_then(|_step| {
+            let clear = self.coarse(5)?;
+            self.taken(Centres::Around, shape, |step| {
+                let _step = step(
+                    "erosion of the coarse free floor by the rectangle",
+                    morphology(clear, shape, true),
+                )?;
                 clear
                     .minkowski_erosion(shape, self.tolerance)
                     .map_err(|e| unavailable("erosion", e))
             })
         } else {
-            let Some(sure) = self.coarse(0) else {
-                return false;
-            };
-            summed_free(&self.room, sure, shape, self.tolerance, &mut step)
+            let around = self.coarse(2)?;
+            self.taken(Centres::Around, shape, |step| {
+                summed_free(&self.room, around, shape, self.tolerance, step)
+            })
         };
-        free.and_then(|free| self.reaching(free, grown, true))
-            .and_then(|free| self.nowhere_in_domain(&free))
-            .unwrap_or(false)
+        free.ok().filter(|free| !free.is_empty())
+    }
+
+    /// The centres [`Self::surely_absent`] asks to be none, as computed:
+    /// `None` where nothing simplifies or the overlay or the budget
+    /// refuses.
+    fn coarse_centres(&self, shape: &Ring, grown: &Ring) -> Option<Region> {
+        // The coarse regions are taken before the centres are looked up,
+        // as they always were, so each is charged once per search alike.
+        let free = if region_points(&self.sure) > OBSTACLE_SUM_POINTS {
+            let clear = self.coarse(3)?;
+            self.taken(Centres::Coarse, shape, |step| {
+                let _step = step(
+                    "erosion of the coarse free floor by the rectangle",
+                    morphology(clear, shape, true),
+                )?;
+                clear
+                    .minkowski_erosion(shape, self.tolerance)
+                    .map_err(|e| unavailable("erosion", e))
+            })
+        } else {
+            let sure = self.coarse(0)?;
+            self.taken(Centres::Coarse, shape, |step| {
+                summed_free(&self.room, sure, shape, self.tolerance, step)
+            })
+        };
+        free.and_then(|free| self.reaching(free, grown, true)).ok()
     }
 
     /// Whether `shape` fits somewhere in the room clear of the sure
@@ -1199,6 +1327,71 @@ impl Scene {
         Ok(blocked <= CONTACT_AREA_M2)
     }
 
+    /// Whether a `width` × `depth` rectangle along `right`, grown by
+    /// [`STANDING_MARGIN_METRES`] and centred on `centre`, lies in the
+    /// room and shares nothing with the sure obstacles (#427): no edge of
+    /// either meets it (each separated from it along one of its axes or
+    /// its own normal), its centre lies inside the room and outside the
+    /// sure obstacles. Then the rectangle's centres for an absence, over
+    /// the coarse regions or as built, hold a neighbourhood of `centre`,
+    /// so neither is empty. The margin is far above the rounding of these
+    /// tests in floating point and of the overlay's own; a test within it
+    /// says `false`.
+    fn stands(&self, centre: Point2, width: f64, depth: f64, right: Axis) -> bool {
+        let forward = right.left();
+        let (half_w, half_d) = (
+            width / 2.0 + STANDING_MARGIN_METRES,
+            depth / 2.0 + STANDING_MARGIN_METRES,
+        );
+        let ring = rectangle(centre, 2.0 * half_w, 2.0 * half_d, right);
+        let Some((low, high)) = ring_box(&ring) else {
+            return false;
+        };
+        let local = |p: Point2| {
+            let (dx, dy) = (p.x - centre.x, p.y - centre.y);
+            (dx * right.x + dy * right.y, dx * forward.x + dy * forward.y)
+        };
+        let apart = |a: Point2, b: Point2| {
+            let ((au, av), (bu, bv)) = (local(a), local(b));
+            if (au > half_w && bu > half_w)
+                || (au < -half_w && bu < -half_w)
+                || (av > half_d && bv > half_d)
+                || (av < -half_d && bv < -half_d)
+            {
+                return true;
+            }
+            let cross = |q: Point2| (b.x - a.x) * (q.y - a.y) - (b.y - a.y) * (q.x - a.x);
+            let sides: Vec<f64> = ring.points.iter().map(|&q| cross(q)).collect();
+            sides.iter().all(|&side| side > 0.0) || sides.iter().all(|&side| side < 0.0)
+        };
+        // Whether every edge of `region` near the rectangle keeps apart
+        // from it, and the centre lies inside it (even-odd over its rings).
+        let clear_of = |region: &Region| {
+            let mut inside = false;
+            for polygon in region.polygons() {
+                for ring in std::iter::once(&polygon.outer).chain(&polygon.holes) {
+                    let points = &ring.points;
+                    let near = ring_box(ring).is_some_and(|(a, b)| {
+                        a.x <= high.x && low.x <= b.x && a.y <= high.y && low.y <= b.y
+                    });
+                    for i in 0..points.len() {
+                        let (a, b) = (points[i], points[(i + 1) % points.len()]);
+                        if near && !apart(a, b) {
+                            return None;
+                        }
+                        if (a.y > centre.y) != (b.y > centre.y)
+                            && centre.x < a.x + (centre.y - a.y) * (b.x - a.x) / (b.y - a.y)
+                        {
+                            inside = !inside;
+                        }
+                    }
+                }
+            }
+            Some(inside)
+        };
+        clear_of(&self.room) == Some(true) && clear_of(&self.sure) == Some(false)
+    }
+
     /// A centre in `free` at which `place` fits and `touch` (inside the
     /// shape) is reached, if any candidate does.
     fn witness(
@@ -1296,7 +1489,7 @@ fn centroids(region: &Region) -> Vec<Point2> {
 }
 
 /// What a search established.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) enum Search {
     /// The shape fits with its centre here, at this angle of its width axis.
     Found { centre: Point2, right: Axis },
@@ -1368,11 +1561,126 @@ pub(crate) fn fixed_rectangle(
 /// narrows each interval's centres apart. Later intervals take the absence
 /// first: where it is proven, the witness region, which lies inside it, is
 /// empty too.
+///
+/// A search asked of the scene before, from the same work, is taken as
+/// it ended ([`Scene::searched`], #427): the same steps would be charged
+/// and the same verdict reached.
 pub(crate) fn any_rectangle(
     scene: &Scene,
     width: f64,
     depth: f64,
 ) -> Result<Search, FreeSpaceError> {
+    if scene.window.is_some() {
+        return angle_search(scene, width, depth);
+    }
+    let asked = Asked {
+        sizes: [width.to_bits(), depth.to_bits()],
+        reach: scene
+            .reach
+            .as_ref()
+            .map(|reach| (reach.inner.clone(), reach.outer.clone())),
+        before: scene.work.state(),
+        after: scene.work.state(),
+        search: Err(FreeSpaceError::Unavailable(String::new())),
+    };
+    let kept = scene
+        .searched
+        .borrow()
+        .iter()
+        .find(|kept| kept.asks_as(&asked))
+        .map(|kept| (kept.after.clone(), kept.search.clone()));
+    if let Some((after, search)) = kept {
+        scene.work.restore(&after);
+        return search;
+    }
+    let search = angle_search(scene, width, depth);
+    keep_searched(
+        &scene.searched,
+        &Asked {
+            after: scene.work.state(),
+            search: search.clone(),
+            ..asked
+        },
+    );
+    search
+}
+
+/// What an angle search learns within itself after its first interval
+/// (#427), never kept past it: centres at which an absence's shrunk
+/// rectangle was seen to stand, and the intervals no rotation within
+/// which has a witness.
+#[derive(Default)]
+struct Learnt {
+    standing: Vec<Point2>,
+    bare: Vec<(f64, f64)>,
+}
+
+impl Learnt {
+    /// Whether no centre holds `inner` (a `w` x `d` rectangle along
+    /// `right` about the origin) without a reach or a window, as
+    /// [`Scene::free_for`] would find, asking the cheapest proofs first:
+    /// a centre it stands at ([`Scene::stands`]), the centres among the
+    /// sure obstacles simplified from inside ([`Scene::coarse_centres`]:
+    /// none, or one of them standing) and from around
+    /// ([`Scene::stands_somewhere`]), and only then the obstacles as
+    /// built.
+    fn absent(
+        &mut self,
+        scene: &Scene,
+        inner: &Ring,
+        grown: &Ring,
+        (w, d, right): (f64, f64, Axis),
+    ) -> Result<bool, FreeSpaceError> {
+        // A centre where the shrunk rectangle stands with room to
+        // spare lies inside its centres, coarse or exact, which
+        // cannot then be empty.
+        if let Some(at) = self
+            .standing
+            .iter()
+            .rposition(|&c| scene.stands(c, w, d, right))
+        {
+            let centre = self.standing.remove(at);
+            self.standing.push(centre);
+            return Ok(false);
+        }
+        // Without a reach or a window, none is empty.
+        if let Some(coarse) = scene.coarse_centres(inner, grown) {
+            if coarse.is_empty() {
+                return Ok(true);
+            }
+            // A centre of the coarse centres may stand among the
+            // obstacles as built too.
+            if let Some(&centre) = candidates(&coarse)
+                .iter()
+                .take(STANDING)
+                .find(|&&c| scene.stands(c, w, d, right))
+            {
+                self.standing.clear();
+                self.standing.push(centre);
+                return Ok(false);
+            }
+        }
+        // Centres among more obstacles than the sure ones are centres
+        // among those.
+        if let Some(around) = scene.stands_somewhere(inner) {
+            self.standing.clear();
+            self.standing
+                .extend(candidates(&around).into_iter().take(STANDING));
+            return Ok(false);
+        }
+        let free = scene.free_for(inner, true)?;
+        if !free.is_empty() {
+            self.standing.clear();
+            self.standing
+                .extend(candidates(&free).into_iter().take(STANDING));
+        }
+        Ok(free.is_empty())
+    }
+}
+
+/// [`any_rectangle`] as searched.
+#[allow(clippy::too_many_lines)]
+fn angle_search(scene: &Scene, width: f64, depth: f64) -> Result<Search, FreeSpaceError> {
     // A rectangle repeats every half turn, a square every quarter turn.
     let period = if (width - depth).abs() <= f64::EPSILON * width.max(depth) {
         PI / 2.0
@@ -1386,20 +1694,42 @@ pub(crate) fn any_rectangle(
     }
     let half_diagonal = width.hypot(depth) / 2.0;
     let origin = Point2::new(0.0, 0.0);
-    let mut open: Vec<(f64, f64)> = (0..8)
-        .map(|i| (period * f64::from(i) / 8.0, period * f64::from(i + 1) / 8.0))
+    // Each interval with the width below which it tries to prove that no
+    // rotation within it has a witness: none until its parent's witness
+    // region was empty.
+    let mut open: Vec<(f64, f64, Option<f64>)> = (0..8)
+        .map(|i| {
+            (
+                period * f64::from(i) / 8.0,
+                period * f64::from(i + 1) / 8.0,
+                None,
+            )
+        })
         .collect();
     // Turning by at most half an interval moves any point of the rectangle
     // by at most the half-diagonal times that angle, so a rectangle that
     // deep inside the middle one is inside every rotation.
     let shrink_by =
         |(low, high): (f64, f64)| half_diagonal * (high - low) / 2.0 + KNIFE_EDGE_METRES;
-    let first_shrink = shrink_by(open[0]);
+    let first_shrink = shrink_by((open[0].0, open[0].1));
+    // After a proof that no rotation has a witness fails, the next is
+    // tried in an interval this many times narrower: the shrunk rectangle
+    // nears the whole one only as the interval narrows.
+    let backoff = 8.0;
     // Whether no witness region holds anything at any angle; asked after
     // the first interval, as the proofs over every angle.
     let mut witnessless = false;
     let mut spent = 0usize;
-    while let Some((low, high)) = open.pop() {
+    // What this search learnt for the intervals after the first (#427),
+    // never kept past it: centres at which an absence's shrunk rectangle
+    // was seen to stand, and intervals no rotation within which has a
+    // witness. Without a reach, which narrows each interval's centres
+    // apart, they spare an interval the Minkowski steps whose outcome they
+    // decide: an absence that cannot be proven, a witness region that is
+    // empty.
+    let unreached = scene.reach.is_none();
+    let mut learnt = Learnt::default();
+    while let Some((low, high, hinted)) = open.pop() {
         if spent >= ANGLE_BUDGET {
             return Ok(Search::Undecided(
                 "orientation search budget exhausted before a verdict",
@@ -1439,47 +1769,79 @@ pub(crate) fn any_rectangle(
         // rectangle grown by the shrink, so it meets the reached region
         // only where that one does.
         let grown = rectangle(origin, width + 2.0 * shrink, depth + 2.0 * shrink, right);
-        let absence = || {
-            (w > 0.0 && d > 0.0).then(|| {
-                let inner = rectangle(origin, w, d, right);
-                if scene.surely_absent(&inner, &grown) {
-                    return Ok(true);
-                }
-                scene
-                    .free_for(&inner, true)
-                    .and_then(|free| scene.reaching(free, &grown, true))
-                    .map(|free| free.is_empty())
-            })
-        };
         // The first interval takes the witness first; a later one the
         // absence, and the witness only where that is not proven. A
         // refusal of the absence is raised only where no witness is found,
         // as when it came second.
         let first = spent == 1;
-        let mut absent = if first { None } else { absence() };
+        let inner = rectangle(origin, w, d, right);
+        let absence = |learnt: &mut Learnt| {
+            (w > 0.0 && d > 0.0).then(|| {
+                if !unreached || first {
+                    if scene.surely_absent(&inner, &grown) {
+                        return Ok(true);
+                    }
+                    return scene
+                        .free_for(&inner, true)
+                        .and_then(|free| scene.reaching(free, &grown, true))
+                        .map(|free| free.is_empty());
+                }
+                learnt.absent(scene, &inner, &grown, (w, d, right))
+            })
+        };
+        let mut absent = if first { None } else { absence(&mut learnt) };
         if matches!(absent, Some(Ok(true))) {
             continue;
         }
+        let mut empty = false;
+        let mut tried = false;
         if !witnessless {
-            let shape = rectangle(origin, width, depth, right);
-            let free = scene.reaching(scene.free_for(&shape, false)?, &shape, false)?;
-            let place = |c| rectangle(c, width, depth, right);
-            if !free.is_empty()
-                && let Some(centre) = scene.witness(&free, place, place)?
-            {
-                return Ok(Search::Found { centre, right });
+            // Every rotation within an interval holds its shrunk
+            // rectangle, so where that has no centres, no rotation has.
+            let within =
+                !first && unreached && learnt.bare.iter().any(|&(a, b)| a <= low && high <= b);
+            tried = !first
+                && unreached
+                && !within
+                && hinted.is_some_and(|below| high - low <= below)
+                && w > 0.0
+                && d > 0.0;
+            // A refusal proves nothing: the witness is sought as ever.
+            let below = tried
+                && scene
+                    .free_for(&inner, false)
+                    .is_ok_and(|free| free.is_empty());
+            if below {
+                learnt.bare.push((low, high));
+            }
+            empty = within || below;
+            if !empty {
+                let shape = rectangle(origin, width, depth, right);
+                let free = scene.reaching(scene.free_for(&shape, false)?, &shape, false)?;
+                let place = |c| rectangle(c, width, depth, right);
+                if !free.is_empty()
+                    && let Some(centre) = scene.witness(&free, place, place)?
+                {
+                    return Ok(Search::Found { centre, right });
+                }
+                empty = free.is_empty();
             }
         }
         if first {
-            absent = absence();
+            absent = absence(&mut learnt);
         }
         match absent {
             Some(Ok(true)) => continue,
             Some(Err(refused)) => return Err(refused),
             _ => {}
         }
-        open.push((low, middle));
-        open.push((middle, high));
+        let hint = match (empty, tried) {
+            (false, _) => None,
+            (true, true) => Some((high - low) / backoff),
+            (true, false) => Some(hinted.unwrap_or(f64::INFINITY)),
+        };
+        open.push((low, middle, hint));
+        open.push((middle, high, hint));
     }
     Ok(Search::Nowhere)
 }
@@ -2115,6 +2477,7 @@ mod tests {
             simple: Default::default(),
             coarse: Default::default(),
             found: Found::default(),
+            searched: Searched::default(),
             work: Work::default(),
         }
     }
@@ -2215,13 +2578,25 @@ mod tests {
     /// taking a region the scene kept charges what building it did, so a
     /// second search over a furnished room's scene, which takes the
     /// regions the first one kept, spends what the first did and decides
-    /// as it did.
+    /// as it did; and so does one taking the first search as it ended
+    /// (#427).
     #[test]
     fn a_search_spends_what_its_request_takes_whatever_the_scene_keeps() {
         let scene = furnished((0.0, 0.0), false);
         let first = format!("{:?}", any_rectangle(&scene, 1.8, 1.2));
         let spent = scene.work.spent();
         assert!(spent > 0 && !scene.found.borrow().is_empty());
+        // Without the search itself kept, from the regions it kept.
+        let regions = Scene {
+            work: Work::default(),
+            searched: Searched::default(),
+            found: scene.found.clone(),
+            ..furnished((0.0, 0.0), false)
+        };
+        assert_eq!(format!("{:?}", any_rectangle(&regions, 1.8, 1.2)), first);
+        assert_eq!(regions.work.spent(), spent);
+        // With it (#427), as it ended.
+        assert_eq!(scene.searched.borrow().len(), 1);
         let again = Scene {
             work: Work::default(),
             ..scene
@@ -2256,6 +2631,7 @@ mod tests {
                 simple: fresh.simple.clone(),
                 coarse: fresh.coarse.clone(),
                 found: fresh.found.clone(),
+                searched: fresh.searched.clone(),
                 ..scene()
             };
             assert_eq!(format!("{:?}", circle(&kept, radius)), first);
@@ -2333,6 +2709,7 @@ mod tests {
             simple: earlier.simple.clone(),
             coarse: earlier.coarse.clone(),
             found: earlier.found.clone(),
+            searched: earlier.searched.clone(),
             ..scene
         }
     }
@@ -2440,6 +2817,7 @@ mod tests {
             simple: Default::default(),
             coarse: Default::default(),
             found: Found::default(),
+            searched: Searched::default(),
             work: Work::default(),
         }
     }
@@ -2594,6 +2972,56 @@ mod tests {
                     assert_eq!(now, before, "{name} at {offset:?}, {width} x {depth}");
                 }
             }
+        }
+    }
+
+    /// What an angle search learns within itself spares it steps but not
+    /// verdicts (#427): a 2 x 1.5 room whose corner may hold a 0.3 m
+    /// block, asked a rectangle filling it exactly (which no witness
+    /// avoids the block for and no absence excludes, so the search
+    /// descends to the end of its period until its budget runs out),
+    /// rectangles of the same proportions just smaller and larger, one
+    /// that fits beside the block and one that fits nowhere, near the
+    /// origin and at georeferenced coordinates: each gets the verdict, and
+    /// a found centre and axis, the search before it gave, and the one
+    /// that runs out of budget spends less on the way.
+    #[test]
+    fn an_angle_search_learning_within_itself_decides_as_before() {
+        let block = [(0.0, 0.0, 0.3, 0.3)];
+        for offset in [(0.0, 0.0), (643_692.0, 5_649_156.0)] {
+            let make = || scene(offset, (2.0, 1.5), &block, &[]);
+            let mut verdicts = Vec::new();
+            for (width, depth) in [
+                (1.8, 1.5),
+                (1.79, 1.4917),
+                (1.81, 1.5083),
+                (1.2, 1.0),
+                (2.4, 2.0),
+            ] {
+                let before = make();
+                let old = format!("{:?}", any_rectangle_before(&before, width, depth));
+                let after = make();
+                let new = format!("{:?}", any_rectangle(&after, width, depth));
+                assert_eq!(new, old, "{width} x {depth} at {offset:?}");
+                if new.contains("budget exhausted") {
+                    assert!(
+                        after.work.spent() < before.work.spent(),
+                        "{width} x {depth}: {} of {}",
+                        after.work.spent(),
+                        before.work.spent()
+                    );
+                }
+                verdicts.push(new);
+            }
+            assert!(
+                verdicts.iter().any(|v| v.contains("budget exhausted")),
+                "{verdicts:?}"
+            );
+            assert!(
+                verdicts.iter().any(|v| v.starts_with("Ok(Found")),
+                "{verdicts:?}"
+            );
+            assert!(verdicts.iter().any(|v| v == "Ok(Nowhere)"), "{verdicts:?}");
         }
     }
 

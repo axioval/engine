@@ -508,6 +508,24 @@ impl Work {
         }
     }
 
+    /// Everything a later charge depends on (#427): the limit, what was
+    /// spent and the steps charged once, so a search that starts from the
+    /// same state and asks the same steps ends in the same one.
+    pub(crate) fn state(&self) -> WorkState {
+        WorkState {
+            limit: self.limit(),
+            spent: self.spent.get(),
+            charged: self.charged.borrow().clone(),
+        }
+    }
+
+    /// Sets the work to `state`, as a search ending there left it; the
+    /// limit stays this work's own.
+    pub(crate) fn restore(&self, state: &WorkState) {
+        self.spent.set(state.spent);
+        self.charged.borrow_mut().clone_from(&state.charged);
+    }
+
     /// The most a search may spend, in millionths of a step.
     #[cfg_attr(not(test), allow(clippy::unused_self))]
     fn limit(&self) -> u64 {
@@ -595,6 +613,14 @@ pub(crate) fn admit_step(what: &'static str, cost: Cost) -> Result<Step, Refusal
     Ok(Step {
         _admission: admission,
     })
+}
+
+/// A search's [`Work`] at one moment ([`Work::state`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct WorkState {
+    limit: u64,
+    spent: u64,
+    charged: Vec<u32>,
 }
 
 /// A step admitted against the check's memory budget while it builds

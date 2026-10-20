@@ -1135,3 +1135,70 @@ models check in under a second either way. Every report, with
 `--rule-status`, is the same byte for byte in every variant; the
 integrity diagnostics of the before build differ on m13's clashes, from
 the geometry it was built to mesh, not from the rules.
+
+### Rectangle searches that learn as they go
+
+The free-floor rectangle at any orientation was most of a check among
+every physical element: on m13 (157 spaces) with two circles and two
+rectangles, the 1.8 × 1.5 m rectangle took 1704 of the check's 1743 s
+on four threads. Timed inside the search on that model (the rectangle
+alone, 510 searches, 4560 s summed over the threads; axiolid-overlay
+0.3.18, the build before the last change of the search):
+
+| Where the time went | Before | After |
+|---|---:|---:|
+| Searches that ran out of their 512 intervals (75) | 3798 s | 618 s |
+| Searches proving no placement (107) | 412 s | 286 s |
+| Searches finding one (328) | 351 s | 256 s |
+| Of all: the bracket of the largest rectangle | 4337 s | 998 s |
+| Of all: the decision at the size asked | 223 s | 161 s |
+| Absences over the coarse obstacles | 2603 s | 364 s |
+| Absences over the obstacles as built | 986 s | 126 s |
+| Centres among the obstacles simplified from around | | 112 s |
+| Witness regions | 849 s | 322 s |
+| Scenes, proofs over every angle | 121 s | 113 s |
+
+Nearly all of every step was the overlay's Minkowski sum of the
+obstacles with the rectangle (in one search 16.0 of 16.3 s; the
+difference after it 0.1%), 30 to 120 ms per sum along tessellated
+furniture of 150 to 300 corners within the rectangle's reach. The
+searches that ran out of intervals descend towards an angle where the
+rectangle neither fits nor is excluded until floating point halves
+their intervals no more: about four in five of their sums repeated an
+earlier interval's rectangle bit for bit, and 20 of the 510 searches
+repeated an earlier search of the same space and size. Since
+[#427](https://github.com/axioval/engine/issues/427) a scene keeps
+every search asked of it and the coarse proofs' centres, and a search
+learns within itself which steps cannot change its course: a centre
+standing with room to spare shows an absence unprovable, centres among
+the sure obstacles simplified from around show it too, and an interval
+whose shrunk rectangle has no witness centres has none at any rotation
+(see [Free space](./free-space.md)). What is left is one or two sums
+per interval near the angle a search cannot decide.
+
+Release builds, one run each, wall time and peak resident memory from
+`getrusage` under a 20 GB cgroup limit on a 20-core machine; the rule
+sets as in [Scenes and body indexes built once per check](#scenes-and-body-indexes-built-once-per-check),
+the public parity case `floors` on the parity models.
+
+| Model, rule set | Threads | Wall before / after | Peak before / after |
+|---|---:|---:|---:|
+| m13 (157 spaces), every physical element | 4 | 1712 / 489 s | 2486 / 2671 MiB |
+| m13, every physical element | 1 | 4220 / 1191 s | 2148 / 2146 MiB |
+| m13, furniture | 1 | 5.3 / 5.3 s | 1108 / 1105 MiB |
+| m13, furniture | 4 | 6.8 / 4.5 s | 1120 / 1122 MiB |
+| m07 (17 spaces), every physical element | 1 | 100.1 / 24.8 s | 717 / 745 MiB |
+| m07, every physical element | 4 | 85.1 / 20.8 s | 1338 / 1363 MiB |
+| m07, furniture | 1 | 4.3 / 4.0 s | 627 / 621 MiB |
+| m07, furniture | 4 | 2.8 / 2.3 s | 1061 / 1052 MiB |
+| public parity models, `floors` | 4 | 0.31 / 0.30 s | 98 / 99 MiB |
+
+Both sides on axiolid-overlay 0.3.19, after independent rules run at
+once (#406). On m13 the 1.8 × 1.5 m rectangle went from 1703 to 481 s
+on four threads, and on m07 from 92.0 to 17.9 s on one. Four threads
+gain less than the sum suggests: a space is searched on one thread, and
+the spaces whose bracket runs out of intervals several times take
+minutes each (on m07 one space is most of the rule). The furniture sets hold no such space and take what they took;
+peaks vary with each run's largest placement step, as before. Every
+report is the same byte for byte before and after, on one thread and
+on four.

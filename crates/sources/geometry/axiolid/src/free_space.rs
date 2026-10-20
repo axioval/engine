@@ -1009,6 +1009,7 @@ impl Measuring {
             simple: Default::default(),
             coarse: Default::default(),
             found: placement::Found::default(),
+            searched: placement::Searched::default(),
             work: Work::default(),
         };
         Ok((scene, floor, excess.get()))

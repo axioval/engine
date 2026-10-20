@@ -525,6 +525,29 @@ All notable changes are documented here. This project follows Semantic Versionin
   piece went from 6.6 s to 2.3 s per first search. The first interval's
   witness and mapping the path remain.
 
+- **Free-floor rectangles learn which steps cannot change a search**
+  ([#427](https://github.com/axioval/engine/issues/427)). Most of a
+  rectangle search among every physical element went to bracketing the
+  largest rectangle of a space that no rectangle of the size asked fits,
+  and most of that to searches running out of their 512 angle intervals
+  near an angle where the rectangle neither fits nor is excluded; nearly
+  all of each was the overlay's Minkowski sum of tessellated furniture
+  with the rectangle, once or thrice per interval. A scene now keeps
+  every rectangle search asked of it, by its sizes, reached pieces and
+  starting work, and the coarse proofs' centres; and after its first
+  interval a search without a path learns within itself: a centre where
+  an interval's shrunk rectangle stands with 0.01 mm to spare (tested
+  edge by edge, no overlay), or centres left among the sure obstacles
+  simplified from around, show its absence unprovable without the sums,
+  and an interval whose shrunk rectangle has no witness centres holds no
+  witness at any rotation, so none is sought there. Each decides only
+  what the step it spares would have, and witnesses are found over the
+  regions as built as before: reports are byte-identical. A spared step
+  is not charged to the search's budget. On m13 (157 spaces) among every
+  physical element the check took 1712 s and now 489 s on four threads
+  (4220 s and 1191 s on one); on m07 (17 spaces) 100.1 s and 24.8 s on
+  one thread, 85.1 s and 20.8 s on four.
+
 - **Free floors of up to 20,000 corners are searched for a disc**
   ([#414](https://github.com/axioval/engine/issues/414)). The disc search
   refused a free floor past 5,000 corners, since a disc morphology along

@@ -157,6 +157,30 @@ impl Plan {
             polygons: polygons.to_vec(),
         }
     }
+
+    /// The bytes the plan holds: its corners and its polygons and rings.
+    pub(crate) fn bytes(&self) -> usize {
+        polygons_bytes(&self.polygons)
+    }
+}
+
+/// The bytes `polygons` hold: their corners and their polygons and rings.
+pub(crate) fn polygons_bytes(polygons: &[Polygon]) -> usize {
+    polygons
+        .iter()
+        .map(|polygon| {
+            let rings = 1 + polygon.holes.len();
+            let points = polygon.outer.points.len()
+                + polygon
+                    .holes
+                    .iter()
+                    .map(|hole| hole.points.len())
+                    .sum::<usize>();
+            points * std::mem::size_of::<Point2>()
+                + rings * std::mem::size_of::<Ring>()
+                + std::mem::size_of::<Polygon>()
+        })
+        .sum()
 }
 
 /// Slab heights closer than this are one slab: the overlay snaps its output

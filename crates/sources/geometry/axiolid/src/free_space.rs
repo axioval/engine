@@ -9,10 +9,10 @@
 //! search found nowhere it fits. Neither may be returned on a hunch -- an
 //! adapter that cannot search exhaustively must say so instead.
 
+mod obstacles;
 mod scenes;
-use std::collections::BTreeMap;
 use std::fmt::Write as _;
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::Arc;
 
 use axiolid_core::{Point2, Point3, Vec2};
 use axiolid_measure::WindingMesh;
@@ -20,11 +20,11 @@ use axiolid_mesh::{TriMesh, audit_mesh};
 use axioval_engine::{
     AreaInterval, CirculationMap, CirculationRequest, ClearanceOutcome, ClearancePlacementEvidence,
     ClearanceRequest, ClearanceShape, CompleteClearanceEvidence, CompletePlacementEvidence,
-    CompleteSupportEvidence, ContainmentOutcome, ContainmentRequest, ElevationBand,
-    FrameOffsetPlacement, FreeAreaEvidence, FreeAreaRequest, FreeFloorEvidence, FreeSpaceError,
-    FreeSpaceService, LargestDiscEstimate, MetricDirection, MetricFrame, MetricPoint,
-    ObstructionEvidence, PlacementDomain, PlacementOrientation, PlacementOutcome, PlacementRequest,
-    PlacementShape, SupportedPlacement, SweptDoor,
+    CompleteSupportEvidence, ContainmentOutcome, ContainmentRequest, DerivationStore,
+    ElevationBand, FrameOffsetPlacement, FreeAreaEvidence, FreeAreaRequest, FreeFloorEvidence,
+    FreeSpaceError, FreeSpaceService, LargestDiscEstimate, MetricDirection, MetricFrame,
+    MetricPoint, ObstructionEvidence, PlacementDomain, PlacementOrientation, PlacementOutcome,
+    PlacementRequest, PlacementShape, SupportedPlacement, SweptDoor,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
@@ -36,6 +36,7 @@ use crate::walkable::{ON_SURFACE, Plan, band_footprint, solid_column, trapezoids
 use axiolid_overlay::{
     FillRule, MorphologyMode, OverlayInput, OverlayOperation, Polygon, Region, Ring, overlay,
 };
+use obstacles::{BandFootprints, Body, Column, ObstacleKey, SolidColumns};
 
 /// The audit tolerance every measurement here shares.
 pub(crate) fn tolerance() -> Result<axiolid_core::Tolerance, FreeSpaceError> {
@@ -54,30 +55,21 @@ pub struct AxiolidFreeSpaceService {
     source: SourceId,
 }
 
-/// The geometry a free-space service measures, with what it keeps of it
-/// for later requests: each obstacle's band footprint and column, and the
-/// obstacle lists its scenes are keyed by.
+/// The geometry a free-space service measures, and the obstacle lists its
+/// scenes are keyed by. What it measures of the geometry (each obstacle's
+/// band footprint and column, each scene) is kept in the check's
+/// derivation store, keyed over this state ([`obstacles`], [`scenes`]),
+/// never here (#443).
 pub(crate) struct Measuring {
     geometry: AxiolidGeometry,
-    /// Each obstacle's band footprint, by the band's exact limits: spaces on
-    /// one floor share their band and many of their obstacles, and a large
-    /// obstacle's footprint can take the overlay seconds.
-    footprints: Mutex<BTreeMap<FootprintKey, Result<Plan, String>>>,
-    /// Each tessellated obstacle's [`solid_column`], by the column's centre
-    /// and half height.
-    columns: Mutex<BTreeMap<FootprintKey, Column>>,
-    /// The obstacle lists of the scenes keyed over this state, each once.
+    /// The obstacle lists of the scenes keyed over this state, each once:
+    /// part of their keys, not a cache of values.
     lists: scenes::Lists,
-    /// Whether footprints, columns and scenes are kept for later requests
+    /// Whether footprints, columns and scenes are read from the check's
+    /// store, built once for every request asking for them
     /// ([`AxiolidFreeSpaceService::with_reuse`]).
     reuse: bool,
 }
-
-/// A [`solid_column`]'s section and boundary shadow, or why it failed.
-type Column = Result<(Plan, Plan), String>;
-
-/// An obstacle and the bit patterns of its band's open limits.
-type FootprintKey = (ObjectId, u64, u64);
 
 impl AxiolidFreeSpaceService {
     /// Creates a service over the supplied geometry.
@@ -86,8 +78,6 @@ impl AxiolidFreeSpaceService {
         Self {
             over: Arc::new(Measuring {
                 geometry,
-                footprints: Mutex::new(BTreeMap::new()),
-                columns: Mutex::new(BTreeMap::new()),
                 lists: scenes::Lists::default(),
                 reuse: true,
             }),
@@ -105,8 +95,6 @@ impl AxiolidFreeSpaceService {
             Ok(over) => Measuring { reuse, ..over },
             Err(shared) => Measuring {
                 geometry: shared.geometry.clone(),
-                footprints: Mutex::new(BTreeMap::new()),
-                columns: Mutex::new(BTreeMap::new()),
                 lists: scenes::Lists::default(),
                 reuse,
             },
@@ -167,79 +155,68 @@ impl AxiolidFreeSpaceService {
 }
 
 impl Measuring {
-    /// [`solid_column`] of `obstacle` about `level`, built once per service.
-    fn solid_column(&self, obstacle: &ObjectId, mesh: &TriMesh, level: f64, half: f64) -> Column {
+    /// [`solid_column`] of `obstacle`'s `body` about `level`: the check's,
+    /// built once ([`SolidColumns`]), or with reuse off built here.
+    fn solid_column(
+        self: &Arc<Self>,
+        obstacle: &ObjectId,
+        body: Body,
+        level: f64,
+        half: f64,
+    ) -> Column {
+        let key = ObstacleKey::new(self, obstacle, body, [level, half]);
         if !self.reuse {
-            return solid_column(obstacle, mesh, level, half);
+            return key.column();
         }
-        let key = (obstacle.clone(), level.to_bits(), half.to_bits());
-        let cached = self
-            .columns
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .get(&key)
-            .cloned();
-        if let Some(column) = cached {
-            return column;
-        }
-        let column = solid_column(obstacle, mesh, level, half);
-        self.columns
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .insert(key, column.clone());
-        column
+        DerivationStore::derive_current::<SolidColumns>(&key)
+            .map_err(|error| error.to_string())?
+            .as_ref()
+            .clone()
     }
 
-    /// [`band_footprint`] of `obstacle` in the open band `low < z < high`,
-    /// built once per service.
+    /// [`band_footprint`] of `obstacle`'s `body` in the open band
+    /// `low < z < high`: the check's, built once ([`BandFootprints`]), or
+    /// with reuse off built here.
     fn band_footprint(
-        &self,
+        self: &Arc<Self>,
         obstacle: &ObjectId,
-        mesh: &TriMesh,
+        body: Body,
         low: f64,
         high: f64,
     ) -> Result<Plan, String> {
+        let key = ObstacleKey::new(self, obstacle, body, [low, high]);
         if !self.reuse {
-            return band_footprint(obstacle, mesh, low, high);
+            return key.footprint();
         }
-        let key = (obstacle.clone(), low.to_bits(), high.to_bits());
-        let cached = self
-            .footprints
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .get(&key)
-            .cloned();
-        if let Some(footprint) = cached {
-            return footprint;
-        }
-        let footprint = band_footprint(obstacle, mesh, low, high);
-        self.footprints
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .insert(key, footprint.clone());
-        footprint
+        DerivationStore::derive_current::<BandFootprints>(&key)
+            .map_err(|error| error.to_string())?
+            .as_ref()
+            .clone()
     }
 
     /// Why the footprints a scene takes of a measured obstacle (as
     /// [`Self::floor_scene`] takes them: in the band, and, for a tessellated
     /// body, its sure column) are refused, if they are; `None` when each
     /// is built, or a tessellated body's bounds leave it out of the scene
-    /// either way. The footprints are kept, so the scene reads them again.
+    /// either way. The footprints are the check's, so the scene reads them
+    /// again.
     fn band_refusal(
-        &self,
+        self: &Arc<Self>,
         obstacle: &ObjectId,
-        mesh: &TriMesh,
         d: f64,
         low: f64,
         high: f64,
         u: f64,
     ) -> Option<String> {
         if d == 0.0 {
-            self.band_footprint(obstacle, mesh, low - u, high + u)
+            self.band_footprint(obstacle, Body::Mesh, low - u, high + u)
                 .err()
                 .or_else(|| {
                     (u != 0.0 && high - u > low + u)
-                        .then(|| self.band_footprint(obstacle, mesh, low + u, high - u).err())
+                        .then(|| {
+                            self.band_footprint(obstacle, Body::Mesh, low + u, high - u)
+                                .err()
+                        })
                         .flatten()
                 })
         } else {
@@ -247,12 +224,12 @@ impl Measuring {
             if bounds.clear_of(low - u, high + u, ON_SURFACE) {
                 return None;
             }
-            self.band_footprint(obstacle, mesh, low - u - d, high + u + d)
+            self.band_footprint(obstacle, Body::Mesh, low - u - d, high + u + d)
                 .err()
                 .or_else(|| {
                     let level = low + u + 2.0 * d;
                     (level < high - u)
-                        .then(|| self.solid_column(obstacle, mesh, level, d).err())
+                        .then(|| self.solid_column(obstacle, Body::Mesh, level, d).err())
                         .flatten()
                 })
         }
@@ -618,7 +595,7 @@ impl Measuring {
     /// morphology ran in the fast mode.
     #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
     pub(crate) fn floor_scene(
-        &self,
+        self: &Arc<Self>,
         scope: &ObjectId,
         merged: &[ObjectId],
         obstacles: &[ObjectId],
@@ -828,7 +805,7 @@ impl Measuring {
                     }
                 }
                 let widened = self
-                    .band_footprint(obstacle, &enclosure.mesh, low - u - d, high + u + d)
+                    .band_footprint(obstacle, Body::Enclosure, low - u - d, high + u + d)
                     .map_err(FreeSpaceError::Unavailable)?;
                 let mut may = to_local(&widened)?;
                 if d > 0.0 && !may.is_empty() {
@@ -866,7 +843,7 @@ impl Measuring {
             // terminal's open shell standing on the floor) is bounded by
             // its vertices' hull (#401), a possible obstacle as above; its
             // closed pieces still surely occupy what they do.
-            if let Some(refusal) = self.band_refusal(obstacle, mesh, d, low, high, u) {
+            if let Some(refusal) = self.band_refusal(obstacle, d, low, high, u) {
                 if !open(mesh) {
                     return Err(FreeSpaceError::Unavailable(refusal));
                 }
@@ -918,7 +895,7 @@ impl Measuring {
             }
             if d == 0.0 {
                 let witness = self
-                    .band_footprint(obstacle, mesh, low - u, high + u)
+                    .band_footprint(obstacle, Body::Mesh, low - u, high + u)
                     .map_err(FreeSpaceError::Unavailable)?;
                 let may: Vec<Ring> = trapezoids(&witness)
                     .into_iter()
@@ -928,7 +905,7 @@ impl Measuring {
                     may.clone()
                 } else if high - u > low + u {
                     let sure = self
-                        .band_footprint(obstacle, mesh, low + u, high - u)
+                        .band_footprint(obstacle, Body::Mesh, low + u, high - u)
                         .map_err(FreeSpaceError::Unavailable)?;
                     trapezoids(&sure)
                         .into_iter()
@@ -960,7 +937,7 @@ impl Measuring {
             }
             bracketed.push((obstacle.clone(), d));
             let widened = self
-                .band_footprint(obstacle, mesh, low - u - d, high + u + d)
+                .band_footprint(obstacle, Body::Mesh, low - u - d, high + u + d)
                 .map_err(FreeSpaceError::Unavailable)?;
             let grown = to_local(&widened)?
                 .dilate_outer_with(d, tolerance, mode)
@@ -974,7 +951,7 @@ impl Measuring {
             let mut surely = Region::empty();
             if level < high - u {
                 let (section, shadow) = self
-                    .solid_column(obstacle, mesh, level, d)
+                    .solid_column(obstacle, Body::Mesh, level, d)
                     .map_err(FreeSpaceError::Unavailable)?;
                 let core = to_local(&section)?
                     .difference(&to_local(&shadow)?, tolerance)

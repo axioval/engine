@@ -66,7 +66,7 @@ uuid = { version = "1.18.1", features = ["serde", "v5"] }
 schemars = { version = "1.2.2", default-features = false, features = ["std", "derive"] }
 # Test-only: validates package fixtures against those schemas. No remote or
 # file resolution: every schema is in memory.
-jsonschema = { version = "0.58.5", default-features = false }
+jsonschema = { version = "0.59.0", default-features = false }
 # Test-only: generated inputs for the parity harness. `std` only: no fork,
 # timeout or failure-persistence files.
 proptest = { version = "1.11.0", default-features = false, features = ["std"] }

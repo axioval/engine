@@ -9,7 +9,10 @@
 //! free), `--no-reuse` (a derivation store that keeps nothing, and
 //! geometry services that keep no placement scene or footprint) and
 //! `--keep-derivations` (a store releasing what it keeps past a bound,
-//! #440) beside `--threads`. Every variant's standard output must be the first's. The
+//! #440) beside `--threads`. On more than one thread a check evaluates its
+//! independent rules at once (#406); `--serial-rules` evaluates them one
+//! after another, each on the threads, and both run here. Every variant's
+//! standard output must be the first's. The
 //! harness knows nothing of what a variant changes: a switch added later
 //! (a memory budget that makes evaluation wait, a store on disk) is one
 //! more row of [`VARIANTS`].
@@ -46,7 +49,17 @@ const VARIANTS: &[(&str, &[&str])] = &[
         "reversed, 1 thread",
         &["--threads", "1", "--rule-order", "reversed"],
     ),
-    ("plan, 4 threads", &["--threads", "4"]),
+    ("plan, 4 threads, rules at once", &["--threads", "4"]),
+    (
+        "plan, 4 threads, rules one after another",
+        &["--threads", "4", "--serial-rules"],
+    ),
+    // More threads than most cases have rules ready at once, so rules
+    // wait for the rules they read while others run (#406).
+    (
+        "reversed, 8 threads, rules at once",
+        &["--threads", "8", "--rule-order", "reversed"],
+    ),
     (
         "shuffled (seed 1), 4 threads",
         &["--threads", "4", "--rule-order", "shuffled:1"],
@@ -113,6 +126,20 @@ const BUDGETED: &[(&str, &[&str])] = &[
             "--evaluation-budget",
             "10",
         ],
+    ),
+    (
+        "plan, 4 threads, rules one after another, budget 10",
+        &[
+            "--threads",
+            "4",
+            "--serial-rules",
+            "--evaluation-budget",
+            "10",
+        ],
+    ),
+    (
+        "plan, 8 threads, rules at once, budget 10",
+        &["--threads", "8", "--evaluation-budget", "10"],
     ),
     (
         "reversed, 4 threads, no reuse, budget 10",

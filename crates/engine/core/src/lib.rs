@@ -1562,6 +1562,14 @@ pub type RuleObserver = Arc<dyn Fn(&RuleId, RuleProgress) + Send + Sync>;
 /// a report.
 pub type DerivationObserver = Arc<dyn Fn(&[DerivationStatistics]) + Send + Sync>;
 
+/// How a runtime evaluates a plan's independent rules
+/// ([`Runtime::with_rules_at_once`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Rules {
+    OneAfterAnother,
+    AtOnce,
+}
+
 /// Deterministic runtime that invokes only registered trusted capabilities.
 pub struct Runtime {
     registry: CapabilityRegistry,
@@ -1571,6 +1579,7 @@ pub struct Runtime {
     timings: bool,
     evaluation_budget: u64,
     parallelism: Parallelism,
+    rules: Rules,
     memory_budget: Option<Arc<MemoryBudget>>,
     observer: Option<RuleObserver>,
     derivations: Option<DerivationObserver>,
@@ -1589,6 +1598,7 @@ impl Runtime {
             timings: false,
             evaluation_budget: expression::DEFAULT_EVALUATION_BUDGET,
             parallelism: Parallelism::SERIAL,
+            rules: Rules::OneAfterAnother,
             memory_budget: None,
             observer: None,
             derivations: None,
@@ -1652,6 +1662,42 @@ impl Runtime {
         self.parallelism = parallelism;
         self
     }
+    /// Evaluates the plan's independent rules at once, as many as the
+    /// runtime's parallelism ([`Self::with_parallelism`]), when `at_once`
+    /// (#406); one after another otherwise, the default.
+    ///
+    /// The rules and the subjects each judges share the run's threads, one
+    /// pool: a rule holds one while it runs, and its subjects are judged on
+    /// those no rule holds, so no more threads are busy than the
+    /// parallelism. A rule starts once every rule it reads (its gates,
+    /// `ruleOutcome` selectors and severity overrides) finished, the first
+    /// in the plan's order among those ready, and what each rule reports is
+    /// merged in the plan's order. The report, rule summaries and the
+    /// records of [`Self::run_recorded`] are the serial run's, byte for
+    /// byte: every rule is a function of the model, its parameters and
+    /// the outcomes it reads, each spends an evaluation budget share of
+    /// its own, and the backstop refuses rules in the plan's order whatever
+    /// order they finish in ([`Self::with_evaluation_budget`]). A
+    /// derivation is released once no rule still to finish may read it,
+    /// and what a rule keeps for itself alone is its own
+    /// ([`MeasuredMemo::of_rule`]). A panic is raised as the serial run
+    /// raises it: the first rule's in the plan's order.
+    ///
+    /// Rule timings stay each rule's own; the rule observer
+    /// ([`Self::with_rule_observer`]) is told of rules on the threads
+    /// running them, so starts and finishes of several rules interleave.
+    /// The memory budget bounds the heavy steps of every rule running at
+    /// once together; what each rule holds outside them grows with the
+    /// rules at once.
+    #[must_use]
+    pub fn with_rules_at_once(mut self, at_once: bool) -> Self {
+        self.rules = if at_once {
+            Rules::AtOnce
+        } else {
+            Rules::OneAfterAnother
+        };
+        self
+    }
     /// Admits the heavy steps of each run against `budget` ([`memory`]):
     /// a step that would pass it beside the steps admitted already waits
     /// for one of them to finish, so the memory they take together does
@@ -1703,9 +1749,11 @@ impl Runtime {
         self.locations = Some(policy);
         self
     }
-    /// Tells `observer` when each rule of the plan starts and finishes, in
-    /// plan order, so a host can time rules. The engine reads no clock; the
-    /// observer never changes the report.
+    /// Tells `observer` when each rule of the plan starts and finishes, so
+    /// a host can time rules: in the order rules run, on the thread running
+    /// each, which with [`Self::with_rules_at_once`] interleaves several
+    /// rules' starts and finishes. The engine reads no clock; the observer
+    /// never changes the report.
     #[must_use]
     pub fn with_rule_observer(mut self, observer: RuleObserver) -> Self {
         self.observer = Some(observer);
@@ -2005,7 +2053,7 @@ impl Runtime {
             BTreeMap<axioval_ir::SourceId, Vec<Arc<str>>>,
             (SessionSources, SourceDisciplines, SourceMetadataIndex),
         ),
-        plan: ExecutionPlan,
+        mut plan: ExecutionPlan,
         parallelism: Parallelism,
     ) -> Result<(Report, RuleOutcomes), EngineError> {
         // Bindings are per run: they join this plan's package concepts to this
@@ -2037,11 +2085,11 @@ impl Runtime {
         let refiner = self.refiner_for(&plan)?;
         // Each derivation is released after the last rule that may read
         // it (#440).
-        let readers = LastReaders::of(&geometry_demand::services_asked(&plan, &self.registry));
+        let readers = Readers::of(geometry_demand::services_asked(&plan, &self.registry));
         let mut summaries: Vec<RuleSummary> = Vec::new();
         let mut findings = Vec::new();
         let mut tables: Vec<ReportTable> = Vec::new();
-        let mut not_evaluated = self.deferred(plan.deferred, &mut summaries);
+        let mut not_evaluated = self.deferred(std::mem::take(&mut plan.deferred), &mut summaries);
         Self::install_expressions(&mut services, &plan.values, &plan.types);
         // The catalogues are the plan's: a host copy could state entries it
         // never supplied through the plan.
@@ -2085,166 +2133,81 @@ impl Runtime {
                 (&plan.relations, &plan.supplied),
             ),
         );
-        // What every completed rule reported, for the rules that read it.
-        let mut outcomes = RuleOutcomes::default();
-        let mut backstop = Backstop::new(
-            self.evaluation_budget,
-            plan.planned.as_deref(),
-            &plan.rules,
-            before_rules.spent(),
-        );
-        let mut ran: Vec<RuleOutput> = Vec::new();
-        for (index, rule) in plan.rules.iter().enumerate() {
-            store.release_unread(readers.unread_from(index));
-            let capability = self
-                .registry
-                .get(&rule.capability)
-                .ok_or_else(|| EngineError::UnknownCapability(rule.capability.clone()))?;
-            let rule_id = rule.id.clone();
-            let _progress = self
-                .observer
-                .as_ref()
-                .map(|observer| Observed::start(observer, &rule_id));
-            // An auxiliary rule's outcome is recorded for the rules that
-            // read it, and reported only through them.
-            let reported = !plan.auxiliary.contains(&rule_id);
-            let reads = plan.dependencies.get(&rule_id);
-            // Past the backstop, a rule reading a refused one is refused
-            // unrun, and any other is given nothing to spend.
-            let past = backstop.past(&rule_id);
-            if past == Some(true) && backstop.reads_refused(reads) {
-                backstop.done(&rule_id, 0, true, reads);
-                let refusal = backstop.refusal();
-                outcomes.insert(rule_id.clone(), RuleRecord::of(&refusal, None));
-                ran.push(RuleOutput::refused(
-                    rule_id,
-                    reported,
-                    refusal,
-                    self.summaries,
-                ));
-                continue;
-            }
-            let share = if past == Some(true) {
-                0
-            } else {
-                self.evaluation_budget
-            };
-            let mut budget = Arc::new(expression::EvaluationBudget::within(
-                share,
+        // Every rule's capability, before any rule runs.
+        let capabilities = plan
+            .rules
+            .iter()
+            .map(|rule| {
+                self.registry
+                    .get(&rule.capability)
+                    .ok_or_else(|| EngineError::UnknownCapability(rule.capability.clone()))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        // What no rule may read is released before any runs.
+        store.release_unread(|service| readers.unread(service));
+        let schedule = Schedule::new(
+            &plan,
+            readers,
+            Backstop::new(
                 self.evaluation_budget,
-            ));
-            let mut entered = budget.enter();
-            // A rule reads the outcomes of the rules the plan ran before it.
-            services.replace(outcomes.clone());
-            let clock = self.timings.then(timing::RuleClock::start);
-            let context = RuleContext {
-                project,
-                services: &services,
-            };
-            let gates = plan.gates.get(&rule_id).map_or(&[][..], Vec::as_slice);
-            let evaluation = match outcomes.gate(gates) {
-                rule_outcomes::Gate::Closed => {
-                    outcomes.insert(rule_id.clone(), RuleRecord::skipped());
-                    backstop.done(&rule_id, 0, false, reads);
-                    let summary = (self.summaries && reported)
-                        .then(|| timed(RuleSummary::skipped(rule_id.clone()), clock));
-                    ran.push(RuleOutput::of(
-                        rule_id,
-                        reported,
-                        past.is_none(),
-                        CapabilityEvaluation::default(),
-                        summary,
-                    ));
-                    continue;
-                }
-                rule_outcomes::Gate::Undecided(why) => {
-                    outcomes.insert(rule_id.clone(), RuleRecord::undecided(&why));
-                    CapabilityEvaluation::not_evaluated(NotEvaluatedReason::IncompleteEvidence, why)
-                }
-                rule_outcomes::Gate::Open => {
-                    let judge = |context: &RuleContext<'_>| {
-                        let evaluation = self.evaluate(
-                            context,
-                            capability.as_ref(),
-                            rule,
-                            plan.refinements.get(&rule_id),
-                        );
-                        let selection =
-                            refiner
-                                .filter(|_| plan.recorded.contains(&rule_id))
-                                .map(|refiner| {
-                                    rule_outcomes::selection(refiner.as_ref(), context, rule)
-                                });
-                        (evaluation, selection)
-                    };
-                    let (mut evaluation, mut selection) = judge(&context);
-                    // Which subject a spent share refuses depends on the
-                    // order the threads spend it in: the rule is judged
-                    // again on one thread, its subjects in their order. A
-                    // rule refused by the backstop is not judged again.
-                    if budget.refused() && !parallelism.is_serial() && past != Some(true) {
-                        drop((evaluation, selection));
-                        drop(entered);
-                        budget = Arc::new(expression::EvaluationBudget::within(
-                            share,
-                            self.evaluation_budget,
-                        ));
-                        entered = budget.enter();
-                        let mut serial = services.clone();
-                        serial.replace(Parallelism::SERIAL);
-                        (evaluation, selection) = judge(&RuleContext {
-                            project,
-                            services: &serial,
+                plan.planned.as_deref(),
+                &plan.rules,
+                before_rules.spent(),
+            ),
+        );
+        let judging = Judging {
+            runtime: self,
+            project,
+            services: &services,
+            plan: &plan,
+            refiner,
+            parallelism,
+        };
+        // The run's threads are one pool, for the rules evaluated at once
+        // and the subjects each judges (#406).
+        let pool = parallel::Pool::new(parallelism.threads());
+        let _pool = parallel::enter_pool(Some(pool.clone()));
+        let at_once = if self.rules == Rules::AtOnce {
+            parallelism.threads().min(plan.rules.len())
+        } else {
+            1
+        };
+        let work = || {
+            while let Some(start) = schedule.claim() {
+                let index = start.index;
+                let thread = pool.take();
+                let finished = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    judging.rule(capabilities[index].as_ref(), &plan.rules[index], start)
+                }));
+                drop(thread);
+                schedule.finish(index, finished, &store);
+            }
+        };
+        if at_once <= 1 {
+            work();
+        } else {
+            // Each rule thread admits its steps against the run's budget
+            // and derives through its store, as this one does.
+            let budget = memory::current();
+            std::thread::scope(|scope| {
+                for _ in 1..at_once {
+                    // A thread that cannot be started leaves its rules to
+                    // the others.
+                    let _ = std::thread::Builder::new()
+                        .name("axioval-rule".into())
+                        .stack_size(parallel::WORKER_STACK)
+                        .spawn_scoped(scope, || {
+                            let _pool = parallel::enter_pool(Some(pool.clone()));
+                            let _budget = memory::enter(budget.clone());
+                            let _store = store.enter();
+                            work();
                         });
-                    }
-                    outcomes.insert(rule_id.clone(), RuleRecord::of(&evaluation, selection));
-                    evaluation
                 }
-            };
-            // What the rule spent, recording its selection for the rules
-            // reading it included; its summary's count below is not.
-            let tried = budget.spent() > 0 || budget.refused();
-            backstop.done(&rule_id, budget.spent(), tried, reads);
-            if past == Some(true) && tried {
-                let refusal = backstop.refusal();
-                outcomes.insert(rule_id.clone(), RuleRecord::of(&refusal, None));
-                ran.push(RuleOutput::refused(
-                    rule_id,
-                    reported,
-                    refusal,
-                    self.summaries,
-                ));
-                continue;
-            }
-            // The time is the rule's own: counting its selection for the
-            // summary below is the host's diagnostic, not the rule's work.
-            let timing = clock.map(timing::RuleClock::finish);
-            if !reported {
-                ran.push(RuleOutput::of(
-                    rule_id,
-                    reported,
-                    past.is_none(),
-                    CapabilityEvaluation::default(),
-                    None,
-                ));
-                continue;
-            }
-            let summary = refiner.filter(|_| self.summaries).map(|refiner| {
-                let summary = summarize(&rule_id, refiner.selected(&context, rule), &evaluation);
-                match timing {
-                    Some(timing) => summary.with_timing(timing),
-                    None => summary,
-                }
+                work();
             });
-            drop(entered);
-            ran.push(RuleOutput::of(
-                rule_id,
-                reported,
-                past.is_none(),
-                evaluation,
-                summary,
-            ));
         }
+        // A rule that panicked is raised as the plan's order raises it.
+        let (mut outcomes, backstop, mut ran) = schedule.finished();
         // A rule run before the backstop knew of it is refused now where
         // the backstop refuses it in plan order.
         for output in &mut ran {
@@ -2268,7 +2231,7 @@ impl Runtime {
             tables.extend(output.tables);
             not_evaluated.extend(output.not_evaluated);
         }
-        store.release_unread(readers.unread_from(usize::MAX));
+        store.release_unread(|_| true);
         if let Some(observer) = &self.derivations {
             observer(&store.statistics());
         }
@@ -2279,38 +2242,428 @@ impl Runtime {
     }
 }
 
-/// The last rule (by its index in the plan) that may ask each host
-/// service, so the run releases the derivations read through a service no
-/// rule still to run asks (#440).
-struct LastReaders {
-    /// The last rule that may ask each service it names.
+/// The rules still to finish that may ask each host service, so the run
+/// releases the derivations read through a service no rule still to
+/// finish asks (#440), however many rules run at once (#406).
+struct Readers {
+    /// The services each rule may ask, by its index in the plan; `None`:
+    /// any.
+    asked: Vec<Option<BTreeSet<TypeId>>>,
+    /// How many rules still to finish may ask each service they name.
     named: BTreeMap<TypeId, usize>,
-    /// The last rule that may ask any service.
-    any: Option<usize>,
+    /// How many rules still to finish may ask any service.
+    any: usize,
 }
 
-impl LastReaders {
-    fn of(asked: &[Option<BTreeSet<TypeId>>]) -> Self {
+impl Readers {
+    fn of(asked: Vec<Option<BTreeSet<TypeId>>>) -> Self {
         let mut named = BTreeMap::new();
-        let mut any = None;
-        for (index, services) in asked.iter().enumerate() {
+        let mut any = 0;
+        for services in &asked {
             match services {
                 Some(services) => {
                     for service in services {
-                        named.insert(*service, index);
+                        *named.entry(*service).or_insert(0) += 1;
                     }
                 }
-                None => any = Some(index),
+                None => any += 1,
             }
         }
-        Self { named, any }
+        Self { asked, named, any }
     }
 
-    /// Whether no rule from the `index`th on asks a service.
-    fn unread_from(&self, index: usize) -> impl Fn(TypeId) -> bool + '_ {
-        move |service| {
-            self.any.is_none_or(|last| last < index)
-                && self.named.get(&service).is_none_or(|last| *last < index)
+    /// Notes that the `index`th rule finished.
+    fn finish(&mut self, index: usize) {
+        match self.asked.get(index) {
+            Some(Some(services)) => {
+                for service in services {
+                    if let Some(count) = self.named.get_mut(service) {
+                        *count = count.saturating_sub(1);
+                    }
+                }
+            }
+            Some(None) => self.any = self.any.saturating_sub(1),
+            None => {}
+        }
+    }
+
+    /// Whether no rule still to finish asks `service`.
+    fn unread(&self, service: TypeId) -> bool {
+        self.any == 0 && self.named.get(&service).is_none_or(|count| *count == 0)
+    }
+}
+
+/// Where a rule starts from ([`Schedule::claim`]): what the backstop knew
+/// of it and the outcomes of the rules finished before it was claimed.
+struct RuleStart {
+    index: usize,
+    /// Whether the rule is past the backstop ([`Backstop::past`]).
+    past: Option<bool>,
+    /// Past it, whether it reads a rule the backstop refused.
+    reads_refused: bool,
+    /// The records of the rules finished so far, every rule it reads
+    /// among them.
+    outcomes: RuleOutcomes,
+}
+
+/// What one rule left: its record, what it spent and its reported
+/// outcomes.
+struct Finished {
+    record: RuleRecord,
+    spent: u64,
+    tried: bool,
+    output: RuleOutput,
+}
+
+/// The order the runtime evaluates a plan's rules in on one or several
+/// threads (#406): a rule is claimed once every rule it reads finished
+/// (gates, `ruleOutcome` selectors and severity overrides), the first in
+/// the plan's order among those ready, and what it left is merged by its
+/// place in the plan, never by when it finished.
+///
+/// The backstop learns of rules as they finish, in any order, and refuses
+/// in the plan's order whatever that order (#447). Each derivation kind is
+/// released once no rule still to finish may ask a service it is read
+/// through (#440).
+struct Schedule<'a> {
+    rules: &'a [CompiledRule],
+    /// The rules each rule reads, by index.
+    reads: Vec<Option<&'a BTreeSet<RuleId>>>,
+    /// The rules reading each rule, by index.
+    readers: Vec<Vec<usize>>,
+    state: std::sync::Mutex<ScheduleState>,
+    changed: std::sync::Condvar,
+}
+
+struct ScheduleState {
+    /// How many rules each rule reads that have not finished.
+    waiting: Vec<usize>,
+    /// The rules every rule they read finished, not yet claimed.
+    ready: BTreeSet<usize>,
+    /// How many rules are claimed and not finished.
+    running: usize,
+    outcomes: RuleOutcomes,
+    backstop: Backstop,
+    services: Readers,
+    ran: Vec<Option<RuleOutput>>,
+    /// The first rule in the plan that panicked, and its panic: no rule
+    /// after it is claimed.
+    panicked: Option<(usize, Box<dyn std::any::Any + Send>)>,
+}
+
+impl<'a> Schedule<'a> {
+    fn new(plan: &'a ExecutionPlan, services: Readers, backstop: Backstop) -> Self {
+        let rules = plan.rules.as_slice();
+        let index: BTreeMap<&RuleId, usize> = rules
+            .iter()
+            .enumerate()
+            .map(|(index, rule)| (&rule.id, index))
+            .collect();
+        let reads: Vec<Option<&BTreeSet<RuleId>>> = rules
+            .iter()
+            .map(|rule| plan.dependencies.get(&rule.id))
+            .collect();
+        let mut readers = vec![Vec::new(); rules.len()];
+        let mut waiting = vec![0; rules.len()];
+        for (reader, read) in reads.iter().enumerate() {
+            // A rule read that is not in the plan never runs: it holds
+            // nothing up.
+            for read in read
+                .iter()
+                .copied()
+                .flatten()
+                .filter_map(|read| index.get(read))
+            {
+                readers[*read].push(reader);
+                waiting[reader] += 1;
+            }
+        }
+        let startable = waiting
+            .iter()
+            .enumerate()
+            .filter(|(_, waiting)| **waiting == 0)
+            .map(|(index, _)| index)
+            .collect();
+        Self {
+            rules,
+            reads,
+            readers,
+            state: std::sync::Mutex::new(ScheduleState {
+                waiting,
+                ready: startable,
+                running: 0,
+                outcomes: RuleOutcomes::default(),
+                backstop,
+                services,
+                ran: std::iter::repeat_with(|| None).take(rules.len()).collect(),
+                panicked: None,
+            }),
+            changed: std::sync::Condvar::new(),
+        }
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, ScheduleState> {
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// The next rule to evaluate, waiting while none is ready and some
+    /// still run; `None` once none is left (or none before a rule that
+    /// panicked).
+    fn claim(&self) -> Option<RuleStart> {
+        let mut state = self.lock();
+        loop {
+            let bound = state
+                .panicked
+                .as_ref()
+                .map_or(usize::MAX, |(index, _)| *index);
+            if let Some(index) = state.ready.first().copied().filter(|index| *index < bound) {
+                state.ready.remove(&index);
+                state.running += 1;
+                let rule = &self.rules[index].id;
+                let past = state.backstop.past(rule);
+                let reads_refused =
+                    past == Some(true) && state.backstop.reads_refused(self.reads[index]);
+                return Some(RuleStart {
+                    index,
+                    past,
+                    reads_refused,
+                    outcomes: state.outcomes.clone(),
+                });
+            }
+            if state.running == 0 {
+                return None;
+            }
+            state = self
+                .changed
+                .wait(state)
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+        }
+    }
+
+    /// Records what the `index`th rule left, or its panic, and releases
+    /// what no rule still to finish may read from `store`.
+    fn finish(
+        &self,
+        index: usize,
+        finished: std::thread::Result<Finished>,
+        store: &DerivationStore,
+    ) {
+        let mut state = self.lock();
+        state.running -= 1;
+        let rule = &self.rules[index].id;
+        match finished {
+            Ok(finished) => {
+                state
+                    .backstop
+                    .done(rule, finished.spent, finished.tried, self.reads[index]);
+                state.outcomes.insert(rule.clone(), finished.record);
+                state.ran[index] = Some(finished.output);
+                for reader in &self.readers[index] {
+                    state.waiting[*reader] -= 1;
+                    if state.waiting[*reader] == 0 {
+                        state.ready.insert(*reader);
+                    }
+                }
+            }
+            Err(payload) => {
+                if state
+                    .panicked
+                    .as_ref()
+                    .is_none_or(|(first, _)| index < *first)
+                {
+                    state.panicked = Some((index, payload));
+                }
+            }
+        }
+        state.services.finish(index);
+        store.release_unread(|service| state.services.unread(service));
+        drop(state);
+        self.changed.notify_all();
+    }
+
+    /// The outcomes, the backstop and every rule's output in the plan's
+    /// order, once every rule finished; the panic of the first rule in
+    /// the plan's order that panicked is raised again.
+    fn finished(self) -> (RuleOutcomes, Backstop, Vec<RuleOutput>) {
+        let state = self
+            .state
+            .into_inner()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some((_, payload)) = state.panicked {
+            std::panic::resume_unwind(payload);
+        }
+        let ran = state
+            .ran
+            .into_iter()
+            .map(|output| output.expect("every rule of the plan ran"))
+            .collect();
+        (state.outcomes, state.backstop, ran)
+    }
+}
+
+/// What judging one rule reads: the run's project, services and plan.
+struct Judging<'a> {
+    runtime: &'a Runtime,
+    project: &'a Project,
+    services: &'a ServiceRegistry,
+    plan: &'a ExecutionPlan,
+    refiner: Option<&'a Arc<dyn OutcomeRefiner>>,
+    parallelism: Parallelism,
+}
+
+impl Judging<'_> {
+    /// Evaluates `rule` from `start`, on this thread and the workers its
+    /// subjects are judged on.
+    #[allow(clippy::too_many_lines)]
+    fn rule(
+        &self,
+        capability: &dyn RuleCapability,
+        rule: &CompiledRule,
+        start: RuleStart,
+    ) -> Finished {
+        let runtime = self.runtime;
+        let plan = self.plan;
+        let refiner = self.refiner;
+        let limit = runtime.evaluation_budget;
+        let rule_id = rule.id.clone();
+        let _progress = runtime
+            .observer
+            .as_ref()
+            .map(|observer| Observed::start(observer, &rule_id));
+        // An auxiliary rule's outcome is recorded for the rules that
+        // read it, and reported only through them.
+        let reported = !plan.auxiliary.contains(&rule_id);
+        let past = start.past;
+        // Past the backstop, a rule reading a refused one is refused
+        // unrun, and any other is given nothing to spend.
+        if start.reads_refused {
+            let refusal = refusal(limit);
+            return Finished {
+                record: RuleRecord::of(&refusal, None),
+                spent: 0,
+                tried: true,
+                output: RuleOutput::refused(rule_id, reported, refusal, runtime.summaries),
+            };
+        }
+        let share = if past == Some(true) { 0 } else { limit };
+        let mut budget = Arc::new(expression::EvaluationBudget::within(share, limit));
+        let mut entered = budget.enter();
+        // What only this rule reads is kept for it alone, whatever else
+        // runs at once (#406).
+        let _table = measured::provider::RuleTable::enter();
+        // A rule reads the outcomes of the rules it reads, finished before
+        // it started.
+        let mut services = self.services.clone();
+        let gates = plan.gates.get(&rule_id).map_or(&[][..], Vec::as_slice);
+        let gate = start.outcomes.gate(gates);
+        services.replace(start.outcomes);
+        let clock = runtime.timings.then(timing::RuleClock::start);
+        let context = RuleContext {
+            project: self.project,
+            services: &services,
+        };
+        let (evaluation, record) = match gate {
+            rule_outcomes::Gate::Closed => {
+                let summary = (runtime.summaries && reported)
+                    .then(|| timed(RuleSummary::skipped(rule_id.clone()), clock));
+                return Finished {
+                    record: RuleRecord::skipped(),
+                    spent: 0,
+                    tried: false,
+                    output: RuleOutput::of(
+                        rule_id,
+                        reported,
+                        past.is_none(),
+                        CapabilityEvaluation::default(),
+                        summary,
+                    ),
+                };
+            }
+            rule_outcomes::Gate::Undecided(why) => {
+                let record = RuleRecord::undecided(&why);
+                (
+                    CapabilityEvaluation::not_evaluated(
+                        NotEvaluatedReason::IncompleteEvidence,
+                        why,
+                    ),
+                    record,
+                )
+            }
+            rule_outcomes::Gate::Open => {
+                let judge = |context: &RuleContext<'_>| {
+                    let evaluation =
+                        runtime.evaluate(context, capability, rule, plan.refinements.get(&rule_id));
+                    let selection = refiner
+                        .filter(|_| plan.recorded.contains(&rule_id))
+                        .map(|refiner| rule_outcomes::selection(refiner.as_ref(), context, rule));
+                    (evaluation, selection)
+                };
+                let (mut evaluation, mut selection) = judge(&context);
+                // Which subject a spent share refuses depends on the
+                // order the threads spend it in: the rule is judged
+                // again on one thread, its subjects in their order. A
+                // rule refused by the backstop is not judged again.
+                if budget.refused() && !self.parallelism.is_serial() && past != Some(true) {
+                    drop((evaluation, selection));
+                    drop(entered);
+                    budget = Arc::new(expression::EvaluationBudget::within(share, limit));
+                    entered = budget.enter();
+                    let mut serial = services.clone();
+                    serial.replace(Parallelism::SERIAL);
+                    (evaluation, selection) = judge(&RuleContext {
+                        project: self.project,
+                        services: &serial,
+                    });
+                }
+                let record = RuleRecord::of(&evaluation, selection);
+                (evaluation, record)
+            }
+        };
+        // What the rule spent, recording its selection for the rules
+        // reading it included; its summary's count below is not.
+        let spent = budget.spent();
+        let tried = spent > 0 || budget.refused();
+        if past == Some(true) && tried {
+            let refusal = refusal(limit);
+            return Finished {
+                record: RuleRecord::of(&refusal, None),
+                spent,
+                tried,
+                output: RuleOutput::refused(rule_id, reported, refusal, runtime.summaries),
+            };
+        }
+        // The time is the rule's own: counting its selection for the
+        // summary below is the host's diagnostic, not the rule's work.
+        let timing = clock.map(timing::RuleClock::finish);
+        if !reported {
+            return Finished {
+                record,
+                spent,
+                tried,
+                output: RuleOutput::of(
+                    rule_id,
+                    reported,
+                    past.is_none(),
+                    CapabilityEvaluation::default(),
+                    None,
+                ),
+            };
+        }
+        let summary = refiner.filter(|_| runtime.summaries).map(|refiner| {
+            let summary = summarize(&rule_id, refiner.selected(&context, rule), &evaluation);
+            match timing {
+                Some(timing) => summary.with_timing(timing),
+                None => summary,
+            }
+        });
+        drop(entered);
+        Finished {
+            record,
+            spent,
+            tried,
+            output: RuleOutput::of(rule_id, reported, past.is_none(), evaluation, summary),
         }
     }
 }
@@ -2459,15 +2812,19 @@ impl Backstop {
 
     /// What a refused rule reports: one project-wide outcome.
     fn refusal(&self) -> CapabilityEvaluation {
-        CapabilityEvaluation::not_evaluated(
-            NotEvaluatedReason::ResourceLimit,
-            format!(
-                "the rules before it spent the run's expression evaluation budget of {} \
-                 nodes",
-                self.limit
-            ),
-        )
+        refusal(self.limit)
     }
+}
+
+/// What a rule the backstop refuses reports under an expression evaluation
+/// budget of `limit` nodes: one project-wide outcome.
+fn refusal(limit: u64) -> CapabilityEvaluation {
+    CapabilityEvaluation::not_evaluated(
+        NotEvaluatedReason::ResourceLimit,
+        format!(
+            "the rules before it spent the run's expression evaluation budget of {limit} nodes"
+        ),
+    )
 }
 
 /// The session's project less its superseded objects, `None` when it

@@ -355,6 +355,15 @@ struct CheckArgs {
     /// `--memory-budget`, not by the threads.
     #[arg(long, value_name = "N")]
     threads: Option<std::num::NonZeroUsize>,
+    /// Evaluate the rules one after another, each on the threads, rather
+    /// than the independent rules at once. With more than one thread, a
+    /// check evaluates as many rules at once as it has threads, each rule
+    /// after the rules it reads, and judges a rule's subjects on the
+    /// threads no other rule holds. The result is the same either way;
+    /// rules at once hold more memory beside the heavy steps
+    /// `--memory-budget` bounds.
+    #[arg(long)]
+    serial_rules: bool,
     /// Evaluate the rules in another order wherever their dependencies
     /// leave it free: `plan` (the default), `reversed` or `shuffled:SEED`.
     /// A diagnostic of the determinism gate (#441): the result is the same
@@ -1709,7 +1718,9 @@ fn check_runtime(
         Option<&std::sync::Arc<axioval::engine::MemoryBudget>>,
     ),
 ) -> Result<Runtime, Box<dyn Error>> {
-    let mut runtime = Runtime::new(registry).with_parallelism(parallelism(args.threads)?);
+    let mut runtime = Runtime::new(registry)
+        .with_parallelism(parallelism(args.threads)?)
+        .with_rules_at_once(!args.serial_rules);
     if args.no_reuse {
         runtime = runtime.without_reuse();
     }

@@ -6,6 +6,30 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Independent rules run at once**
+  ([#406](https://github.com/axioval/engine/issues/406)).
+  `Runtime::with_rules_at_once` evaluates as many of a plan's rules at
+  once as the runtime's parallelism, each once every rule it reads (gates,
+  `ruleOutcome` selectors, severity overrides) has finished, the first in
+  the plan's order among those ready. Rules and the subjects each judges
+  share one pool of the run's threads: a running rule holds one, and
+  `Parallelism::map_ordered` starts a worker only on a thread no rule or
+  worker holds, so no pool is nested and no more threads are busy than
+  asked for. What each rule reports is merged in the plan's order; each
+  rule keeps its own `MeasuredMemo::of_rule` table, spends its own
+  evaluation budget share and is refused by the backstop in the plan's
+  order whatever order rules finish in; a derivation kind is released once
+  no rule still to finish may ask its services. Reports, rule summaries
+  and recorded outcomes are the serial run's byte for byte. `check` runs
+  rules at once on more than one thread unless `--serial-rules`; the
+  determinism gate runs both. On four threads an escape-route set over a
+  private model went from 48.6 s to 19.0 s, an openings set from 31.8 s
+  to 25.5 s, and free-floor and clash rules over m07 from 7.3 s to 3.5 s
+  (see [Template performance](docs/src/performance.md#independent-rules-at-once)).
+  `check --timings` times each rule from its own start; the rule observer
+  is called on the thread running each rule, so with rules at once starts
+  and finishes interleave.
+
 - **Exact and Fast derivations kept apart**
   ([#438](https://github.com/axioval/engine/issues/438),
   [ADR 0006](docs/src/adr-0006.md#precision-classes)). A geometric

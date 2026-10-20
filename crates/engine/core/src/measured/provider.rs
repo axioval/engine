@@ -492,11 +492,57 @@ struct Shared;
 /// its arguments) is kept for that rule alone ([`MeasuredMemo::of_rule`]):
 /// the runtime drops it once the rule is evaluated
 /// ([`MeasuredMemo::end_rule`]), so a run of many rules does not hold every
-/// rule's preparation at once.
+/// rule's preparation at once. Rules evaluated at once (#406) each keep
+/// their own: the runtime enters a rule's table on the thread evaluating
+/// it, and [`crate::Parallelism::map_ordered`] on the workers its subjects
+/// are judged on (`RuleTable`); outside a rule, the memo keeps one of
+/// its own.
 #[derive(Clone, Default)]
 pub struct MeasuredMemo {
     store: DerivationStore,
-    rule: Arc<Mutex<HashMap<TypeId, Box<dyn Any + Send>>>>,
+    rule: RuleEntries,
+}
+
+/// What [`MeasuredMemo::of_rule`] keeps for one rule, by table type.
+type RuleEntries = Arc<Mutex<HashMap<TypeId, Box<dyn Any + Send>>>>;
+
+thread_local! {
+    /// The table of the rule this thread evaluates ([`RuleTable::enter`]).
+    static RULE: std::cell::RefCell<Option<RuleEntries>> = const { std::cell::RefCell::new(None) };
+}
+
+/// The per-rule table of the rule a thread evaluates (#406): rules run at
+/// once never read or drop each other's.
+pub(crate) struct RuleTable {
+    outer: Option<RuleEntries>,
+}
+
+impl RuleTable {
+    /// Makes an empty table the calling thread's until the guard is
+    /// dropped: the table of the rule it is about to evaluate.
+    pub(crate) fn enter() -> Self {
+        Self::enter_entries(Some(RuleEntries::default()))
+    }
+
+    /// The table of the rule the calling thread evaluates, for a worker
+    /// it starts to judge that rule's subjects ([`Self::enter_entries`]).
+    pub(crate) fn current() -> Option<RuleEntries> {
+        RULE.with(|rule| rule.borrow().clone())
+    }
+
+    /// Makes `entries` the calling thread's table until the guard is
+    /// dropped; `None` makes it have none.
+    pub(crate) fn enter_entries(entries: Option<RuleEntries>) -> Self {
+        let outer = RULE.with(|rule| std::mem::replace(&mut *rule.borrow_mut(), entries));
+        Self { outer }
+    }
+}
+
+impl Drop for RuleTable {
+    fn drop(&mut self) {
+        let outer = self.outer.take();
+        RULE.with(|rule| *rule.borrow_mut() = outer);
+    }
 }
 
 impl MeasuredMemo {
@@ -532,7 +578,8 @@ impl MeasuredMemo {
             return measure();
         }
         let table = TypeId::of::<Table<K, (V, Cost)>>();
-        if let Ok(entries) = self.rule.lock()
+        let rule = RuleTable::current().unwrap_or_else(|| Arc::clone(&self.rule));
+        if let Ok(entries) = rule.lock()
             && let Some((value, cost)) = entries
                 .get(&table)
                 .and_then(|entries| entries.downcast_ref::<Table<K, (V, Cost)>>())
@@ -541,7 +588,7 @@ impl MeasuredMemo {
             return budget::read_built(value.clone(), *cost);
         }
         let (value, cost) = budget::built(measure);
-        if let Ok(mut entries) = self.rule.lock()
+        if let Ok(mut entries) = rule.lock()
             && let Some(entries) = entries
                 .entry(table)
                 .or_insert_with(|| Box::new(Table::<K, (V, Cost)>::default()))
@@ -565,9 +612,10 @@ impl MeasuredMemo {
         }
     }
 
-    /// Drops what was kept for the rule just evaluated.
+    /// Drops what was kept for the rule just evaluated on this thread.
     pub fn end_rule(&self) {
-        if let Ok(mut entries) = self.rule.lock() {
+        let rule = RuleTable::current().unwrap_or_else(|| Arc::clone(&self.rule));
+        if let Ok(mut entries) = rule.lock() {
             entries.clear();
         }
     }

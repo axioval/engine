@@ -5,11 +5,13 @@
 //! the result of a run with `--timings` is the result of one without. How
 //! the run reused its derivations is `--stats`' ([`crate::stats`]).
 
+use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use axioval::engine::memory::Size;
 use axioval::engine::{MemoryBudget, RuleObserver, RuleProgress};
+use axioval::ir::RuleId;
 
 /// Times consecutive phases; silent unless enabled.
 #[derive(Debug)]
@@ -74,19 +76,22 @@ impl Stopwatch {
         }
     }
 
-    /// A rule observer printing each rule's time as `rule <id>`, or `None`
-    /// when timings are off.
+    /// A rule observer printing each rule's time as `rule <id>` as it
+    /// finishes, or `None` when timings are off. Rules evaluated at once
+    /// are each timed from their own start.
     pub fn rules(&self) -> Option<RuleObserver> {
         self.is_on().then(|| {
-            let started: Mutex<Option<Instant>> = Mutex::new(None);
+            let started: Mutex<BTreeMap<RuleId, Instant>> = Mutex::new(BTreeMap::new());
             let observer: RuleObserver = Arc::new(move |rule, progress| {
                 let mut started = started
                     .lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner);
                 match progress {
-                    RuleProgress::Started => *started = Some(Instant::now()),
+                    RuleProgress::Started => {
+                        started.insert(rule.clone(), Instant::now());
+                    }
                     RuleProgress::Finished => {
-                        if let Some(start) = started.take() {
+                        if let Some(start) = started.remove(rule) {
                             print_phase(&format!("rule {rule}"), start.elapsed().as_secs_f64());
                         }
                     }

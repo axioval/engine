@@ -177,17 +177,23 @@ reason and a decision; a recorded one no longer shown fails as well.
 A check's result is the same, byte for byte, whatever order its rules are
 evaluated in, on however many threads, and whether or not what one rule
 built is kept for another (ADR 0006, #441). `crates/apps/cli/tests/determinism.rs`
-holds every check to that through the real binary: it runs each in six
+holds every check to that through the real binary: it runs each in ten
 variants and requires each variant's standard output to be the first's.
+On more than one thread a check runs its independent rules at once
+(#406) unless `--serial-rules` runs them one after another.
 
-| Variant | Rule order | Threads | Reuse |
-|---|---|---|---|
-| reference | the plan's | 1 | kept |
-| | reversed | 1 | kept |
-| | the plan's | 4 | kept |
-| | shuffled (seed 1) | 4 | kept |
-| | reversed | 4 | none |
-| | shuffled (seed 2) | 1 | none |
+| Variant | Rule order | Threads | Rules | Reuse |
+|---|---|---|---|---|
+| reference | the plan's | 1 | one after another | kept |
+| | reversed | 1 | one after another | kept |
+| | the plan's | 4 | at once | kept |
+| | the plan's | 4 | one after another | kept |
+| | reversed | 8 | at once | kept |
+| | shuffled (seed 1) | 4 | at once | kept |
+| | reversed | 4 | at once | none |
+| | shuffled (seed 2) | 1 | one after another | none |
+| | the plan's, a 64 MiB memory budget | 4 | at once | kept |
+| | shuffled (seed 3) | 4 | at once | one byte kept |
 
 Two hidden `check` switches make the variants. `--rule-order`
 (`ExecutionPlan::evaluate_in` with a `RuleOrder`) evaluates the rules in
@@ -202,9 +208,10 @@ bytes, so a later switch, such as a memory budget that makes evaluation
 wait (#407), is one more row.
 
 The same checks run again under an expression evaluation budget of 10
-nodes (the hidden `--evaluation-budget`, #447), in four variants of their
-own: the plan's order and reversed on one thread, a seeded shuffle on
-four, and reversed on four without reuse. Over the generated building
+nodes (the hidden `--evaluation-budget`, #447), in six variants of their
+own: the plan's order and reversed on one thread, the plan's order on
+four threads with the rules one after another and on eight with them at
+once, a seeded shuffle on four, and reversed on four without reuse. Over the generated building
 that budget runs out part way through a rule of `coverage` and refuses
 the later rules of `counts`, `coverage` and `judges` whole by the
 backstop; the gate requires both to happen, so the variants cannot go

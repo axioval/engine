@@ -1249,10 +1249,13 @@ fn covered_rule(id: &str) -> Value {
 
 /// #447: three rules reading one ruleset value, over budgets about their
 /// threshold, report alike in either order, on one and several threads,
-/// and with nothing reused: each rule spends a share of its own, every
-/// read of the value charged as if built for it, and the backstop refuses
-/// in plan order the rules after the first that spent the run's size.
+/// with the rules one after another or at once (#406), and with nothing
+/// reused: each rule spends a share of its own, every read of the value
+/// charged as if built for it, and the backstop refuses in plan order the
+/// rules after the first that spent the run's size, whatever order they
+/// finish in.
 #[test]
+#[allow(clippy::too_many_lines)]
 fn rules_sharing_a_value_are_refused_alike_in_any_order() {
     let package = vocabulary(&registry(), &[]);
     let (required, covered) = (required_cover(), covered_rule);
@@ -1261,7 +1264,7 @@ fn rules_sharing_a_value_are_refused_alike_in_any_order() {
     };
     let report = |budget: u64,
                   order: axioval_engine::RuleOrder,
-                  parallelism: axioval_engine::Parallelism,
+                  (parallelism, at_once): (axioval_engine::Parallelism, bool),
                   reuse: bool| {
         let mut ruleset = common::runtime::ruleset(vec![covered("a"), covered("b"), covered("c")]);
         ruleset.values = required.clone();
@@ -1272,7 +1275,8 @@ fn rules_sharing_a_value_are_refused_alike_in_any_order() {
         run(registry, plan, &session(slabs()), |runtime| {
             let runtime = runtime
                 .with_evaluation_budget(budget)
-                .with_parallelism(parallelism);
+                .with_parallelism(parallelism)
+                .with_rules_at_once(at_once);
             if reuse {
                 runtime
             } else {
@@ -1303,7 +1307,7 @@ fn rules_sharing_a_value_are_refused_alike_in_any_order() {
         let plan = report(
             budget,
             axioval_engine::RuleOrder::Plan,
-            axioval_engine::Parallelism::SERIAL,
+            (axioval_engine::Parallelism::SERIAL, false),
             true,
         );
         let expected = serde_json::to_string(&plan).unwrap();
@@ -1312,12 +1316,21 @@ fn rules_sharing_a_value_are_refused_alike_in_any_order() {
             axioval_engine::RuleOrder::Reversed,
         ] {
             for parallelism in [axioval_engine::Parallelism::SERIAL, threads(2), threads(8)] {
-                for reuse in [true, false] {
-                    assert_eq!(
-                        serde_json::to_string(&report(budget, order, parallelism, reuse)).unwrap(),
-                        expected,
-                        "budget {budget}, {order:?}, {parallelism:?}, reuse {reuse}"
-                    );
+                for at_once in [false, true] {
+                    for reuse in [true, false] {
+                        assert_eq!(
+                            serde_json::to_string(&report(
+                                budget,
+                                order,
+                                (parallelism, at_once),
+                                reuse
+                            ))
+                            .unwrap(),
+                            expected,
+                            "budget {budget}, {order:?}, {parallelism:?}, at once {at_once}, \
+                             reuse {reuse}"
+                        );
+                    }
                 }
             }
         }
@@ -1342,7 +1355,7 @@ fn rules_sharing_a_value_are_refused_alike_in_any_order() {
     let report = report(
         axioval_engine::expression::DEFAULT_EVALUATION_BUDGET,
         axioval_engine::RuleOrder::Reversed,
-        threads(4),
+        (threads(4), true),
         true,
     );
     assert!(

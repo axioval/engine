@@ -459,3 +459,108 @@ fn the_runtime_lists_every_session_source_including_an_empty_one() {
     let report = runtime.run(&project(), bare_plan).unwrap();
     assert_eq!(report.not_evaluated()[0].message, "test:full");
 }
+
+/// What [`Busy`] saw: the most rules and the most subjects judged at once.
+#[derive(Default)]
+struct Busyness {
+    rules: std::sync::atomic::AtomicUsize,
+    most_rules: std::sync::atomic::AtomicUsize,
+    subjects: std::sync::atomic::AtomicUsize,
+    most_subjects: std::sync::atomic::AtomicUsize,
+}
+
+impl Busyness {
+    fn enter(now: &std::sync::atomic::AtomicUsize, most: &std::sync::atomic::AtomicUsize) {
+        use std::sync::atomic::Ordering;
+        let running = now.fetch_add(1, Ordering::SeqCst) + 1;
+        most.fetch_max(running, Ordering::SeqCst);
+    }
+}
+
+/// Judges six subjects on the run's threads, each taking a while.
+struct Busy(std::sync::Arc<Busyness>);
+impl RuleCapability for Busy {
+    fn id(&self) -> &'static str {
+        Stub.id()
+    }
+    fn parameters(&self) -> Vec<ParameterDescriptor> {
+        Stub.parameters()
+    }
+    fn evaluate(&self, context: &RuleContext<'_>, _: &CompiledRule) -> CapabilityEvaluation {
+        use std::sync::atomic::Ordering;
+        let busy = &self.0;
+        Busyness::enter(&busy.rules, &busy.most_rules);
+        axioval_engine::Parallelism::of(context.services).map_ordered(&[0; 6], |_| {
+            Busyness::enter(&busy.subjects, &busy.most_subjects);
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            busy.subjects.fetch_sub(1, Ordering::SeqCst);
+        });
+        busy.rules.fetch_sub(1, Ordering::SeqCst);
+        CapabilityEvaluation::evaluated(vec![])
+    }
+}
+
+/// #406: independent rules run at once on the run's threads, one pool for
+/// the rules and their subjects, a gated rule only once the rule it reads
+/// finished, and the report is the one of the rules one after another.
+#[test]
+fn independent_rules_run_at_once_on_the_run_threads_alone() {
+    use axioval_engine::RuleProgress::{Finished, Started};
+    use axioval_ir::contract::{GateCondition, RuleGate};
+    use std::sync::atomic::Ordering;
+    let (definitions, mut rules) = packages();
+    let template = rules.root.rules[0].clone();
+    let rule = |id: &str| {
+        let mut rule = template.clone();
+        rule.id = id.into();
+        rule
+    };
+    let mut gated = rule("b-gated");
+    gated.gate = Some(RuleGate {
+        rule: "a-parent".into(),
+        condition: GateCondition::AllIfPassed,
+    });
+    rules.root.rules = vec![rule("a-parent"), gated];
+    rules
+        .root
+        .rules
+        .extend((1..=6).map(|index| rule(&format!("c-{index}"))));
+    let run = |at_once: bool| {
+        let busy = std::sync::Arc::new(Busyness::default());
+        let registry = CapabilityRegistry::new()
+            .register(Busy(busy.clone()))
+            .unwrap();
+        let plan = compile(&registry, std::slice::from_ref(&definitions), &rules).unwrap();
+        let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let log = seen.clone();
+        let report = Runtime::new(registry)
+            .with_parallelism(axioval_engine::Parallelism::new(
+                std::num::NonZeroUsize::new(3).unwrap(),
+            ))
+            .with_rules_at_once(at_once)
+            .with_rule_observer(std::sync::Arc::new(move |rule, progress| {
+                log.lock().unwrap().push((rule.to_string(), progress));
+            }))
+            .run(&Project::new(vec![]).unwrap(), plan)
+            .unwrap();
+        let seen = seen.lock().unwrap().clone();
+        (serde_json::to_string(&report).unwrap(), busy, seen)
+    };
+    let (serial, busy, _) = run(false);
+    assert_eq!(busy.most_rules.load(Ordering::SeqCst), 1);
+    let (at_once, busy, seen) = run(true);
+    assert_eq!(at_once, serial);
+    // Rules ran at once, and never more subjects were judged at once than
+    // the run has threads, the rules holding some of them.
+    assert!(busy.most_rules.load(Ordering::SeqCst) > 1);
+    assert!(busy.most_subjects.load(Ordering::SeqCst) <= 3);
+    let at = |rule: &str, progress| {
+        seen.iter()
+            .position(|seen| *seen == (rule.to_owned(), progress))
+            .unwrap()
+    };
+    assert!(
+        at("b-gated", Started) > at("a-parent", Finished),
+        "{seen:?}"
+    );
+}

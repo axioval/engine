@@ -218,7 +218,16 @@ every template to the implementation it replaced.
    check's memory budget before it is built, on whichever thread runs it,
    and waits while the steps already admitted would pass it together; only
    a step estimated past the whole budget is refused, by name
-   ([Memory budget](./memory.md)).
+   ([Memory budget](./memory.md)). With `Runtime::with_rules_at_once`
+   (the CLI's default on more than one thread), the plan's independent
+   rules run at once too (#406): a rule starts once every rule it reads
+   finished, the first in the plan's order among those ready, holding one
+   of the run's threads, and its subjects are judged on the threads no
+   rule holds, so rules and subjects share one pool and never nest one.
+   What each rule reports is merged in the plan's order, each rule keeps
+   what is its own alone (`MeasuredMemo::of_rule`), and a derivation is
+   released once no rule still to finish may read it, so the report is
+   the serial run's byte for byte.
 7. Findings retain rule, source, object, evidence, precision and diagnostic
    provenance; an expression's findings carry an explanation of the path
    that decided them.

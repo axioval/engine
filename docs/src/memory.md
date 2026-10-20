@@ -19,9 +19,11 @@ between the runtimes of the checks it runs at once; the CLI takes
 the system reports available, at least 6 GiB; see
 [Command line](./cli.md#axioval-check)).
 
-The runtime enters the budget on the thread running the plan, and
-`Parallelism::map_ordered` on every worker, so a step reads the budget of
-the check it belongs to (`axioval_engine::memory::current`). A geometry
+The runtime enters the budget on the thread running the plan, on every
+thread running rules at once (#406), and `Parallelism::map_ordered` on
+every worker, so a step reads the budget of the check it belongs to
+(`axioval_engine::memory::current`), and the heavy steps of rules run at
+once are bounded together as those of one rule's subjects are. A geometry
 adapter estimates each heavy step before building it and asks to be
 admitted (`memory::admit`), holding the returned `Admission` while it
 builds:
@@ -69,7 +71,9 @@ and exact disc morphologies of the other services are estimated and
 admitted the same way, one step at a time.
 
 The estimates are of a step's arrangement, not of the process. The models,
-meshes, a session's caches and each thread's scene come on top, and an
+meshes, a session's caches, each thread's scene and what each rule run at
+once holds outside its steps (its selection, its outcomes, what it keeps
+for itself) come on top, and an
 estimate can be below what a step takes: traced one by one on a private
 sample, the rectangle search's steps took up to 1.8 times their estimate
 at 1.5 million pairs and more for some smaller ones.

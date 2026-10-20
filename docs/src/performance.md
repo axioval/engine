@@ -1074,3 +1074,62 @@ before on every case measured: no rule set here measures one body both
 through the proximity service and through the derived relationships,
 the two readers that held different copies. Every report is the same
 byte for byte before and after.
+
+### Independent rules at once
+
+Until [#406](https://github.com/axioval/engine/issues/406) a check ran its
+rules one after another; only each rule's subjects were judged on several
+threads (#405). A rule set of many rules, each with few subjects or a
+serial step, used one core. With `Runtime::with_rules_at_once` (the CLI's
+default on more than one thread, `--serial-rules` to turn it off) the
+runtime runs as many rules at once as it has threads: a rule starts once
+every rule it reads has finished, the first in the plan's order among
+those ready, and holds one of the run's threads while it runs. Its
+subjects are judged on the threads no rule holds (`parallel::Pool`):
+`map_ordered` starts a worker only on a thread it can take at once, before
+each next subject, so a rule takes more threads as the rules beside it
+finish, and rules and subjects together never keep more threads busy than
+`--threads`. What each rule reports is merged in the plan's order.
+
+Measured on a release build of each side, one run each, wall time and
+peak resident memory of the whole check (`rss.py`, every run alone under
+an exclusive lock and a 20 GB limit): *before* is the build of #450,
+*serial* this build with `--serial-rules`, *at once* this build's default.
+The rule sets are the public parity cases' and b448's free-floor circle
+and rectangle searches among furniture plus the parity clashes, over the
+private models m07 and m13.
+
+| Model, rule set (rules) | Threads | Wall before / serial / at once | Rules phase before / at once | Peak before / at once |
+|---|---:|---:|---:|---:|
+| m13, routes (20) | 4 | 48.6 / 47.3 / 19.0 s | 42.2 / 12.6 s | 1324 / 1347 MiB |
+| m13, routes | 8 | | / 7.7 s | / 1393 MiB |
+| m13, openings (60) | 4 | 31.8 / 31.5 / 25.5 s | 25.4 / 19.1 s | 1264 / 1301 MiB |
+| m13, openings | 8 | | / 13.8 s | / 1350 MiB |
+| m13, furniture circles and rectangles, clashes (12) | 4 | 71.3 / 71.8 / 28.0 s | 65.0 / 23.4 s | 1295 / 1286 MiB |
+| m13, the same | 8 | | / 17.4 s | / 1296 MiB |
+| m07, furniture circles and rectangles, clashes | 4 | 7.3 / 7.0 / 3.5 s | 6.4 / 2.8 s | 1312 / 983 MiB |
+| m07, floors (26) | 4 | 275.8 / 273.3 / 282.1 s | 274.9 / 281.1 s | 2618 / 2344 MiB |
+| m07, floors | 8 | | / 250.2 s | / 3145 MiB |
+| m13, spans (17) | 4 | 671.4 / 664.1 / 660.1 s | 664.6 / 653.6 s | 4386 / 4318 MiB |
+| m13, spans | 8 | | / 411.1 s | / 4565 MiB |
+| m13, judges (29, no geometry) | 4 | 3.0 / 2.8 / 2.8 s | 0.59 / 0.33 s | 797 / 820 MiB |
+| m07, openings | 4 | 2.3 / 2.3 / 2.0 s | 1.24 / 1.09 s | 311 / 324 MiB |
+
+Rule sets of many rules whose subjects are few or judged serially gain
+most: the routes (an accessibility-like set of accessible-route,
+escape-route and space-distance rules) ran 2.6 times as fast on four threads, and the free-floor and
+clash set 2.5 times, the clashes running beside the searches. A set
+dominated by one long rule whose subjects already filled the threads
+gains nothing on four (spans, floors): its other rules end early and the
+long rule takes their threads back only between its subjects, so floors
+over m07 ran 2 to 4% slower (281 and 288 s against 273 and 277 s
+serially, two runs each), within what one rule's subjects judged on one
+thread fewer for a while cost. On eight threads both gain. CPU time is
+the same either way; peaks moved by less than the runs' own spread except
+where several heavy rules overlap (floors on eight threads, 3145 MiB
+against 2618 on four before), which the memory budget bounds for their
+steps but not for what each rule holds beside them. The public parity
+models check in under a second either way. Every report, with
+`--rule-status`, is the same byte for byte in every variant; the
+integrity diagnostics of the before build differ on m13's clashes, from
+the geometry it was built to mesh, not from the rules.

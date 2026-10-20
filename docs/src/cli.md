@@ -93,7 +93,8 @@ axioval check --model building.ifc[:DISCIPLINE] [--model other.ifc[:DISCIPLINE] 
   [--zones [ACCURACY=]FILE ...] \
   [--terrain KIND@ACCURACY=FILE[#SURFACE] ... --terrain-in model|map] \
   [--geometry [--no-exact-boundaries] [--mesh-all]] [--locate storeys|containers|geometry] \
-  [--rule-status] [--rule-timings] [--timings] [--stats] [--threads N] [--memory-budget SIZE] \
+  [--rule-status] [--rule-timings] [--timings] [--stats] [--threads N] [--serial-rules] \
+  [--memory-budget SIZE] \
   [--report result.json] \
   [--decisions decisions.json | --decisions-from reviewed.bcfzip] \
   [--summary [--top N]] [--bcf issues.bcfzip] [--xlsx report.xlsx] \
@@ -808,6 +809,20 @@ those measurements are bounded together by the memory budget, not by
 the threads. Rule timings count every thread's
 host calls, so the time a rule spent in a service may exceed its wall
 time; its host time is never stated above its wall time.
+
+On more than one thread, a check also evaluates its independent rules at
+once (#406): as many rules as it has threads, each holding one of them,
+a rule starting once every rule it reads (its gate, `ruleOutcome`
+selectors and severity overrides) has finished. A rule's subjects are
+judged on the threads no other rule holds, so the rules and their
+subjects together never keep more than `N` threads busy. The result is
+the same byte for byte: what each rule reports is merged in the plan's
+order, never in the order rules finish. `--serial-rules` evaluates the
+rules one after another instead, each on all `N` threads, as checks did
+before: rules at once hold what each running rule holds beside the heavy
+steps the memory budget bounds. With `--timings`, each `rule` line is
+printed as its rule finishes, so rules run at once print out of the
+plan's order, each timed from its own start.
 
 Two hidden switches exist only for the determinism gate (#441, see
 [Parity harness](./parity.md#the-determinism-gate)) and change nothing but

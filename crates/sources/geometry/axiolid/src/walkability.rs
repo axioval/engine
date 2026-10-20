@@ -77,7 +77,6 @@ use axioval_ir::{Evidence, ObjectId, SourceId};
 use crate::connector::Passable;
 use crate::free_space::swept_rings;
 use crate::geometry::AxiolidGeometry;
-use crate::placement;
 use crate::planar::{self, Morphology, PlanarRefusal};
 use crate::walkable::{
     Blocker, Clearance, Floor, MARGIN, ON_SURFACE, Plan, PortalFacts, PortalFrame, REACH, Side,
@@ -418,14 +417,21 @@ fn overlay_error<E: Into<PlanarRefusal>>(context: &str) -> impl Fn(E) -> String 
     move |error| format!("{context}: {}", error.into().described())
 }
 
-/// The union of counter-clockwise rings as a region
-/// ([`placement::union`]), refused before it is built past the overlay
-/// budget (#432).
+/// The union of counter-clockwise rings as a region, as
+/// `placement::union` unites them, held to the overlay budgets
+/// (`planar::soup_union`, #432, #433).
 fn united(rings: &[Ring], t: Tolerance) -> Result<Region, String> {
-    let _admitted = planar::admit_rings(rings).map_err(|refusal| {
-        FreeSpaceError::Unavailable(format!("footprint: {refusal}")).to_string()
+    if rings.is_empty() {
+        return Ok(Region::empty());
+    }
+    let footprint = |error: &dyn std::fmt::Debug| {
+        FreeSpaceError::Unavailable(format!("footprint: {error:?}")).to_string()
+    };
+    let polygons = planar::soup_union(rings, t).map_err(|refusal| match refusal {
+        PlanarRefusal::Overlay(error) => footprint(&error),
+        budget => FreeSpaceError::Unavailable(format!("footprint: {budget}")).to_string(),
     })?;
-    placement::union(rings, t).map_err(|e| e.to_string())
+    Region::new(polygons, t).map_err(|error| footprint(&error))
 }
 
 /// `region` under the disc morphology `kind` by `radius`, held to the disc

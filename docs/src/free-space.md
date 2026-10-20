@@ -121,7 +121,7 @@ Every search is bounded in memory and time (#434). A Minkowski sum or erosion ha
 |---|---|---|
 | Minkowski sum or erosion by a rectangle or an octagon | 2,000,000 | about 4 s and 2 GB |
 | Disc morphology by the overlay's 64-gon (the path's reach, a circulation map's pieces) | 16,000,000 | about 4 s and 0.9 GB: the overlay trims a disc's hulls along dense outlines to about a tenth of the count |
-| Overlay of two regions (differences and intersections between the steps) | 4,000,000 | as for plan overlays (#419) |
+| Overlay of two regions (differences and intersections between the steps) | 4,000,000 | as for every region boolean (#419, #433): the kernel has no budgeted region boolean, so the pairs bound its memory too |
 
 A search also spends at most what 100 steps at their budgets would together: each step spends its pairs' share of its kind's budget, so a search whose every step passes still cannot run for hours. A region the scene keeps (a clear part, a coarse region, a rectangle's configuration space) is charged as it was when it was built, once per search, so what a search may spend depends on its request alone and never on the searches before it. Past either budget the space is not evaluated, its reason naming the step, its edges and pairs and the budget, and the check goes on with every other space and rule. On the public parity models and two private houses of 17 and 157 spaces, the heaviest search spent 42 of the 100 steps (83 s) and its largest step about half its budget. The count bounds what the arrangement is handed from above; an exact count of the trimmed hulls would need the overlay to state it.
 

@@ -510,7 +510,7 @@ mod budget_tests {
     use axiolid_overlay::{Polygon, Region, Ring};
     use axioval_engine::FreeSpaceError;
 
-    use crate::planar::budget::{DISC_PAIRS, OVERLAY_PAIRS};
+    use crate::planar::budget::{DISC_PAIRS, REGION_PAIRS};
     use crate::planar::sliver_polygons;
 
     /// A subject's footprint grown by the reach, and a contact or free
@@ -548,7 +548,7 @@ mod budget_tests {
         let refused = message(super::meets(&room, &crowded, t).unwrap_err());
         assert!(
             refused.starts_with("contact: ")
-                && refused.ends_with(&format!("past the overlay budget of {OVERLAY_PAIRS} pairs")),
+                && refused.ends_with(&format!("past the overlay budget of {REGION_PAIRS} pairs")),
             "{refused}"
         );
         assert!(super::meets(&room, &room, t).unwrap());

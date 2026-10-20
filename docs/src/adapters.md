@@ -751,47 +751,65 @@ measurement, never zero. The 0.3.0 overlay's region dilation is not used: it
 does not state on which side of the true offset its polygon lies.
 
 Every plan overlay the adapter's shared plan helpers build (footprints,
-overlaps, uncovered areas, elevations, zones and setbacks) is first held to
-an **overlay budget** (#419): the pairs of edges of its operands whose boxes
-meet are counted exactly, in `O(n log n)` for `n` edges, and past 4,000,000
-pairs the overlay is not built. Every crossing the overlay keeps comes from
-such a pair, so the count bounds its time and memory; before the budget,
-the shadows of a finely faceted beam grown one by one, each a long, thin
-fan lying over every other along the beam, asked for gigabytes and the
-allocation failure aborted the host. A grown triangle is handed over as
-fans from each corner's run of hull vertices and one fan of the runs'
-ends, so only a handful of its edges are as long as the shadow. An
-uncovered area whose triangles are past the budget is measured again over
-the united footprints: the cover's union grown edge by edge (the union
-itself and each boundary edge's hull with the growth polygon, which is the
-grown union exactly) against the element's union. The overlay snaps a
-union by up to `δ` (`10⁻⁷` of the largest coordinate, at least a metre),
-so the sure part grows the united cover by `δ` less, the possible part by
-`δ` more, and both lose and gain the area the snapping may move along the
-element's outline: the bracket is never a point, and the locator ends in
-`;united`. Past the budget there too, the measurement is refused, naming
-the edges, the pairs and the budget: the element is not evaluated, and
-every other element and rule keeps running.
+overlaps, uncovered areas, elevations, zones and setbacks) is held to two
+**overlay budgets** (#419, #433). The kernel builds it under a memory
+budget of its own (axiolid-overlay 0.3.19, `overlay_within`): 1 GiB, or
+the check's memory budget where that is smaller. Its subdivision charges
+what it is about to hold before allocating it, and the overlay is refused
+by name as soon as the charges pass the budget. Before that, the pairs of
+edges of its operands whose boxes meet are counted exactly, in
+`O(n log n)` for `n` edges, and past 50,000,000 pairs the overlay is not
+built: the kernel's budget does not reach the snap to its grid and the
+chain reduction that run before its charges, nor the box pairs it tests
+without keeping anything, whose time grows with the pairs (some 0.2 µs a
+pair). Before these budgets, the shadows of a finely faceted beam grown
+one by one, each a long, thin fan lying over every other along the beam,
+asked for gigabytes and the allocation failure aborted the host. A grown
+triangle is handed over as fans from each corner's run of hull vertices
+and one fan of the runs' ends, so only a handful of its edges are as long
+as the shadow. An uncovered area whose triangles are past either budget
+is measured again over the united footprints: the cover's union grown edge
+by edge (the union itself and each boundary edge's hull with the growth
+polygon, which is the grown union exactly) against the element's union.
+The overlay snaps a union by up to `δ` (`10⁻⁷` of the largest coordinate,
+at least a metre), so the sure part grows the united cover by `δ` less,
+the possible part by `δ` more, and both lose and gain the area the
+snapping may move along the element's outline: the bracket is never a
+point, and the locator ends in `;united`. Past the budgets there too, the
+measurement is refused, naming the budget: the element is not evaluated,
+and every other element and rule keeps running.
+
+The kernel is first handed a smaller budget, from the overlay's edges and
+pairs, so a small overlay never holds the check's memory budget for the
+whole gigabyte; refused there, it is tried again under four times what
+the kernel had charged, up to the cap, and one whose charge is already
+past the cap is refused at once. The kernel's charges do not depend on
+its budget, so whether an overlay is built, and the refusal's numbers,
+depend on its operands and the cap alone, never on the attempts or on
+what else runs.
 
 Every other arrangement the adapter hands the overlay is held to a budget
 as well (#432): the walkable plans and band footprints behind routes and
 walkability, containment and support coverage, shelf lengths, envelope
 membership, plan sections, space-boundary coverage, effective coverage,
 circulation contacts and walkability's possible pieces and portal zones.
-Booleans of two regions and unions of ring soups count their pairs as plan
-overlays do, within 4,000,000; one-sided disc morphologies (a footprint
-grown by a range or a reach, a floor eroded by a body's radius) count the
-pairs of the disc's hulls along every edge, within the 16,000,000 a
-placement search's disc steps take. Each is admitted against the check's
-memory budget while it builds. Past either, the measurement is refused
-by name before anything is built: shelf lengths and envelope membership
-with their own `OverBudget` error, read as a resource limit, every other
-service in its message, which names the pairs and the budget. A refusal
-is a function of the operands alone, so it is the same whether a result
-was kept or built again. The placement searches and free-space scenes
-keep the bounds of their own (the search's step budget and the corner
-limit), and coverage's visibility polygon is bounded by its own
-construction, one piece per wedge between the free region's corners.
+Unions of ring soups are held to both overlay budgets as plan overlays
+are (`union_soup_within`). Booleans of two regions have no budgeted call
+in the kernel, so they count their pairs within 4,000,000, which bounds
+their memory too; one-sided disc morphologies (a footprint grown by a
+range or a reach, a floor eroded by a body's radius) count the pairs of
+the disc's hulls along every edge, within the 16,000,000 a placement
+search's disc steps take. Each is admitted against the check's memory
+budget while it builds. Past either, the measurement is refused by name
+before anything is built: shelf lengths and envelope membership with
+their own `OverBudget` error, read as a resource limit, every other
+service in its message, which names the budget. A refusal is a function
+of the operands alone (and the check's memory budget), so it is the same
+whether a result was kept or built again. The placement searches and
+free-space scenes keep the bounds of their own (the search's step budget
+and the corner limit), and coverage's visibility polygon is bounded by
+its own construction, one piece per wedge between the free region's
+corners.
 
 The footprint of objects in a stated zone (`measure_zone_area`) unites the
 objects' footprints as a footprint is united (slivers the overlay refuses

@@ -66,9 +66,25 @@ pairs counted over the region with every corner dropped that lies within
 the fast mode's 1 mm of the chord across it, as the overlay fills such
 notches; the search's step and pair budgets then apply to them as to the
 rectangle's, and the one disc step of a private sample that asked for
-20 GB is refused by name. Since #432 the region booleans, ring-soup unions
-and exact disc morphologies of the other services are estimated and
-admitted the same way, one step at a time.
+20 GB is refused by name. Since #432 the region booleans and exact disc
+morphologies of the other services are estimated and admitted the same
+way, one step at a time.
+
+Plan overlays and ring-soup unions are bounded by the kernel itself since
+[#433](https://github.com/axioval/engine/issues/433) (axiolid-overlay
+0.3.19, `overlay_within` and `union_soup_within`): the adapter hands the
+kernel a memory budget, and its subdivision charges what it is about to
+hold before allocating it and refuses past the budget, so an admitted
+overlay holds at most what it was admitted with. The budget is at most
+1 GiB, or the check's budget where that is smaller. A step is admitted
+with the budget it is tried under and 16 bytes for every pair of meeting
+edge boxes, for the snap and chain reduction that run before the kernel's
+charges (0.36 GB at 36 million pairs, measured). It is first tried under
+8 KiB an edge and 32 bytes a pair (a grown bar's soup needed 15 to 24
+bytes a pair, a self-union 7.4 KB an edge), then, refused, under four
+times what the kernel had charged, up to the cap. The kernel's budget is
+never taken from what is free or held: the cap depends on the check's
+budget alone, so the refusal does too.
 
 The estimates are of a step's arrangement, not of the process. The models,
 meshes, a session's caches, each thread's scene and what each rule run at

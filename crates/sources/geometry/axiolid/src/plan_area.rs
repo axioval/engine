@@ -587,7 +587,11 @@ impl PlanAreaService for AxiolidPlanAreaService {
         // whose snapping widens the bracket.
         let (covered, united) =
             match triangle_cover(&subject, &soup, deviation, growth_metres, tolerance) {
-                Err(PlanarRefusal::OverBudget(_) | PlanarRefusal::Memory(_)) => (
+                Err(
+                    PlanarRefusal::OverBudget(_)
+                    | PlanarRefusal::Memory(_)
+                    | PlanarRefusal::Subdivision(_),
+                ) => (
                     united_cover(&subject, &soup, deviation, growth_metres, tolerance),
                     true,
                 ),

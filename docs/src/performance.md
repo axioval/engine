@@ -1202,3 +1202,66 @@ minutes each (on m07 one space is most of the rule). The furniture sets hold no 
 peaks vary with each run's largest placement step, as before. Every
 report is the same byte for byte before and after, on one thread and
 on four.
+
+### Plan overlays under the kernel's memory budget
+
+Since [#433](https://github.com/axioval/engine/issues/433) the Axiolid
+adapter builds plan overlays and ring-soup unions through the kernel's
+`overlay_within` and `union_soup_within` (axiolid-overlay 0.3.19, which
+also made a circumscribed grown soup's overlay cost about its outline):
+the subdivision is refused past 1 GiB, or the check's memory budget where
+that is smaller, before it allocates more. The edge-pair budget of these
+calls went from 4,000,000 to 50,000,000 pairs; it bounds only what the
+kernel does not charge.
+
+Calibrated on the kernel alone (release, heap high-water by a counting
+allocator), unbudgeted unless stated:
+
+| Input | Pairs | Time | Memory |
+|---|---:|---:|---:|
+| bar of 128 facets, circumscribed growth, union | 10.5 M | 0.38 s | 70 MB |
+| the same, 256 facets, union / intersection with the bar | 41 / 43 M | 1.8 / 2.1 s | 289 / 300 MB |
+| the same, 256 facets, union with itself | 41 M | 6.6 s | 756 MB |
+| 1,000 slivers crossing at every pair | 4.0 M | 246 s | 5.2 GB |
+| the same under a 1 GiB budget | 4.0 M | refused after 0.9 s | 40 MB |
+| 500 such slivers under a 1 GiB budget | 1.0 M | refused after 22 s | 0.65 GB |
+| 3,000 such slivers under a 256 MiB budget | 36 M | refused after 13 s | 0.36 GB |
+| 3,000 parallel slivers, no crossing | 27 M | 3.9 s | 19 MB |
+| 6,000 parallel slivers, no crossing | 108 M | 19 s | 38 MB |
+
+The old pair budget admitted the 1,000 crossing slivers (246 s, 5.2 GB)
+and refused the grown 128- and 256-facet bars. The kernel's budget bounds
+the first; what it does not charge, the snap, the chain reduction and box
+pairs tested without a crossing, grows with the pairs at 0.15 to 0.4 µs a
+pair, which the raised pair budget keeps under some 20 s.
+
+Through the adapter (`measure_uncovered_area`, a 6 m bar over another
+grown by 2 cm, and #419's crossing combs grown by 1 cm; test profile with
+optimized dependencies, one run each):
+
+| Case | Before | After |
+|---|---|---|
+| bar of 64 facets | exact, 0.76 s, 45 MB | exact, 0.82 s, 47 MB |
+| bar of 128 facets | united bracket 3.7·10⁻⁵ m² wide, 0.09 s, 8 MB | exact, 4.2 s, 167 MB |
+| bar of 256 facets | united bracket, 0.19 s, 12 MB | united bracket (needs 1.35 GB), 3.3 s, 400 MB |
+| combs of 100 teeth | exact, 3.7 s, 241 MB | exact, 3.7 s, 245 MB |
+| combs of 600 teeth | refused by pairs, 1.4 s, 40 MB | refused by the kernel, 3.1 s, 735 MB |
+
+On the private models and the public parity models (release builds, one
+run each as in [Independent rules at once](#independent-rules-at-once)):
+
+| Model, rule set | Threads | Wall before / after | Peak before / after |
+|---|---:|---:|---:|
+| m13, clashes | 1 | 70.6 / 68.1 s | 1252 / 1251 MiB |
+| m13, clashes | 4 | 30.3 / 27.5 s | 1271 / 1261 MiB |
+| m13, every physical element | 4 | 1752 / 1606 s | 2490 / 2526 MiB |
+| m13, furniture | 4 | 4.8 / 5.8 s | 1152 / 1110 MiB |
+| m07, clashes | 1 | 6.3 / 6.3 s | 286 / 282 MiB |
+| m07, clashes | 4 | 2.8 / 2.8 s | 310 / 314 MiB |
+| m07, every physical element | 4 | 84.8 / 78.8 s | 1325 / 1347 MiB |
+| m07, furniture | 4 | 2.3 / 3.3 s | 1171 / 1073 MiB |
+| public parity models, 162 checks | 4 | 4.38 / 3.73 s | 97 / 101 MiB |
+
+No overlay of these models reached either budget, so the differences are
+the runs' own spread. Every report is the same byte for byte, and the
+determinism gate's 64 MiB budget refuses no overlay.

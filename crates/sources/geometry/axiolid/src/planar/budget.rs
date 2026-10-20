@@ -1,14 +1,24 @@
-//! How much work one plan overlay may be handed (#419).
+//! How much work one plan overlay may be handed (#419, #433).
 //!
 //! The overlay subdivides the plane by every edge of both operands at once:
 //! each pair of edges whose boxes meet is asked where they cross, and every
 //! crossing becomes a vertex the subdivision keeps. Long, slender shadows
 //! lying over one another (a finely tessellated beam's faces, each grown by
 //! a disc into a fan of long triangles) meet about every other edge, so
-//! the pairs grow with the square of the edges and a few thousand
-//! triangles asked for gigabytes, which aborted the host. The pairs are
-//! counted exactly before the overlay is called, in `O(n log n)` for `n`
-//! edges, and an overlay past [`OVERLAY_PAIRS`] is refused by name.
+//! the pairs grow with the square of the edges. The pairs are counted
+//! exactly before the overlay is called, in `O(n log n)` for `n` edges.
+//!
+//! Since axiolid-overlay 0.3.19 (axiolid/kernel#338) a plan overlay and a
+//! ring-soup union are built under a memory budget of the kernel's own
+//! (`overlay_within`, `union_soup_within`): the subdivision charges what
+//! it is about to hold before allocating it and is refused past
+//! [`OVERLAY_MEMORY`] (`bounded::within`). What runs before the charges
+//! (the snap to the grid and the chain reduction, kernel ADR 0088) and the
+//! box pairs the subdivision tests without keeping anything are not
+//! charged, so those calls are still refused past [`OVERLAY_PAIRS`], which
+//! bounds that time. Region booleans and disc morphologies have no
+//! budgeted call in the kernel; they keep [`REGION_PAIRS`] and
+//! [`DISC_PAIRS`], which bound their memory as well.
 
 use std::cell::{Cell, RefCell};
 use std::fmt;
@@ -17,18 +27,70 @@ use axiolid_core::Point2;
 use axiolid_overlay::{Polygon, Ring};
 use axioval_engine::memory::{self, Admission, OverBudget as OverMemory};
 
-/// The most pairs of edges whose boxes meet that one plan overlay is
-/// handed. Every crossing the subdivision keeps comes from such a pair (two
-/// segments cross at most twice), so the pairs bound both its time and its
-/// memory: a grown round bar of 64 facets meets about 2.4 million pairs and
-/// is measured in about 2 s and 0.4 GB, one of 128 facets about 10 million
-/// in 10 s and 1.9 GB, and one of 256 facets aborted at 4.5 GB.
-pub(crate) const OVERLAY_PAIRS: u64 = 4_000_000;
+/// The most pairs of edges whose boxes meet that one plan overlay or
+/// ring-soup union is handed; the kernel holds its subdivision to
+/// [`OVERLAY_MEMORY`] (#433). What it does not charge grows with the
+/// pairs: the box pairs it tests took 0.15 to 0.2 µs each where no edges
+/// cross (3,000 parallel slivers in 27 million pairs, 3.9 s and 19 MB;
+/// 6,000 in 108 million, 19 s), and a soup crossing at every pair took
+/// 13 s and 0.36 GB before the memory budget refused it (3,000 slivers in
+/// 36 million pairs). A circumscribed growth of a 256-facet bar meets in
+/// 43 million pairs and is measured in 2 s and 0.3 GB.
+pub(crate) const OVERLAY_PAIRS: u64 = 50_000_000;
+
+/// The most pairs one boolean of two regions is handed (#419): the
+/// kernel has no budgeted region boolean, so the pairs bound its memory
+/// too. Every crossing the subdivision keeps comes from such a pair (two
+/// segments cross at most twice): a grown round bar of 64 facets met in
+/// about 2.4 million pairs and took about 2 s and 0.4 GB with
+/// axiolid-overlay 0.3.17.
+pub(crate) const REGION_PAIRS: u64 = 4_000_000;
+
+/// The most memory the subdivision of one plan overlay or ring-soup
+/// union may hold, or the check's memory budget where that is smaller
+/// (#433): the kernel refuses it by name before allocating more. It is
+/// within [`axioval_engine::MemoryBudget::FLOOR`], so a default budget
+/// refuses the same overlays on every machine. A 256-facet bar's
+/// circumscribed growth needs well under it (its union 0.29 GB, its
+/// intersection with the bar 0.30 GB); a soup crossing itself at every
+/// pair passes it from about 500 slivers, refused after 22 s.
+pub(crate) const OVERLAY_MEMORY: u64 = 1 << 30;
+
+const _: () = assert!(OVERLAY_MEMORY < axioval_engine::MemoryBudget::FLOOR);
+
+/// The memory what the kernel does not charge holds per counted pair, at
+/// most: 3,000 slivers crossing at every pair held 0.36 GB in 36 million
+/// pairs before the subdivision was refused (#433).
+const UNCHARGED_PAIR_BYTES: u64 = 16;
+
+/// What the kernel's subdivision is first allowed per counted edge
+/// ([`Counted::attempt`]): the least budget admitting a self-union of
+/// disjoint triangles, whose edges the kernel is handed twice, was 7.4 KB
+/// an edge (axiolid-overlay 0.3.19 charges 320 bytes a vertex and 2,000
+/// an edge, besides its crossings and pieces).
+const KERNEL_EDGE_BYTES: u64 = 8192;
+
+/// What the kernel's subdivision is first allowed per counted pair
+/// ([`Counted::attempt`]): the least budget admitting a bar's grown soup,
+/// its union or its intersection with the bar, was 15 to 24 bytes a pair
+/// from 16 to 256 facets. A grid of crossings takes some 560 bytes a
+/// pair and is tried again under the cap.
+const KERNEL_PAIR_BYTES: u64 = 32;
 
 /// The refusal's reason where an error holds only a static text; it names
 /// [`OVERLAY_PAIRS`], which a test keeps in step.
-pub(crate) const OVER_BUDGET: &str = "the plan overlay was not built: its edges meet in more than 4000000 pairs, \
+pub(crate) const OVER_BUDGET: &str = "the plan overlay was not built: its edges meet in more than 50000000 pairs, \
      past the overlay budget";
+
+/// [`OVER_BUDGET`] for a region boolean; it names [`REGION_PAIRS`].
+pub(crate) const OVER_REGION_BUDGET: &str = "the plan overlay was not built: its edges meet in more than 4000000 pairs, \
+     past the overlay budget";
+
+/// The refusal's reason where an error holds only a static text and the
+/// kernel refused the subdivision past [`OVERLAY_MEMORY`] or the check's
+/// memory budget (#433).
+pub(crate) const OVER_SUBDIVISION: &str =
+    "the plan overlay was not built: its subdivision needs more than the overlay memory budget";
 
 /// The refusal's reason where an error holds only a static text and a
 /// disc morphology outside any search is past [`DISC_PAIRS`] or the
@@ -37,20 +99,34 @@ pub(crate) const OVER_DISC_BUDGET: &str = "the disc morphology was not built: it
      more pairs than the disc morphology budget or its estimated memory is more than the \
      check's memory budget";
 
-/// The refusal's reason where an error holds only a static text and the
-/// overlay's memory estimate alone is more than the check's memory budget
-/// (#407).
+/// The refusal's reason where an error holds only a static text and a
+/// region boolean's memory estimate alone is more than the check's memory
+/// budget (#407).
 pub(crate) const OVER_MEMORY: &str =
     "the plan overlay was not built: its estimated memory is more than the check's memory budget";
 
 /// An overlay refused before it was built because its operands' edges meet
-/// in more pairs than [`OVERLAY_PAIRS`].
+/// in more pairs than its budget: [`OVERLAY_PAIRS`] for a plan overlay or
+/// a ring-soup union, [`REGION_PAIRS`] for a region boolean.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct OverBudget {
     /// The edges of both operands.
     pub(crate) edges: usize,
     /// The pairs of them whose boxes meet.
     pub(crate) pairs: u64,
+    /// The budget they are past.
+    pub(crate) budget: u64,
+}
+
+impl OverBudget {
+    /// The refusal's static reason, naming its budget.
+    pub(crate) fn reason(self) -> &'static str {
+        if self.budget == REGION_PAIRS {
+            OVER_REGION_BUDGET
+        } else {
+            OVER_BUDGET
+        }
+    }
 }
 
 impl fmt::Display for OverBudget {
@@ -58,34 +134,86 @@ impl fmt::Display for OverBudget {
         write!(
             f,
             "the plan overlay was not built: its {} edges meet in {} pairs, past the \
-             overlay budget of {OVERLAY_PAIRS} pairs",
-            self.edges, self.pairs
+             overlay budget of {} pairs",
+            self.edges, self.pairs, self.budget
         )
     }
 }
 
-/// Refuses an overlay of `operands` whose edges' boxes meet in more pairs
-/// than [`OVERLAY_PAIRS`]; every ring of every polygon counts, holes too.
-/// Admitted, its memory estimate ([`overlay_bytes`]).
+/// Refuses a boolean of the regions with `operands` whose edges' boxes
+/// meet in more pairs than [`REGION_PAIRS`]; every ring of every polygon
+/// counts, holes too. Admitted, its memory estimate ([`overlay_bytes`]).
 pub(crate) fn admit(operands: &[&[Polygon]]) -> Result<u64, OverBudget> {
-    admit_boxes(&edge_boxes(operands))
+    let boxes = edge_boxes(operands);
+    let pairs = meeting_pairs(&boxes);
+    if pairs > REGION_PAIRS {
+        return Err(OverBudget {
+            edges: boxes.len(),
+            pairs,
+            budget: REGION_PAIRS,
+        });
+    }
+    Ok(overlay_bytes(boxes.len(), pairs))
 }
 
-/// [`admit`] for a soup of rings the overlay unites in one arrangement
-/// (`axiolid_overlay::union_soup`): every ring's edges count (#432).
-pub(crate) fn admit_rings(rings: &[Ring]) -> Result<u64, OverBudget> {
-    admit_boxes(&ring_boxes(rings.iter()))
+/// What an overlay of `operands` hands the kernel, or its refusal past
+/// [`OVERLAY_PAIRS`]; every ring of every polygon counts, holes too.
+pub(crate) fn count(operands: &[&[Polygon]]) -> Result<Counted, OverBudget> {
+    counted(&edge_boxes(operands))
 }
 
-fn admit_boxes(boxes: &[EdgeBox]) -> Result<u64, OverBudget> {
+/// [`count`] for a soup of rings the overlay unites in one arrangement
+/// (`axiolid_overlay::union_soup_within`): every ring's edges count (#432).
+pub(crate) fn count_rings(rings: &[Ring]) -> Result<Counted, OverBudget> {
+    counted(&ring_boxes(rings.iter()))
+}
+
+fn counted(boxes: &[EdgeBox]) -> Result<Counted, OverBudget> {
     let pairs = meeting_pairs(boxes);
     if pairs > OVERLAY_PAIRS {
         return Err(OverBudget {
             edges: boxes.len(),
             pairs,
+            budget: OVERLAY_PAIRS,
         });
     }
-    Ok(overlay_bytes(boxes.len(), pairs))
+    Ok(Counted {
+        edges: boxes.len(),
+        pairs,
+    })
+}
+
+/// What an overlay within [`OVERLAY_PAIRS`] hands the kernel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Counted {
+    /// The edges of its operands.
+    pub(crate) edges: usize,
+    /// The pairs of them whose boxes meet.
+    pub(crate) pairs: u64,
+}
+
+impl Counted {
+    /// The memory budget the kernel's subdivision is first tried under
+    /// (#433): [`KERNEL_EDGE_BYTES`] an edge and [`KERNEL_PAIR_BYTES`] a
+    /// pair, within `cap`. An overlay refused under less than `cap` is
+    /// tried once more under `cap` (`bounded::within`), so whether it is
+    /// built depends on `cap` alone: an admitted overlay is the same under
+    /// any budget, and the kernel's charges only grow. The first budget
+    /// only spares the check's memory budget a cap's admission for every
+    /// small overlay.
+    pub(crate) fn attempt(self, cap: u64) -> u64 {
+        let edges = u64::try_from(self.edges).unwrap_or(u64::MAX);
+        edges
+            .saturating_mul(KERNEL_EDGE_BYTES)
+            .saturating_add(self.pairs.saturating_mul(KERNEL_PAIR_BYTES))
+            .min(cap)
+    }
+
+    /// What the kernel may hold besides its subdivision's charges
+    /// ([`UNCHARGED_PAIR_BYTES`] a pair), admitted beside its budget.
+    pub(crate) fn uncharged(self) -> u64 {
+        self.pairs.saturating_mul(UNCHARGED_PAIR_BYTES)
+    }
 }
 
 /// One edge's closed box: `[x_min, x_max, y_min, y_max]`.
@@ -128,7 +256,7 @@ pub(crate) struct Cost {
 /// per step: an arrangement keeps a different amount per counted pair.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Kind {
-    /// A boolean overlay of two regions, within [`OVERLAY_PAIRS`].
+    /// A boolean overlay of two regions, within [`REGION_PAIRS`].
     Overlay,
     /// A Minkowski sum or erosion by a polygon of a few corners (a
     /// rectangle, an octagon), within [`POLYGON_PAIRS`].
@@ -164,7 +292,7 @@ impl Cost {
     /// The most pairs one step of this kind is handed.
     pub(crate) fn budget(self) -> u64 {
         match self.kind {
-            Kind::Overlay => OVERLAY_PAIRS,
+            Kind::Overlay => REGION_PAIRS,
             Kind::Polygon => POLYGON_PAIRS,
             Kind::Disc => DISC_PAIRS,
         }
@@ -188,7 +316,7 @@ impl Cost {
 
 /// What one overlay keeps per pair of meeting edges, about: a grown round
 /// bar meeting in 2.4 million pairs took 0.4 GB, one in 10 million 1.9 GB
-/// ([`OVERLAY_PAIRS`]).
+/// with axiolid-overlay 0.3.17 ([`REGION_PAIRS`]).
 const OVERLAY_PAIR_BYTES: u64 = 200;
 
 /// What one Minkowski sum or erosion by a polygon keeps per pair, at
@@ -751,8 +879,9 @@ impl Fenwick {
 #[cfg(test)]
 mod tests {
     use super::{
-        Cost, EdgeBox, Kind, OVER_BUDGET, OVERLAY_PAIRS, OverBudget, POLYGON_PAIRS, Refusal,
-        SEARCH_STEPS, Work, admit, meeting_pairs, minkowski_cost,
+        Cost, Counted, EdgeBox, Kind, OVER_BUDGET, OVER_REGION_BUDGET, OVERLAY_MEMORY,
+        OVERLAY_PAIRS, OverBudget, POLYGON_PAIRS, REGION_PAIRS, Refusal, SEARCH_STEPS, Work, admit,
+        count, meeting_pairs, minkowski_cost,
     };
     use axiolid_core::Point2;
     use axiolid_overlay::{Polygon, Ring};
@@ -811,44 +940,34 @@ mod tests {
         assert_eq!(meeting_pairs(&[]), 0);
     }
 
-    /// The static reason names the budget the counted one does.
+    /// The static reasons name the budgets the counted ones do.
     #[test]
     fn both_reasons_name_the_budget() {
-        let over = OverBudget {
-            edges: 9,
-            pairs: OVERLAY_PAIRS + 1,
-        };
-        assert!(
-            OVER_BUDGET.contains(&format!("more than {OVERLAY_PAIRS} pairs")),
-            "{OVER_BUDGET}"
-        );
-        assert!(
-            over.to_string()
-                .ends_with(&format!("past the overlay budget of {OVERLAY_PAIRS} pairs")),
-            "{over}"
-        );
+        for (budget, reason) in [
+            (OVERLAY_PAIRS, OVER_BUDGET),
+            (REGION_PAIRS, OVER_REGION_BUDGET),
+        ] {
+            let over = OverBudget {
+                edges: 9,
+                pairs: budget + 1,
+                budget,
+            };
+            assert_eq!(over.reason(), reason);
+            assert!(
+                reason.contains(&format!("more than {budget} pairs")),
+                "{reason}"
+            );
+            assert!(
+                over.to_string()
+                    .ends_with(&format!("past the overlay budget of {budget} pairs")),
+                "{over}"
+            );
+        }
     }
 
-    /// Only an overlay past the budget is refused; a union counts its
-    /// operand once.
-    #[test]
-    fn an_overlay_within_the_budget_is_admitted() {
-        use axiolid_core::Point2;
-        use axiolid_overlay::{Polygon, Ring};
-        let square = Polygon {
-            outer: Ring {
-                points: vec![
-                    Point2::new(0.0, 0.0),
-                    Point2::new(1.0, 0.0),
-                    Point2::new(1.0, 1.0),
-                    Point2::new(0.0, 1.0),
-                ],
-            },
-            holes: Vec::new(),
-        };
-        assert!(admit(&[&[square.clone()], &[square]]).is_ok());
-        // 3,000 long, thin triangles along one line: each meets every other.
-        let slivers: Vec<Polygon> = (0..3000)
+    /// `n` long, thin triangles along one line: each meets every other.
+    fn slivers(n: u32) -> Vec<Polygon> {
+        (0..n)
             .map(|index| {
                 let y = f64::from(index) * 1e-4;
                 Polygon {
@@ -862,10 +981,49 @@ mod tests {
                     holes: Vec::new(),
                 }
             })
-            .collect();
-        let refused = admit(&[&slivers]).unwrap_err();
-        assert_eq!(refused.edges, 9000);
+            .collect()
+    }
+
+    /// Only an overlay past its budget is refused: 3,000 slivers are past
+    /// a region boolean's, within a plan overlay's, which 4,000 are past.
+    #[test]
+    fn an_overlay_within_the_budget_is_admitted() {
+        let unit = square(0.0, 0.0, 1.0);
+        assert!(admit(&[&[unit.clone()], &[unit.clone()]]).is_ok());
+        assert_eq!(
+            count(&[&[unit.clone()], &[unit]]),
+            Ok(Counted {
+                edges: 8,
+                pairs: 20
+            })
+        );
+        let three = slivers(3000);
+        let refused = admit(&[&three]).unwrap_err();
+        assert_eq!((refused.edges, refused.budget), (9000, REGION_PAIRS));
+        assert!(refused.pairs > REGION_PAIRS, "{refused:?}");
+        let counted = count(&[&three]).unwrap();
+        assert_eq!(counted.pairs, refused.pairs);
+        let refused = count(&[&slivers(4000)]).unwrap_err();
+        assert_eq!((refused.edges, refused.budget), (12_000, OVERLAY_PAIRS));
         assert!(refused.pairs > OVERLAY_PAIRS, "{refused:?}");
+    }
+
+    /// An overlay is first tried under its estimate, at least what the
+    /// kernel charges for its edges, and never above the cap.
+    #[test]
+    fn the_first_attempt_lies_within_the_cap() {
+        let small = Counted {
+            edges: 8,
+            pairs: 16,
+        };
+        assert_eq!(small.attempt(OVERLAY_MEMORY), 8 * 8192 + 16 * 32);
+        let crowded = Counted {
+            edges: 9000,
+            pairs: 36_000_000,
+        };
+        assert_eq!(crowded.attempt(OVERLAY_MEMORY), OVERLAY_MEMORY);
+        assert_eq!(crowded.attempt(1 << 20), 1 << 20);
+        assert_eq!(crowded.uncharged(), 36_000_000 * 16);
     }
 
     /// A rectangle swept along each edge of a square hands over the
@@ -987,7 +1145,7 @@ mod tests {
     #[test]
     fn the_largest_step_fits_the_default_budget() {
         for (kind, pairs) in [
-            (Kind::Overlay, OVERLAY_PAIRS),
+            (Kind::Overlay, REGION_PAIRS),
             (Kind::Polygon, POLYGON_PAIRS),
             (Kind::Disc, super::DISC_PAIRS),
         ] {

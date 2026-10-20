@@ -260,7 +260,13 @@ reused, so every budget charges a reused value as if it were built:
   so it refuses alike whether built or kept. Since #432 every region
   boolean, ring-soup union and disc morphology outside the placement
   search is counted the same way, from its operands alone, so none of
-  them depends on what was kept either.
+  them depends on what was kept either. Since #433 the kernel refuses a
+  plan overlay's or ring-soup union's subdivision past its memory budget;
+  that budget is a constant capped by the check's budget, never what is
+  free, and a first attempt under less only ever refuses what the cap
+  would, with the same charge, so the refusal is the cap's alone.
+  `the_kernel_refuses_a_subdivision_past_the_memory_budget_by_name`
+  compares it with the kernel's own refusal under the cap.
 - *The expression evaluation budget* (#447) gives each rule a share of
   its own and charges every ruleset value, measured value and selection
   it reads as if built for it, whether built or kept. Its backstop

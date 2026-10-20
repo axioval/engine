@@ -361,9 +361,10 @@ fn bar_reach(facets: u32, radius: f64, y: f64) -> (f64, f64) {
 
 /// A 6 m beam of 256 facets over another: each of the cover's long, thin
 /// shadows grown on its own meets every other along the whole beam, which
-/// aborted the host asking for gigabytes (#419). Past the overlay budget
-/// the cover is measured over the united footprints instead, the bracket
-/// widened by the overlay's snapping.
+/// aborted the host asking for gigabytes (#419). Its subdivision needs
+/// more than the overlay memory budget (#433), so the cover is measured
+/// over the united footprints instead, the bracket widened by the
+/// overlay's snapping.
 #[test]
 fn a_finely_faceted_beam_is_measured_over_its_united_footprints() {
     let facets = 256;
@@ -389,24 +390,27 @@ fn a_finely_faceted_beam_is_measured_over_its_united_footprints() {
     assert!(!area.is_exact());
     assert!(area.evidence().locator.ends_with(";united"), "{area:?}");
     assert!(started.elapsed().as_secs() < 60, "{:?}", started.elapsed());
-    // A beam of few facets is still measured triangle by triangle, exactly.
-    let areas = service(
-        AxiolidGeometry::new()
-            .with_mesh(id("beam"), bar(16, 0.1, 6.0, 0.0, 0.0))
-            .with_mesh(id("cover"), bar(16, 0.1, 6.0, 0.15, 0.0)),
-    );
-    let area = areas
-        .measure_uncovered_area(&id("beam"), &[id("cover")], 0.02)
-        .unwrap();
-    let (low, _) = bar_reach(16, 0.1, 0.0);
-    let (cover_low, _) = bar_reach(16, 0.1, 0.15);
-    let expected = 6.0 * ((cover_low - 0.02) - low);
-    assert!(area.is_exact(), "{area:?}");
-    assert!(!area.evidence().locator.ends_with(";united"), "{area:?}");
-    assert!(
-        (area.lower_square_metres() - expected).abs() < 1e-7,
-        "{area:?} {expected}"
-    );
+    // A beam of fewer facets is measured triangle by triangle, exactly:
+    // since #433 one of 128 too, which was past the edge-pair budget.
+    for facets in [16, 128] {
+        let areas = service(
+            AxiolidGeometry::new()
+                .with_mesh(id("beam"), bar(facets, 0.1, 6.0, 0.0, 0.0))
+                .with_mesh(id("cover"), bar(facets, 0.1, 6.0, 0.15, 0.0)),
+        );
+        let area = areas
+            .measure_uncovered_area(&id("beam"), &[id("cover")], 0.02)
+            .unwrap();
+        let (low, _) = bar_reach(facets, 0.1, 0.0);
+        let (cover_low, _) = bar_reach(facets, 0.1, 0.15);
+        let expected = 6.0 * ((cover_low - 0.02) - low);
+        assert!(area.is_exact(), "{facets}: {area:?}");
+        assert!(!area.evidence().locator.ends_with(";united"), "{area:?}");
+        assert!(
+            (area.lower_square_metres() - expected).abs() < 1e-7,
+            "{area:?} {expected}"
+        );
+    }
 }
 
 /// `teeth` boxes 40 m long and 1 cm wide, 5 cm apart, along x or along y.
@@ -429,9 +433,10 @@ fn comb(teeth: u32, along_x: bool) -> TriMesh {
 }
 
 /// Two combs crossing at right angles meet in a grid of over a million
-/// crossings, which the overlay would build vertex by vertex. Their united
-/// footprints are past the overlay budget too, so the cover is refused by
-/// name, in bounded time and memory, never built.
+/// crossings, which the overlay would build vertex by vertex. Their
+/// subdivision needs more than the overlay memory budget, over the grown
+/// triangles and over the united footprints alike, so the kernel refuses
+/// the cover by name before allocating past it (#433), never built.
 #[test]
 fn crossing_combs_past_the_overlay_budget_are_refused_by_name() {
     let areas = service(
@@ -448,7 +453,10 @@ fn crossing_combs_past_the_overlay_budget_are_refused_by_name() {
     };
     assert!(
         reason.starts_with(&format!("the cover of {} cannot be computed: ", id("rows")))
-            && reason.contains("past the overlay budget of 4000000 pairs"),
+            && reason.contains(
+                "the plan overlay was not built: its subdivision needs more than the \
+                 overlay memory budget of 1.0 GiB"
+            ),
         "{reason}"
     );
     assert!(started.elapsed().as_secs() < 60, "{:?}", started.elapsed());

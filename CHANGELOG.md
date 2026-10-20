@@ -271,6 +271,34 @@ All notable changes are documented here. This project follows Semantic Versionin
   its outline, rings are validated through a box tree and once per produced
   region, and more flat walls and swept edges are certified. Kept
   derivations that call these crates are rebuilt under their new versions.
+- **Plan overlays are bounded by the kernel's memory budget**
+  ([#433](https://github.com/axioval/engine/issues/433),
+  [adapters](docs/src/adapters.md), [memory](docs/src/memory.md)). The
+  Axiolid adapter builds every plan overlay and ring-soup union through
+  axiolid-overlay's `overlay_within` and `union_soup_within`, under a
+  memory budget of 1 GiB or the check's memory budget where that is
+  smaller: the subdivision charges what it is about to hold before
+  allocating it, and past the budget the measurement is refused by name
+  (`the plan overlay was not built: its subdivision needs more than the
+  overlay memory budget of 1.0 GiB (…)`), read as a resource limit, an
+  uncovered area first measured again over the united footprints. The
+  edge-pair budget of these calls went from 4,000,000 to 50,000,000
+  pairs: it now bounds only what the kernel does not charge (the snap to
+  its grid, the chain reduction and the box pairs it tests), at about
+  0.2 µs a pair. Region booleans and disc morphologies, which the kernel
+  has no budgeted call for, keep their pair budgets (4,000,000 and
+  16,000,000). A 6 m beam of 128 facets under another is now measured
+  triangle by triangle, exactly (0.78 m², 4.2 s, 167 MB), where it was
+  past the pair budget and bracketed over the united footprints; one of
+  256 facets needs 1.35 GB and is still bracketed (3.3 s); #419's
+  crossing combs are refused by the kernel after 3.1 s and 0.73 GB
+  instead of by their pairs after 1.4 s. A refusal depends on the
+  operands and the check's memory budget alone: a first attempt under a
+  smaller budget refuses only what the cap would, with the same charge.
+  Reports are unchanged on the public parity models and on m07's and
+  m13's clashes, furniture and every-physical-element checks, whose run
+  times and peaks moved within noise
+  ([performance](docs/src/performance.md#plan-overlays-under-the-kernels-memory-budget)).
 - **One geometry set for every service**
   ([#450](https://github.com/axioval/engine/issues/450),
   [performance](docs/src/performance.md#one-geometry-set-for-every-service)).

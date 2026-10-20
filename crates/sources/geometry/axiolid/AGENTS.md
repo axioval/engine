@@ -514,7 +514,7 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   spaces are the request's (the rule's selection), never host-declared; a
   bounding object without a mesh refuses the derivation. Declarations are
   plain `ObjectId` data, so this stays a geometry adapter.
-- `src/plan_area.rs` implements `PlanAreaService`: footprints and footprint overlaps from the plan overlay. A tessellated mesh widens the area by `2·P·d + π·d²`; never report it as a point. A declared group (`with_group`) measures the union of its members; a member without a body, an unmeasured member or undecided membership refuses, never zero. An uncovered area brackets the grown cover between an inscribed and a circumscribed 16-gon (growth by `r − d` and `r + d` for a tessellated cover), handed to the overlay as triangles (`clustered_fan`: a fan per corner's run of hull vertices and one over the runs' ends, so few edges are as long as the shadow): its ring check refuses a vertex on the line through a non-adjacent edge. Past the overlay budget (#419) it is measured over the united footprints (`united_cover`: the cover's union grown edge by edge, `planar::grown_region`, by `δ = OVERLAY_SNAP` of the largest coordinate less for the sure part and more for the possible one, both moved by twice the subject's `snapping_area`, locator `;united`); past it there too it refuses with the budget's reason. Never fall back to anything unbounded. Never use the 0.3.0 overlay's `Region::dilate`, whose side of the true offset is unstated. `measure_footprint_outline` is the outer rings of the overlay's union of every requested object's plan triangles (groups through their members, holes left out), with the largest chord deviation; nothing to trace refuses, never a bounding box.
+- `src/plan_area.rs` implements `PlanAreaService`: footprints and footprint overlaps from the plan overlay. A tessellated mesh widens the area by `2·P·d + π·d²`; never report it as a point. A declared group (`with_group`) measures the union of its members; a member without a body, an unmeasured member or undecided membership refuses, never zero. An uncovered area brackets the grown cover between an inscribed and a circumscribed 16-gon (growth by `r − d` and `r + d` for a tessellated cover), handed to the overlay as triangles (`clustered_fan`: a fan per corner's run of hull vertices and one over the runs' ends, so few edges are as long as the shadow): its ring check refuses a vertex on the line through a non-adjacent edge. Past the overlay budget (#419: the edge pairs, or the kernel's refusal past the overlay memory budget, #433) it is measured over the united footprints (`united_cover`: the cover's union grown edge by edge, `planar::grown_region`, by `δ = OVERLAY_SNAP` of the largest coordinate less for the sure part and more for the possible one, both moved by twice the subject's `snapping_area`, locator `;united`); past it there too it refuses with the budget's reason. Never fall back to anything unbounded. Never use the 0.3.0 overlay's `Region::dilate`, whose side of the true offset is unstated. `measure_footprint_outline` is the outer rings of the overlay's union of every requested object's plan triangles (groups through their members, holes left out), with the largest chord deviation; nothing to trace refuses, never a bounding box.
 - `src/elevation.rs` (internal) answers `measure_elevation_cover` for the plan-area service in the request's `(s, z, t)` frame: a cover body counts by its surface clipped to the subject's widened depth slab plus its cross-sections at both slab faces (the even-odd fill of the surface beyond each face, projected; never the clipped surface alone, which loses a body passing through the slab), grown exactly by the rectangle's Minkowski sum (edges swept over it); a frame covers by the convex hull of its members' projections. Tessellation and an axis off the coordinate axes (rounding) are bracketed: less growth and a narrower slab for the sure part, more and wider for the possible, the subject's band on both ends; a growth under the uncertainty drops to zero in that direction and the sure part loses its outline's band.
 - `src/plan_span.rs` also answers `measure_rectangle` with the overlay's exact calipers (`minimum_area_rectangle`, axiolid-overlay ≥ 0.3.2): a tessellated footprint is `Unproven`, several least-area orientations `Tied`; the kernel's `error` widens centre and half extents and turns the axes by `asin(e / (L − e))`, except along the coordinate axes, where the extremes are recomputed exactly. That computation is `least_area_rectangle`, the crate's one rectangle: sections and the shelf layout call it too, never `minimum_area_rectangle` directly. `src/plan_area.rs` measures `measure_outside_bands` as the overlay of the subject with band hulls clipped to their shared stretch, the clip moved by `CUT_MARGIN` inwards (sure) and outwards (possible); a tessellated band member refuses.
 - `src/zone_area.rs` (internal) answers `measure_zone_area` for the plan-area service: the objects' footprints united by `bounded_footprint` (slivers' area to the upper bounds), the inside measured as the overlay's intersection and the outside as its difference, each directly (a footprint wholly inside has exactly zero outside; never take the outside as the footprint less the inside). A zone stated within `a` is bracketed by its boundary band (each segment's hull grown by a circumscribed 16-gon, at least `MINIMUM_BAND`, as fan triangles through `kept_fan_triangle`): sure inside against the zone less the band, possible inside against the zone with it, the outside the other way round; a tessellated footprint widens every bound by its band, except a side no projected triangle lies on when every triangle is farther than its deviation plus the zone's circumscribed band (and `SIDE_MARGIN`) from every boundary segment (`sides`, #364): that side is exactly zero. Never read a triangle's side from one corner without that clearance, and never zero a side from the overlay's pieces alone (slivers it refuses never reach them). `tests/zone_area.rs` pins inside, a 0.3 m crossing, the accuracy, a union, an L-shaped zone with a hole and tessellated round trunks deep inside, touching and beyond the boundary.
@@ -754,22 +754,38 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   `setback.rs`) and the storey difference in `space.rs` goes through
   `planar::plan_overlay`, which counts the pairs of edges whose boxes meet
   (`planar/budget.rs`, exact, `O(n log n)`) and refuses past
-  `OVERLAY_PAIRS` (4,000,000) with `PlanarRefusal::OverBudget`, named in
-  the refusal (`Display`, `reason()` where an error holds a static
-  text, `budget_note()` after a "cannot be computed" message, which keeps
-  an overlay refusal's message as it was: the parity recordings hold it). An overlay asking for gigabytes aborts the host, so never call
-  `axiolid_overlay::overlay` on operands whose size the request decides
-  without it; raise the budget only with timings and peak memory of the
-  slender, overlapping shadows that motivated it (#419).
+  `OVERLAY_PAIRS` (50,000,000) with `PlanarRefusal::OverBudget`, then
+  builds it through the kernel's `overlay_within` under a memory budget
+  (`bounded::within`, #433): `OVERLAY_MEMORY` (1 GiB) or the check's
+  memory budget where smaller, which the kernel refuses past before
+  allocating (`PlanarRefusal::Subdivision`). Each is named in the refusal
+  (`Display`, `reason()` where an error holds a static text,
+  `budget_note()` after a "cannot be computed" message, which keeps an
+  overlay refusal's message as it was: the parity recordings hold it).
+  `within` tries a small budget first (`Counted::attempt`), then four
+  times what the kernel charged, up to the cap, and refuses at once
+  where the charge is past the cap: the kernel's charges do not depend
+  on its budget, so the outcome and the refusal's numbers are what the
+  cap alone gives. Never pass the kernel a budget from what is free or
+  held (`headroom`): a refusal would then depend on what else runs.
+  The kernel's budget does not reach the snap and the chain reduction
+  that run before its charges, nor the box pairs it tests without
+  keeping anything (kernel ADR 0088), so `OVERLAY_PAIRS` stays as their
+  time bound: raise it only with timings of soups crossing at every pair
+  and of parallel slivers whose boxes all meet (#433). An overlay asking
+  for gigabytes aborts the host, so never call `axiolid_overlay::overlay`
+  or `union_soup` on operands whose size the request decides.
   Every other arrangement the adapter hands the overlay is held to a
   budget too (#432, `planar/bounded.rs`): `walkable.rs` (`overlay_soups`,
   `snapped_union`, which ends its snapping ladder on a budget's refusal),
   `containment.rs` and `support_coverage.rs` (`containment::outside`),
   `linear_quantity.rs`, `envelope_membership.rs` and `plan_span.rs`
-  through `plan_overlay`; `Region` booleans through `planar::union`,
-  `intersection` and `difference` (`admit_regions`: an empty operand
-  builds nothing and is never refused), ring soups through
-  `planar::soup_union` or `admit_rings` held around `placement::union`,
+  through `plan_overlay`; ring soups through `planar::soup_union`
+  (`union_soup_within`, the same two budgets; walkability's `united` too);
+  `Region` booleans through `planar::union`, `intersection` and
+  `difference` (`admit_regions`: an empty operand builds nothing and is
+  never refused), which the kernel has no budgeted call for, so they keep
+  `REGION_PAIRS` (4,000,000) as their memory bound;
   and exact one-sided disc morphologies through `planar::morphology`
   (`budget::admit_step` with `disc_cost` against `DISC_PAIRS`,
   `PlanarRefusal::Morphology`) in `boundary_coverage.rs`, `coverage.rs`,
@@ -777,15 +793,18 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   refusal as it was (`PlanarRefusal::described`: the error
   debug-formatted) and name the budget otherwise; `LinearQuantityError`
   and `EnvelopeMembershipError` refuse with `OverBudget`, read by rules as
-  `ResourceLimit`. Each refusal is a function of the operands alone,
-  never of what was kept, so a kept result refuses alike (ADR 0006). The
-  placement search and free-space scenes keep their own bounds
-  (`Work`, `MORPHOLOGY_POINTS`); coverage's visibility polygon has one of
-  its own (one fan piece per wedge between the free region's corners,
-  linear in them). Never add a direct `Region` boolean, `union_soup` or
-  disc morphology outside those without a budget; each budgeted path has
-  a test feeding it `planar::slivers` (`sliver_polygons`,
-  `sliver_triangles`), 3,000 long, thin shadows over one another.
+  `ResourceLimit`. Each refusal is a function of the operands alone (and
+  the check's memory budget), never of what was kept, so a kept result
+  refuses alike (ADR 0006). The placement search and free-space scenes
+  keep their own bounds (`Work`, `MORPHOLOGY_POINTS`); coverage's
+  visibility polygon has one of its own (one fan piece per wedge between
+  the free region's corners, linear in them). Never add a direct `Region`
+  boolean, `union_soup` or disc morphology outside those without a
+  budget; each budgeted path has a test feeding it `planar::slivers`
+  (`sliver_polygons`, `sliver_triangles`), 4,000 long, thin shadows over
+  one another, past `OVERLAY_PAIRS`, and
+  `the_kernel_refuses_a_subdivision_past_the_memory_budget_by_name`
+  holds the kernel's refusal under a small check budget.
 - `src/linear_quantity.rs` implements `LinearQuantityService`: parallel shelf
   bands on the footprint less each requested door's clearance (its footprint
   grown by clearance plus plan gap, circumscribed for the lower bound, inscribed

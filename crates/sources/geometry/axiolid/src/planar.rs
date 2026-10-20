@@ -6,7 +6,8 @@
 
 use axiolid_core::{Frame2, Point2, Vec2};
 use axiolid_overlay::{
-    FillRule, OverlayError, OverlayInput, OverlayOperation, OverlayResult, Polygon, Ring,
+    FillRule, OverlayError, OverlayInput, OverlayOperation, OverlayOptions, OverlayRefusal,
+    OverlayResult, Polygon, Ring,
 };
 
 use crate::geometry::Triangle;
@@ -16,21 +17,23 @@ pub(crate) mod budget;
 
 #[cfg(test)]
 pub(crate) use bounded::tests::{sliver_polygons, sliver_triangles, slivers};
-pub(crate) use bounded::{
-    Morphology, admit_rings, difference, intersection, morphology, soup_union, union,
-};
+pub(crate) use bounded::{Morphology, difference, intersection, morphology, soup_union, union};
 
 /// Why a plan measurement was not built: the overlay refused its operands,
-/// or they were past the overlay budget (#419).
+/// or they were past the overlay budget (#419) or its memory budget (#433).
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum PlanarRefusal {
     /// The overlay refused the operands.
     Overlay(OverlayError),
     /// The operands' edges meet in more pairs than one overlay is handed.
     OverBudget(budget::OverBudget),
-    /// The overlay's memory estimate alone is more than the check's
+    /// A region boolean's memory estimate alone is more than the check's
     /// memory budget (#407).
     Memory(axioval_engine::memory::OverBudget),
+    /// The kernel refused the subdivision before allocating past the
+    /// overlay memory budget (`budget::OVERLAY_MEMORY`) or the check's
+    /// memory budget, whichever is smaller (#433).
+    Subdivision(OverlayRefusal),
     /// A disc morphology outside any search was refused by its budget or
     /// the check's memory budget before it was built (#432).
     Morphology(budget::Refusal),
@@ -42,8 +45,9 @@ impl PlanarRefusal {
     pub(crate) fn reason(&self) -> &'static str {
         match self {
             Self::Overlay(error) => overlay_refusal(error),
-            Self::OverBudget(_) => budget::OVER_BUDGET,
+            Self::OverBudget(over) => over.reason(),
             Self::Memory(_) => budget::OVER_MEMORY,
+            Self::Subdivision(_) => budget::OVER_SUBDIVISION,
             Self::Morphology(_) => budget::OVER_DISC_BUDGET,
         }
     }
@@ -56,7 +60,7 @@ impl PlanarRefusal {
             Self::Overlay(_) => String::new(),
             Self::OverBudget(over) => format!(": {over}"),
             Self::Memory(over) => format!(": the plan overlay was not built: {over}"),
-            Self::Morphology(refusal) => format!(": {refusal}"),
+            Self::Subdivision(_) | Self::Morphology(_) => format!(": {self}"),
         }
     }
 
@@ -90,17 +94,26 @@ impl std::fmt::Display for PlanarRefusal {
             Self::Overlay(error) => f.write_str(overlay_refusal(error)),
             Self::OverBudget(over) => over.fmt(f),
             Self::Memory(over) => write!(f, "the plan overlay was not built: {over}"),
+            Self::Subdivision(OverlayRefusal::BudgetExceeded { needed, budget }) => write!(
+                f,
+                "the plan overlay was not built: its subdivision needs more than the \
+                 overlay memory budget of {} ({} charged when it was refused)",
+                axioval_engine::memory::Size(u64::try_from(*budget).unwrap_or(u64::MAX)),
+                axioval_engine::memory::Size(u64::try_from(*needed).unwrap_or(u64::MAX)),
+            ),
+            Self::Subdivision(refusal) => write!(f, "the plan overlay was not built: {refusal}"),
             Self::Morphology(refusal) => refusal.fmt(f),
         }
     }
 }
 
 /// The plan overlay of two polygon sets, refused before it is built when
-/// their edges meet in more pairs than the overlay budget allows (#419).
-/// Every overlay this module builds goes through here, so none can grow
-/// without bound; a union passing one set as both operands counts its
-/// edges once. It is built once admitted against the check's memory
-/// budget (#407), refused where its estimate alone is more than that.
+/// their edges meet in more pairs than the overlay budget allows (#419),
+/// and by the kernel where its subdivision needs more than the overlay
+/// memory budget (#433, [`bounded::within`]). Every overlay this module
+/// builds goes through here, so none can grow without bound; a union
+/// passing one set as both operands counts its edges once. Admitted, it
+/// is `axiolid_overlay::overlay` exactly.
 pub(crate) fn plan_overlay(
     first: &OverlayInput,
     second: &OverlayInput,
@@ -108,15 +121,23 @@ pub(crate) fn plan_overlay(
     fill: FillRule,
     tolerance: axiolid_core::Tolerance,
 ) -> Result<OverlayResult, PlanarRefusal> {
-    let estimate = if std::ptr::eq(first, second) {
-        budget::admit(&[&first.polygons])
+    let counted = if std::ptr::eq(first, second) {
+        budget::count(&[&first.polygons])
     } else {
-        budget::admit(&[&first.polygons, &second.polygons])
+        budget::count(&[&first.polygons, &second.polygons])
     }
     .map_err(PlanarRefusal::OverBudget)?;
-    let _admitted = axioval_engine::memory::admit(estimate).map_err(PlanarRefusal::Memory)?;
-    axiolid_overlay::overlay(first, second, operation, fill, tolerance)
-        .map_err(PlanarRefusal::Overlay)
+    bounded::within(counted, tolerance, |execution| {
+        axiolid_overlay::overlay_within(
+            first,
+            second,
+            operation,
+            fill,
+            OverlayOptions::new(),
+            execution,
+        )
+        .map(|reported| reported.result)
+    })
 }
 
 /// The xy plan frame both projections share.

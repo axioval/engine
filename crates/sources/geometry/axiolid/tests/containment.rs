@@ -164,7 +164,7 @@ fn a_room_whose_walls_project_to_slivers_decides_containment() {
     ));
 }
 
-/// A scope whose 3,000 long, thin shadows lie over one another meets in
+/// A scope whose 4,000 long, thin shadows lie over one another meets in
 /// more pairs of edges than one overlay is handed: it is refused by name
 /// before the overlay is built, never measured until memory runs out
 /// (#432).
@@ -172,7 +172,7 @@ fn a_room_whose_walls_project_to_slivers_decides_containment() {
 fn a_scope_past_the_overlay_budget_is_refused_by_name() {
     let mut positions = Vec::new();
     let mut indices = Vec::new();
-    for index in 0..3000_u32 {
+    for index in 0..4000_u32 {
         let y = f64::from(index) * 1e-4;
         let first = u32::try_from(positions.len()).unwrap();
         positions.extend([
@@ -191,7 +191,7 @@ fn a_scope_past_the_overlay_budget_is_refused_by_name() {
         panic!("a scope past the overlay budget was measured");
     };
     assert!(
-        message.ends_with("past the overlay budget of 4000000 pairs"),
+        message.ends_with("past the overlay budget of 50000000 pairs"),
         "{message}"
     );
 }

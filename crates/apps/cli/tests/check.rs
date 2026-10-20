@@ -10638,8 +10638,8 @@ fn comb_wall(teeth: u32, along_x: bool, global: &str) -> String {
 }
 
 /// An architectural wall crossing a structural one in a grid of 600 by 600
-/// teeth meets it in more pairs of edges than one plan overlay is handed
-/// (#419): its coverage is refused by name, not built until memory runs
+/// teeth meets it in a subdivision past the overlay memory budget (#419,
+/// #433): its coverage is refused by name, not built until memory runs
 /// out, and the check's other rule reports as it would alone.
 #[test]
 fn with_geometry_a_coverage_past_the_overlay_budget_is_refused_and_other_rules_report() {
@@ -10710,7 +10710,10 @@ fn with_geometry_a_coverage_past_the_overlay_budget_is_refused_and_other_rules_r
         assert_eq!(outcome["object_id"]["source"]["document"], "arch.ifc");
         let message = outcome["message"].as_str().unwrap();
         assert!(
-            message.contains("past the overlay budget of 4000000 pairs"),
+            message.contains(
+                "the plan overlay was not built: its subdivision needs more than the \
+                 overlay memory budget of"
+            ),
             "{message}"
         );
     }
@@ -17634,8 +17637,10 @@ fn with_geometry_a_memory_budget_changes_no_report_but_by_its_refusals() {
     }
     let (refused, result) = report("1K", "1");
     let text = result.to_string();
+    // The band footprints' plan overlays come first, refused by the kernel
+    // under the check's budget, as it is smaller than the overlay's (#433).
     assert!(
-        text.contains("is more than the check's memory budget of 1.0 KiB"),
+        text.contains("its subdivision needs more than the overlay memory budget of 1.0 KiB"),
         "{result:#}"
     );
     assert!(

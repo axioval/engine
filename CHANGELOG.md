@@ -242,6 +242,22 @@ All notable changes are documented here. This project follows Semantic Versionin
   after on every set measured
   ([Template performance](docs/src/performance.md#adapter-caches-on-the-store)).
 
+- **A class the source's schema lacks bounds the geometry demand**
+  ([#449](https://github.com/axioval/engine/issues/449)). The type
+  hierarchy now tells an unknown requested class from an unknown object
+  kind: `TypeHierarchyService::is_a` refuses an ancestor the source's
+  schema does not declare, for a kind it does, with the new
+  `TypeHierarchyError::UnknownAncestor` (breaking for a match over the
+  enum), and keeps `UnknownType` for a kind it cannot place. The IFC
+  adapter answers so, checking the kind first: IFC4's `IfcDuctSegment`
+  asked of an IFC2X3 model is an unknown ancestor. The geometry demand
+  (`geometry_demand`) reads that refusal as "no object of this source
+  is one", where it read every refusal as "may be", so a clash rule
+  written for IFC4 no longer meshes every body of an IFC2X3 model; an
+  object of an unknown kind still may be selected. A rule's selection
+  reports both refusals as before (invalid evidence, the same message):
+  reports are byte-identical.
+
 - **The expression evaluation budget refuses alike in any rule order**
   ([#447](https://github.com/axioval/engine/issues/447),
   [ADR 0006](docs/src/adr-0006.md#the-expression-evaluation-budget)).

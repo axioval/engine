@@ -81,14 +81,17 @@ impl TypeHierarchyService for IfcTypeHierarchy {
     fn is_a(&self, kind: &str, ancestor: &str) -> Result<bool, TypeHierarchyError> {
         let schema = self.release.schema;
         // `is_a` answers false for a name the schema does not declare, which
-        // would make an unknown kind look like a proven non-member.
-        for name in [kind, ancestor] {
-            if schema.entity(name).is_none() {
-                return Err(TypeHierarchyError::UnknownType(format!(
-                    "`{name}` is not an {} entity",
-                    self.release.label
-                )));
-            }
+        // would make an unknown kind look like a proven non-member. Which
+        // name is unknown matters (#449): a kind the release lacks may be
+        // anything, while an ancestor it lacks (a class of another release,
+        // such as IFC4's `IfcDuctSegment` asked of IFC2X3) has no member
+        // among its declared kinds.
+        let undeclared = |name: &str| format!("`{name}` is not an {} entity", self.release.label);
+        if schema.entity(kind).is_none() {
+            return Err(TypeHierarchyError::UnknownType(undeclared(kind)));
+        }
+        if schema.entity(ancestor).is_none() {
+            return Err(TypeHierarchyError::UnknownAncestor(undeclared(ancestor)));
         }
         Ok(schema.is_a(kind, ancestor))
     }

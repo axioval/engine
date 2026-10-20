@@ -9,7 +9,7 @@ use axioval_engine::{
     AbsentEndPolicy, EvidenceSession, ObjectNature, PropertyRequest, PropertyResolution,
     PropertyResolutionServiceHandle, RelationshipQuery, RelationshipSelectionRequest,
     RelationshipSelectionServiceHandle, SemanticRelationship, SourceIntegrityServiceHandle,
-    TraversalDirection, TypeHierarchyServiceHandle,
+    TraversalDirection, TypeHierarchyError, TypeHierarchyServiceHandle,
 };
 use axioval_ifc::{IFC2X3_TYPE_SYSTEM, IFC4_TYPE_SYSTEM, import_ifc_session};
 use axioval_ir::{ObjectId, PropertyValue, SourceId};
@@ -147,10 +147,26 @@ fn the_type_hierarchy_is_answered_from_ifc2x3() {
     );
     // IfcDoorType exists only in IFC4, so an IFC2X3 source refuses it
     // rather than calling it a non-member.
-    assert!(
-        hierarchy
-            .is_a(&source(), "IfcDoorType", "IfcTypeObject")
-            .is_err()
+    assert_eq!(
+        hierarchy.is_a(&source(), "IfcDoorType", "IfcTypeObject"),
+        Err(TypeHierarchyError::UnknownType(
+            "`IfcDoorType` is not an IFC2X3 entity".into()
+        ))
+    );
+    // Asked whether an IFC2X3 kind is an IFC4-only class, it says the class
+    // is the unknown name (#449): no IFC2X3 object is one, unlike a kind it
+    // cannot place, which may be anything.
+    assert_eq!(
+        hierarchy.is_a(&source(), "IfcFlowSegment", "IfcDuctSegment"),
+        Err(TypeHierarchyError::UnknownAncestor(
+            "`IfcDuctSegment` is not an IFC2X3 entity".into()
+        ))
+    );
+    assert_eq!(
+        hierarchy.is_a(&source(), "IfcDuctSegment", "IfcFlowSegment"),
+        Err(TypeHierarchyError::UnknownType(
+            "`IfcDuctSegment` is not an IFC2X3 entity".into()
+        ))
     );
 }
 

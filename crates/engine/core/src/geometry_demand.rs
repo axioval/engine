@@ -17,7 +17,8 @@
 //! object types it requires; one that cannot be bounded that way (a
 //! property, a relationship, a negation) may select every object. Where a
 //! type cannot be told (an unbound concept, a kind the type hierarchy does
-//! not know) the object is kept. Being wrong here would turn missing
+//! not know) the object is kept; a class the source's schema does not
+//! declare, asked of an object whose kind it does, selects none (#449). Being wrong here would turn missing
 //! evidence into a verdict, so a host meshing less than everything also
 //! watches the services it left out ([`crate::ServiceRegistry::watch`])
 //! and runs again with every object meshed when a rule asked for one.
@@ -29,7 +30,7 @@ use std::sync::Arc;
 use axioval_ir::contract::{self as schema, Selector};
 use axioval_ir::{MEASURED_SET, Object, ObjectId, SourceId};
 
-use crate::concepts::ConceptBindings;
+use crate::concepts::{ConceptBindings, TypeHierarchyError};
 use crate::derived_relationships::DERIVED_RELATIONSHIP_PREFIX;
 use crate::{
     CapabilityRegistry, CompiledRule, EvidenceSession, ExecutionPlan, TypeHierarchyServiceHandle,
@@ -260,10 +261,15 @@ impl Bound<'_> {
         if !subtypes {
             return false;
         }
+        // A class the source's schema does not declare has no member among
+        // the kinds it does (#449); any other refusal (a kind the hierarchy
+        // cannot place, an uncovered source) leaves the object open.
         self.hierarchy.is_none_or(|hierarchy| {
-            hierarchy
-                .is_a(&object.id.source, object.kind(), name)
-                .unwrap_or(true)
+            match hierarchy.is_a(&object.id.source, object.kind(), name) {
+                Ok(is) => is,
+                Err(TypeHierarchyError::UnknownAncestor(_)) => false,
+                Err(_) => true,
+            }
         })
     }
 }

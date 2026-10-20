@@ -268,9 +268,19 @@ pub enum TypeHierarchyError {
     /// The service does not cover this source.
     #[error("type hierarchy does not cover source `{0}`")]
     UncoveredSource(SourceId),
-    /// The type is not declared by the source's schema.
+    /// The type is not declared by the source's schema: for
+    /// [`TypeHierarchyService::is_a`], the kind asked about, which the
+    /// hierarchy cannot place and so may be anything.
     #[error("type `{0}` is not declared by the source schema")]
     UnknownType(String),
+    /// [`TypeHierarchyService::is_a`] was asked about an ancestor the
+    /// source's schema does not declare, for a kind it does (#449): no
+    /// object of a declared kind is one of it, but the hierarchy says so
+    /// rather than answering "no", since a rule naming a class its source
+    /// lacks is not the same as a rule whose class an object is not. Reads
+    /// as [`Self::UnknownType`] does.
+    #[error("type `{0}` is not declared by the source schema")]
+    UnknownAncestor(String),
     /// The service does not say what objects of this type are.
     #[error("the type hierarchy does not say what `{0}` objects are")]
     Unmapped(String),
@@ -302,6 +312,12 @@ pub trait TypeHierarchyService: Send + Sync {
     // gate: reads
     fn source_snapshots(&self) -> &[SourceSnapshot];
     /// Whether `kind` is `ancestor` or one of its subtypes.
+    ///
+    /// A service that cannot tell refuses rather than answering "no": with
+    /// [`TypeHierarchyError::UnknownType`] for a `kind` its schema does not
+    /// declare (checked first), and with
+    /// [`TypeHierarchyError::UnknownAncestor`] for an `ancestor` it does not
+    /// declare while it declares `kind`.
     // gate: reads
     fn is_a(&self, kind: &str, ancestor: &str) -> Result<bool, TypeHierarchyError>;
     /// What objects of `kind` are ([`ObjectNature`]). A service that does

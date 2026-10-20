@@ -2,24 +2,26 @@
 //! for rules reading properties only, the spaces, obstacles and doors a
 //! free-floor rule selects, the bodies a clash rule pairs, and everything
 //! for a rule that reads a measured value or whose capability records why
-//! it may.
+//! it may; none of a class the source's schema does not declare (#449).
 #![allow(missing_docs)]
 
 mod common;
 
 use std::any::TypeId;
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
 use axioval_engine::{
     CapabilityRegistry, CompiledRule, FreeSpaceServiceHandle, GeometryDemand, GeometryReach,
-    LocalOrigins, ObjectFrameServiceHandle, ParameterType, ProximityServiceHandle, geometry_demand,
+    LocalOrigins, ObjectFrameServiceHandle, ParameterType, ProximityServiceHandle, SourceSnapshot,
+    TypeHierarchyError, TypeHierarchyService, TypeHierarchyServiceHandle, geometry_demand,
     services_asked,
 };
 use axioval_ir::contract::{ParameterValue, Selector, Severity};
 use axioval_ir::{DefinitionPackage, MEASURED_SET, RuleId};
 use axioval_rules::reach::{CONDITIONAL_REACH, UNBOUNDED_REACH};
 use axioval_rules::register_builtins;
-use common::runtime::{definitions, entity, plan, rule, ruleset, session};
+use common::runtime::{definitions, entity, plan, rule, ruleset, session, snapshot};
 use common::{Model, id};
 use serde_json::{Value, json};
 
@@ -314,4 +316,96 @@ fn a_grouping_by_compartments_asks_for_everything() {
         GeometryDemand::Everything
     );
     assert_eq!(services_asked(&plan, &registry), vec![None]);
+}
+
+/// A type hierarchy over a schema declaring `declared` kinds, each its own
+/// only ancestor, refusing as an adapter does (#449): an undeclared kind as
+/// unknown, an undeclared ancestor of a declared kind as such.
+struct Schema(Vec<SourceSnapshot>, &'static [&'static str]);
+
+impl TypeHierarchyService for Schema {
+    fn source_snapshots(&self) -> &[SourceSnapshot] {
+        &self.0
+    }
+    fn is_a(&self, kind: &str, ancestor: &str) -> Result<bool, TypeHierarchyError> {
+        if !self.1.contains(&kind) {
+            return Err(TypeHierarchyError::UnknownType(kind.to_owned()));
+        }
+        if !self.1.contains(&ancestor) {
+            return Err(TypeHierarchyError::UnknownAncestor(ancestor.to_owned()));
+        }
+        Ok(kind == ancestor)
+    }
+}
+
+/// The demand of a clash of furniture against `counterpart`, both with
+/// their subtypes, over `model` and a schema declaring `declared`.
+fn clash_over(
+    model: Model,
+    declared: &'static [&'static str],
+    counterpart: &str,
+) -> GeometryDemand {
+    let registry = registry();
+    let subtypes = |name: &str| json!({"kind": "entityType", "objectType": format!("t.{name}"), "includeSubtypes": true});
+    let rule = rule(
+        "clash",
+        CLASH,
+        "error",
+        subtypes("Furniture"),
+        json!({"counterparts": {"type": "selector", "value": subtypes(counterpart)},
+               "penetration_tolerance_metres": {"type": "number", "value": 0.01}}),
+        json!({}),
+    );
+    let plan = plan(&registry, &vocabulary(&registry), vec![rule]).unwrap();
+    let hierarchy = TypeHierarchyServiceHandle::new(Arc::new(Schema(vec![snapshot()], declared)));
+    let session = session(model).with_service(hierarchy).unwrap();
+    geometry_demand(&plan, &registry, &session)
+}
+
+/// A clash against a class the source's schema does not declare, as an
+/// IFC4 class asked of an IFC2X3 model: no object of the source can be one,
+/// so only the furniture is meshed (#449).
+#[test]
+fn a_class_the_schema_does_not_declare_selects_no_object() {
+    let model = Model::default()
+        .object("s1", "Space")
+        .object("f1", "Furniture")
+        .object("d1", "Door");
+    assert_eq!(
+        clash_over(model, &["Space", "Furniture", "Door"], "Pipe"),
+        GeometryDemand::Objects {
+            objects: BTreeSet::from([id("f1")]),
+            services: BTreeSet::from([
+                TypeId::of::<ProximityServiceHandle>(),
+                TypeId::of::<ObjectFrameServiceHandle>(),
+                TypeId::of::<LocalOrigins>(),
+            ]),
+        }
+    );
+}
+
+/// An object whose own kind the hierarchy cannot place may be anything, so
+/// it stays in the demand, whether the class asked for is declared or not
+/// (#449).
+#[test]
+fn an_object_of_an_unknown_kind_may_still_be_selected() {
+    let model = || {
+        Model::default()
+            .object("s1", "Space")
+            .object("f1", "Furniture")
+            .object("d1", "Door")
+            .object("x1", "Mystery")
+    };
+    let declared: &'static [&'static str] = &["Space", "Furniture", "Door"];
+    for counterpart in ["Door", "Pipe"] {
+        let GeometryDemand::Objects { objects, .. } = clash_over(model(), declared, counterpart)
+        else {
+            panic!("a clash is bounded by its selectors");
+        };
+        let mut expected = BTreeSet::from([id("f1"), id("x1")]);
+        if counterpart == "Door" {
+            expected.insert(id("d1"));
+        }
+        assert_eq!(objects, expected, "{counterpart}");
+    }
 }

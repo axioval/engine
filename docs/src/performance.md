@@ -984,14 +984,46 @@ What is held over the run: m07's 17 placement scenes (169 KiB) and m13's
 157 (509 KiB) are now released before the first clash rule, where they
 were held to the end of the check; the indexed bodies (8.2 MiB on m07,
 24.4 MiB on m13) are read by every clash rule and released after the last,
-as before. Nothing is evicted under the default budget. m13 meshes every
+as before. Nothing is evicted under the default budget. m13 meshed every
 body still: it is an IFC2X3 model, and one clash rule selects a concept
 bound to a class the IFC2X3 schema does not declare (`IfcDuctSegment`),
-which the type hierarchy cannot decide, so every object may be selected
-(on the public IFC2X3 architecture model that rule alone meshes every
-body, any other of the set alone half of them). Every report is the same
-byte for byte before and after; the result's `geometry` record and the
-model-data warnings now cover the bodies meshed.
+which the type hierarchy could not decide, so every object might have
+been selected (on the public IFC2X3 architecture model that rule alone
+meshed every body, any other of the set alone half of them; #449 below
+bounds it). Every report is the same byte for byte before and after; the
+result's `geometry` record and the model-data warnings now cover the
+bodies meshed.
+
+### A class the source's schema lacks selects nothing
+
+Since [#449](https://github.com/axioval/engine/issues/449) the type
+hierarchy tells the two refusals apart that made m13 mesh every body: an
+object whose own kind it cannot place (`TypeHierarchyError::UnknownType`),
+which may still be anything, and a class the source's schema does not
+declare asked of a kind it does (`UnknownAncestor`), which no object of
+that source is. The geometry demand keeps the first and drops the second,
+so the IFC4 `IfcDuctSegment` of a clash rule no longer reaches every
+object of an IFC2X3 model. The rule's selection reports both as before.
+
+Measured as in #448, one release build per side (the side before is this
+change with the demand reading `UnknownAncestor` as "may be"), one run
+each, the parity clashes alone and after the free-floor circles and
+rectangles ("floors, clashes"):
+
+| Model, rule set | Threads | Wall before / after / `--mesh-all` | Peak before / after / `--mesh-all` | Bodies meshed before / after |
+|---|---:|---:|---:|---:|
+| m13, clashes | 1 | 71.6 / 68.8 s | 1872 / 1347 MiB | 4781 / 2720 |
+| m13, clashes | 4 | 71.8 / 69.6 / 77.1 s | 1894 / 1354 / 1855 MiB | 4781 / 2720 |
+| m13, floors, clashes | 4 | 72.3 / 69.8 / 72.8 s | 1884 / 1361 / 1837 MiB | 4781 / 2877 |
+| m07, clashes | 1 | 5.8 / 5.8 s | 334 / 331 MiB | 595 / 595 |
+| m07, clashes | 4 | 6.0 / 5.8 / 6.0 s | 332 / 330 / 384 MiB | 595 / 595 |
+| m07, floors, clashes | 4 | 7.0 / 7.0 / 7.3 s | 1340 / 1360 / 1435 MiB | 612 / 612 |
+
+m13 meshes 2720 of its 4781 bodies, those of the classes its clash rules
+select, and peaks 520 to 540 MiB (28%) lower. Its wall time is the clash rules' own, so it drops by
+2 to 3 s only. m07 is an IFC4 model, where `IfcDuctSegment` is declared,
+and is unchanged. Every report is the same byte for byte as with
+`--mesh-all`, and no run is checked again with every body.
 
 A rule may still be checked again with every body where the host's answer
 depends on bodies it left out: an exact body is registered only when some

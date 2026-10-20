@@ -893,9 +893,11 @@ fn entity_type_matches(
     };
     match hierarchy.is_a(&object.id.source, object.kind(), name) {
         Ok(matches) => verdict(matches),
-        Err(TypeHierarchyError::UnknownType(message)) => {
-            Selection::NotEvaluated(NotEvaluatedReason::InvalidEvidence, message)
-        }
+        // A class the source's schema lacks is refused as an unknown kind
+        // is; only the geometry demand tells them apart (#449).
+        Err(
+            TypeHierarchyError::UnknownType(message) | TypeHierarchyError::UnknownAncestor(message),
+        ) => Selection::NotEvaluated(NotEvaluatedReason::InvalidEvidence, message),
         Err(error) => {
             Selection::NotEvaluated(NotEvaluatedReason::BackendUnavailable, error.to_string())
         }

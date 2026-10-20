@@ -19,7 +19,7 @@ use axioval_engine::{
 use axioval_ir::ObjectId;
 
 use super::{PlanArea, SharedArea, plan_area, shared_area};
-use crate::derivations::{self, AXIOLID_CORE, AXIOLID_MESH, AXIOLID_OVERLAY, Over};
+use crate::derivations::{self, AXIOLID_CORE, AXIOLID_MESH, AXIOLID_OVERLAY, OverGeometry};
 use crate::geometry::{AxiolidGeometry, Triangle, triangles};
 use crate::walkable::polygons_bytes;
 
@@ -47,7 +47,7 @@ fn of_bits(bits: [u64; 2]) -> Result<axiolid_core::Tolerance, SpaceError> {
 /// overlay computes no fast mode here), so every reader asks Exact.
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub(crate) struct FootprintKey {
-    pub(crate) geometry: Over<AxiolidGeometry>,
+    pub(crate) geometry: OverGeometry,
     pub(crate) object: ObjectId,
     pub(crate) tolerance: [u64; 2],
     pub(crate) precision: Precision,
@@ -55,12 +55,12 @@ pub(crate) struct FootprintKey {
 
 impl FootprintKey {
     pub(crate) fn new(
-        geometry: &Arc<AxiolidGeometry>,
+        geometry: &AxiolidGeometry,
         object: &ObjectId,
         tolerance: axiolid_core::Tolerance,
     ) -> Self {
         Self {
-            geometry: Over(Arc::clone(geometry)),
+            geometry: OverGeometry(geometry.clone()),
             object: object.clone(),
             tolerance: tolerance_bits(tolerance),
             precision: Precision::Exact,
@@ -117,7 +117,7 @@ impl DerivationKind for PlanFootprints {
 /// class; exact, as [`FootprintKey`].
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub(crate) struct SharedKey {
-    pub(crate) geometry: Over<AxiolidGeometry>,
+    pub(crate) geometry: OverGeometry,
     pub(crate) space: ObjectId,
     pub(crate) candidate: ObjectId,
     pub(crate) tolerance: [u64; 2],
@@ -126,12 +126,12 @@ pub(crate) struct SharedKey {
 
 impl SharedKey {
     pub(crate) fn new(
-        geometry: &Arc<AxiolidGeometry>,
+        geometry: &AxiolidGeometry,
         (space, candidate): (&ObjectId, &ObjectId),
         tolerance: axiolid_core::Tolerance,
     ) -> Self {
         Self {
-            geometry: Over(Arc::clone(geometry)),
+            geometry: OverGeometry(geometry.clone()),
             space: space.clone(),
             candidate: candidate.clone(),
             tolerance: tolerance_bits(tolerance),
@@ -217,13 +217,11 @@ mod tests {
 
     /// A 5 m by 4 m room, a 2 m by 2 m store inside it, and a slab under
     /// half of the room.
-    fn geometry(room: [f64; 3]) -> Arc<AxiolidGeometry> {
-        Arc::new(
-            AxiolidGeometry::new()
-                .with_mesh(id("room"), cuboid([0.0; 3], room))
-                .with_mesh(id("store"), cuboid([0.0; 3], [2.0, 2.0, 3.0]))
-                .with_mesh(id("slab"), cuboid([0.0, 0.0, -0.2], [2.5, 4.0, 0.0])),
-        )
+    fn geometry(room: [f64; 3]) -> AxiolidGeometry {
+        AxiolidGeometry::new()
+            .with_mesh(id("room"), cuboid([0.0; 3], room))
+            .with_mesh(id("store"), cuboid([0.0; 3], [2.0, 2.0, 3.0]))
+            .with_mesh(id("slab"), cuboid([0.0, 0.0, -0.2], [2.5, 4.0, 0.0]))
     }
 
     fn area(value: &Result<Arc<PlanArea>, SpaceError>) -> String {
@@ -285,7 +283,7 @@ mod tests {
     fn changing_any_input_of_a_shared_plan_area_changes_its_key() {
         let (one, other) = (geometry([5.0, 4.0, 3.0]), geometry([1.0, 4.0, 3.0]));
         let tolerance = tolerance().unwrap();
-        let key = |geometry: &Arc<AxiolidGeometry>, space: &str, candidate: &str| {
+        let key = |geometry: &AxiolidGeometry, space: &str, candidate: &str| {
             SharedKey::new(geometry, (&id(space), &id(candidate)), tolerance)
         };
         let base = key(&one, "room", "slab");

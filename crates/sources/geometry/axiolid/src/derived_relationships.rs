@@ -121,7 +121,7 @@ pub struct AxiolidDerivedRelationshipService {
 pub(crate) struct Declared {
     /// Shared with the proximity measurements `intersects` reads, whose
     /// bodies the store indexes over it.
-    geometry: Arc<AxiolidGeometry>,
+    geometry: AxiolidGeometry,
     spaces: BTreeSet<ObjectId>,
     /// Each declared level's height band, bottom and top (open above for
     /// the highest), or why it has none.
@@ -138,7 +138,7 @@ impl AxiolidDerivedRelationshipService {
     pub fn new(geometry: AxiolidGeometry) -> Self {
         Self {
             declared: Arc::new(Declared {
-                geometry: Arc::new(geometry),
+                geometry,
                 spaces: BTreeSet::new(),
                 levels: BTreeMap::new(),
                 openings: BTreeSet::new(),
@@ -777,7 +777,7 @@ impl Declared {
         }
         // A view of the same geometry: its bodies are indexed once per
         // check, keyed over it.
-        let proximity = AxiolidProximityService::over(Arc::clone(&self.geometry));
+        let proximity = AxiolidProximityService::over(self.geometry.clone());
         let request = ProximityRequest::try_new(a.clone(), b.clone())
             .map_err(|error| format!("{a} and {b} cannot be measured: {error:?}"))?;
         let measured = match proximity.measure_proximity(&request) {

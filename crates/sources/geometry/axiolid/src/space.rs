@@ -74,7 +74,7 @@ enum Role {
 pub struct AxiolidSpaceService {
     /// Shared with the plan areas the check's store keeps of it
     /// ([`areas`]).
-    geometry: Arc<AxiolidGeometry>,
+    geometry: AxiolidGeometry,
     source: SourceId,
     roles: BTreeMap<ObjectId, Role>,
     /// Which storey each object belongs to, as the host declares it.
@@ -93,7 +93,7 @@ impl AxiolidSpaceService {
     #[must_use]
     pub fn new(geometry: AxiolidGeometry, source: SourceId) -> Self {
         Self {
-            geometry: Arc::new(geometry),
+            geometry,
             source,
             roles: BTreeMap::new(),
             storeys: BTreeMap::new(),

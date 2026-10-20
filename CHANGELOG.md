@@ -214,6 +214,20 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **One geometry set for every service**
+  ([#450](https://github.com/axioval/engine/issues/450),
+  [performance](docs/src/performance.md#one-geometry-set-for-every-service)).
+  `AxiolidGeometry` is a handle over data its clones share, so a clone no
+  longer copies every mesh, and the IFC-Axiolid host, which hands each of
+  its geometry services a clone, holds each mesh once instead of 19 times.
+  A `with_` method on a clone others still share copies the set first and
+  leaves them as they were. Derivation keys over a set (indexed bodies,
+  plan footprints, shared plan areas, body shells, union volumes) compare
+  the identity of the shared data, so services over clones of one set
+  read one entry for one body. m13's clashes peak at 1285 MiB instead of
+  1869 MiB, 18 copies of its 32.4 MiB of meshes; run times and every
+  report are unchanged.
+
 - **Adapter caches live in the derivation store**
   ([#443](https://github.com/axioval/engine/issues/443),
   [ADR 0006](docs/src/adr-0006.md#adapter-caches-on-the-store)). What the

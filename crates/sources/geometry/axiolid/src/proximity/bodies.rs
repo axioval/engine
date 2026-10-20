@@ -22,7 +22,7 @@ use axioval_ir::ObjectId;
 use super::zero_area::Surface;
 use super::{ANGULAR_TOLERANCE, Indexed, LINEAR_TOLERANCE, triangle_box};
 use crate::derivations::{
-    self, AXIOLID_CORE, AXIOLID_MEASURE, AXIOLID_MESH, AXIOLID_SPATIAL, Over,
+    self, AXIOLID_CORE, AXIOLID_MEASURE, AXIOLID_MESH, AXIOLID_SPATIAL, OverGeometry,
 };
 use crate::geometry::{AxiolidGeometry, Triangle, triangles};
 
@@ -49,7 +49,7 @@ pub(crate) struct IndexedBody {
 /// asked, is another entry indexed as exactly, carrying no excess.
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub(crate) struct BodyKey {
-    pub(crate) geometry: Over<AxiolidGeometry>,
+    pub(crate) geometry: OverGeometry,
     pub(crate) object: ObjectId,
     pub(crate) void: bool,
     pub(crate) tolerance: [u64; 2],
@@ -59,9 +59,9 @@ pub(crate) struct BodyKey {
 impl BodyKey {
     /// The key of `object`'s body in `geometry`, its void's where `voids`
     /// measures it so.
-    pub(crate) fn new(geometry: &Arc<AxiolidGeometry>, object: &ObjectId, voids: bool) -> Self {
+    pub(crate) fn new(geometry: &AxiolidGeometry, object: &ObjectId, voids: bool) -> Self {
         Self {
-            geometry: Over(Arc::clone(geometry)),
+            geometry: OverGeometry(geometry.clone()),
             object: object.clone(),
             void: voids && geometry.has_no_body(object),
             tolerance: [LINEAR_TOLERANCE.to_bits(), ANGULAR_TOLERANCE.to_bits()],
@@ -234,24 +234,36 @@ mod tests {
     /// indexes another body.
     #[test]
     fn changing_any_input_of_an_indexed_body_changes_its_key() {
-        let geometry = Arc::new(
-            AxiolidGeometry::new()
-                .with_no_body(id("opening"))
-                .with_void(id("opening"), cuboid([0.0; 3], [1.0, 0.2, 2.0]))
-                .with_mesh(id("wall"), cuboid([0.0; 3], [4.0, 0.2, 3.0])),
-        );
-        let other = Arc::new(
-            AxiolidGeometry::new()
-                .with_no_body(id("opening"))
-                .with_void(id("opening"), cuboid([0.0; 3], [0.9, 0.2, 2.1])),
-        );
+        let geometry = AxiolidGeometry::new()
+            .with_no_body(id("opening"))
+            .with_void(id("opening"), cuboid([0.0; 3], [1.0, 0.2, 2.0]))
+            .with_mesh(id("wall"), cuboid([0.0; 3], [4.0, 0.2, 3.0]));
+        let other = AxiolidGeometry::new()
+            .with_no_body(id("opening"))
+            .with_void(id("opening"), cuboid([0.0; 3], [0.9, 0.2, 2.1]));
         let base = BodyKey::new(&geometry, &id("opening"), true);
         KeyCompleteness::<IndexedBodies, _>::new(base.clone(), fingerprint)
             .same(
                 "the same inputs",
                 BodyKey::new(&geometry, &id("opening"), true),
             )
+            // Every service holds a clone of the host's one set (#450).
+            .same(
+                "a clone of the geometry",
+                BodyKey::new(&geometry.clone(), &id("opening"), true),
+            )
             .changes_value("the geometry", BodyKey::new(&other, &id("opening"), true))
+            // A clone changed after cloning is a set of its own.
+            .changes_value(
+                "a clone changed after cloning",
+                BodyKey::new(
+                    &geometry
+                        .clone()
+                        .with_void(id("opening"), cuboid([0.0; 3], [0.9, 0.2, 2.1])),
+                    &id("opening"),
+                    true,
+                ),
+            )
             .changes_value("the object", BodyKey::new(&geometry, &id("wall"), true))
             .changes_value(
                 "measuring its void",

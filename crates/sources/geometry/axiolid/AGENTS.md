@@ -3,7 +3,16 @@
 Geometry evidence for any source, measured with the Axiolid kernel.
 
 - `src/geometry.rs` holds `AxiolidGeometry`, the host-supplied mesh store shared
-  by every service here. `with_extent_bounds` takes host-certified bounds
+  by every service here. It is a handle over one `Arc<GeometryData>`
+  (#450): a clone is shallow, so a host hands one set to all its services
+  and holds each mesh once, and every `with_` method changes it through
+  `data_mut` (`Arc::make_mut`), which copies the set first only when a
+  clone or a key still shares it. Never give `GeometryData` interior
+  mutability or a `with_` method that writes through `self.data`, and never
+  hold geometry behind another `Arc` in a key: derivation keys over a set
+  compare what its clones share (`derivations::OverGeometry`), so services
+  over clones of one set share entries, and a clone changed after cloning
+  is another set. `with_extent_bounds` takes host-certified bounds
   on a tessellated body's extent (the CLI passes
   `ExactBoundary::extent_bounds`: each item's subject in closed form
   outside, the built vertices less the body's widening inside), and
@@ -39,7 +48,7 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   seeing it, and `mesh` answers `None` for it. Only two readers measure a
   void, and only for an object named in the request: the proximity
   service's view `AxiolidProximityService::measuring_voids` (sharing the
-  geometry through an `Arc`; `body` and `fidelity` resolve the void there,
+  geometry, as every clone does; `body` and `fidelity` resolve the void there,
   an unmeasured void is `Unavailable`, a bodiless object without one stays
   `NoBody`; `face_distance`, `height_above` and `drainage` read fidelity
   through the service so a void's is its own) and the vertical extent
@@ -778,8 +787,9 @@ Geometry evidence for any source, measured with the Axiolid kernel.
 - `src/proximity.rs` implements `ProximityService` for clash and distance
   checks. Every body a pair reads is indexed once per check
   (`proximity/bodies.rs`, `IndexedBodies`, #408: triangles, boxes and
-  hierarchy, solidity, zero-area surface), keyed by the geometry's `Arc`
-  by address, the object, whether its void is measured (only for a
+  hierarchy, solidity, zero-area surface), keyed by the geometry by the
+  identity of what its clones share (`derivations::OverGeometry`, #450),
+  so every service over the host's one set reads one entry, the object, whether its void is measured (only for a
   bodiless object, so both views share every other body) and the audit
   tolerance bits, which the build reads (never the module's constants),
   and the precision class (Exact; the index computes nothing fast, so a

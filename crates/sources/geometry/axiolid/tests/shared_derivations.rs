@@ -174,3 +174,53 @@ fn pairs_sharing_a_body_index_it_once() {
     assert_eq!(kind(&store, "indexed body").builds, 3);
     assert_eq!(kept, measure());
 }
+
+/// Services over clones of one geometry share its meshes and the bodies
+/// indexed from them (#450); a clone changed after cloning is a set of its
+/// own, its bodies indexed afresh, and the others keep what they had.
+#[test]
+fn services_over_clones_of_one_geometry_share_its_bodies() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("a"), cuboid([0.0, 0.0, 0.0], [1.0, 1.0, 1.0]))
+        .with_mesh(id("b"), cuboid([2.0, 0.0, 0.0], [3.0, 1.0, 1.0]));
+    let clone = geometry.clone();
+    assert!(std::ptr::eq(
+        geometry.mesh(&id("a")).unwrap(),
+        clone.mesh(&id("a")).unwrap()
+    ));
+    let changed = geometry
+        .clone()
+        .with_mesh(id("b"), cuboid([4.0, 0.0, 0.0], [5.0, 1.0, 1.0]));
+    assert!(!std::ptr::eq(
+        geometry.mesh(&id("a")).unwrap(),
+        changed.mesh(&id("a")).unwrap()
+    ));
+    let request = ProximityRequest::try_new(id("a"), id("b")).unwrap();
+    let measure = |geometry: AxiolidGeometry| {
+        format!(
+            "{:?}",
+            AxiolidProximityService::new(geometry).measure_proximity(&request)
+        )
+    };
+    let store = DerivationStore::new();
+    let (first, second, third) = {
+        let _entered = store.enter();
+        (
+            measure(geometry.clone()),
+            measure(clone),
+            measure(changed.clone()),
+        )
+    };
+    // Two bodies for the shared set, two more for the changed one.
+    let bodies = kind(&store, "indexed body");
+    assert_eq!(bodies.builds, 4, "{bodies:?}");
+    assert_eq!(first, second);
+    assert_ne!(first, third);
+    assert_eq!(first, measure(geometry.clone()));
+    assert_eq!(third, measure(changed));
+    // The original still holds its own second body.
+    assert_eq!(
+        geometry.mesh(&id("b")).unwrap().positions[0],
+        Point3::new(2.0, 0.0, 0.0)
+    );
+}

@@ -7,6 +7,8 @@ use std::sync::Arc;
 
 use axioval_engine::{Kernel, memory};
 
+use crate::AxiolidGeometry;
+
 /// The kernel crates the adapter's derivations call, at the versions their
 /// versions are stated for: the ones the workspace locks, which every
 /// kind's key-completeness test holds them to. Upgrading one means
@@ -64,6 +66,29 @@ impl<T> Eq for Over<T> {}
 impl<T> Hash for Over<T> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         Arc::as_ptr(&self.0).hash(state);
+    }
+}
+
+/// A geometry set in a key, compared and hashed by the identity of what
+/// its clones share (#450): keys over one set, through whichever service
+/// holds a clone of it, are equal in this field; keys over two sets never,
+/// whatever those hold, a clone changed after cloning included (it then
+/// holds a copy of its own). The key holds the set, so the address is not
+/// reused, nor what it holds changed, while the key lives.
+#[derive(Clone)]
+pub(crate) struct OverGeometry(pub(crate) AxiolidGeometry);
+
+impl PartialEq for OverGeometry {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.same(&other.0)
+    }
+}
+
+impl Eq for OverGeometry {}
+
+impl Hash for OverGeometry {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.address().hash(state);
     }
 }
 

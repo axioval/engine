@@ -82,6 +82,12 @@ benchmark) is its first consumer.
   and `a_tessellated_copy_is_confirmed…` pin it end to end. Each object's model is looked up by its source, spatial
   trees are built per source, and every service is bound to all snapshots.
   Never key anything on a bare local id: two files share `#10`.
+- One geometry set for every service (#450): `attach` builds the
+  `AxiolidGeometry` completely (bodies, wholes, voids, exact bodies),
+  then hands each service a clone of it, which shares every mesh. Never
+  call a `with_` method on the set after the first service holds a clone:
+  it would copy the whole set for that holder, and its derivations would
+  no longer be the other services'.
 - Meshing only what the rules ask (#410): `Options::with_only` meshes
   the objects named and what measuring them as among all the others needs
   (`wanted`: every product sharing a decomposition with one through

@@ -197,7 +197,7 @@ type Volume = Result<(f64, f64), ProximityError>;
 /// Measures pairwise proximity between registered meshes using Axiolid.
 #[derive(Debug)]
 pub struct AxiolidProximityService {
-    geometry: Arc<AxiolidGeometry>,
+    geometry: AxiolidGeometry,
     /// Whether a bodiless object's registered void is measured as the
     /// solid of that void ([`Self::measuring_voids`]).
     voids: bool,
@@ -213,7 +213,7 @@ impl AxiolidProximityService {
     #[must_use]
     pub fn new(geometry: AxiolidGeometry) -> Self {
         Self {
-            geometry: Arc::new(geometry),
+            geometry,
             voids: false,
         }
     }
@@ -221,7 +221,7 @@ impl AxiolidProximityService {
     /// A view of `geometry` measuring bodies, sharing it: the bodies it
     /// measures are indexed over it in the check's store, as for any
     /// service over the same geometry.
-    pub(crate) fn over(geometry: Arc<AxiolidGeometry>) -> Self {
+    pub(crate) fn over(geometry: AxiolidGeometry) -> Self {
         Self {
             geometry,
             voids: false,
@@ -240,7 +240,7 @@ impl AxiolidProximityService {
     #[must_use]
     pub fn measuring_voids(&self) -> Self {
         Self {
-            geometry: Arc::clone(&self.geometry),
+            geometry: self.geometry.clone(),
             voids: true,
         }
     }

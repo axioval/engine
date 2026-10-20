@@ -22,7 +22,8 @@ use axioval_ir::ObjectId;
 use super::bodies::BodyKey;
 use super::{AxiolidProximityService, Volume, shells};
 use crate::derivations::{
-    self, AXIOLID_CORE, AXIOLID_INSPECT, AXIOLID_MEASURE, AXIOLID_MESH, AXIOLID_SPATIAL, Over,
+    self, AXIOLID_CORE, AXIOLID_INSPECT, AXIOLID_MEASURE, AXIOLID_MESH, AXIOLID_SPATIAL,
+    OverGeometry,
 };
 use crate::geometry::AxiolidGeometry;
 
@@ -88,16 +89,16 @@ impl DerivationKind for BodyShells {
 /// certified, not computed in a fast mode, so every reader asks Exact.
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub(crate) struct VolumeKey {
-    pub(crate) geometry: Over<AxiolidGeometry>,
+    pub(crate) geometry: OverGeometry,
     pub(crate) object: ObjectId,
     pub(crate) voids: bool,
     pub(crate) precision: Precision,
 }
 
 impl VolumeKey {
-    pub(crate) fn new(geometry: &Arc<AxiolidGeometry>, object: &ObjectId, voids: bool) -> Self {
+    pub(crate) fn new(geometry: &AxiolidGeometry, object: &ObjectId, voids: bool) -> Self {
         Self {
-            geometry: Over(Arc::clone(geometry)),
+            geometry: OverGeometry(geometry.clone()),
             object: object.clone(),
             voids,
             precision: Precision::Exact,
@@ -108,7 +109,7 @@ impl VolumeKey {
     /// names.
     pub(crate) fn measure(&self) -> Volume {
         let view = AxiolidProximityService {
-            geometry: Arc::clone(&self.geometry.0),
+            geometry: self.geometry.0.clone(),
             voids: self.voids,
         };
         view.pieces_volume(&self.geometry.0.pieces(&self.object))
@@ -235,13 +236,11 @@ mod tests {
     #[test]
     fn changing_any_input_of_a_body_s_shells_changes_its_key() {
         let geometry = |second| {
-            Arc::new(
-                AxiolidGeometry::new()
-                    .with_mesh(id("pair"), two_boxes(second))
-                    .with_mesh(id("single"), cuboid([0.0; 3], [1.0; 3]))
-                    .with_no_body(id("opening"))
-                    .with_void(id("opening"), two_boxes([4.0, 1.0, 1.0])),
-            )
+            AxiolidGeometry::new()
+                .with_mesh(id("pair"), two_boxes(second))
+                .with_mesh(id("single"), cuboid([0.0; 3], [1.0; 3]))
+                .with_no_body(id("opening"))
+                .with_void(id("opening"), two_boxes([4.0, 1.0, 1.0]))
         };
         let (one, other) = (geometry([3.0, 1.0, 1.0]), geometry([3.0, 1.0, 2.0]));
         let base = BodyKey::new(&one, &id("pair"), false);

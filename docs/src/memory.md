@@ -127,6 +127,13 @@ system library. A check's placement scenes are kept in its derivation store
 250,000 corners of found regions (#427), and dropped with the store at the
 end of the run.
 
+The model's meshes are not counted against the budget: they are the
+source, held for the whole check. They are held once (#450): every
+geometry service of the IFC-Axiolid host reads one shared set, where each
+held a copy before: 18 beside the set itself, which on m13 were 583 MiB
+of copies of its 32.4 MiB of meshes (see [One geometry set for every
+service](./performance.md#one-geometry-set-for-every-service)).
+
 ## Measurements
 
 Release builds, peak resident memory from `getrusage`, steady memory the

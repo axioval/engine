@@ -1031,3 +1031,46 @@ tessellated body of the set meshed has one, so a check whose selected
 bodies have none, while some other body has one, asks about every object
 (a distance through a window, a model comparison of moved openings, in
 `tests/check.rs`). The report is the same; the check runs twice.
+
+### One geometry set for every service
+
+Since [#450](https://github.com/axioval/engine/issues/450) the IFC-Axiolid
+host holds each mesh once. It hands each of its geometry services a clone
+of one `AxiolidGeometry`, and a clone used to copy every mesh: 18 copies
+beside the set itself were held for the whole check. A set is now a handle
+over data its clones share; a `with_` method on a shared clone copies the
+set first, so nothing a service holds changes under it. Derivations over a
+set (indexed bodies, plan footprints and shared areas, shells, composed
+volumes) are keyed by the identity of that shared data, so services over
+clones of one set read one entry for one body.
+
+Measured as above, one release build per side, one run each; the public
+parity models as in [Adapter caches on the store](#adapter-caches-on-the-store).
+
+| Model, rule set | Threads | Wall before / after | Peak before / after | Steady before / after |
+|---|---:|---:|---:|---:|
+| m13 (4781 bodies, 32.4 MiB of meshes), clashes | 1 | 70.3 / 70.6 s | 1869 / 1285 MiB | 1813 / 1223 MiB |
+| m13, clashes | 4 | 70.6 / 71.3 s | 1867 / 1285 MiB | 1814 / 1220 MiB |
+| m13, every physical element | 4 | 1616 / 1593 s | 3471 / 2975 MiB | 1907 / 1294 MiB |
+| m13, furniture | 1 | 5.3 / 5.3 s | 1111 / 1108 MiB | 1108 / 1107 MiB |
+| m13, furniture | 4 | 4.3 / 4.3 s | 1164 / 1152 MiB | 1164 / 1149 MiB |
+| m07 (595 bodies, 1.3 MiB of meshes), clashes | 1 | 5.8 / 5.8 s | 332 / 296 MiB | 311 / 284 MiB |
+| m07, clashes | 4 | 5.8 / 5.8 s | 333 / 298 MiB | 313 / 285 MiB |
+| m07, every physical element | 4 | 69.8 / 73.6 s | 1543 / 1365 MiB | 383 / 301 MiB |
+| m07, furniture | 1 | 4.0 / 4.3 s | 635 / 625 MiB | 600 / 602 MiB |
+| m07, furniture | 4 | 2.0 / 2.0 s | 1277 / 1317 MiB | 1131 / 1316 MiB |
+| public parity models, 162 checks | 4 | 4.78 / 4.74 s | 102 / 98 MiB | |
+
+The drop is the meshes times the copies removed: m13's clashes mesh every
+body, 32.4 MiB of positions and indices, and 18 copies of them are
+583 MiB, the 584 MiB its peak fell by. m07's clashes fell by 36 MiB, its
+18 copies of 1.3 MiB of meshes and of the maps naming every object. The
+furniture sets mesh only the furniture and spaces their rules select
+(#448), so there is little to share, and their peaks are each run's
+largest placement step, which varies between runs as before. Run times
+are the same within noise; registering the services no longer copies
+(0.23 s before, 0.001 s after on m13 among every physical element). Indexed bodies are built as often as
+before on every case measured: no rule set here measures one body both
+through the proximity service and through the derived relationships,
+the two readers that held different copies. Every report is the same
+byte for byte before and after.

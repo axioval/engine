@@ -181,7 +181,7 @@ const IFC_GEOMETRY: Kernel = Kernel {
 };
 const AXIOLID_MESH_COMPILE: Kernel = Kernel {
     name: "axiolid-mesh-compile",
-    version: "0.3.29",
+    version: "0.3.30",
 };
 
 /// The derivation kind of doors' body items.

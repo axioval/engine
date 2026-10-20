@@ -238,6 +238,11 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- Moved to axiolid-overlay 0.3.19, axiolid-mesh-compile 0.3.30 and
+  axiolid-construct 0.3.20: a circumscribed grown soup's overlay now costs about
+  its outline, rings are validated through a box tree and once per produced
+  region, and more flat walls and swept edges are certified. Kept
+  derivations that call these crates are rebuilt under their new versions.
 - **One geometry set for every service**
   ([#450](https://github.com/axioval/engine/issues/450),
   [performance](docs/src/performance.md#one-geometry-set-for-every-service)).

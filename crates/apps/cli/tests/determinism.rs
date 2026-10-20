@@ -188,6 +188,11 @@ fn case_ruleset(case: &str) -> PathBuf {
 /// packages of its case, meshed unless the case says otherwise, with
 /// `args`.
 fn result(check: &Check, args: &[&str]) -> Vec<u8> {
+    run(check, args).stdout
+}
+
+/// [`result`], with what `check` printed on standard error.
+fn run(check: &Check, args: &[&str]) -> std::process::Output {
     let model = &check.model.1;
     let case = Path::new(FIXTURES).join("cases").join(check.case);
     let parity: serde_json::Value = serde_json::from_str(
@@ -220,7 +225,7 @@ fn result(check: &Check, args: &[&str]) -> Vec<u8> {
         output.status,
         String::from_utf8_lossy(&output.stderr)
     );
-    output.stdout
+    output
 }
 
 /// Where two results first differ: the line of each, as JSON is printed.
@@ -529,6 +534,68 @@ fn a_generated_building_is_judged_alike_whatever_the_order_threads_and_reuse() {
     assert!(
         part_way > 0 && whole > 0,
         "{part_way} part way, {whole} whole"
+    );
+}
+
+/// The `--stats` lines of a check's standard error, each split into its
+/// fields, the header left out.
+fn statistics(output: &std::process::Output) -> Vec<Vec<String>> {
+    String::from_utf8_lossy(&output.stderr)
+        .lines()
+        .filter_map(|line| line.strip_prefix("stats\t"))
+        .skip(1)
+        .map(|line| line.split('\t').map(str::to_owned).collect())
+        .collect()
+}
+
+/// The measurement memo keeps its tables in the run's derivation store
+/// (#451): `--stats` lists them beside the run's kinds, each without a
+/// version (`-`), and keeping one byte of derivations releases the
+/// memo's values like any other kind's, so values the `spans` case's
+/// rules share are measured again when read again. The result is the
+/// same either way.
+#[test]
+fn the_stats_list_the_measurement_memo_with_the_run_kinds() {
+    let directory = Path::new(env!("CARGO_TARGET_TMPDIR")).join("memo-stats");
+    std::fs::create_dir_all(&directory).unwrap();
+    let model = directory.join("building.ifc");
+    std::fs::write(&model, building(1)).unwrap();
+    let check = Check {
+        case: "spans",
+        model: ("building.ifc".to_owned(), model),
+        ruleset: case_ruleset("spans"),
+    };
+    let kept = run(&check, &["--threads", "1", "--stats"]);
+    let released = run(
+        &check,
+        &["--threads", "1", "--stats", "--keep-derivations", "1"],
+    );
+    assert_eq!(kept.stdout, released.stdout);
+    // The memo's tables, by their hits, builds and evictions together.
+    let memo = |output: &std::process::Output| {
+        let tables: Vec<Vec<String>> = statistics(output)
+            .into_iter()
+            .filter(|line| line[1] == "-")
+            .collect();
+        assert!(
+            !tables.is_empty(),
+            "no memo table: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let sum = |field: usize| -> u64 {
+            tables
+                .iter()
+                .map(|line| line[field].parse::<u64>().expect("a count"))
+                .sum()
+        };
+        (sum(2), sum(3), sum(8))
+    };
+    let (hits, builds, evicted) = memo(&kept);
+    assert!(hits > 0 && evicted == 0, "{hits} hits, {evicted} evicted");
+    let (_, rebuilt, released) = memo(&released);
+    assert!(
+        released > 0 && rebuilt > builds,
+        "{released} released, {rebuilt} builds against {builds}"
     );
 }
 

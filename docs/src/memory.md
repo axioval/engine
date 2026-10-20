@@ -107,6 +107,9 @@ refused and never wait, and what they hold never takes a step's room
   The run registers its store with the budget (`MemoryBudget::reclaim_from`),
   so a step that does not fit beside the kept values has them released
   before it waits. A released value is built again when read again.
+  The measurement memo's tables are kinds of the same store (#451): they
+  name no services and state no bytes, so they wait for the run's end
+  unless a bound or the budget evicts them with the values around them.
 
 `MemoryBudget::headroom` tells a keeper what is left before it evicts,
 and `MemoryBudget::check` refuses a step taken from a kept value exactly

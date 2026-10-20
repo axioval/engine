@@ -866,9 +866,9 @@ impl Hash for ArgumentsKey {
     }
 }
 
-/// Installs `providers` for a run over `project`, if there are any, with an
-/// empty [`MeasuredMemo`] over an empty [`DerivationStore`], installed
-/// too: one keeping nothing where the services hold such a store
+/// Installs `providers` over `project` outside a run, if there are any,
+/// with an empty [`MeasuredMemo`] over an empty [`DerivationStore`],
+/// installed too: one keeping nothing where the services hold such a store
 /// ([`DerivationStore::forgetful`]).
 pub(crate) fn install(
     services: &mut ServiceRegistry,
@@ -888,6 +888,23 @@ pub(crate) fn install(
         DerivationStore::new()
     };
     services.replace(store.clone());
+    install_on(services, providers, index, project, store);
+}
+
+/// Installs `providers` for a run over `project`, if there are any, with
+/// an empty [`MeasuredMemo`] over `store`, the run's own (#451): the
+/// memo's tables are then bounded, budgeted and reported with every
+/// other kind the run keeps.
+pub(crate) fn install_on(
+    services: &mut ServiceRegistry,
+    providers: &[Arc<dyn MeasuredProvider>],
+    index: &ProviderIndex,
+    project: &Project,
+    store: DerivationStore,
+) {
+    if providers.is_empty() {
+        return;
+    }
     services.replace(MeasuredMemo::on(store));
     services.replace(Providers {
         registered: Arc::new(providers.to_vec()),

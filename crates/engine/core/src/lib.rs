@@ -828,7 +828,9 @@ impl CapabilityRegistry {
     }
     /// Installs the registered measured-value providers into `services`
     /// for `project`, as a run does, so [`measured_value`] reads what a run
-    /// would.
+    /// would. Outside a run, the measurement memo keeps its tables in a
+    /// store of its own, installed too; a run keeps them in the run's
+    /// store (#451).
     pub fn install_measured(&self, services: &mut ServiceRegistry, project: &Project) {
         measured::provider::install(services, &self.measured, &self.measured_index, project);
     }
@@ -2119,7 +2121,15 @@ impl Runtime {
         // counted first by the backstop (#447).
         let before_rules = Arc::new(expression::EvaluationBudget::new(self.evaluation_budget));
         let _before_rules = before_rules.enter();
-        self.registry.install_measured(&mut services, project);
+        // The measurement memo keeps its tables in the run's store, bounded,
+        // budgeted and reported with every other kind (#451).
+        measured::provider::install_on(
+            &mut services,
+            &self.registry.measured,
+            &self.registry.measured_index,
+            project,
+            store.clone(),
+        );
         // Measured values are answered through the host's resolver in
         // every run; classifications are derived first when the plan has
         // any.

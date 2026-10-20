@@ -614,6 +614,23 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **The measurement memo keeps its tables in the run's derivation store**
+  ([#451](https://github.com/axioval/engine/issues/451)). Installing the
+  measured-value providers gave a run's `MeasuredMemo` a second, fresh
+  `DerivationStore` and put it in the run's services in place of the
+  run's own, so measured values were kept for the whole run past
+  `--keep-derivations` (`Runtime::with_kept_derivations`) and the memory
+  budget's reclaiming, and `check --stats` (the derivation observer)
+  listed none of them. The runtime now installs the memo over the store
+  it enters, bounds, budgets and reports; `CapabilityRegistry::install_measured`
+  outside a run still gives the memo a store of its own. Reports are
+  unchanged byte for byte (the determinism gate, generated building and
+  public models). Wall time and peak memory are unchanged within run to
+  run noise on four threads: free-floor and clash rules over m07 4.3 to
+  5.5 s and 0.93 to 0.98 GiB either way, over m13 30 to 34 s and 1.2 GiB;
+  the routes case over m07 5.5 to 6.8 s and 0.4 GiB, over m13 23 to 25 s
+  and 1.3 GiB.
+
 - **Every plan overlay the Axiolid adapter builds is held to the overlay
   budget** ([#432](https://github.com/axioval/engine/issues/432), after
   #419). Walkable plans and band footprints, containment and support

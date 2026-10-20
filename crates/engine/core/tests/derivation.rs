@@ -797,16 +797,19 @@ fn values_whose_services_no_rule_still_asks_are_released() {
 
 mod planned {
     use std::any::TypeId;
-    use std::sync::Mutex;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
 
     use axioval_engine::{
-        CapabilityEvaluation, CapabilityRegistry, CompiledRule, DerivationStore, ExecutionPlan,
-        GeometryReach, ParameterDescriptor, ParameterType, RuleCapability, RuleContext, Runtime,
-        compile,
+        CapabilityEvaluation, CapabilityRegistry, CompiledRule, DerivationStatistics,
+        DerivationStore, ExecutionPlan, GeometryReach, MeasuredMemo, MeasuredProvider, Measurement,
+        ParameterDescriptor, ParameterType, PropertyResolutionError, RuleCapability, RuleContext,
+        Runtime, compile,
     };
-    use axioval_ir::{DefinitionPackage, Project, RuleSetPackage};
+    use axioval_ir::measured::MeasuredCall;
+    use axioval_ir::{DefinitionPackage, ObjectId, Project, RuleSetPackage};
 
-    use super::{Asked, ReadThroughAsked};
+    use super::{Asked, Eight, ReadThroughAsked};
 
     /// Whether each rule found the value kept that an earlier rule built,
     /// by rule id.
@@ -898,6 +901,97 @@ mod planned {
                 .map(|(id, kept)| ((*id).to_owned(), kept))
                 .collect();
             assert_eq!(found, expected);
+        }
+    }
+
+    /// How often the shared measurement was made.
+    static MEASURED: AtomicUsize = AtomicUsize::new(0);
+
+    /// The key of the one measurement every rule shares.
+    #[derive(Clone, Hash, PartialEq, Eq)]
+    struct SharedMeasurement;
+
+    /// A provider measuring nothing, there so a run installs the
+    /// measurement memo.
+    struct Nothing;
+
+    impl MeasuredProvider for Nothing {
+        fn names(&self) -> &'static [&'static str] {
+            &["cover"]
+        }
+        fn measure(
+            &self,
+            _: &MeasuredCall,
+            _: &ObjectId,
+            _: &RuleContext<'_>,
+        ) -> Result<Measurement, PropertyResolutionError> {
+            Err(PropertyResolutionError::Unavailable("nothing".into()))
+        }
+    }
+
+    /// Every rule reads the shared measurement through the memo, then
+    /// derives a value of eight bytes of its own, as a measurement reading
+    /// a geometry adapter's kinds does.
+    struct Sharer;
+
+    impl RuleCapability for Sharer {
+        fn id(&self) -> &'static str {
+            "axioval:capability.property-exists"
+        }
+        fn parameters(&self) -> Vec<ParameterDescriptor> {
+            Reader.parameters()
+        }
+        fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
+            let value = MeasuredMemo::of(context.services, SharedMeasurement, || {
+                MEASURED.fetch_add(1, Ordering::SeqCst);
+                7_u64
+            });
+            assert_eq!(value, 7);
+            let own = rule.id.to_string().len() as u64;
+            DerivationStore::derive_current::<Eight>(&own).expect("no cycle");
+            CapabilityEvaluation::evaluated(vec![])
+        }
+    }
+
+    /// The memo's tables are the run's store's (#451): a measurement two
+    /// rules share is reported with the run's kinds, and a store keeping
+    /// one byte releases it once another value lands, so the second rule
+    /// measures it again.
+    #[test]
+    fn the_measurement_memo_is_bounded_and_reported_with_the_run_store() {
+        static STATISTICS: Mutex<Vec<DerivationStatistics>> = Mutex::new(Vec::new());
+        let registry = CapabilityRegistry::new()
+            .register(Sharer)
+            .unwrap()
+            .register_measured(Nothing)
+            .unwrap();
+        let project = Project::new(vec![]).unwrap();
+        let memo = std::any::type_name::<(SharedMeasurement, u64)>();
+        for (keep, measured, hits, evicted) in [(None, 1, 1, 0), (Some(1), 2, 0, 2)] {
+            MEASURED.store(0, Ordering::SeqCst);
+            let mut runtime = Runtime::new(registry.clone()).with_derivation_observer(Arc::new(
+                |statistics: &[DerivationStatistics]| {
+                    *STATISTICS.lock().unwrap() = statistics.to_vec();
+                },
+            ));
+            if let Some(bytes) = keep {
+                runtime = runtime.with_kept_derivations(bytes);
+            }
+            runtime
+                .run(&project, plan(&["a-shares", "bb-shares"]))
+                .unwrap();
+            assert_eq!(MEASURED.load(Ordering::SeqCst), measured, "{keep:?}");
+            let statistics = STATISTICS.lock().unwrap().clone();
+            let shared = statistics
+                .iter()
+                .find(|kind| kind.kind == memo)
+                .unwrap_or_else(|| panic!("the memo's kind among {statistics:?}"));
+            assert_eq!(
+                (shared.builds, shared.hits, shared.evicted),
+                (measured as u64, hits, evicted),
+                "{keep:?}"
+            );
+            assert!(statistics.iter().any(|kind| kind.kind == "eight"));
         }
     }
 }

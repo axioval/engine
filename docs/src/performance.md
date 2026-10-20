@@ -42,7 +42,9 @@ and reads its value, instead of measuring it a second time and keeping the
 first, so a rule evaluated on several threads holds one copy of each value
 while it is measured. A hit costs what it cost before: one lock, a table
 found by type and a key hashed with `foldhash`, the value cloned under the
-lock. `body-extent`'s provider keeps one entry per body: its
+lock. The store is the one the run enters (#451), so the memo's tables
+are bounded by `--keep-derivations` and the memory budget and listed by
+`--stats` with every other kind. `body-extent`'s provider keeps one entry per body: its
 frame, measured once, and its extent along each axis read, measured once.
 Its three values (`body_extent` and both `body_position` ends), along every
 axis and in every rule, share them, so a run asks each service once per

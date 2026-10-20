@@ -255,12 +255,18 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   so inner stays inner for witnesses and outer outer for absences; never
   use a fast result on the other side, nor read a distance from it
   without adding `Region::excess`. A region past `MORPHOLOGY_POINTS`
-  (50,000) corners is refused by name (#394), never eroded; it is a
-  safety net (#402, #414, #435), not a cost model, so raise it only with
-  timings of a hole lined by dense teeth (the whole search, not only the
-  morphology: past 50,000 the overlay's check of each large ring against
-  itself, quadratic in its corners, costs most, once per difference and
-  per witness check). `Scene::clear` takes one difference for both
+  (100,000) corners is refused by name (#394), never eroded; it is a
+  safety net (#402, #414, #435, #445), not a cost model, so raise it only
+  with timings of a hole lined by dense teeth and of a room toothed along
+  its walls, the whole search and each erosion by discs up to the room's
+  half width (past some 50,000 corners axiolid-overlay 0.3.19's fast
+  erosion of such a room builds from nearly every tooth, in time and
+  memory `disc` does not count: 0.9 GB at 100,000, 4.2 GB at 200,000).
+  Every disc erosion of the circle search goes through `eroded`, which
+  builds none where `narrower_than` shows the disc wider than the
+  region's convex hull (both sides empty, the step still charged); keep
+  its margins (the 64-gon's apothem, the fast budget, the overlay's
+  margin, `KNIFE_EDGE_METRES`). `Scene::clear` takes one difference for both
   sides where the room is the scope and every obstacle sure, and
   `Scene::fits` asks no intersection where every obstacle's box lies
   `APART_METRES` from the witness's. Keep the pole first, which

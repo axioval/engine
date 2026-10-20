@@ -639,6 +639,28 @@ All notable changes are documented here. This project follows Semantic Versionin
   skipped the search reaches the verdicts it reached over the simplified
   regions; reports are byte-identical.
 
+- **Free floors of up to 100,000 corners are searched for a disc**
+  ([#445](https://github.com/axioval/engine/issues/445)). axiolid-overlay
+  0.3.19 checks each ring against itself once, in time about its
+  corners, instead of with every difference or witness check, in time
+  growing with their square. A whole disc search (radii 0.4, 1.0 and
+  1.6 m, release) round a 1 x 1 column toothed 0.5 mm deep took 4.5 s
+  and 130 MB at 50,000 corners and 18 s at 100,000, and takes 0.55 s and
+  120 MB, 1.1 s and 230 MB, and 2.3 s and 440 MB at 200,000; in a
+  3 x 3 room toothed so, 4.1 s and 16 s before, 0.42 s and 210 MB at
+  100,000 now. A disc wider than the floor it would erode, across the
+  narrowest direction of the floor's convex hull, is no longer eroded:
+  both erosions are empty, so the step is charged as before and taken
+  empty. The overlay built such an erosion of a toothed room from nearly
+  every tooth, in time and memory the search's budget does not count:
+  7.3 s and 0.9 GB for a 1.6 m disc at 100,000 corners, 89 s and 16 GB
+  for a 10 m one at 50,000. The bound is raised to 100,000 corners
+  rather than removed: past some 50,000 corners the overlay's erosion of
+  a room toothed along its walls, by a disc whose radius exceeds a third
+  of its width, still builds from nearly every tooth (up to 7.7 s and
+  0.9 GB at 100,000 corners, 15 s and 4.2 GB at 150,000 to 200,000), and a
+  larger floor is still refused by name. Reports are byte-identical.
+
 - **Findings name the facet an IDS states, and every property by the names
   it binds to** ([#375](https://github.com/axioval/engine/issues/375)).
   With `check --ids`, findings named the concepts the translation

@@ -1902,22 +1902,25 @@ const FAST: MorphologyMode = MorphologyMode::fast(FAST_BUDGET_METRES);
 const FAST_BUDGET_METRES: f64 = 1.0e-3;
 
 /// The most corners a region a circle search erodes or dilates by a disc
-/// may have: a safety net, not a cost model (#394, #402, #414). Since
-/// axiolid-overlay 0.3.18 the search fills a notch within [`FAST`]'s
-/// budget by a chord, and a disc morphology of a toothed floor costs
-/// about its corners: around a 1 x 1 column whose sides are toothed
-/// 0.5 mm deep, an erosion by a disc of 0.4 m takes about 0.04 s at
-/// 10,000 corners, 0.08 s at 20,000 and 0.2 s at 50,000 (the exact one
-/// 14 to 36 s and 7.5 GB at 10,000). Since the search skips a
-/// simplification keeping nearly every corner (#435), a whole search
-/// round such a column takes up to 0.3 s at 10,000 corners, 0.9 s and
-/// 60 MB at 20,000, 4.5 s and 130 MB at 50,000 and 18 s at 100,000: the
-/// overlay checks each large ring against itself, in time growing with
-/// the square of its corners, once per difference or witness check.
-/// Teeth far deeper than they are apart fill no notch within the budget
-/// and still cost what the exact morphology does. A search past it is
-/// refused with the count.
-pub(crate) const MORPHOLOGY_POINTS: usize = 50_000;
+/// may have: a safety net, not a cost model (#394, #402, #414, #435,
+/// #445). Since axiolid-overlay 0.3.18 the search fills a notch within
+/// [`FAST`]'s budget by a chord, and since 0.3.19 the overlay checks each
+/// ring against itself once, in time about its corners, rather than with
+/// every difference or witness check, in time growing with their square.
+/// A whole search (radii 0.4, 1.0 and 1.6 m) round a 1 x 1 column whose
+/// sides are toothed 0.5 mm deep takes up to 0.55 s and 120 MB at 50,000
+/// corners, 1.1 s and 230 MB at 100,000 and 2.3 s and 440 MB at 200,000;
+/// in a 3 x 3 room toothed so, at most 0.42 s and 210 MB at 100,000. Yet
+/// the overlay's fast erosion of a floor toothed along a wall, by a disc
+/// whose radius exceeds a third of its width, builds from nearly every
+/// tooth past some 50,000 corners, in time and memory [`disc`] does not count and
+/// that vary from one tooth spacing to the next: at 100,000 corners up to
+/// 7.7 s and 0.9 GB, at 150,000 to 200,000 up to 15 s and 4.2 GB. A
+/// disc wider than the region is never built ([`eroded`]). Teeth far
+/// deeper than they are apart fill no notch within the budget and still
+/// cost what the exact morphology does. A search past it is refused with
+/// the count.
+pub(crate) const MORPHOLOGY_POINTS: usize = 100_000;
 
 /// `region` where a disc search may erode or dilate it, else the refusal
 /// naming its corners ([`MORPHOLOGY_POINTS`]).
@@ -1930,6 +1933,81 @@ fn within_budget<'a>(region: &'a Region, what: &str) -> Result<&'a Region, FreeS
         )));
     }
     Ok(region)
+}
+
+/// `region` eroded by a disc of `radius` in [`FAST`]'s mode: the inner
+/// erosion for a witness, or with `outer` the outer one for an absence.
+/// Where the disc is wider than the region ([`narrower_than`]) both are
+/// empty, and nothing is built (#445): axiolid-overlay 0.3.19 builds such
+/// an erosion of a floor toothed along a wall from nearly every tooth, in
+/// time and memory far past what [`disc`] counts (a 3 x 3 room toothed
+/// 0.5 mm deep along two sides, eroded by 10 m: 2.6 s and 1.4 GB at
+/// 20,000 corners, 89 s and 16 GB at 50,000). The step is charged as
+/// before, so a search spends and refuses alike.
+fn eroded(
+    region: &Region,
+    radius: f64,
+    outer: bool,
+    tolerance: Tolerance,
+) -> Result<Region, FreeSpaceError> {
+    if narrower_than(region, radius, tolerance) {
+        return Ok(Region::empty());
+    }
+    if outer {
+        region.erode_outer_with(radius, tolerance, FAST)
+    } else {
+        region.erode_inner_with(radius, tolerance, FAST)
+    }
+    .map_err(|e| unavailable("disc morphology", e))
+}
+
+/// Whether a disc of `radius` is wider than `region` in some direction,
+/// so that both of [`FAST`]'s erosions of it by the disc are empty: the
+/// convex hull of its outer rings is narrower, by [`KNIFE_EDGE_METRES`],
+/// than the disc that the overlay's 64-gon, drawn in by the fast mode's
+/// excess (at most [`FAST_BUDGET_METRES`]) and its margin, still holds.
+/// An erosion by a shape holding that disc, of the region or of the
+/// region less the notches the fast mode fills, lies within the
+/// erosion by the disc, which is empty. A region without a hull of area
+/// is left to the overlay.
+fn narrower_than(region: &Region, radius: f64, tolerance: Tolerance) -> bool {
+    let reach = (radius - FAST_BUDGET_METRES - 2.0 * tolerance.linear() - KNIFE_EDGE_METRES)
+        * (PI / 64.0).cos();
+    reach > 0.0 && hull_width(region).is_some_and(|width| 2.0 * reach > width + KNIFE_EDGE_METRES)
+}
+
+/// The narrowest width of the convex hull of `region`'s outer rings, by
+/// rotating calipers over the hull's edges; `None` where the hull has no
+/// area.
+fn hull_width(region: &Region) -> Option<f64> {
+    let points: Vec<Point2> = region
+        .polygons()
+        .iter()
+        .flat_map(|polygon| polygon.outer.points.iter().copied())
+        .collect();
+    let hull = crate::derived_relationships::convex_hull(&points);
+    let n = hull.len();
+    if n < 3 {
+        return None;
+    }
+    // The distance of hull corner `k` from the line of edge `i`, inward.
+    let height = |i: usize, k: usize| {
+        let (a, b) = (hull[i], hull[(i + 1) % n]);
+        let (dx, dy) = (b.x - a.x, b.y - a.y);
+        let length = dx.hypot(dy);
+        (dx * (hull[k].y - a.y) - dy * (hull[k].x - a.x)) / length
+    };
+    let (mut far, mut width) = (1, f64::INFINITY);
+    for i in 0..n {
+        // The corner farthest from edge `i` only moves on as `i` does.
+        let mut steps = 0;
+        while steps < n && height(i, (far + 1) % n) > height(i, far) {
+            far = (far + 1) % n;
+            steps += 1;
+        }
+        width = width.min(height(i, far));
+    }
+    (width.is_finite() && width > 0.0).then_some(width)
 }
 
 /// [`circle`] over the regions as built, or with `simple`, over the
@@ -2022,7 +2100,7 @@ fn circle_witness(
             "erosion of the free floor by the disc",
             disc(clear, radius, true),
         )?;
-        clear.erode_inner_with(radius, t, FAST).map_err(err)?
+        eroded(clear, radius, false, t)?
     } else {
         let scope = within_budget(&scene.scope, "the floor")?;
         let inner = {
@@ -2030,7 +2108,7 @@ fn circle_witness(
                 "erosion of the floor by the disc",
                 disc(scope, radius, true),
             )?;
-            scope.erode_inner_with(radius, t, FAST).map_err(err)?
+            eroded(scope, radius, false, t)?
         };
         let obstacles = simplest(scene, 2, simple).unwrap_or(&scene.obstacles);
         if obstacles.is_empty() || inner.is_empty() {
@@ -2088,12 +2166,12 @@ fn circle_absent(
             "erosion of the free floor by the disc",
             disc(clear, shrunk, true),
         )?;
-        clear.erode_outer_with(shrunk, t, FAST).map_err(err)?
+        eroded(clear, shrunk, true, t)?
     } else {
         let room = within_budget(&scene.room, "the floor")?;
         let outer = {
             let _step = step("erosion of the floor by the disc", disc(room, shrunk, true))?;
-            room.erode_outer_with(shrunk, t, FAST).map_err(err)?
+            eroded(room, shrunk, true, t)?
         };
         let sure = simplest(scene, 3, simple).unwrap_or(&scene.sure);
         if sure.is_empty() || outer.is_empty() {
@@ -3172,9 +3250,9 @@ mod tests {
         assert!(matches!(circle(&deep, 0.4), Ok(Search::Found { .. })));
     }
 
-    /// A free floor of more corners than a disc search erodes (52,056:
+    /// A free floor of more corners than a disc search erodes (104,052:
     /// a row of 26 posts 0.1 m wide along a 3 x 3 room's wall, each
-    /// toothed 0.5 mm deep every 0.1 mm) is refused with their count
+    /// toothed 0.5 mm deep every 0.05 mm) is refused with their count
     /// (#394), not eroded until memory runs out; a disc that fits at the
     /// floor's estimated pole is still found there.
     #[test]
@@ -3182,7 +3260,7 @@ mod tests {
         let mut scene = scene((0.0, 0.0), (3.0, 3.0), &[], &[]);
         let posts: Vec<Polygon> = (0..26)
             .map(|i| Polygon {
-                outer: jagged(0.05 + 0.11 * f64::from(i), 0.05, 0.1, 1.0e-4, 5.0e-4),
+                outer: jagged(0.05 + 0.11 * f64::from(i), 0.05, 0.1, 5.0e-5, 5.0e-4),
                 holes: Vec::new(),
             })
             .collect();
@@ -3192,10 +3270,70 @@ mod tests {
         assert!(region_points(scene.clear(true).unwrap()) > MORPHOLOGY_POINTS);
         let refused = circle(&scene, 1.6).expect_err("refused");
         assert!(
-            refused.to_string().contains("corners, more than the 50000"),
+            refused
+                .to_string()
+                .contains("corners, more than the 100000"),
             "{refused}"
         );
         assert!(matches!(circle(&scene, 0.4), Ok(Search::Found { .. })));
+    }
+
+    /// A disc wider than the region in some direction is ruled out
+    /// without eroding (#445), and the overlay's erosions, either side,
+    /// are then empty too: round a 3 x 3 room toothed 0.5 mm deep along
+    /// two sides and along a corridor 1 m wide turned by 30 degrees, near
+    /// the origin and far from it. A disc narrower than the region is left
+    /// to the overlay; the guard keeps the 64-gon's sagitta and the fast
+    /// mode's excess clear of the region's width.
+    #[test]
+    fn a_disc_wider_than_the_floor_is_ruled_out_without_eroding() {
+        let t = Tolerance::new(1.0e-9, 1.0e-9).unwrap();
+        for (x, y) in [(0.0, 0.0), (643_692.0, 5_649_156.0)] {
+            let region = |outer: Ring| {
+                Region::new(
+                    vec![Polygon {
+                        outer,
+                        holes: Vec::new(),
+                    }],
+                    t,
+                )
+                .unwrap()
+            };
+            let room = region(jagged(x, y, 3.0, 3.0e-3, 5.0e-4));
+            let corridor = region(turned(x + 3.0, y + 3.0, 6.0, 1.0, PI / 6.0));
+            for (floor, wider, narrower) in [
+                (&room, [1.51, 1.6, 10.0], [0.4, 1.4]),
+                (&corridor, [0.505, 0.6, 3.0], [0.3, 0.49]),
+            ] {
+                for radius in wider {
+                    assert!(narrower_than(floor, radius, t), "{x}, {radius}");
+                    assert!(eroded(floor, radius, true, t).unwrap().is_empty());
+                    for outer in [true, false] {
+                        let built = if outer {
+                            floor.erode_outer_with(radius, t, FAST)
+                        } else {
+                            floor.erode_inner_with(radius, t, FAST)
+                        };
+                        assert!(built.unwrap().is_empty(), "{x}, {radius}, {outer}");
+                    }
+                }
+                for radius in narrower {
+                    assert!(!narrower_than(floor, radius, t), "{x}, {radius}");
+                    let built = floor.erode_outer_with(radius, t, FAST).unwrap();
+                    assert!(!built.is_empty(), "{x}, {radius}");
+                    assert_eq!(
+                        eroded(floor, radius, true, t).unwrap().polygons(),
+                        built.polygons()
+                    );
+                }
+            }
+            // Just wider than the region, the disc the 64-gon holds, drawn
+            // in by the excess, may still fit: left to the overlay.
+            assert!(!narrower_than(&room, 1.502, t), "{x}");
+            assert!(!narrower_than(&corridor, 0.501, t), "{x}");
+        }
+        // A region whose hull has no area is left to the overlay.
+        assert!(hull_width(&Region::empty()).is_none());
     }
 
     /// Round a column toothed every millimetre (2,002 corners), 0.5 mm

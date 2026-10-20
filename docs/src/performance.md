@@ -1265,3 +1265,37 @@ run each as in [Independent rules at once](#independent-rules-at-once)):
 No overlay of these models reached either budget, so the differences are
 the runs' own spread. Every report is the same byte for byte, and the
 determinism gate's 64 MiB budget refuses no overlay.
+
+### Disc searches on dense free floors
+
+A free floor lined by sub-millimetre teeth, as overlay output along a
+tessellated or flush body is, holds tens of thousands of corners. Since
+[#445](https://github.com/axioval/engine/issues/445) the circle search
+erodes floors of up to 100,000 corners by a disc, up from 50,000: the
+overlay (axiolid-overlay 0.3.19) checks each ring against itself once,
+in time about its corners, where it checked every operand of every
+difference and witness check in time growing with the square of their
+corners. A disc wider than the floor it would erode is no longer eroded
+at all (see [Free space](./free-space.md)).
+
+Whole circle search at radii 0.4, 1.0 and 1.6 m, a fresh scene each,
+release, the slowest of the three and the largest peak resident memory:
+round a 1 x 1 column toothed 0.5 mm deep in a 3 x 3 room (hole), and in
+a 3 x 3 room toothed so along two walls (room). Before is #435 on
+axiolid-overlay 0.3.18, its bound lifted past 50,000 corners:
+
+| Corners | Hole before / after | Room before / after | Peak before / after |
+|---|---:|---:|---:|
+| 50,000 | 4.5 / 0.55 s | 4.1 / 0.18 s | 132 / 119 MB |
+| 100,000 | 17.8 / 1.14 s | 16.1 / 0.42 s | 877 / 230 MB |
+| 200,000 | – / 2.3 s | – / 0.73 s | – / 436 MB |
+
+On axiolid-overlay 0.3.19 without the width test, the room's 1.6 m
+search took 7.3 s and 0.9 GB at 100,000 corners: the overlay's fast erosion of a room toothed along a
+wall builds from nearly every tooth, in time and memory the search's
+budget does not count. That remains for discs narrower than the room
+whose radius exceeds a third of its width: one erosion takes up to 7.7 s
+and 0.9 GB at 100,000 corners and up to 15 s and 4.2 GB at 150,000 to
+200,000, varying from one tooth spacing to the next, which is why the
+bound is 100,000. Reports are the same byte for byte on the public parity
+models.

@@ -21,14 +21,18 @@
 //! answer `Unavailable`: leaving one edge out would turn "not related" into a
 //! claim the file does not make.
 
+use std::any::TypeId;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Mutex};
 
 use axioval_engine::{
     AbsentEndPolicy, CandidateUniverse, CompleteRelationshipEdges, CompleteRelationshipSelection,
+    DerivationError, DerivationKind, DerivationStore, DerivationVersion, Inputs, Precision,
     RELATIONSHIP_KIND_PREFIX, RelationshipEdge, RelationshipEdgesRequest, RelationshipKind,
     RelationshipQuery, RelationshipSelectionError, RelationshipSelectionRequest,
-    RelationshipSelectionService, SemanticRelationship, SourceSnapshot, TraversalDirection,
+    RelationshipSelectionService, RelationshipSelectionServiceHandle, SemanticRelationship,
+    SourceSnapshot, TraversalDirection,
 };
 use axioval_ir::{Evidence, ObjectId};
 use ifc_model::{EntityId, Model, Value};
@@ -73,19 +77,134 @@ pub(crate) struct EdgeIndex {
 /// A candidate universe by entity, or why it is refused.
 type Entities = Result<Arc<BTreeMap<EntityId, ObjectId>>, RelationshipSelectionError>;
 
-/// How many universes the service keeps read by entity: a rule asks about
-/// many anchors over one or two, so a few cover a run without holding
-/// every universe it ever saw.
-const UNIVERSES: usize = 4;
-
 pub(crate) struct IfcRelationshipService {
     release: Release,
     model: Arc<Model>,
     snapshots: Arc<[SourceSnapshot]>,
+    /// Each relationship type's edges, indexed once: an index of the model
+    /// (#443), the same for every check of it, so kept with the source
+    /// rather than in a check's derivation store.
     cache: Mutex<BTreeMap<String, Result<Arc<EdgeIndex>, RelationshipSelectionError>>>,
-    /// The universes read last, newest last, each shared with the requests
-    /// bound to it.
-    universes: Mutex<VecDeque<(CandidateUniverse, Entities)>>,
+}
+
+/// The model of a universe read by entity, compared and hashed by its
+/// address.
+#[derive(Clone)]
+pub(crate) struct OverModel(Arc<Model>);
+
+impl PartialEq for OverModel {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl Eq for OverModel {}
+
+impl Hash for OverModel {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        Arc::as_ptr(&self.0).hash(state);
+    }
+}
+
+/// Everything a universe read by entity is read from (#439): the model (by
+/// identity), the source its objects must belong to, and the universe's
+/// objects (a shared universe compared by its identity first, any other by
+/// its objects, hashed once when it was built); the kind's version beside
+/// it. Requests bound to one universe, or to equal universes built apart
+/// (a rule relating each anchor to the objects it selected), read one
+/// entry.
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub(crate) struct UniverseKey {
+    model: OverModel,
+    source: axioval_ir::SourceId,
+    universe: CandidateUniverse,
+}
+
+/// The derivation kind of candidate universes read by entity (#443): a
+/// rule asks about many anchors over one universe, each request bound to
+/// it, so its candidates are read by entity once per check rather than
+/// per request, and released after the last rule that may select a
+/// relationship.
+pub(crate) struct UniverseEntities;
+
+impl DerivationKind for UniverseEntities {
+    const NAME: &'static str = "universe entities";
+    /// Bumped whenever the same universe could be read otherwise: the
+    /// reading of an object's instance id changing.
+    const VERSION: DerivationVersion = DerivationVersion::new(1, &[]);
+    type Key = UniverseKey;
+    type Value = Entities;
+
+    fn build(key: &UniverseKey, _: &Inputs<'_>) -> Result<Self::Value, DerivationError> {
+        Ok(key
+            .universe
+            .objects()
+            .iter()
+            .map(|candidate| {
+                Ok((
+                    entity_in(&key.model.0, &key.source, candidate)?,
+                    candidate.clone(),
+                ))
+            })
+            .collect::<Result<BTreeMap<_, _>, RelationshipSelectionError>>()
+            .map(Arc::new))
+    }
+
+    /// Not geometric: an instance id is read exactly or refused.
+    fn precision(_: &UniverseKey) -> Option<Precision> {
+        None
+    }
+
+    fn size_hint(value: &Self::Value) -> Option<usize> {
+        Some(value.as_ref().map_or(0, |entities| {
+            entities
+                .values()
+                .map(|object| {
+                    object.local_id.len()
+                        + std::mem::size_of::<(EntityId, ObjectId)>()
+                        + 2 * std::mem::size_of::<usize>()
+                })
+                .sum()
+        }))
+    }
+
+    /// At most a few universes' worth, as the service's ring of four kept
+    /// before: a rule relates its anchors to one or two, and one built per
+    /// request is never read again.
+    fn keep_bytes() -> Option<u64> {
+        Some(UNIVERSES_KEPT)
+    }
+
+    /// Universes are read by entity for the relationship service alone.
+    fn read_through() -> Option<Vec<TypeId>> {
+        Some(vec![TypeId::of::<RelationshipSelectionServiceHandle>()])
+    }
+}
+
+/// The most bytes of universes read by entity the store keeps at once.
+const UNIVERSES_KEPT: u64 = 64 << 20;
+
+/// `object`'s instance in `model`, as one of `source`'s.
+fn entity_in(
+    model: &Model,
+    source: &axioval_ir::SourceId,
+    object: &ObjectId,
+) -> Result<EntityId, RelationshipSelectionError> {
+    if object.source != *source {
+        return Err(unavailable(format!(
+            "object `{object}` is not from this IFC source; relationships across sources are unknown here"
+        )));
+    }
+    let id = object
+        .local_id
+        .strip_prefix('#')
+        .and_then(|digits| digits.parse::<u64>().ok())
+        .map(EntityId)
+        .ok_or(RelationshipSelectionError::InvalidRequest)?;
+    if model.get(id).is_none() {
+        return Err(RelationshipSelectionError::InvalidRequest);
+    }
+    Ok(id)
 }
 
 impl IfcRelationshipService {
@@ -99,31 +218,22 @@ impl IfcRelationshipService {
             model,
             snapshots,
             cache: Mutex::new(BTreeMap::new()),
-            universes: Mutex::new(VecDeque::new()),
         }
     }
 
     /// The candidates of `universe` by entity, each refused as `entity`
-    /// refuses it, read once per shared universe rather than per request.
+    /// refuses it: the check's, read once per shared universe for every
+    /// request bound to it ([`UniverseEntities`]).
     fn entities(&self, universe: &CandidateUniverse) -> Entities {
-        let mut kept = self
-            .universes
-            .lock()
-            .map_err(|_| unavailable("relationship universe lock is poisoned"))?;
-        if let Some((_, entities)) = kept.iter().find(|(seen, _)| seen.shares(universe)) {
-            return entities.clone();
-        }
-        let entities = universe
-            .objects()
-            .iter()
-            .map(|candidate| Ok((self.entity(candidate)?, candidate.clone())))
-            .collect::<Result<BTreeMap<_, _>, RelationshipSelectionError>>()
-            .map(Arc::new);
-        if kept.len() == UNIVERSES {
-            kept.pop_front();
-        }
-        kept.push_back((universe.clone(), entities.clone()));
-        entities
+        let key = UniverseKey {
+            model: OverModel(Arc::clone(&self.model)),
+            source: self.snapshots[0].source().clone(),
+            universe: universe.clone(),
+        };
+        DerivationStore::derive_current::<UniverseEntities>(&key)
+            .map_err(|error| unavailable(error.to_string()))?
+            .as_ref()
+            .clone()
     }
 
     fn locator(&self, detail: impl std::fmt::Display) -> String {
@@ -144,21 +254,7 @@ impl IfcRelationshipService {
     }
 
     fn entity(&self, object: &ObjectId) -> Result<EntityId, RelationshipSelectionError> {
-        if object.source != *self.snapshots[0].source() {
-            return Err(unavailable(format!(
-                "object `{object}` is not from this IFC source; relationships across sources are unknown here"
-            )));
-        }
-        let id = object
-            .local_id
-            .strip_prefix('#')
-            .and_then(|digits| digits.parse::<u64>().ok())
-            .map(EntityId)
-            .ok_or(RelationshipSelectionError::InvalidRequest)?;
-        if self.model.get(id).is_none() {
-            return Err(RelationshipSelectionError::InvalidRequest);
-        }
-        Ok(id)
+        entity_in(&self.model, self.snapshots[0].source(), object)
     }
 }
 
@@ -641,4 +737,61 @@ fn malformed(instance: EntityId, detail: &str) -> RelationshipSelectionError {
 
 fn unavailable(message: impl Into<String>) -> RelationshipSelectionError {
     RelationshipSelectionError::Unavailable(message.into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axioval_engine::KeyCompleteness;
+    use axioval_ir::SourceId;
+
+    const STEP: &str = "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\n\
+        FILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+        #1=IFCWALL('0000000000000000000001',$,$,$,$,$,$,$,$);\n\
+        #2=IFCSLAB('0000000000000000000002',$,$,$,$,$,$,$,$);\n\
+        ENDSEC;\nEND-ISO-10303-21;\n";
+
+    fn model() -> Arc<Model> {
+        Arc::new(crate::step::read_ifc_step(STEP.as_bytes()).unwrap())
+    }
+
+    fn object(source: &SourceId, local: &str) -> ObjectId {
+        ObjectId::new(source.clone(), local).unwrap()
+    }
+
+    fn read(value: &Entities) -> String {
+        format!("{value:?}")
+    }
+
+    /// Every input a universe read by entity is read from is in its key
+    /// (#439).
+    #[test]
+    fn changing_any_input_of_a_universe_read_by_entity_changes_its_key() {
+        let (one, other) = (model(), model());
+        let source = SourceId::new("ifc", "m").unwrap();
+        let elsewhere = SourceId::new("ifc", "n").unwrap();
+        let universe = |locals: &[&str]| {
+            CandidateUniverse::try_new(locals.iter().map(|local| object(&source, local)).collect())
+                .unwrap()
+        };
+        let both = universe(&["#1", "#2"]);
+        let key =
+            |model: &Arc<Model>, source: &SourceId, universe: &CandidateUniverse| UniverseKey {
+                model: OverModel(Arc::clone(model)),
+                source: source.clone(),
+                universe: universe.clone(),
+            };
+        KeyCompleteness::<UniverseEntities, _>::new(key(&one, &source, &both), read)
+            .same("the same inputs", key(&one, &source, &both))
+            // Another parse of the same file reads alike.
+            .input("the model", key(&other, &source, &both))
+            .changes_value("the source", key(&one, &elsewhere, &both))
+            .changes_value("the universe", key(&one, &source, &universe(&["#1"])))
+            // Equal objects built apart: the same entry.
+            .same(
+                "an equal universe",
+                key(&one, &source, &universe(&["#2", "#1"])),
+            )
+            .check();
+    }
 }

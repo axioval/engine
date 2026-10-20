@@ -202,6 +202,10 @@ pub struct CandidateUniverse(Arc<Universe>);
 
 struct Universe {
     objects: Box<[ObjectId]>,
+    /// The objects' hash, taken once when the universe is built, so a
+    /// universe keys a map (a derivation of the check's store, #443) at
+    /// the cost of one number; equal universes hash alike.
+    hash: u64,
     /// The parts already asked for, one per set of sources, at most
     /// [`PARTS`] of them; `None` where the part is the whole universe.
     parts: std::sync::Mutex<
@@ -232,7 +236,11 @@ impl CandidateUniverse {
     }
 
     fn canonical(objects: Box<[ObjectId]>) -> Self {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        objects.hash(&mut hasher);
         Self(Arc::new(Universe {
+            hash: hasher.finish(),
             objects,
             parts: std::sync::Mutex::new(Vec::new()),
         }))
@@ -302,7 +310,15 @@ impl std::fmt::Debug for CandidateUniverse {
 
 impl PartialEq for CandidateUniverse {
     fn eq(&self, other: &Self) -> bool {
-        self.shares(other) || self.objects() == other.objects()
+        self.shares(other) || (self.0.hash == other.0.hash && self.objects() == other.objects())
+    }
+}
+
+/// By the objects' hash, taken once when the universe was built: equal
+/// universes, shared or built apart, hash alike.
+impl std::hash::Hash for CandidateUniverse {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        state.write_u64(self.0.hash);
     }
 }
 

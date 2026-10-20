@@ -25,6 +25,7 @@
 //! upper bound only for a point and an exact footprint.
 
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
 use axiolid_core::Point2;
 use axiolid_overlay::Polygon;
@@ -34,7 +35,7 @@ use axioval_engine::{
 };
 use axioval_ir::{Evidence, ObjectId};
 
-use super::{AxiolidMetricRoutingService, LENGTH_ROUNDING, Level, Prepared, plan, rounded_up};
+use super::{LENGTH_ROUNDING, Level, Prepared, Routing, plan, rounded_up};
 use crate::geometry::Extent;
 use crate::walkable::{Bounds2, ON_SURFACE, Plan, REACH, ROUTE_BUDGET, intersect, plan_gap};
 
@@ -222,7 +223,7 @@ pub(super) fn climb_factor(
         .fold(1.0, f64::max)
 }
 
-impl AxiolidMetricRoutingService {
+impl Routing {
     /// Measures a request's costed objects. A tessellated or bodiless
     /// object is refused, since its cost could then be missed or
     /// overstated.
@@ -356,7 +357,10 @@ impl AxiolidMetricRoutingService {
     /// Brackets the shortest walk from the origin to a target that enters
     /// the requested object.
     #[allow(clippy::too_many_lines)]
-    pub(super) fn forced(&self, request: &ForcedWalkRequest) -> Result<ForcedWalkOutcome, String> {
+    pub(super) fn forced(
+        self: &Arc<Self>,
+        request: &ForcedWalkRequest,
+    ) -> Result<ForcedWalkOutcome, String> {
         if request.connectors().is_some() {
             return Err("walks forced through an object are measured on one level only".into());
         }
@@ -369,7 +373,7 @@ impl AxiolidMetricRoutingService {
         if height <= step {
             return Err("the clear height does not exceed the maximum step".into());
         }
-        let prepared = self.prepared();
+        let prepared = &self.prepared();
         let mut obstacles = self.obstacles()?;
         obstacles.extend(crate::walkable::obstacles(
             &self.geometry,

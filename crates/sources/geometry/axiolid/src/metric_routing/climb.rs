@@ -46,6 +46,7 @@
 //! Weighted walks are measured for a point only.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 use axiolid_core::Point2;
 use axiolid_route::{CostRegion, FarthestError, MapError, Unreachable};
@@ -59,8 +60,8 @@ use axioval_ir::{Evidence, ObjectId};
 
 use super::weighted::{Costed, Map, climb_factor, costs_text, describe};
 use super::{
-    AxiolidMetricRoutingService, LENGTH_ROUNDING, Level, Narrow, Prepared, holder, inner_point,
-    length, plan, rounded_up,
+    LENGTH_ROUNDING, Level, Narrow, Prepared, Routing, holder, inner_point, length, plan,
+    rounded_up,
 };
 use crate::connector::{self, Climb, Passable};
 use crate::walkable::{
@@ -207,7 +208,7 @@ pub(super) enum Walked {
     Unreachable(String),
 }
 
-impl AxiolidMetricRoutingService {
+impl Routing {
     /// The requested connectors measured, and the levels reached from
     /// `seeds` through them.
     #[allow(clippy::too_many_lines, clippy::too_many_arguments)]
@@ -593,7 +594,7 @@ impl AxiolidMetricRoutingService {
     /// request's connectors.
     #[allow(clippy::too_many_lines)]
     pub(super) fn walk_across(
-        &self,
+        self: &Arc<Self>,
         origin: &MetricPoint,
         targets: &[MetricPoint],
         profile: MobilityProfile,
@@ -616,7 +617,7 @@ impl AxiolidMetricRoutingService {
                     .into(),
             );
         }
-        let prepared = self.prepared();
+        let prepared = &self.prepared();
         let mut obstacles = self.obstacles()?;
         obstacles.extend(crate::walkable::obstacles(&self.geometry, avoided)?);
         let start = Self::place(prepared, origin, step)?;
@@ -782,7 +783,7 @@ impl AxiolidMetricRoutingService {
     }
 
     pub(super) fn nearest_across(
-        &self,
+        self: &Arc<Self>,
         request: &NearestTargetRequest,
         routing: &ConnectorRouting,
     ) -> Result<NearestTargetOutcome, String> {
@@ -825,7 +826,7 @@ impl AxiolidMetricRoutingService {
     }
 
     pub(super) fn route_across(
-        &self,
+        self: &Arc<Self>,
         request: &MetricRouteRequest,
         routing: &ConnectorRouting,
     ) -> Result<MetricRouteOutcome, String> {
@@ -869,7 +870,7 @@ impl AxiolidMetricRoutingService {
     /// through the request's connectors. For a point only.
     #[allow(clippy::too_many_lines)]
     pub(super) fn farthest_across(
-        &self,
+        self: &Arc<Self>,
         request: &FarthestPointRequest,
         routing: &ConnectorRouting,
     ) -> Result<FarthestPointOutcome, String> {
@@ -889,7 +890,7 @@ impl AxiolidMetricRoutingService {
         if height <= step {
             return Err("the clear height does not exceed the maximum step".into());
         }
-        let prepared = self.prepared();
+        let prepared = &self.prepared();
         let obstacles = self.obstacles()?;
         let region_id = request.region();
         let region = prepared

@@ -65,18 +65,20 @@
 mod climb;
 mod weighted;
 
+use std::any::TypeId;
 use std::collections::BTreeSet;
-use std::sync::OnceLock;
+use std::sync::Arc;
 
 use axiolid_core::Point2;
 use axiolid_mesh::TriMesh;
 use axiolid_route::{FarthestError, MapError, Unreachable};
 use axioval_engine::{
-    BlockedMetricRouteEvidence, CompleteMetricEvidence, FarthestPointEvidence,
-    FarthestPointOutcome, FarthestPointRequest, ForcedWalkOutcome, ForcedWalkRequest,
-    LengthInterval, MetricPoint, MetricRouteEvidence, MetricRouteOutcome, MetricRouteRequest,
-    MetricRoutingError, MetricRoutingService, MobilityProfile, NearestTargetEvidence,
-    NearestTargetOutcome, NearestTargetRequest, PathTrace, PathTraceRequest,
+    BlockedMetricRouteEvidence, CompleteMetricEvidence, DerivationError, DerivationKind,
+    DerivationStore, DerivationVersion, FarthestPointEvidence, FarthestPointOutcome,
+    FarthestPointRequest, ForcedWalkOutcome, ForcedWalkRequest, Inputs, LengthInterval,
+    MetricPoint, MetricRouteEvidence, MetricRouteOutcome, MetricRouteRequest, MetricRoutingError,
+    MetricRoutingService, MetricRoutingServiceHandle, MobilityProfile, NearestTargetEvidence,
+    NearestTargetOutcome, NearestTargetRequest, PathTrace, PathTraceRequest, Precision,
     UnreachableRegionEvidence, UnreachableTargetsEvidence,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
@@ -105,17 +107,25 @@ const APPROACH_ROUNDING: f64 = 1e-9;
 
 /// Metric routes over host-declared walkable surfaces and portals.
 pub struct AxiolidMetricRoutingService {
+    routing: Arc<Routing>,
+}
+
+/// What a metric-routing service routes over: the geometry and the host's
+/// declarations. What the declarations yield ([`Prepared`]) is the check's
+/// derivation store's, keyed over this state ([`PreparedRoutes`], #443):
+/// the service keeps nothing of its own.
+#[derive(Clone)]
+pub(crate) struct Routing {
     geometry: AxiolidGeometry,
     source: SourceId,
     surfaces: BTreeSet<ObjectId>,
     portals: BTreeSet<ObjectId>,
     connectors: BTreeSet<ObjectId>,
     facts: PortalFacts,
-    prepared: OnceLock<Prepared>,
 }
 
 /// What the declarations yield, independent of any request.
-struct Prepared {
+pub(crate) struct Prepared {
     floors: Vec<Floor>,
     /// Declared surfaces, portals and connectors that could not be measured.
     gaps: Vec<String>,
@@ -177,6 +187,81 @@ struct Targets {
 }
 
 impl AxiolidMetricRoutingService {
+    /// Creates a service over the supplied geometry.
+    #[must_use]
+    pub fn new(geometry: AxiolidGeometry, source: SourceId) -> Self {
+        Self {
+            routing: Arc::new(Routing {
+                geometry,
+                source,
+                surfaces: BTreeSet::new(),
+                portals: BTreeSet::new(),
+                connectors: BTreeSet::new(),
+                facts: PortalFacts::default(),
+            }),
+        }
+    }
+
+    /// The declarations, changed by `declare`: unshared while the host
+    /// declares, so changed in place.
+    fn declare(self, declare: impl FnOnce(Routing) -> Routing) -> Self {
+        let routing = Arc::try_unwrap(self.routing).unwrap_or_else(|shared| (*shared).clone());
+        Self {
+            routing: Arc::new(declare(routing)),
+        }
+    }
+
+    /// Declares a walkable surface: a closed body standing on its floor.
+    #[must_use]
+    pub fn with_surface(self, surface: ObjectId) -> Self {
+        self.declare(|routing| routing.with_surface(surface))
+    }
+
+    /// Declares a door or opening a route may pass through. Its body is not
+    /// an obstacle.
+    #[must_use]
+    pub fn with_portal(self, portal: ObjectId) -> Self {
+        self.declare(|routing| routing.with_portal(portal))
+    }
+
+    /// Declares a bodiless opening and the exact planar shape of its void.
+    #[must_use]
+    pub fn with_opening_void(self, opening: ObjectId, mesh: TriMesh) -> Self {
+        self.declare(|routing| routing.with_opening_void(opening, mesh))
+    }
+
+    /// Declares an opening whose void is a tessellation; it is not measured.
+    #[must_use]
+    pub fn with_tessellated_opening_void(self, opening: ObjectId, mesh: TriMesh) -> Self {
+        self.declare(|routing| routing.with_tessellated_opening_void(opening, mesh))
+    }
+
+    /// Declares an opening whose void could not be meshed.
+    #[must_use]
+    pub fn with_unmeasured_opening_void(
+        self,
+        opening: ObjectId,
+        reason: impl Into<String>,
+    ) -> Self {
+        self.declare(|routing| routing.with_unmeasured_opening_void(opening, reason))
+    }
+
+    /// States the clear width, in metres, a door's leaf and lining leave.
+    #[must_use]
+    pub fn with_clear_width(self, portal: ObjectId, metres: f64) -> Self {
+        self.declare(|routing| routing.with_clear_width(portal, metres))
+    }
+
+    /// Declares a vertical connector (a lift, stair or ramp). Routes do not
+    /// climb it, but a level it touches is not closed, so no route leaving
+    /// that level is reported blocked.
+    #[must_use]
+    pub fn with_connector(self, connector: ObjectId) -> Self {
+        self.declare(|routing| routing.with_connector(connector))
+    }
+}
+
+impl Routing {
     /// A plan point of `source`'s meshes in its model coordinates, as
     /// evidence reports it (#372).
     pub(crate) fn shown(&self, source: &SourceId, point: Point2) -> [f64; 2] {
@@ -185,54 +270,29 @@ impl AxiolidMetricRoutingService {
             .to_model([point.x, point.y])
     }
 
-    /// Creates a service over the supplied geometry.
-    #[must_use]
-    pub fn new(geometry: AxiolidGeometry, source: SourceId) -> Self {
-        Self {
-            geometry,
-            source,
-            surfaces: BTreeSet::new(),
-            portals: BTreeSet::new(),
-            connectors: BTreeSet::new(),
-            facts: PortalFacts::default(),
-            prepared: OnceLock::new(),
-        }
-    }
-
-    /// Declares a walkable surface: a closed body standing on its floor.
-    #[must_use]
-    pub fn with_surface(mut self, surface: ObjectId) -> Self {
+    fn with_surface(mut self, surface: ObjectId) -> Self {
         self.surfaces.insert(surface);
         self
     }
 
-    /// Declares a door or opening a route may pass through. Its body is not
-    /// an obstacle.
-    #[must_use]
-    pub fn with_portal(mut self, portal: ObjectId) -> Self {
+    fn with_portal(mut self, portal: ObjectId) -> Self {
         self.portals.insert(portal);
         self
     }
 
-    /// Declares a bodiless opening and the exact planar shape of its void.
-    #[must_use]
-    pub fn with_opening_void(mut self, opening: ObjectId, mesh: TriMesh) -> Self {
+    fn with_opening_void(mut self, opening: ObjectId, mesh: TriMesh) -> Self {
         self.portals.insert(opening.clone());
         self.facts = self.facts.with_void(opening, mesh, true);
         self
     }
 
-    /// Declares an opening whose void is a tessellation; it is not measured.
-    #[must_use]
-    pub fn with_tessellated_opening_void(mut self, opening: ObjectId, mesh: TriMesh) -> Self {
+    fn with_tessellated_opening_void(mut self, opening: ObjectId, mesh: TriMesh) -> Self {
         self.portals.insert(opening.clone());
         self.facts = self.facts.with_void(opening, mesh, false);
         self
     }
 
-    /// Declares an opening whose void could not be meshed.
-    #[must_use]
-    pub fn with_unmeasured_opening_void(
+    fn with_unmeasured_opening_void(
         mut self,
         opening: ObjectId,
         reason: impl Into<String>,
@@ -242,24 +302,27 @@ impl AxiolidMetricRoutingService {
         self
     }
 
-    /// States the clear width, in metres, a door's leaf and lining leave.
-    #[must_use]
-    pub fn with_clear_width(mut self, portal: ObjectId, metres: f64) -> Self {
+    fn with_clear_width(mut self, portal: ObjectId, metres: f64) -> Self {
         self.facts = self.facts.with_clear_width(portal, metres);
         self
     }
 
-    /// Declares a vertical connector (a lift, stair or ramp). Routes do not
-    /// climb it, but a level it touches is not closed, so no route leaving
-    /// that level is reported blocked.
-    #[must_use]
-    pub fn with_connector(mut self, connector: ObjectId) -> Self {
+    fn with_connector(mut self, connector: ObjectId) -> Self {
         self.connectors.insert(connector);
         self
     }
 
-    fn prepared(&self) -> &Prepared {
-        self.prepared.get_or_init(|| self.prepare())
+    /// What the declarations yield: the check's, prepared once for every
+    /// request, rule and thread routing over them ([`PreparedRoutes`]).
+    fn prepared(self: &Arc<Self>) -> Arc<Prepared> {
+        let key = PreparedKey {
+            routing: Over(Arc::clone(self)),
+            precision: Precision::Exact,
+        };
+        // A store refusing the read (a cycle or a precision class, neither
+        // of which a preparation can meet) prepares it here.
+        DerivationStore::derive_current::<PreparedRoutes>(&key)
+            .unwrap_or_else(|_| Arc::new(self.prepare()))
     }
 
     fn prepare(&self) -> Prepared {
@@ -735,7 +798,10 @@ impl AxiolidMetricRoutingService {
     }
 
     #[allow(clippy::too_many_lines)]
-    fn measure(&self, request: &MetricRouteRequest) -> Result<MetricRouteOutcome, String> {
+    fn measure(
+        self: &Arc<Self>,
+        request: &MetricRouteRequest,
+    ) -> Result<MetricRouteOutcome, String> {
         let approach = request.approaches_destination();
         if let Some(routing) = request.connectors() {
             if approach {
@@ -753,7 +819,7 @@ impl AxiolidMetricRoutingService {
         if height <= step {
             return Err("the clear height does not exceed the maximum step".into());
         }
-        let prepared = self.prepared();
+        let prepared = &self.prepared();
         // A walk up to an object (#361) leaves the object's own body out of
         // the region its lower bound and separation are measured in: the
         // reach from where the body stands may cross it.
@@ -936,7 +1002,10 @@ impl AxiolidMetricRoutingService {
     }
 
     #[allow(clippy::too_many_lines)]
-    fn nearest(&self, request: &NearestTargetRequest) -> Result<NearestTargetOutcome, String> {
+    fn nearest(
+        self: &Arc<Self>,
+        request: &NearestTargetRequest,
+    ) -> Result<NearestTargetOutcome, String> {
         let profile = request.profile();
         let (radius, step, height) = (
             profile.radius_metres(),
@@ -956,7 +1025,7 @@ impl AxiolidMetricRoutingService {
         if height <= step {
             return Err("the clear height does not exceed the maximum step".into());
         }
-        let prepared = self.prepared();
+        let prepared = &self.prepared();
         let mut obstacles = self.obstacles()?;
         // An avoided object obstructs like any other body, even a surface
         // or portal.
@@ -1156,7 +1225,10 @@ impl AxiolidMetricRoutingService {
     }
 
     #[allow(clippy::too_many_lines)]
-    fn farthest(&self, request: &FarthestPointRequest) -> Result<FarthestPointOutcome, String> {
+    fn farthest(
+        self: &Arc<Self>,
+        request: &FarthestPointRequest,
+    ) -> Result<FarthestPointOutcome, String> {
         if let Some(routing) = request.connectors() {
             return self.farthest_across(request, routing);
         }
@@ -1176,7 +1248,7 @@ impl AxiolidMetricRoutingService {
         if height <= step {
             return Err("the clear height does not exceed the maximum step".into());
         }
-        let prepared = self.prepared();
+        let prepared = &self.prepared();
         let obstacles = self.obstacles()?;
         let region_id = request.region();
         let region = prepared
@@ -1348,9 +1420,9 @@ impl AxiolidMetricRoutingService {
     }
 
     /// How much of a polyline lies over each requested object's footprint.
-    fn trace(&self, request: &PathTraceRequest) -> Result<PathTrace, String> {
+    fn trace(self: &Arc<Self>, request: &PathTraceRequest) -> Result<PathTrace, String> {
         let points: Vec<Point2> = request.waypoints().iter().map(plan).collect();
-        let prepared = self.prepared();
+        let prepared = &self.prepared();
         let lengths = request
             .objects()
             .iter()
@@ -1520,7 +1592,8 @@ impl MetricRoutingService for AxiolidMetricRoutingService {
         &self,
         request: &MetricRouteRequest,
     ) -> Result<MetricRouteOutcome, MetricRoutingError> {
-        self.measure(request)
+        self.routing
+            .measure(request)
             .map_err(MetricRoutingError::Unavailable)
     }
 
@@ -1528,7 +1601,8 @@ impl MetricRoutingService for AxiolidMetricRoutingService {
         &self,
         request: &NearestTargetRequest,
     ) -> Result<NearestTargetOutcome, MetricRoutingError> {
-        self.nearest(request)
+        self.routing
+            .nearest(request)
             .map_err(MetricRoutingError::Unavailable)
     }
 
@@ -1544,7 +1618,8 @@ impl MetricRoutingService for AxiolidMetricRoutingService {
         &self,
         request: &ForcedWalkRequest,
     ) -> Result<ForcedWalkOutcome, MetricRoutingError> {
-        self.forced(request)
+        self.routing
+            .forced(request)
             .map_err(MetricRoutingError::Unavailable)
     }
 
@@ -1557,14 +1632,181 @@ impl MetricRoutingService for AxiolidMetricRoutingService {
     }
 
     fn trace_path(&self, request: &PathTraceRequest) -> Result<PathTrace, MetricRoutingError> {
-        self.trace(request).map_err(MetricRoutingError::Unavailable)
+        self.routing
+            .trace(request)
+            .map_err(MetricRoutingError::Unavailable)
     }
 
     fn farthest_point(
         &self,
         request: &FarthestPointRequest,
     ) -> Result<FarthestPointOutcome, MetricRoutingError> {
-        self.farthest(request)
+        self.routing
+            .farthest(request)
             .map_err(MetricRoutingError::Unavailable)
+    }
+}
+
+/// The declarations a routing state was prepared from, compared and hashed
+/// by their address.
+#[derive(Clone)]
+pub(crate) struct Over(Arc<Routing>);
+
+impl PartialEq for Over {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl Eq for Over {}
+
+impl std::hash::Hash for Over {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        Arc::as_ptr(&self.0).hash(state);
+    }
+}
+
+/// Everything what the declarations yield is prepared from (#439): the
+/// geometry and declarations (by identity) and the precision class (#438);
+/// exact, as every footprint and portal frame here.
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub(crate) struct PreparedKey {
+    routing: Over,
+    precision: Precision,
+}
+
+/// The derivation kind of what a routing service's declarations yield:
+/// its floors, portals and connectors, and what could not be measured.
+pub(crate) struct PreparedRoutes;
+
+impl DerivationKind for PreparedRoutes {
+    const NAME: &'static str = "prepared routes";
+    /// Bumped whenever the same declarations could prepare otherwise: the
+    /// floors, the portal frames, their sides or the touching floors
+    /// changing what they return.
+    const VERSION: DerivationVersion = DerivationVersion::new(
+        1,
+        &[
+            crate::derivations::AXIOLID_CORE,
+            crate::derivations::AXIOLID_MESH,
+            crate::derivations::AXIOLID_OVERLAY,
+        ],
+    );
+    type Key = PreparedKey;
+    type Value = Prepared;
+
+    fn build(key: &PreparedKey, _: &Inputs<'_>) -> Result<Self::Value, DerivationError> {
+        Ok(key.routing.0.prepare())
+    }
+
+    fn precision(key: &PreparedKey) -> Option<Precision> {
+        Some(key.precision)
+    }
+
+    fn size_hint(value: &Prepared) -> Option<usize> {
+        Some(
+            value
+                .floors
+                .iter()
+                .map(|floor| floor.footprint.bytes() + std::mem::size_of::<Floor>())
+                .sum::<usize>()
+                + value.portals.len()
+                    * std::mem::size_of::<(PortalFrame, [Option<Side>; 2], Clearance)>()
+                + value.gaps.iter().map(String::len).sum::<usize>(),
+        )
+    }
+
+    fn keep_bytes() -> Option<u64> {
+        Some(crate::derivations::keep_bytes())
+    }
+
+    /// Prepared for the metric-routing service's requests alone.
+    fn read_through() -> Option<Vec<TypeId>> {
+        Some(vec![TypeId::of::<MetricRoutingServiceHandle>()])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axiolid_core::Point3;
+    use axioval_engine::KeyCompleteness;
+
+    fn source() -> SourceId {
+        SourceId::new("cad", "m").unwrap()
+    }
+
+    fn id(local: &str) -> ObjectId {
+        ObjectId::new(source(), local).unwrap()
+    }
+
+    /// A closed, outward-wound box.
+    fn cuboid(min: [f64; 3], max: [f64; 3]) -> TriMesh {
+        let [x0, y0, z0] = min;
+        let [x1, y1, z1] = max;
+        let positions = vec![
+            Point3::new(x0, y0, z0),
+            Point3::new(x1, y0, z0),
+            Point3::new(x1, y1, z0),
+            Point3::new(x0, y1, z0),
+            Point3::new(x0, y0, z1),
+            Point3::new(x1, y0, z1),
+            Point3::new(x1, y1, z1),
+            Point3::new(x0, y1, z1),
+        ];
+        let indices = vec![
+            0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 1, 2, 6, 1, 6, 5, 2, 3, 7, 2, 7,
+            6, 3, 0, 4, 3, 4, 7,
+        ];
+        TriMesh::new(positions, indices)
+    }
+
+    /// Two rooms side by side, both declared walkable unless `one_room`.
+    fn routing(one_room: bool) -> Arc<Routing> {
+        let geometry = AxiolidGeometry::new()
+            .with_mesh(id("a"), cuboid([0.0; 3], [4.0, 4.0, 3.0]))
+            .with_mesh(id("b"), cuboid([4.0, 0.0, 0.0], [8.0, 4.0, 3.0]));
+        let service = AxiolidMetricRoutingService::new(geometry, source()).with_surface(id("a"));
+        let service = if one_room {
+            service
+        } else {
+            service.with_surface(id("b"))
+        };
+        service.routing
+    }
+
+    fn prepared(value: &Prepared) -> String {
+        format!(
+            "{:?} {:?} {:?}",
+            value
+                .floors
+                .iter()
+                .map(|floor| (&floor.id.local_id, floor.z0, floor.footprint.area()))
+                .collect::<Vec<_>>(),
+            value.touching,
+            value.gaps
+        )
+    }
+
+    /// Every input what the declarations yield is prepared from is in its
+    /// key (#439).
+    #[test]
+    fn changing_any_input_of_prepared_routes_changes_their_key() {
+        let one = routing(false);
+        let key = |routing: &Arc<Routing>| PreparedKey {
+            routing: Over(Arc::clone(routing)),
+            precision: Precision::Exact,
+        };
+        KeyCompleteness::<PreparedRoutes, _>::new(key(&one), prepared)
+            .same("the same inputs", key(&one))
+            .changes_value("the declarations", key(&routing(true)))
+            .precision(
+                "the precision class",
+                PreparedKey {
+                    precision: Precision::fast(1.0e-3),
+                    ..key(&one)
+                },
+            )
+            .check();
     }
 }

@@ -24,7 +24,7 @@ pub(crate) const AXIOLID_INSPECT: Kernel = Kernel {
 };
 pub(crate) const AXIOLID_MEASURE: Kernel = Kernel {
     name: "axiolid-measure",
-    version: "0.3.10",
+    version: "0.3.11",
 };
 pub(crate) const AXIOLID_MESH: Kernel = Kernel {
     name: "axiolid-mesh",

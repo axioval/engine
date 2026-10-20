@@ -771,7 +771,7 @@ table.
 
 ```text
 stats	kind	version	hits	builds	waits	build_seconds	peak_bytes	released	evicted
-stats	indexed body	1 (axiolid-core 0.3.2, axiolid-measure 0.3.10, axiolid-mesh 0.3.3, axiolid-spatial 0.3.3)	2	2	0	0.000109	4416	0	0
+stats	indexed body	1 (axiolid-core 0.3.2, axiolid-measure 0.3.11, axiolid-mesh 0.3.3, axiolid-spatial 0.3.3)	2	2	0	0.000109	4416	0	0
 ```
 
 `--timings` prints no derivation lines: it keeps to phases, and `--stats`

@@ -177,11 +177,11 @@ pub(super) struct ItemsKey {
 /// versions the workspace locks.
 const IFC_GEOMETRY: Kernel = Kernel {
     name: "ifc-geometry",
-    version: "0.30.0",
+    version: "0.30.1",
 };
 const AXIOLID_MESH_COMPILE: Kernel = Kernel {
     name: "axiolid-mesh-compile",
-    version: "0.3.30",
+    version: "0.3.31",
 };
 
 /// The derivation kind of doors' body items.

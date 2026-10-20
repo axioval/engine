@@ -238,11 +238,34 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **The kernel's re-based volume properties and certified faceted faces**
+  ([#452](https://github.com/axioval/engine/issues/452),
+  axiolid/kernel#343). The workspace moves to axiolid-measure 0.3.11,
+  which sums `exact_properties` and `mesh::second_moments` about a point
+  of the body, and axiolid-mesh-compile 0.3.31, which reports a faceted
+  face without a surface `Certified` with its slab width unless its
+  corners are exactly coplanar, within the tolerance too. A faceted B-rep
+  whose face is warped within the tolerance is now declared within that
+  width instead of exact (a 1 m quad with a corner lifted 0.5 mm: within
+  0.25 mm); a width no larger than the 1 nm the services read as one
+  point (a planar face a turned placement rounded) stays rounding, and
+  the body exact, as a snapped operand's move does. The engine calls
+  neither re-based measurement outside its tests. ifc-geometry 0.30.1,
+  which requires these releases, comes with them: partial B-spline and
+  polyline edges compile (openbimrs/ifc#525), and planar and curved faces
+  sharing straight edges compile watertight (openbimrs/ifc#528). On the public IFC2X3
+  structural model one body has a face whose corners span 3.4e-7 m about
+  its plane: it is now a tessellation, so the facade areas, the
+  window-to-wall ratio and the space validation that rested on it being
+  exact are left open (not evaluated) instead of judged; the parity cases
+  record these divergences. Every other public model reports as before.
+
 - Moved to openbim-ifc 0.37.0, ifc-geometry 0.30.0, ifc-properties 0.9.0,
   ifc-schema 0.3.3 and ifc-style 0.5.1. Product curves skip text and fill items,
   and IFC4X3_TC1/ADD1 files are recognised as unpublished releases rather than
   read as ADD2. Door items name the new ifc-geometry version, so none is read
   across the upgrade.
+
 - Moved to axiolid-overlay 0.3.19, axiolid-mesh-compile 0.3.30 and
   axiolid-construct 0.3.20: a circumscribed grown soup's overlay now costs about
   its outline, rings are validated through a box tree and once per produced

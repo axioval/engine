@@ -284,9 +284,9 @@ dependencies = [
 
 [[package]]
 name = "axiolid-measure"
-version = "0.3.10"
+version = "0.3.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7795f3df18896151ef9955d4a92d36d5c05ae785d373f96515d86d0580b4ccbc"
+checksum = "c640ad6419aebe13b2b87702334c73f192bfda181166b1078bc4f867960865e2"
 dependencies = [
  "axiolid-brep",
  "axiolid-core",
@@ -335,9 +335,9 @@ dependencies = [
 
 [[package]]
 name = "axiolid-mesh-compile"
-version = "0.3.30"
+version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c0a834e48f62863617061d5efd4e2f272e3f3f7ffa25ae6c36e8b99837c10f7"
+checksum = "74856783696cbfb155b34001edfa44eed39bb9aee8cfa1a16d10a986976ad513"
 dependencies = [
  "axiolid-brep",
  "axiolid-brep-boolean",
@@ -1592,9 +1592,9 @@ dependencies = [
 
 [[package]]
 name = "ifc-geometry"
-version = "0.30.0"
+version = "0.30.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c945030adc7534798ad455a81de9846c1f7878e3a6f0ea6cb944c7a9a8ea30e1"
+checksum = "f7f7e41da3cacde05e8ff8c869bce23c7e4beab2ca4fd09a16e1508231603cc6"
 dependencies = [
  "axiolid-construct",
  "axiolid-contracts",

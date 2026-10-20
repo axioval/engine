@@ -4107,14 +4107,19 @@ const WARPED_FACES: [&str; 2] = [
 /// plane, which holds every reading and the mesh: a saddle with corners
 /// at `±h` reports `2 h`, a square with one corner lifted by `h` about
 /// `h / 2`, the gap between its two triangulations. The bound is scaled
-/// by every placement above the face. Faces within the tolerance count
-/// as planar and report nothing here.
+/// by every placement above the face. Since axiolid-mesh-compile 0.3.31
+/// (axiolid/kernel#343) a faceted face reports its width unless its corners
+/// are exactly coplanar, within the tolerance too, so a zero bound means
+/// planar. A width no larger than [`ON_SURFACE`] (a planar face whose
+/// corners a turned placement rounded off its plane) is rounding, as a
+/// snapped operand's move is in [`planar_width`], and keeps the body exact.
 fn warped_width(report: &DeviationReport) -> Option<f64> {
     report
         .contributions
         .iter()
         .filter(|contribution| WARPED_FACES.contains(&contribution.detail))
         .filter_map(|contribution| contribution.bound.value())
+        .filter(|width| *width > ON_SURFACE)
         .reduce(f64::max)
 }
 
@@ -5382,17 +5387,27 @@ mod tests {
                 );
             }
         }
-        // Within the tolerance a face counts as planar, as the compiler
-        // counts it, and the body stays exact.
+        // Only a face whose corners are exactly coplanar is planar. Since
+        // axiolid-mesh-compile 0.3.31 (axiolid/kernel#343) a faceted face
+        // warped within the tolerance reports its width too, and the body
+        // is declared within it; the polygon mesh stays as before.
         for faceted in [true, false] {
-            for lift in [0.0, 5e-4] {
-                assert_eq!(
-                    top_fit(lifted(lift), faceted),
-                    Ok(super::Fit::Exact),
-                    "{faceted}"
-                );
-            }
+            assert_eq!(
+                top_fit(lifted(0.0), faceted),
+                Ok(super::Fit::Exact),
+                "{faceted}"
+            );
         }
+        let lift = 5e-4_f64;
+        let apart = (lift / 2.0) / (1.0 + 2.0 * lift * lift).sqrt();
+        let Ok(super::Fit::Within(bound)) = top_fit(lifted(lift), true) else {
+            panic!("{:?}", top_fit(lifted(lift), true));
+        };
+        assert!(
+            apart <= bound && bound <= lift / 2.0 + 1e-12,
+            "{apart} <= {bound}"
+        );
+        assert_eq!(top_fit(lifted(lift), false), Ok(super::Fit::Exact));
     }
 
     #[test]

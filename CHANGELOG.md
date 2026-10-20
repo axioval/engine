@@ -238,6 +238,11 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- Moved to openbim-ifc 0.37.0, ifc-geometry 0.30.0, ifc-properties 0.9.0,
+  ifc-schema 0.3.3 and ifc-style 0.5.1. Product curves skip text and fill items,
+  and IFC4X3_TC1/ADD1 files are recognised as unpublished releases rather than
+  read as ADD2. Door items name the new ifc-geometry version, so none is read
+  across the upgrade.
 - Moved to axiolid-overlay 0.3.19, axiolid-mesh-compile 0.3.30 and
   axiolid-construct 0.3.20: a circumscribed grown soup's overlay now costs about
   its outline, rings are validated through a box tree and once per produced

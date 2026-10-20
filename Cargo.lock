@@ -1592,9 +1592,9 @@ dependencies = [
 
 [[package]]
 name = "ifc-geometry"
-version = "0.29.0"
+version = "0.30.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be0101451c827a5463aadd0bc49e6f6bf9dbb49b309de4ce5de6ad74e88c5cdb"
+checksum = "c945030adc7534798ad455a81de9846c1f7878e3a6f0ea6cb944c7a9a8ea30e1"
 dependencies = [
  "axiolid-construct",
  "axiolid-contracts",
@@ -1650,9 +1650,9 @@ dependencies = [
 
 [[package]]
 name = "ifc-properties"
-version = "0.8.1"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72355e967e9f95d9140c228ecdf45d4bc58b8fc0d574f5d56826851d320dadff"
+checksum = "6414fc8543307e705f498b64d47436a5b11c3b5ee45b63a37afacc919021e987"
 dependencies = [
  "ifc-model",
  "ifc-schema",
@@ -1660,9 +1660,9 @@ dependencies = [
 
 [[package]]
 name = "ifc-schema"
-version = "0.3.2"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21a69dbc30e26eff04ffafb3550e5a631a3b63ef3b4aa1e0c927dddb0cf74ba7"
+checksum = "55534c45dd5edf206f40e6bd6c2319b803dc7c8a4f9fb1ed4f39ff1dff34ef6d"
 dependencies = [
  "ahash",
  "bincode",
@@ -1693,9 +1693,9 @@ dependencies = [
 
 [[package]]
 name = "ifc-style"
-version = "0.5.0"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "641a3bbce22b13c4a7943d37c061c60382abc28a0182643d3a879c4bf8362d8f"
+checksum = "83b02fe74464983497cc704fff842a10cded4446a5222e43e8325f3ad4f02b04"
 dependencies = [
  "ifc-model",
  "ifc-schema",
@@ -1725,9 +1725,9 @@ dependencies = [
 
 [[package]]
 name = "ifc-validate"
-version = "0.6.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4616c18fdafe630ac4dcd495d5428de95c987631367b31ab6cb108320a095c45"
+checksum = "825070201e8e4e122a9579832ddaa07cd0bb7c4eb0c8b8a8bff269b89e806392"
 dependencies = [
  "ifc-model",
  "ifc-schema",
@@ -2083,9 +2083,9 @@ dependencies = [
 
 [[package]]
 name = "openbim-ifc"
-version = "0.36.0"
+version = "0.37.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dad17dc0b25a2f30582d9380101cc7ffbae357e339b9c19b5995e4b4f46af024"
+checksum = "f75f18d0544ca48da326a365a5ad566f78648e659dca0ce953d9f876587cd4ba"
 dependencies = [
  "getrandom 0.3.4",
  "ifc-classification",

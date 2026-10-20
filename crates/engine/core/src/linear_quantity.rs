@@ -30,6 +30,13 @@ pub enum LinearQuantityError {
     /// The requested arrangement is not physically realisable.
     #[error("shelf geometry must be positive, finite and ordered")]
     InvalidGeometry,
+    /// The measurement was refused before it was built: its plan overlay
+    /// is past the adapter's overlay budget or the check's memory budget.
+    #[error(
+        "linear quantity was not measured: its plan overlay is past the overlay budget or the \
+         check's memory budget"
+    )]
+    OverBudget,
 }
 
 /// A measured length, in metres, bounded below and above.

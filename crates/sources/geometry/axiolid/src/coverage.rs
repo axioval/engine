@@ -42,7 +42,7 @@
 use std::fmt::Write as _;
 
 use axiolid_core::{Point2, Tolerance};
-use axiolid_overlay::{Polygon, Region, Ring, union_soup};
+use axiolid_overlay::{Polygon, Region, Ring};
 use axiolid_route::{Unreachable, distance_map};
 use axioval_engine::{
     CoverageEvidence, CoverageRequest, EffectMeets, EffectReach, PlanArea, PlanAreaError,
@@ -51,7 +51,9 @@ use axioval_ir::{Evidence, ObjectId};
 
 use crate::geometry::triangles;
 use crate::plan_area::{AxiolidPlanAreaService, tolerance};
-use crate::planar::{collinear, footprint_polygons, polygon_moments, ring_area};
+use crate::planar::{
+    self, Morphology, PlanarRefusal, collinear, footprint_polygons, polygon_moments, ring_area,
+};
 use crate::walkable::{Plan, trapezoids};
 
 /// Sides of the regular polygons bracketing the range's disc.
@@ -104,7 +106,11 @@ pub(crate) fn measure(
     if footprint.is_empty() || area <= 0.0 {
         return Err(unavailable(format!("{subject} has no plan footprint")));
     }
-    let overlay = |error| unavailable(format!("the coverage of {subject}: {error:?}"));
+    // Every union, intersection and difference here is held to the overlay
+    // budget (#432); an overlay refusal reads as it always did.
+    let overlay = |error: PlanarRefusal| {
+        unavailable(format!("the coverage of {subject}: {}", error.described()))
+    };
     let mut unmeasured = false;
     let (free_inner, free_outer) = match request.reach() {
         EffectReach::Grown => (Region::empty(), Region::empty()),
@@ -118,16 +124,14 @@ pub(crate) fn measure(
                     continue;
                 }
                 let (region, _) = exact_region(blocker.object(), "blocker")?;
-                all = all.union(&region, tolerance).map_err(overlay)?;
+                all = planar::union(&all, &region, tolerance).map_err(overlay)?;
                 if blocker.is_certain() {
-                    certain = certain.union(&region, tolerance).map_err(overlay)?;
+                    certain = planar::union(&certain, &region, tolerance).map_err(overlay)?;
                 }
             }
             (
-                joined_inner.difference(&all, tolerance).map_err(overlay)?,
-                joined_outer
-                    .difference(&certain, tolerance)
-                    .map_err(overlay)?,
+                planar::difference(&joined_inner, &all, tolerance).map_err(overlay)?,
+                planar::difference(&joined_outer, &certain, tolerance).map_err(overlay)?,
             )
         }
     };
@@ -136,7 +140,7 @@ pub(crate) fn measure(
     let connected = !(request.connected().is_empty() && request.passages().is_empty());
     let judged = |free: &Region| -> Result<Option<Region>, PlanAreaError> {
         if connected && request.reach() == EffectReach::Travel {
-            free.intersection(&footprint, tolerance)
+            planar::intersection(free, &footprint, tolerance)
                 .map(Some)
                 .map_err(overlay)
         } else {
@@ -146,10 +150,14 @@ pub(crate) fn measure(
     let (judged_inner, judged_outer) = (judged(&free_inner)?, judged(&free_outer)?);
     let range = request.range_metres();
     let clipped = |effect: &Region| {
-        effect
-            .intersection(&footprint, tolerance)
+        planar::intersection(effect, &footprint, tolerance)
             .map(|within| within.area())
-            .map_err(|error| format!("the overlay could not clip it to the footprint: {error:?}"))
+            .map_err(|error| {
+                format!(
+                    "the overlay could not clip it to the footprint: {}",
+                    error.described()
+                )
+            })
     };
     let mut inner_union = Region::empty();
     let mut outer_union = Region::empty();
@@ -193,9 +201,9 @@ pub(crate) fn measure(
                 };
                 let joined = (|| {
                     if source.is_certain() {
-                        inner_union = inner_union.union(&inner, tolerance)?;
+                        inner_union = planar::union(&inner_union, &inner, tolerance)?;
                     }
-                    outer_union = outer_union.union(&outer, tolerance)?;
+                    outer_union = planar::union(&outer_union, &outer, tolerance)?;
                     Ok(())
                 })();
                 joined.map_err(overlay)?;
@@ -273,10 +281,12 @@ fn joined(
             cut = true;
             continue;
         };
-        let failed = |error| format!("joining {}: {error:?}", connection.object());
-        outer = outer.union(&region, tolerance).map_err(failed)?;
+        let failed = |error: PlanarRefusal| {
+            format!("joining {}: {}", connection.object(), error.described())
+        };
+        outer = planar::union(&outer, &region, tolerance).map_err(failed)?;
         if connection.is_certain() {
-            inner = inner.union(&region, tolerance).map_err(failed)?;
+            inner = planar::union(&inner, &region, tolerance).map_err(failed)?;
         }
     }
     Ok((inner, outer, cut))
@@ -332,10 +342,12 @@ fn grown(
     let Some(region) = source_region(service, object, tolerance)? else {
         return Ok((Region::empty(), Region::empty()));
     };
-    let failed = |error| format!("{object} grown by {range} m: {error:?}");
+    let failed =
+        |error: PlanarRefusal| format!("{object} grown by {range} m: {}", error.described());
+    let grown = |kind| planar::morphology(&region, kind, range, tolerance).map_err(failed);
     Ok((
-        region.dilate_inner(range, tolerance).map_err(failed)?,
-        region.dilate_outer(range, tolerance).map_err(failed)?,
+        grown(Morphology::DilateInner)?,
+        grown(Morphology::DilateOuter)?,
     ))
 }
 
@@ -458,8 +470,8 @@ fn visible(
     let seen = free
         .visibility_polygon(centre, tolerance)
         .map_err(|error| format!("the view from the centre: {error:?}"))?;
-    seen.intersection(&disc(centre, range, inner, tolerance)?, tolerance)
-        .map_err(|error| format!("the view within range: {error:?}"))
+    planar::intersection(&seen, &disc(centre, range, inner, tolerance)?, tolerance)
+        .map_err(|error| format!("the view within range: {}", error.described()))
 }
 
 /// The part of `judged`, a part of the free region, within `range` of
@@ -542,8 +554,16 @@ fn travel(
     // A cell without area covers nothing; footprints are built from
     // shadows filtered the same way (`planar::projected_polygons`).
     reached.retain(|ring| ring_area(ring).abs() > 0.0 && !collinear(&ring.points));
-    let cells = |error| format!("the travel cells within range: {error:?}");
-    Region::new(union_soup(&reached, tolerance).map_err(cells)?, tolerance).map_err(cells)
+    united_cells(&reached, tolerance)
+}
+
+/// The union of the reached travel cells as a region, held to the overlay
+/// budget (#432).
+fn united_cells(reached: &[Ring], tolerance: Tolerance) -> Result<Region, String> {
+    let cells =
+        |error: PlanarRefusal| format!("the travel cells within range: {}", error.described());
+    let polygons = planar::soup_union(reached, tolerance).map_err(cells)?;
+    Region::new(polygons, tolerance).map_err(|error| cells(error.into()))
 }
 
 /// A cell as a counter-clockwise ring.
@@ -555,4 +575,40 @@ fn triangle_ring(corners: [Point2; 3]) -> Ring {
         ring.points.reverse();
     }
     ring
+}
+
+#[cfg(test)]
+mod budget_tests {
+    use axiolid_overlay::Region;
+
+    use crate::planar::budget::{DISC_PAIRS, OVERLAY_PAIRS};
+    use crate::planar::{sliver_polygons, slivers};
+
+    /// Travel cells, and a source's footprint grown by its range, past
+    /// their budgets leave the effect unmeasured with the budget named,
+    /// never built (#432).
+    #[test]
+    fn effects_past_their_budgets_are_refused_by_name() {
+        let tolerance = axiolid_core::Tolerance::new(1e-9, 1e-9).unwrap();
+        let refused = super::united_cells(&slivers(), tolerance).unwrap_err();
+        assert!(
+            refused.ends_with(&format!("past the overlay budget of {OVERLAY_PAIRS} pairs")),
+            "{refused}"
+        );
+        let crowded = Region::new(sliver_polygons(), tolerance).unwrap();
+        let refused = crate::planar::morphology(
+            &crowded,
+            crate::planar::Morphology::DilateInner,
+            1.0,
+            tolerance,
+        )
+        .unwrap_err();
+        assert!(
+            refused.described().ends_with(&format!(
+                "past the disc morphology budget of {DISC_PAIRS} pairs"
+            )),
+            "{}",
+            refused.described()
+        );
+    }
 }

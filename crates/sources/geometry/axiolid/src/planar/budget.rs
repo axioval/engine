@@ -14,7 +14,7 @@ use std::cell::{Cell, RefCell};
 use std::fmt;
 
 use axiolid_core::Point2;
-use axiolid_overlay::Polygon;
+use axiolid_overlay::{Polygon, Ring};
 use axioval_engine::memory::{self, Admission, OverBudget as OverMemory};
 
 /// The most pairs of edges whose boxes meet that one plan overlay is
@@ -29,6 +29,13 @@ pub(crate) const OVERLAY_PAIRS: u64 = 4_000_000;
 /// [`OVERLAY_PAIRS`], which a test keeps in step.
 pub(crate) const OVER_BUDGET: &str = "the plan overlay was not built: its edges meet in more than 4000000 pairs, \
      past the overlay budget";
+
+/// The refusal's reason where an error holds only a static text and a
+/// disc morphology outside any search is past [`DISC_PAIRS`] or the
+/// check's memory budget (#432).
+pub(crate) const OVER_DISC_BUDGET: &str = "the disc morphology was not built: its edges meet in \
+     more pairs than the disc morphology budget or its estimated memory is more than the \
+     check's memory budget";
 
 /// The refusal's reason where an error holds only a static text and the
 /// overlay's memory estimate alone is more than the check's memory budget
@@ -61,8 +68,17 @@ impl fmt::Display for OverBudget {
 /// than [`OVERLAY_PAIRS`]; every ring of every polygon counts, holes too.
 /// Admitted, its memory estimate ([`overlay_bytes`]).
 pub(crate) fn admit(operands: &[&[Polygon]]) -> Result<u64, OverBudget> {
-    let boxes = edge_boxes(operands);
-    let pairs = meeting_pairs(&boxes);
+    admit_boxes(&edge_boxes(operands))
+}
+
+/// [`admit`] for a soup of rings the overlay unites in one arrangement
+/// (`axiolid_overlay::union_soup`): every ring's edges count (#432).
+pub(crate) fn admit_rings(rings: &[Ring]) -> Result<u64, OverBudget> {
+    admit_boxes(&ring_boxes(rings.iter()))
+}
+
+fn admit_boxes(boxes: &[EdgeBox]) -> Result<u64, OverBudget> {
+    let pairs = meeting_pairs(boxes);
     if pairs > OVERLAY_PAIRS {
         return Err(OverBudget {
             edges: boxes.len(),
@@ -76,14 +92,21 @@ pub(crate) fn admit(operands: &[&[Polygon]]) -> Result<u64, OverBudget> {
 type EdgeBox = [f64; 4];
 
 fn edge_boxes(operands: &[&[Polygon]]) -> Vec<EdgeBox> {
+    ring_boxes(
+        operands
+            .iter()
+            .flat_map(|polygons| polygons.iter())
+            .flat_map(|polygon| std::iter::once(&polygon.outer).chain(&polygon.holes)),
+    )
+}
+
+fn ring_boxes<'r>(rings: impl Iterator<Item = &'r Ring>) -> Vec<EdgeBox> {
     let mut boxes = Vec::new();
-    for polygon in operands.iter().flat_map(|polygons| polygons.iter()) {
-        for ring in std::iter::once(&polygon.outer).chain(&polygon.holes) {
-            let points = &ring.points;
-            for (index, a) in points.iter().enumerate() {
-                let b = points[(index + 1) % points.len()];
-                boxes.push([a.x.min(b.x), a.x.max(b.x), a.y.min(b.y), a.y.max(b.y)]);
-            }
+    for ring in rings {
+        let points = &ring.points;
+        for (index, a) in points.iter().enumerate() {
+            let b = points[(index + 1) % points.len()];
+            boxes.push([a.x.min(b.x), a.x.max(b.x), a.y.min(b.y), a.y.max(b.y)]);
         }
     }
     boxes
@@ -556,6 +579,22 @@ impl Work {
     pub(crate) fn spent(&self) -> u64 {
         self.spent.get()
     }
+}
+
+/// Admits one step outside any search (#432): refused past its kind's
+/// budget ([`Cost::budget`]) or where its memory estimate alone is more
+/// than the check's memory budget, and otherwise admitted against that
+/// budget while the returned [`Step`] is held. The refusal is a function
+/// of the step's operands alone, never of what was kept before it.
+pub(crate) fn admit_step(what: &'static str, cost: Cost) -> Result<Step, Refusal> {
+    if cost.pairs > cost.budget() {
+        return Err(Refusal::Step { what, cost });
+    }
+    let admission =
+        memory::admit(cost.bytes()).map_err(|over| Refusal::Memory { what, cost, over })?;
+    Ok(Step {
+        _admission: admission,
+    })
 }
 
 /// A step admitted against the check's memory budget while it builds

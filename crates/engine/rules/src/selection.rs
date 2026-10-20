@@ -1305,6 +1305,9 @@ pub(crate) fn property_error(error: PropertyResolutionError) -> (NotEvaluatedRea
         PropertyResolutionError::MissingService(message) => {
             (NotEvaluatedReason::MissingService, message)
         }
+        PropertyResolutionError::ResourceLimit(message) => {
+            (NotEvaluatedReason::ResourceLimit, message)
+        }
         // Present, of a known type: only the value is unknown.
         PropertyResolutionError::UnreadableValue(unreadable) => (
             NotEvaluatedReason::IncompleteEvidence,

@@ -64,7 +64,9 @@ pairs counted over the region with every corner dropped that lies within
 the fast mode's 1 mm of the chord across it, as the overlay fills such
 notches; the search's step and pair budgets then apply to them as to the
 rectangle's, and the one disc step of a private sample that asked for
-20 GB is refused by name.
+20 GB is refused by name. Since #432 the region booleans, ring-soup unions
+and exact disc morphologies of the other services are estimated and
+admitted the same way, one step at a time.
 
 The estimates are of a step's arrangement, not of the process. The models,
 meshes, a session's caches and each thread's scene come on top, and an

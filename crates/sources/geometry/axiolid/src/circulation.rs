@@ -50,6 +50,7 @@ use crate::free_space::AxiolidFreeSpaceService;
 use crate::geometry::triangles;
 use crate::placement::{self, KNIFE_EDGE_METRES, Reached, Scene};
 use crate::planar::budget::{Cost, Work, disc_cost, overlay_cost};
+use crate::planar::{self, Morphology, PlanarRefusal};
 
 /// The free area eroded by a path's half width `radius`, from both sides:
 /// pieces inside the exact erosion (`erode_inner` of the scope less the
@@ -161,6 +162,29 @@ fn unavailable(context: &str, error: impl std::fmt::Debug) -> FreeSpaceError {
     FreeSpaceError::Unavailable(format!("{context}: {error:?}"))
 }
 
+/// [`unavailable`] for an operation held to the overlay budget (#432): an
+/// overlay refusal reads as it always did, a budget's by name.
+#[allow(clippy::needless_pass_by_value)]
+fn refused(context: &str, error: PlanarRefusal) -> FreeSpaceError {
+    FreeSpaceError::Unavailable(format!("{context}: {}", error.described()))
+}
+
+/// `region` grown by a disc of `radius`, from inside (`inner`) or outside,
+/// held to the disc morphology budget (#432).
+fn grown(
+    region: &Region,
+    radius: f64,
+    inner: bool,
+    t: Tolerance,
+) -> Result<Region, FreeSpaceError> {
+    let kind = if inner {
+        Morphology::DilateInner
+    } else {
+        Morphology::DilateOuter
+    };
+    planar::morphology(region, kind, radius, t).map_err(|e| refused("disc morphology", e))
+}
+
 fn rings(polygon: &Polygon) -> impl Iterator<Item = &[Point2]> {
     std::iter::once(polygon.outer.points.as_slice())
         .chain(polygon.holes.iter().map(|ring| ring.points.as_slice()))
@@ -229,9 +253,8 @@ fn meets(a: &Region, b: &Region, tolerance: Tolerance) -> Result<bool, FreeSpace
     if a.is_empty() || b.is_empty() {
         return Ok(false);
     }
-    Ok(!a
-        .intersection(b, tolerance)
-        .map_err(|e| unavailable("contact", e))?
+    Ok(!planar::intersection(a, b, tolerance)
+        .map_err(|e| refused("contact", e))?
         .is_empty())
 }
 
@@ -246,7 +269,6 @@ impl AxiolidFreeSpaceService {
         request: &CirculationRequest,
     ) -> Result<CirculationMap, FreeSpaceError> {
         let t = crate::free_space::tolerance()?;
-        let err = |e| unavailable("disc morphology", e);
         let radius = request.width_metres() / 2.0;
         let reach = radius + request.tolerance_metres();
         // The placement scene of the same scope, obstacles, doors and band,
@@ -267,9 +289,7 @@ impl AxiolidFreeSpaceService {
             if obstacles.is_empty() {
                 Ok(scope.clone())
             } else {
-                scope
-                    .difference(obstacles, t)
-                    .map_err(|e| unavailable("free area", e))
+                planar::difference(scope, obstacles, t).map_err(|e| refused("free area", e))
             }
         };
         let free = less(&scene.scope, &scene.obstacles)?;
@@ -363,8 +383,8 @@ impl AxiolidFreeSpaceService {
         let mut contacts = Vec::new();
         for subject in request.subjects() {
             let (footprint, around) = self.subject_footprint(&subject, t)?;
-            let near = footprint.dilate_inner(reach, t).map_err(err)?;
-            let far = around.dilate_outer(reach, t).map_err(err)?;
+            let near = grown(&footprint, reach, true, t)?;
+            let far = grown(&around, reach, false, t)?;
             let mut reached = Vec::new();
             for (index, region) in pieces.iter().enumerate() {
                 if meets(region, &near, t)? {
@@ -422,7 +442,6 @@ impl AxiolidFreeSpaceService {
         reach: &EntranceReach,
     ) -> Result<Reached, FreeSpaceError> {
         let t = scene.tolerance;
-        let err = |e| unavailable("disc morphology", e);
         let radius = reach.width_metres() / 2.0;
         let near = radius + reach.tolerance_metres();
         let (inner, outer) = eroded_free(scene, radius, &scene.work)?;
@@ -430,8 +449,8 @@ impl AxiolidFreeSpaceService {
         let mut maybe = Vec::new();
         for entrance in reach.entrances() {
             let (footprint, around) = self.subject_footprint(entrance, t)?;
-            let grown_in = footprint.dilate_inner(near, t).map_err(err)?;
-            let grown_out = around.dilate_outer(near, t).map_err(err)?;
+            let grown_in = grown(&footprint, near, true, t)?;
+            let grown_out = grown(&around, near, false, t)?;
             for polygon in inner.polygons() {
                 if !sure.contains(polygon) && meets(&piece(polygon, t)?, &grown_in, t)? {
                     sure.push(polygon.clone());
@@ -482,5 +501,56 @@ impl AxiolidFreeSpaceService {
             return Err(FreeSpaceError::MissingGeometry(Box::new(subject.clone())));
         }
         Ok((inside, around))
+    }
+}
+
+#[cfg(test)]
+mod budget_tests {
+    use axiolid_core::{Point2, Tolerance};
+    use axiolid_overlay::{Polygon, Region, Ring};
+    use axioval_engine::FreeSpaceError;
+
+    use crate::planar::budget::{DISC_PAIRS, OVERLAY_PAIRS};
+    use crate::planar::sliver_polygons;
+
+    /// A subject's footprint grown by the reach, and a contact or free
+    /// area between regions, past their budgets are refused by name before
+    /// they are built (#432).
+    #[test]
+    fn contacts_past_their_budgets_are_refused_by_name() {
+        let t = Tolerance::new(1e-9, 1e-9).unwrap();
+        let crowded = Region::new(sliver_polygons(), t).unwrap();
+        let p = Point2::new;
+        let room = Region::new(
+            vec![Polygon {
+                outer: Ring {
+                    points: vec![p(0.0, 0.0), p(4.0, 0.0), p(4.0, 4.0), p(0.0, 4.0)],
+                },
+                holes: Vec::new(),
+            }],
+            t,
+        )
+        .unwrap();
+        let message = |error: FreeSpaceError| match error {
+            FreeSpaceError::Unavailable(message) => message,
+            other => panic!("{other:?}"),
+        };
+        for inner in [true, false] {
+            let refused = message(super::grown(&crowded, 0.5, inner, t).unwrap_err());
+            assert!(
+                refused.starts_with("disc morphology: ")
+                    && refused.ends_with(&format!(
+                        "past the disc morphology budget of {DISC_PAIRS} pairs"
+                    )),
+                "{refused}"
+            );
+        }
+        let refused = message(super::meets(&room, &crowded, t).unwrap_err());
+        assert!(
+            refused.starts_with("contact: ")
+                && refused.ends_with(&format!("past the overlay budget of {OVERLAY_PAIRS} pairs")),
+            "{refused}"
+        );
+        assert!(super::meets(&room, &room, t).unwrap());
     }
 }

@@ -28,7 +28,7 @@ use std::collections::BTreeMap;
 
 use axiolid_core::{Point2, Point3, Tolerance};
 use axiolid_mesh::TriMesh;
-use axiolid_overlay::{Region, Ring, union_soup};
+use axiolid_overlay::{Region, Ring};
 use axioval_engine::{
     BoundaryCoverage, BoundaryCoverageError, BoundaryCoverageRequest, BoundaryCoverageService,
     BoundaryOverlap, BoundaryPlacement, CoverageAreas, MeasuredBoundary, SurfaceAreaInterval,
@@ -36,7 +36,7 @@ use axioval_engine::{
 use axioval_ir::{Evidence, ObjectId};
 
 use crate::geometry::{AxiolidGeometry, Triangle, triangles};
-use crate::planar::{OVERLAY_SNAP, collinear, ring_perimeter};
+use crate::planar::{self, OVERLAY_SNAP, PlanarRefusal, collinear, ring_perimeter};
 
 /// Body triangles whose normals differ by less than this (as `1 − cos`) and
 /// whose corners lie within [`FACE_PLANE_METRES`] of one plane form one face
@@ -392,9 +392,9 @@ impl Tally {
             let part = region(triangles)?;
             let part_margin = margin(&part, rounding + boundaries[index].deviation.unwrap_or(0.0));
             self.boundaries[index].add(part.area(), part_margin);
-            let common = union.intersection(&part, tolerance).map_err(overlay)?;
-            overlapped = overlapped.union(&common, tolerance).map_err(overlay)?;
-            union = union.union(&part, tolerance).map_err(overlay)?;
+            let common = planar::intersection(&union, &part, tolerance).map_err(overlay)?;
+            overlapped = planar::union(&overlapped, &common, tolerance).map_err(overlay)?;
+            union = planar::union(&union, &part, tolerance).map_err(overlay)?;
             parts.push((index, part, part_margin));
         }
         let plane_margin = face_margin + parts.iter().map(|(_, _, margin)| margin).sum::<f64>();
@@ -402,21 +402,18 @@ impl Tally {
         // the rest of the faces, so a face its boundaries cover whole is
         // covered by exactly its area rather than by an overlay's rounding
         // of it.
-        let outside = faces.difference(&union, tolerance).map_err(overlay)?;
+        let outside = planar::difference(&faces, &union, tolerance).map_err(overlay)?;
         let uncovered = dust(outside.area());
         self.uncovered.add(uncovered, plane_margin);
         self.covered
             .add((faces.area() - uncovered).max(0.0), plane_margin);
-        let shared = faces
-            .intersection(&overlapped, tolerance)
-            .map_err(overlay)?;
+        let shared = planar::intersection(&faces, &overlapped, tolerance).map_err(overlay)?;
         self.overlap.add(dust(shared.area()), plane_margin);
 
         for (i, (first, first_part, first_margin)) in parts.iter().enumerate() {
             for (second, second_part, second_margin) in &parts[i + 1..] {
-                let common = first_part
-                    .intersection(second_part, tolerance)
-                    .and_then(|common| faces.intersection(&common, tolerance))
+                let common = planar::intersection(first_part, second_part, tolerance)
+                    .and_then(|common| planar::intersection(&faces, &common, tolerance))
                     .map_err(overlay)?;
                 let area = dust(common.area());
                 let pair_margin = face_margin + first_margin + second_margin;
@@ -568,7 +565,7 @@ fn region(
     if rings.is_empty() {
         return Ok(Region::empty());
     }
-    let polygons = union_soup(&rings, tolerance).map_err(overlay)?;
+    let polygons = planar::soup_union(&rings, tolerance).map_err(overlay)?;
     Region::new(polygons, tolerance).map_err(overlay)
 }
 
@@ -586,9 +583,10 @@ fn dust(area: f64) -> f64 {
     if area <= AREA_EPSILON_M2 { 0.0 } else { area }
 }
 
-#[allow(clippy::needless_pass_by_value)]
-fn overlay(error: axiolid_overlay::OverlayError) -> BoundaryCoverageError {
-    BoundaryCoverageError::Unavailable(format!("overlay: {error:?}"))
+/// An overlay's refusal as it always read, or the overlay budget's by name
+/// (#432): every union, intersection and difference here is held to it.
+fn overlay(error: impl Into<PlanarRefusal>) -> BoundaryCoverageError {
+    BoundaryCoverageError::Unavailable(format!("overlay: {}", error.into().described()))
 }
 
 fn area3(triangle: &Triangle) -> f64 {
@@ -624,4 +622,30 @@ fn norm(a: [f64; 3]) -> f64 {
 fn normalise(a: [f64; 3]) -> [f64; 3] {
     let length = norm(a);
     [a[0] / length, a[1] / length, a[2] / length]
+}
+
+#[cfg(test)]
+mod budget_tests {
+    use axioval_engine::BoundaryCoverageError;
+
+    use super::Projection;
+    use crate::planar::budget::OVERLAY_PAIRS;
+    use crate::planar::sliver_triangles;
+
+    /// Faces or boundary parts whose shadows in their plane are past the
+    /// overlay budget refuse the space by name before any union is built
+    /// (#432).
+    #[test]
+    fn parts_past_the_overlay_budget_are_refused_by_name() {
+        let tolerance = axiolid_core::Tolerance::new(1e-9, 1e-9).unwrap();
+        let Err(BoundaryCoverageError::Unavailable(message)) =
+            super::region(&Projection::Axis(2), &sliver_triangles(), tolerance)
+        else {
+            panic!("a region past the budget was united");
+        };
+        assert!(
+            message.ends_with(&format!("past the overlay budget of {OVERLAY_PAIRS} pairs")),
+            "{message}"
+        );
+    }
 }

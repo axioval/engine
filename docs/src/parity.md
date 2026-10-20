@@ -250,7 +250,10 @@ reused, so every budget charges a reused value as if it were built:
   together.
 - *The overlay budget* (#419) counts each overlay from its operands, and a
   refused obstacle footprint is kept by the very key it was refused for,
-  so it refuses alike whether built or kept.
+  so it refuses alike whether built or kept. Since #432 every region
+  boolean, ring-soup union and disc morphology outside the placement
+  search is counted the same way, from its operands alone, so none of
+  them depends on what was kept either.
 - *The expression evaluation budget* (#447) gives each rule a share of
   its own and charges every ruleset value, measured value and selection
   it reads as if built for it, whether built or kept. Its backstop

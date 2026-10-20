@@ -60,8 +60,7 @@
 
 use axiolid_core::Point2;
 use axiolid_overlay::{
-    FillRule, OverlayInput, OverlayOperation, Polygon, RectangleError, Ring,
-    minimum_area_rectangle, overlay,
+    FillRule, OverlayInput, OverlayOperation, Polygon, RectangleError, Ring, minimum_area_rectangle,
 };
 use axioval_engine::{
     CentrePlacement, CorridorEndRequest, CorridorEnds, PlanAreaError, PlanCentre, PlanLength,
@@ -74,7 +73,8 @@ use crate::corridor_end::corridor_ends;
 use crate::geometry::{AxiolidGeometry, Triangle};
 use crate::plan_area::{AxiolidPlanAreaService, Footprint, band, tolerance};
 use crate::planar::{
-    footprint_polygons, hull_of, plan_frame, polygon_area, polygon_moments, ring_segments,
+    PlanarRefusal, footprint_polygons, hull_of, plan_footprint, plan_frame, plan_overlay,
+    polygon_area, polygon_moments, ring_segments,
 };
 
 /// A point in plan.
@@ -693,9 +693,10 @@ impl PlanSpanService for AxiolidPlanSpanService {
             section = Some(match section {
                 None => own,
                 Some(current) if current.is_empty() => current,
-                Some(current) => intersect(current, own, tolerance).ok_or_else(|| {
+                Some(current) => intersect(current, own, tolerance).map_err(|refusal| {
                     PlanSpanError::Unavailable(format!(
-                        "the section through {object} cannot be computed"
+                        "the section through {object} cannot be computed{}",
+                        refusal.budget_note()
                     ))
                 })?,
             });
@@ -763,18 +764,22 @@ impl AxiolidPlanSpanService {
     fn polygons(object: &ObjectId, soup: &[Triangle]) -> Result<Vec<Polygon>, PlanSpanError> {
         let tolerance = tolerance()
             .map_err(|_| PlanSpanError::Unavailable("invalid overlay tolerance".into()))?;
-        footprint_polygons(soup, tolerance).ok_or_else(|| {
-            PlanSpanError::Unavailable(format!("the footprint of {object} cannot be computed"))
+        plan_footprint(soup, tolerance).map_err(|refusal| {
+            PlanSpanError::Unavailable(format!(
+                "the footprint of {object} cannot be computed{}",
+                refusal.budget_note()
+            ))
         })
     }
 }
 
-/// The intersection of two polygon sets, each filled as its non-zero union.
+/// The intersection of two polygon sets, each filled as its non-zero union,
+/// held to the overlay budget (#432).
 fn intersect(
     first: Vec<Polygon>,
     second: Vec<Polygon>,
     tolerance: axiolid_core::Tolerance,
-) -> Option<Vec<Polygon>> {
+) -> Result<Vec<Polygon>, PlanarRefusal> {
     let first = OverlayInput {
         frame: plan_frame(),
         polygons: first,
@@ -783,14 +788,13 @@ fn intersect(
         frame: plan_frame(),
         polygons: second,
     };
-    overlay(
+    plan_overlay(
         &first,
         &second,
         OverlayOperation::Intersection,
         FillRule::NonZero,
         tolerance,
     )
-    .ok()
     .map(|result| result.polygons)
 }
 
@@ -802,6 +806,28 @@ mod tests {
     use axioval_engine::CentrePlacement;
 
     use super::{convex_hull, farthest, placement};
+
+    /// A section through footprints whose edges are past the overlay
+    /// budget is refused by name before it is built (#432).
+    #[test]
+    fn a_section_past_the_overlay_budget_is_refused_by_name() {
+        let square = Polygon {
+            outer: ring(&[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)]),
+            holes: Vec::new(),
+        };
+        let tolerance = axiolid_core::Tolerance::new(1e-9, 1e-9).unwrap();
+        let refused = super::intersect(vec![square], crate::planar::sliver_polygons(), tolerance)
+            .unwrap_err();
+        assert!(refused.is_budget(), "{refused:?}");
+        assert!(
+            refused.budget_note().ends_with(&format!(
+                "past the overlay budget of {} pairs",
+                crate::planar::budget::OVERLAY_PAIRS
+            )),
+            "{}",
+            refused.budget_note()
+        );
+    }
 
     fn ring(points: &[(f64, f64)]) -> Ring {
         Ring {

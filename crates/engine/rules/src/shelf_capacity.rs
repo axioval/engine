@@ -130,5 +130,6 @@ fn reason(error: LinearQuantityError) -> NotEvaluatedReason {
         // The arrangement was validated before the request, so reaching here
         // means the declaration, not the model.
         LinearQuantityError::InvalidGeometry => NotEvaluatedReason::InvalidDeclaration,
+        LinearQuantityError::OverBudget => NotEvaluatedReason::ResourceLimit,
     }
 }

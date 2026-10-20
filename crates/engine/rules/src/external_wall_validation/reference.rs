@@ -115,6 +115,7 @@ impl RuleCapability for ExternalWallValidation {
                         EnvelopeMembershipError::InexactEvidence => {
                             NotEvaluatedReason::InvalidEvidence
                         }
+                        EnvelopeMembershipError::OverBudget => NotEvaluatedReason::ResourceLimit,
                     },
                     format!("{name} envelope: {error}"),
                 ),

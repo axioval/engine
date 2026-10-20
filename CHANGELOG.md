@@ -571,6 +571,26 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **Every plan overlay the Axiolid adapter builds is held to the overlay
+  budget** ([#432](https://github.com/axioval/engine/issues/432), after
+  #419). Walkable plans and band footprints, containment and support
+  coverage, shelf lengths, envelope membership, plan sections,
+  space-boundary coverage, effective coverage, circulation contacts and
+  walkability's possible pieces and portal zones handed the overlay their
+  operands directly, so an input of the same kind could still ask for
+  gigabytes and abort the host. Their booleans and ring-soup unions now
+  count the pairs of meeting edge boxes against the 4,000,000 of a plan
+  overlay, and their disc morphologies against the 16,000,000 of a disc
+  step, each admitted against the check's memory budget: past either, the
+  measurement is refused by name before anything is built and the object
+  is not evaluated. `LinearQuantityError` and `EnvelopeMembershipError`
+  gain `OverBudget`, which rules read as `resource_limit`; measured
+  values carry it as the new `PropertyResolutionError::ResourceLimit`,
+  so a rule's expression form reads a resource limit as its capability
+  does, never as an unavailable backend. A refusal
+  depends on the operands alone, never on what was kept, and reports
+  within the budgets are unchanged.
+
 - **Geometry a plan names without the measured set is seen** (#448). An
   aggregate over a measured list (`{"kind": "measured"}`) and a grouping
   by compartments now make a plan's geometry demand everything, and

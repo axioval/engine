@@ -63,13 +63,14 @@
 
 use std::collections::BTreeSet;
 
-use axiolid_core::Point2;
+use axiolid_core::{Point2, Tolerance};
 use axiolid_mesh::TriMesh;
 use axiolid_overlay::{Polygon, Region, Ring};
 use axioval_engine::{
-    LengthInterval, StretchLimit, SweptDoor, VerifiedWalkablePassage, VerticalConnector,
-    VerticalConnectorKind, WalkabilityError, WalkabilityRegion, WalkabilityRegionId,
-    WalkabilityRequest, WalkabilityService, WalkabilitySnapshot, WalkableStretch,
+    FreeSpaceError, LengthInterval, StretchLimit, SweptDoor, VerifiedWalkablePassage,
+    VerticalConnector, VerticalConnectorKind, WalkabilityError, WalkabilityRegion,
+    WalkabilityRegionId, WalkabilityRequest, WalkabilityService, WalkabilitySnapshot,
+    WalkableStretch,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
@@ -77,6 +78,7 @@ use crate::connector::Passable;
 use crate::free_space::swept_rings;
 use crate::geometry::AxiolidGeometry;
 use crate::placement;
+use crate::planar::{self, Morphology, PlanarRefusal};
 use crate::walkable::{
     Blocker, Clearance, Floor, MARGIN, ON_SURFACE, Plan, PortalFacts, PortalFrame, REACH, Side,
     UNBOUNDED, band_limits, bounded_obstacles, bounded_obstructions, centroid, closest, contains,
@@ -251,7 +253,7 @@ fn region_of(plan: &Plan) -> Result<Region, String> {
         .into_iter()
         .map(|piece| piece.outer)
         .collect();
-    placement::union(&rings, t).map_err(|e| e.to_string())
+    united(&rings, t)
 }
 
 fn joined_all<'p>(plans: impl IntoIterator<Item = &'p Plan>) -> Result<Plan, String> {
@@ -272,19 +274,24 @@ impl Ground {
     ) -> Result<Self, String> {
         let raw = joined_all(blockers.iter().map(|blocker| &blocker.plan))?;
         let (blocked, sure) = if depth > 0.0 && !blockers.is_empty() {
-            let t = crate::free_space::tolerance().map_err(|error| error.to_string())?;
             let footprint = region_of(&floor.footprint)?;
             let beyond_outer = Plan::of(
-                footprint
-                    .erode_outer(depth, t)
-                    .map_err(overlay_error("obstruction depth"))?
-                    .polygons(),
+                morphed(
+                    &footprint,
+                    Morphology::ErodeOuter,
+                    depth,
+                    "obstruction depth",
+                )?
+                .polygons(),
             );
             let beyond_inner = Plan::of(
-                footprint
-                    .erode_inner(depth, t)
-                    .map_err(overlay_error("obstruction depth"))?
-                    .polygons(),
+                morphed(
+                    &footprint,
+                    Morphology::ErodeInner,
+                    depth,
+                    "obstruction depth",
+                )?
+                .polygons(),
             );
             let mut sure = Vec::new();
             // A possible obstacle (#422) is never sure.
@@ -405,8 +412,32 @@ struct Split {
     bare: Vec<Region>,
 }
 
-fn overlay_error(context: &str) -> impl Fn(axiolid_overlay::OverlayError) -> String + '_ {
-    move |error| format!("{context}: {error:?}")
+/// An overlay's refusal as it always read, or the budget's by name (#432):
+/// every boolean and disc morphology here is held to its budget.
+fn overlay_error<E: Into<PlanarRefusal>>(context: &str) -> impl Fn(E) -> String + '_ {
+    move |error| format!("{context}: {}", error.into().described())
+}
+
+/// The union of counter-clockwise rings as a region
+/// ([`placement::union`]), refused before it is built past the overlay
+/// budget (#432).
+fn united(rings: &[Ring], t: Tolerance) -> Result<Region, String> {
+    let _admitted = planar::admit_rings(rings).map_err(|refusal| {
+        FreeSpaceError::Unavailable(format!("footprint: {refusal}")).to_string()
+    })?;
+    placement::union(rings, t).map_err(|e| e.to_string())
+}
+
+/// `region` under the disc morphology `kind` by `radius`, held to the disc
+/// morphology budget (#432).
+fn morphed(
+    region: &Region,
+    kind: Morphology,
+    radius: f64,
+    context: &str,
+) -> Result<Region, String> {
+    let t = crate::free_space::tolerance().map_err(|error| error.to_string())?;
+    planar::morphology(region, kind, radius, t).map_err(overlay_error(context))
 }
 
 /// Whether an obstacle's body begins above the floor: it hangs in the
@@ -474,9 +505,12 @@ impl Parts {
             return Ok(Self::Whole);
         }
         let t = crate::free_space::tolerance().map_err(|error| error.to_string())?;
-        let bare = region_of(&floor.footprint)?
-            .erode_outer(shrunk, t)
-            .map_err(overlay_error("possible pieces"))?;
+        let bare = morphed(
+            &region_of(&floor.footprint)?,
+            Morphology::ErodeOuter,
+            shrunk,
+            "possible pieces",
+        )?;
         let carve = |overhead: bool| -> Result<Region, String> {
             let mut sure: Vec<Ring> = Vec::new();
             for blocker in &ground.sure {
@@ -490,14 +524,13 @@ impl Parts {
                     .iter()
                     .flat_map(|(_, inner, _)| inner.iter().map(|polygon| polygon.outer.clone())),
             );
-            let sure = placement::union(&sure, t).map_err(|e| e.to_string())?;
+            let sure = united(&sure, t)?;
             if sure.is_empty() || bare.is_empty() {
                 return Ok(bare.clone());
             }
-            bare.difference(
-                &sure
-                    .dilate_inner(shrunk, t)
-                    .map_err(overlay_error("possible pieces"))?,
+            planar::difference(
+                &bare,
+                &morphed(&sure, Morphology::DilateInner, shrunk, "possible pieces")?,
                 t,
             )
             .map_err(overlay_error("possible pieces"))
@@ -619,7 +652,6 @@ impl Parts {
         let Self::Split(split) = self else {
             return Ok(Vec::new());
         };
-        let t = crate::free_space::tolerance().map_err(|error| error.to_string())?;
         let plans: Vec<Plan> = split.pieces.iter().map(plan_of).collect();
         let points: Vec<Option<Point2>> = plans.iter().map(inner_point).collect();
         // What bodies centred in each piece cover, only for pieces with a
@@ -642,11 +674,12 @@ impl Parts {
                 })?;
                 for index in [a, b] {
                     if covered[index].is_none() {
-                        covered[index] = Some(plan_of(
-                            &split.pieces[index]
-                                .dilate_outer(radius, t)
-                                .map_err(overlay_error("stretch"))?,
-                        ));
+                        covered[index] = Some(plan_of(&morphed(
+                            &split.pieces[index],
+                            Morphology::DilateOuter,
+                            radius,
+                            "stretch",
+                        )?));
                     }
                 }
                 let (Some(cover_a), Some(cover_b)) = (&covered[a], &covered[b]) else {
@@ -684,8 +717,7 @@ impl Parts {
         let t = crate::free_space::tolerance().map_err(|error| error.to_string())?;
         let limit = Self::limit(split, |pieces| {
             for piece in pieces {
-                if !piece
-                    .intersection(zone, t)
+                if !planar::intersection(piece, zone, t)
                     .map_err(overlay_error("portal zone"))?
                     .is_empty()
                 {
@@ -737,10 +769,12 @@ impl Parts {
             })
             .unwrap_or_default();
         rings.extend(swing.iter().map(|polygon| polygon.outer.clone()));
-        placement::union(&rings, t)
-            .map_err(|e| e.to_string())?
-            .dilate_outer(radius + MARGIN, t)
-            .map_err(overlay_error("portal zone"))
+        morphed(
+            &united(&rings, t)?,
+            Morphology::DilateOuter,
+            radius + MARGIN,
+            "portal zone",
+        )
     }
 
     /// The pieces a body entering through a portal may reach, by index,
@@ -766,8 +800,7 @@ impl Parts {
         let t = crate::free_space::tolerance().map_err(|error| error.to_string())?;
         let mut near = Vec::new();
         for (index, piece) in split.pieces.iter().enumerate() {
-            let meets = !piece
-                .intersection(&zone, t)
+            let meets = !planar::intersection(piece, &zone, t)
                 .map_err(overlay_error("portal zone"))?
                 .is_empty();
             if meets {
@@ -798,8 +831,7 @@ impl Parts {
         let t = crate::free_space::tolerance().map_err(|error| error.to_string())?;
         let a = Self::zone(Some(a_half), a_swing, radius)?;
         let b = Self::zone(Some(b_half), b_swing, radius)?;
-        Ok(!a
-            .intersection(&b, t)
+        Ok(!planar::intersection(&a, &b, t)
             .map_err(overlay_error("portal zone"))?
             .is_empty())
     }
@@ -817,12 +849,14 @@ fn bridge(
 ) -> Result<Plan, String> {
     let t = crate::free_space::tolerance().map_err(|error| error.to_string())?;
     let near = |floor: &Floor| -> Result<Region, String> {
-        region_of(&floor.footprint)?
-            .dilate_inner(gap, t)
-            .map_err(overlay_error("surface gap"))
+        morphed(
+            &region_of(&floor.footprint)?,
+            Morphology::DilateInner,
+            gap,
+            "surface gap",
+        )
     };
-    let both = near(first)?
-        .intersection(&near(second)?, t)
+    let both = planar::intersection(&near(first)?, &near(second)?, t)
         .map_err(overlay_error("surface gap"))?;
     let mut floor = plan_of(&both);
     for ground in [one, other] {
@@ -1591,5 +1625,42 @@ impl WalkabilityService for AxiolidWalkabilityService {
         request: &WalkabilityRequest,
     ) -> Result<WalkabilitySnapshot, WalkabilityError> {
         self.build(request).map_err(unavailable)
+    }
+}
+
+#[cfg(test)]
+mod budget_tests {
+    use axiolid_overlay::Region;
+
+    use super::{Morphology, morphed, united};
+    use crate::planar::budget::{DISC_PAIRS, OVERLAY_PAIRS};
+    use crate::planar::{sliver_polygons, slivers};
+
+    /// A footprint, an obstacle union and a disc morphology of a surface
+    /// past their budgets are refused by name before they are built (#432).
+    #[test]
+    fn surfaces_past_their_budgets_are_refused_by_name() {
+        let t = crate::free_space::tolerance().unwrap();
+        let refused = united(&slivers(), t).unwrap_err();
+        assert!(
+            refused.ends_with(&format!("past the overlay budget of {OVERLAY_PAIRS} pairs")),
+            "{refused}"
+        );
+        let crowded = Region::new(sliver_polygons(), t).unwrap();
+        for kind in [
+            Morphology::ErodeOuter,
+            Morphology::ErodeInner,
+            Morphology::DilateInner,
+            Morphology::DilateOuter,
+        ] {
+            let refused = morphed(&crowded, kind, 0.4, "possible pieces").unwrap_err();
+            assert!(
+                refused.starts_with("possible pieces: ")
+                    && refused.ends_with(&format!(
+                        "past the disc morphology budget of {DISC_PAIRS} pairs"
+                    )),
+                "{refused}"
+            );
+        }
     }
 }

@@ -92,6 +92,7 @@ fn derive(
             (
                 match error {
                     EnvelopeMembershipError::InexactEvidence => NotEvaluatedReason::InvalidEvidence,
+                    EnvelopeMembershipError::OverBudget => NotEvaluatedReason::ResourceLimit,
                     EnvelopeMembershipError::Unavailable
                     | EnvelopeMembershipError::UnsupportedDerivation => {
                         NotEvaluatedReason::IncompleteEvidence

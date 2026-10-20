@@ -272,6 +272,7 @@ pub(crate) fn resolution_error(
         NotEvaluatedReason::NotRecorded => PropertyResolutionError::NotRecorded(message),
         NotEvaluatedReason::InvalidEvidence => PropertyResolutionError::Conflicting(message),
         NotEvaluatedReason::InvalidDeclaration => PropertyResolutionError::InvalidArgument(message),
+        NotEvaluatedReason::ResourceLimit => PropertyResolutionError::ResourceLimit(message),
         _ => PropertyResolutionError::Unavailable(message),
     }
 }

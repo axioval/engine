@@ -237,6 +237,22 @@ fn unavailable_measurement_is_not_a_pass() {
     );
 }
 
+/// A measurement refused by the adapter's overlay budget is a resource
+/// limit, named, never a pass (#432).
+#[test]
+fn a_measurement_past_the_overlay_budget_is_a_resource_limit() {
+    let outcome = evaluate_with(Answer::Failed(LinearQuantityError::OverBudget), &rule());
+    assert!(outcome.findings().is_empty());
+    assert_eq!(
+        unevaluated(&outcome),
+        [("store".into(), NotEvaluatedReason::ResourceLimit)]
+    );
+    assert_eq!(
+        messages(&outcome),
+        [LinearQuantityError::OverBudget.to_string()]
+    );
+}
+
 #[test]
 fn missing_service_is_neither_a_pass_nor_a_violation() {
     let outcome = run(lone_store(), &rule(), None);

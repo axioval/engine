@@ -15,12 +15,12 @@ use axioval_engine::{
 };
 use axioval_ir::{Evidence, SourceId};
 
-use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, Polygon, overlay};
+use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, Polygon};
 
 use crate::free_space::{AREA_EPSILON_M2, shape_footprint, tolerance};
 use crate::geometry::{AxiolidGeometry, triangles};
 use crate::placement::sliver_box;
-use crate::planar::{plan_frame, polygon_area, projected_polygons, refused_ring};
+use crate::planar::{plan_frame, plan_overlay, polygon_area, projected_polygons, refused_ring};
 
 /// Answers a containment request over `geometry`, citing `source`.
 ///
@@ -58,26 +58,7 @@ pub(crate) fn assess(
             }
         }
     }
-    let outside = |bound: &Polygon, scopes: &[Polygon]| -> Result<f64, FreeSpaceError> {
-        if scopes.is_empty() {
-            return Ok(polygon_area(bound));
-        }
-        let rest = overlay(
-            &OverlayInput {
-                frame: plan_frame(),
-                polygons: vec![bound.clone()],
-            },
-            &OverlayInput {
-                frame: plan_frame(),
-                polygons: scopes.to_vec(),
-            },
-            OverlayOperation::Difference,
-            FillRule::NonZero,
-            tolerance,
-        )
-        .map_err(|error| FreeSpaceError::Unavailable(format!("overlay: {error:?}")))?;
-        Ok(rest.polygons.iter().map(polygon_area).sum())
-    };
+    let outside = |bound: &Polygon, scopes: &[Polygon]| outside(bound, scopes, tolerance);
     let evidence = || {
         let scopes: Vec<String> = request.scopes().iter().map(ToString::to_string).collect();
         ContainmentEvidence::try_new(
@@ -100,4 +81,65 @@ pub(crate) fn assess(
     Err(FreeSpaceError::Unavailable(
         "a scope boundary lies within the cylinder's approximation band".into(),
     ))
+}
+
+/// The area of `bound` outside the non-zero fill of `scopes`, measured as
+/// the overlay's difference, which is held to the overlay budget (#432):
+/// the scopes of a containment, the tops of a support coverage.
+pub(crate) fn outside(
+    bound: &Polygon,
+    scopes: &[Polygon],
+    tolerance: axiolid_core::Tolerance,
+) -> Result<f64, FreeSpaceError> {
+    if scopes.is_empty() {
+        return Ok(polygon_area(bound));
+    }
+    let rest = plan_overlay(
+        &OverlayInput {
+            frame: plan_frame(),
+            polygons: vec![bound.clone()],
+        },
+        &OverlayInput {
+            frame: plan_frame(),
+            polygons: scopes.to_vec(),
+        },
+        OverlayOperation::Difference,
+        FillRule::NonZero,
+        tolerance,
+    )
+    .map_err(|error| FreeSpaceError::Unavailable(format!("overlay: {}", error.described())))?;
+    Ok(rest.polygons.iter().map(polygon_area).sum())
+}
+
+#[cfg(test)]
+mod budget_tests {
+    use axiolid_core::{Point2, Tolerance};
+    use axiolid_overlay::{Polygon, Ring};
+    use axioval_engine::FreeSpaceError;
+
+    use crate::planar::budget::OVERLAY_PAIRS;
+    use crate::planar::sliver_polygons;
+
+    /// A footprint bound against scopes whose shadows are past the overlay
+    /// budget is refused by name, never measured (#432).
+    #[test]
+    fn scopes_past_the_overlay_budget_are_refused_by_name() {
+        let p = Point2::new;
+        let bound = Polygon {
+            outer: Ring {
+                points: vec![p(0.0, 0.0), p(1.0, 0.0), p(1.0, 1.0), p(0.0, 1.0)],
+            },
+            holes: Vec::new(),
+        };
+        let scopes = sliver_polygons();
+        let tolerance = Tolerance::new(1e-9, 1e-9).unwrap();
+        let Err(FreeSpaceError::Unavailable(message)) = super::outside(&bound, &scopes, tolerance)
+        else {
+            panic!("measured past the budget");
+        };
+        assert!(
+            message.ends_with(&format!("past the overlay budget of {OVERLAY_PAIRS} pairs")),
+            "{message}"
+        );
+    }
 }

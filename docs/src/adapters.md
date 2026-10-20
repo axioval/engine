@@ -773,6 +773,26 @@ element's outline: the bracket is never a point, and the locator ends in
 the edges, the pairs and the budget: the element is not evaluated, and
 every other element and rule keeps running.
 
+Every other arrangement the adapter hands the overlay is held to a budget
+as well (#432): the walkable plans and band footprints behind routes and
+walkability, containment and support coverage, shelf lengths, envelope
+membership, plan sections, space-boundary coverage, effective coverage,
+circulation contacts and walkability's possible pieces and portal zones.
+Booleans of two regions and unions of ring soups count their pairs as plan
+overlays do, within 4,000,000; one-sided disc morphologies (a footprint
+grown by a range or a reach, a floor eroded by a body's radius) count the
+pairs of the disc's hulls along every edge, within the 16,000,000 a
+placement search's disc steps take. Each is admitted against the check's
+memory budget while it builds. Past either, the measurement is refused
+by name before anything is built: shelf lengths and envelope membership
+with their own `OverBudget` error, read as a resource limit, every other
+service in its message, which names the pairs and the budget. A refusal
+is a function of the operands alone, so it is the same whether a result
+was kept or built again. The placement searches and free-space scenes
+keep the bounds of their own (the search's step budget and the corner
+limit), and coverage's visibility polygon is bounded by its own
+construction, one piece per wedge between the free region's corners.
+
 The footprint of objects in a stated zone (`measure_zone_area`) unites the
 objects' footprints as a footprint is united (slivers the overlay refuses
 left out, their area bounding what they could add) and measures the part

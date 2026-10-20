@@ -18,9 +18,11 @@ use axioval_engine::{
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
 use crate::geometry::AxiolidGeometry;
-use crate::planar::{plan_frame, polygon_area, projected_polygons, ring_segments};
+use crate::planar::{
+    PlanarRefusal, plan_frame, plan_overlay, polygon_area, projected_polygons, ring_segments,
+};
 use axiolid_core::Point2;
-use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, overlay};
+use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation};
 
 /// How far outside the space hull an object may sit and still bound it.
 ///
@@ -122,6 +124,30 @@ fn reaches_outline(triangles: &[crate::geometry::Triangle], outline: &[(Point2, 
     })
 }
 
+/// A plan overlay's refusal: past the overlay budget the derivation is
+/// refused by name (#432); an overlay refusal leaves it unavailable.
+#[allow(clippy::needless_pass_by_value)]
+fn refused(refusal: PlanarRefusal) -> EnvelopeMembershipError {
+    if refusal.is_budget() {
+        EnvelopeMembershipError::OverBudget
+    } else {
+        EnvelopeMembershipError::Unavailable
+    }
+}
+
+/// The area of `footprint` combined with the covered `region` by
+/// `operation`, held to the overlay budget.
+fn overlap_area(
+    footprint: &OverlayInput,
+    region: &OverlayInput,
+    operation: OverlayOperation,
+    tolerance: axiolid_core::Tolerance,
+) -> Result<f64, EnvelopeMembershipError> {
+    plan_overlay(footprint, region, operation, FillRule::NonZero, tolerance)
+        .map(|result| result.polygons.iter().map(polygon_area).sum())
+        .map_err(refused)
+}
+
 /// The plan region `triangles` cover, and its outline with holes
 /// (courtyards) included.
 fn covered_region(
@@ -132,14 +158,14 @@ fn covered_region(
         frame: plan_frame(),
         polygons: projected_polygons(triangles),
     };
-    let region = overlay(
+    let region = plan_overlay(
         &region,
         &region,
         OverlayOperation::Union,
         FillRule::NonZero,
         tolerance,
     )
-    .map_err(|_| EnvelopeMembershipError::Unavailable)?;
+    .map_err(refused)?;
     let outline = region
         .polygons
         .iter()
@@ -236,11 +262,7 @@ impl EnvelopeMembershipService for AxiolidEnvelopeMembershipService {
             if footprint.polygons.is_empty() {
                 continue;
             }
-            let area = |operation| -> Result<f64, EnvelopeMembershipError> {
-                overlay(&footprint, &region, operation, FillRule::NonZero, tolerance)
-                    .map(|result| result.polygons.iter().map(polygon_area).sum())
-                    .map_err(|_| EnvelopeMembershipError::Unavailable)
-            };
+            let area = |operation| overlap_area(&footprint, &region, operation, tolerance);
             if area(OverlayOperation::Intersection)? <= HULL_TOLERANCE_METRES {
                 continue;
             }
@@ -267,5 +289,41 @@ impl EnvelopeMembershipService for AxiolidEnvelopeMembershipService {
             ),
         )
         .map(|evidence| evidence.with_undeclared(undeclared))
+    }
+}
+
+#[cfg(test)]
+mod budget_tests {
+    use axiolid_core::{Point3, Tolerance};
+    use axiolid_overlay::{OverlayInput, OverlayOperation};
+    use axioval_engine::EnvelopeMembershipError;
+
+    use crate::planar::{plan_frame, projected_polygons, sliver_triangles};
+
+    /// Bounding spaces, and an object's footprint, whose shadows are past
+    /// the overlay budget refuse the derivation by name (#432).
+    #[test]
+    fn shadows_past_the_overlay_budget_refuse_the_derivation_by_name() {
+        let tolerance = Tolerance::new(1e-9, 1e-9).unwrap();
+        let Err(error) = super::covered_region(&sliver_triangles(), tolerance) else {
+            panic!("a region past the budget was covered");
+        };
+        assert_eq!(error, EnvelopeMembershipError::OverBudget);
+        let p = |x, y| Point3::new(x, y, 0.0);
+        let square = [
+            [p(0.0, 0.0), p(1.0, 0.0), p(1.0, 1.0)],
+            [p(0.0, 0.0), p(1.0, 1.0), p(0.0, 1.0)],
+        ];
+        let (region, _) = super::covered_region(&square, tolerance).unwrap();
+        let footprint = OverlayInput {
+            frame: plan_frame(),
+            polygons: projected_polygons(&sliver_triangles()),
+        };
+        for operation in [OverlayOperation::Intersection, OverlayOperation::Difference] {
+            assert_eq!(
+                super::overlap_area(&footprint, &region, operation, tolerance),
+                Err(EnvelopeMembershipError::OverBudget)
+            );
+        }
     }
 }

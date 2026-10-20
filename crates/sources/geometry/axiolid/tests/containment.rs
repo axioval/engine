@@ -163,3 +163,35 @@ fn a_room_whose_walls_project_to_slivers_decides_containment() {
         Ok(ContainmentOutcome::Outside(_))
     ));
 }
+
+/// A scope whose 3,000 long, thin shadows lie over one another meets in
+/// more pairs of edges than one overlay is handed: it is refused by name
+/// before the overlay is built, never measured until memory runs out
+/// (#432).
+#[test]
+fn a_scope_past_the_overlay_budget_is_refused_by_name() {
+    let mut positions = Vec::new();
+    let mut indices = Vec::new();
+    for index in 0..3000_u32 {
+        let y = f64::from(index) * 1e-4;
+        let first = u32::try_from(positions.len()).unwrap();
+        positions.extend([
+            Point3::new(0.0, y, 0.0),
+            Point3::new(10.0, y + 0.5, 0.0),
+            Point3::new(0.0, y + 1.0, 0.0),
+        ]);
+        indices.extend([first, first + 1, first + 2]);
+    }
+    let service = AxiolidFreeSpaceService::new(
+        AxiolidGeometry::new().with_mesh(id("a"), TriMesh::new(positions, indices)),
+        source(),
+    );
+    let request = ContainmentRequest::new(frame_at(1.0, 1.0), square(0.5), vec![id("a")]);
+    let Err(FreeSpaceError::Unavailable(message)) = service.assess_containment(&request) else {
+        panic!("a scope past the overlay budget was measured");
+    };
+    assert!(
+        message.ends_with("past the overlay budget of 4000000 pairs"),
+        "{message}"
+    );
+}

@@ -727,6 +727,31 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   `axiolid_overlay::overlay` on operands whose size the request decides
   without it; raise the budget only with timings and peak memory of the
   slender, overlapping shadows that motivated it (#419).
+  Every other arrangement the adapter hands the overlay is held to a
+  budget too (#432, `planar/bounded.rs`): `walkable.rs` (`overlay_soups`,
+  `snapped_union`, which ends its snapping ladder on a budget's refusal),
+  `containment.rs` and `support_coverage.rs` (`containment::outside`),
+  `linear_quantity.rs`, `envelope_membership.rs` and `plan_span.rs`
+  through `plan_overlay`; `Region` booleans through `planar::union`,
+  `intersection` and `difference` (`admit_regions`: an empty operand
+  builds nothing and is never refused), ring soups through
+  `planar::soup_union` or `admit_rings` held around `placement::union`,
+  and exact one-sided disc morphologies through `planar::morphology`
+  (`budget::admit_step` with `disc_cost` against `DISC_PAIRS`,
+  `PlanarRefusal::Morphology`) in `boundary_coverage.rs`, `coverage.rs`,
+  `circulation.rs` and `walkability.rs`. Messages keep an overlay
+  refusal as it was (`PlanarRefusal::described`: the error
+  debug-formatted) and name the budget otherwise; `LinearQuantityError`
+  and `EnvelopeMembershipError` refuse with `OverBudget`, read by rules as
+  `ResourceLimit`. Each refusal is a function of the operands alone,
+  never of what was kept, so a kept result refuses alike (ADR 0006). The
+  placement search and free-space scenes keep their own bounds
+  (`Work`, `MORPHOLOGY_POINTS`); coverage's visibility polygon has one of
+  its own (one fan piece per wedge between the free region's corners,
+  linear in them). Never add a direct `Region` boolean, `union_soup` or
+  disc morphology outside those without a budget; each budgeted path has
+  a test feeding it `planar::slivers` (`sliver_polygons`,
+  `sliver_triangles`), 3,000 long, thin shadows over one another.
 - `src/linear_quantity.rs` implements `LinearQuantityService`: parallel shelf
   bands on the footprint less each requested door's clearance (its footprint
   grown by clearance plus plan gap, circumscribed for the lower bound, inscribed

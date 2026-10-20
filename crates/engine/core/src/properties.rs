@@ -56,6 +56,11 @@ pub enum PropertyResolutionError {
     /// whatever the object.
     #[error("{0}")]
     InvalidArgument(String),
+    /// A measured value was refused before it was built because it is past
+    /// a resource budget (an adapter's overlay budget, #432): a resource
+    /// limit, read as the capability reading the same measurement reads it.
+    #[error("{0}")]
+    ResourceLimit(String),
 }
 
 /// A present property whose declared type is known exactly and whose

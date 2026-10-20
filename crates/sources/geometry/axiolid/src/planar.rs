@@ -11,7 +11,14 @@ use axiolid_overlay::{
 
 use crate::geometry::Triangle;
 
+mod bounded;
 pub(crate) mod budget;
+
+#[cfg(test)]
+pub(crate) use bounded::tests::{sliver_polygons, sliver_triangles, slivers};
+pub(crate) use bounded::{
+    Morphology, admit_rings, difference, intersection, morphology, soup_union, union,
+};
 
 /// Why a plan measurement was not built: the overlay refused its operands,
 /// or they were past the overlay budget (#419).
@@ -24,6 +31,9 @@ pub(crate) enum PlanarRefusal {
     /// The overlay's memory estimate alone is more than the check's
     /// memory budget (#407).
     Memory(axioval_engine::memory::OverBudget),
+    /// A disc morphology outside any search was refused by its budget or
+    /// the check's memory budget before it was built (#432).
+    Morphology(budget::Refusal),
 }
 
 impl PlanarRefusal {
@@ -34,6 +44,7 @@ impl PlanarRefusal {
             Self::Overlay(error) => overlay_refusal(error),
             Self::OverBudget(_) => budget::OVER_BUDGET,
             Self::Memory(_) => budget::OVER_MEMORY,
+            Self::Morphology(_) => budget::OVER_DISC_BUDGET,
         }
     }
 
@@ -45,7 +56,31 @@ impl PlanarRefusal {
             Self::Overlay(_) => String::new(),
             Self::OverBudget(over) => format!(": {over}"),
             Self::Memory(over) => format!(": the plan overlay was not built: {over}"),
+            Self::Morphology(refusal) => format!(": {refusal}"),
         }
+    }
+
+    /// The refusal as a message written before the overlay budget showed
+    /// it (#432): the overlay's own error as it was debug-formatted (the
+    /// parity recordings hold those messages), or the budget's refusal
+    /// with its counts.
+    pub(crate) fn described(&self) -> String {
+        match self {
+            Self::Overlay(error) => format!("{error:?}"),
+            other => other.to_string(),
+        }
+    }
+
+    /// Whether a budget refused the operands before anything was built,
+    /// rather than the overlay refusing them.
+    pub(crate) fn is_budget(&self) -> bool {
+        !matches!(self, Self::Overlay(_))
+    }
+}
+
+impl From<OverlayError> for PlanarRefusal {
+    fn from(error: OverlayError) -> Self {
+        Self::Overlay(error)
     }
 }
 
@@ -55,6 +90,7 @@ impl std::fmt::Display for PlanarRefusal {
             Self::Overlay(error) => f.write_str(overlay_refusal(error)),
             Self::OverBudget(over) => over.fmt(f),
             Self::Memory(over) => write!(f, "the plan overlay was not built: {over}"),
+            Self::Morphology(refusal) => refusal.fmt(f),
         }
     }
 }

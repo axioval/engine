@@ -15,11 +15,12 @@ use axioval_engine::{
 use axioval_ir::{Evidence, SourceId};
 
 use axiolid_core::{Point2, Point3};
-use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, Polygon, Ring, overlay};
+use axiolid_overlay::{Polygon, Ring};
 
+use crate::containment::outside;
 use crate::free_space::{AREA_EPSILON_M2, shape_footprint, tolerance};
 use crate::geometry::{AxiolidGeometry, triangles};
-use crate::planar::{plan_frame, polygon_area, ring_area};
+use crate::planar::ring_area;
 
 /// The part of a triangle between two elevations: a convex polygon.
 fn between(triangle: &[Point3; 3], from: f64, to: f64) -> Vec<Point3> {
@@ -112,26 +113,9 @@ pub(crate) fn assess(
         }
     }
     let tolerance = tolerance()?;
-    let uncovered = |bound: &Polygon| -> Result<f64, FreeSpaceError> {
-        if tops.is_empty() {
-            return Ok(polygon_area(bound));
-        }
-        let rest = overlay(
-            &OverlayInput {
-                frame: plan_frame(),
-                polygons: vec![bound.clone()],
-            },
-            &OverlayInput {
-                frame: plan_frame(),
-                polygons: tops.clone(),
-            },
-            OverlayOperation::Difference,
-            FillRule::NonZero,
-            tolerance,
-        )
-        .map_err(|error| FreeSpaceError::Unavailable(format!("overlay: {error:?}")))?;
-        Ok(rest.polygons.iter().map(polygon_area).sum())
-    };
+    // Measured as containment measures a bound outside its scopes, held to
+    // the overlay budget (#432).
+    let uncovered = |bound: &Polygon| outside(bound, &tops, tolerance);
     let evidence = || {
         let supports: Vec<String> = request.supports().iter().map(ToString::to_string).collect();
         SupportCoverageEvidence::try_new(

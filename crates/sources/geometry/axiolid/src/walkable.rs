@@ -32,13 +32,15 @@
 
 use axiolid_core::{Point2, Point3, Tolerance, Vec2};
 use axiolid_mesh::{TriMesh, TriangleMeshView, audit_mesh};
-use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, Polygon, Ring, overlay};
+use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, Polygon, Ring};
 use axioval_ir::ObjectId;
 use std::collections::BTreeMap;
 
 use crate::derived_relationships::{convex_hull, span, thin_axis};
 use crate::geometry::{AxiolidGeometry, Extent, Triangle, mesh_extent, triangles};
-use crate::planar::{collinear, plan_frame, polygon_area, projected_polygons, ring_area};
+use crate::planar::{
+    PlanarRefusal, collinear, plan_frame, plan_overlay, polygon_area, projected_polygons, ring_area,
+};
 
 /// Distance below which two points coincide, and the kernel tolerance.
 pub(crate) const ON_SURFACE: f64 = 1e-9;
@@ -256,7 +258,9 @@ fn overlay_soups(
     operation: OverlayOperation,
 ) -> Result<Plan, String> {
     let frame = plan_frame();
-    let result = overlay(
+    // Past the overlay budget it is refused by name before it is built
+    // (#432); an overlay refusal keeps the message it always had.
+    let result = plan_overlay(
         &OverlayInput {
             frame,
             polygons: subject,
@@ -269,7 +273,7 @@ fn overlay_soups(
         FillRule::NonZero,
         overlay_tolerance()?,
     )
-    .map_err(|error| format!("plan {operation:?} failed: {error:?}"))?;
+    .map_err(|error| format!("plan {operation:?} failed: {}", error.described()))?;
     Ok(Plan {
         polygons: result.polygons,
     })
@@ -478,9 +482,12 @@ fn snapped_union(
     if crossings.is_empty() && above.is_empty() {
         return Ok(Plan::empty());
     }
+    // Each attempt is held to the overlay budget (#432); a budget's
+    // refusal ends the ladder, since a coarser snapping hands the overlay
+    // the same edges.
     let unite = |subject: Vec<Polygon>, clip: Vec<Polygon>, tolerance: Tolerance| {
         let frame = plan_frame();
-        overlay(
+        plan_overlay(
             &OverlayInput {
                 frame,
                 polygons: subject,
@@ -494,12 +501,16 @@ fn snapped_union(
             tolerance,
         )
         .map(|result| result.polygons)
+        .map_err(|refusal| match refusal {
+            PlanarRefusal::Overlay(error) => Ok(error),
+            budget => Err(format!("plan Union failed: {budget}")),
+        })
     };
     let mut refusal = None;
     for &tolerance in tolerances {
         let error = match unite(crossings.to_vec(), above.to_vec(), tolerance) {
             Ok(polygons) => return Ok(Plan { polygons }),
-            Err(error) => error,
+            Err(error) => error?,
         };
         refusal.get_or_insert(error);
         let stepped = unite(crossings.to_vec(), Vec::new(), tolerance).and_then(|crossings| {
@@ -1866,4 +1877,23 @@ pub(crate) fn separated(
         }
     }
     Ok(root(&mut group, start) != root(&mut group, goal))
+}
+
+#[cfg(test)]
+mod budget_tests {
+    use crate::planar::budget::OVERLAY_PAIRS;
+    use crate::planar::sliver_polygons as crowded;
+
+    /// A union and a band footprint's snapped union of shadows past the
+    /// overlay budget are refused by name before they are built (#432).
+    #[test]
+    fn plans_past_the_overlay_budget_are_refused_by_name() {
+        let budget = format!("past the overlay budget of {OVERLAY_PAIRS} pairs");
+        let refused = super::union(crowded()).unwrap_err();
+        assert!(refused.starts_with("plan Union failed: "), "{refused}");
+        assert!(refused.ends_with(&budget), "{refused}");
+        let tolerances = super::snapping_tolerances(crowded().iter()).unwrap();
+        let refused = super::snapped_union(&crowded(), &[], &tolerances).unwrap_err();
+        assert!(refused.ends_with(&budget), "{refused}");
+    }
 }

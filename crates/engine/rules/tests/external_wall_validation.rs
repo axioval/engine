@@ -535,6 +535,18 @@ fn unavailable_or_unsupported_measurement_is_not_a_pass() {
             [("-".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
         );
     }
+    // A derivation refused by the adapter's overlay budget is a resource
+    // limit, named (#432).
+    let outcome = run(
+        model(),
+        &Stub::new(Err(EnvelopeMembershipError::OverBudget)),
+        &all_spaces(),
+    );
+    assert!(outcome.findings().is_empty());
+    assert_eq!(
+        unevaluated(&outcome),
+        [("-".to_owned(), NotEvaluatedReason::ResourceLimit)]
+    );
 }
 
 #[test]

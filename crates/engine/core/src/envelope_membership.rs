@@ -35,6 +35,14 @@ pub enum EnvelopeMembershipError {
     /// The requested derivation is not supported by this source.
     #[error("requested envelope derivation is not supported by this source")]
     UnsupportedDerivation,
+    /// The derivation was refused before it was built: a plan overlay it
+    /// needs is past the adapter's overlay budget or the check's memory
+    /// budget.
+    #[error(
+        "envelope membership was not derived: a plan overlay is past the overlay budget or the \
+         check's memory budget"
+    )]
+    OverBudget,
 }
 
 /// Which spatial extent the envelope is derived from.

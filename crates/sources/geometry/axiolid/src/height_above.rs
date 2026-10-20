@@ -257,10 +257,8 @@ fn coverage(
     let covered =
         polygons_overlap_area(projected_polygons(edge), beneath, tolerance).map_err(|error| {
             match error {
-                PlanarRefusal::OverBudget(_) | PlanarRefusal::Memory(_) => {
-                    ProximityError::Refused(error.reason())
-                }
                 PlanarRefusal::Overlay(_) => ProximityError::Refused(REFUSED),
+                _ => ProximityError::Refused(error.reason()),
             }
         })?;
     let uncovered = whole - covered;

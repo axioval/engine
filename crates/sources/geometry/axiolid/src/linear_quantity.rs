@@ -52,7 +52,7 @@ use std::collections::BTreeMap;
 
 use axiolid_core::{Point2, Tolerance, Vec2};
 use axiolid_mesh::{TriMesh, TriangleMeshView};
-use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, Polygon, Ring, overlay};
+use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, Polygon, Ring};
 use axioval_engine::{
     GeometryFidelity, LinearInterval, LinearQuantityError, LinearQuantityEvidence,
     LinearQuantityKind, LinearQuantityRequest, LinearQuantityService, ShelfGeometry,
@@ -61,7 +61,10 @@ use axioval_ir::{Evidence, ObjectId};
 
 use crate::geometry::{AxiolidGeometry, Triangle, triangles};
 use crate::plan_span::least_area_rectangle;
-use crate::planar::{Disc, footprint_polygons, grown_polygons, plan_frame, projected_polygons};
+use crate::planar::{
+    Disc, PlanarRefusal, grown_polygons, plan_footprint, plan_frame, plan_overlay,
+    projected_polygons,
+};
 
 /// Linear tolerance handed to the overlay.
 const LINEAR_TOLERANCE: f64 = 1e-9;
@@ -188,7 +191,7 @@ fn difference(
         frame: plan_frame(),
         polygons: second,
     };
-    overlay(
+    plan_overlay(
         &first,
         &second,
         OverlayOperation::Difference,
@@ -196,7 +199,18 @@ fn difference(
         tolerance,
     )
     .map(|result| result.polygons)
-    .map_err(|_| LinearQuantityError::Unavailable)
+    .map_err(refused)
+}
+
+/// A plan overlay's refusal: past the overlay budget it is refused by
+/// name (#432), an overlay refusal leaves the quantity unavailable.
+#[allow(clippy::needless_pass_by_value)]
+fn refused(refusal: PlanarRefusal) -> LinearQuantityError {
+    if refusal.is_budget() {
+        LinearQuantityError::OverBudget
+    } else {
+        LinearQuantityError::Unavailable
+    }
 }
 
 /// A plan point.
@@ -543,8 +557,7 @@ impl AxiolidLinearQuantityService {
         let room_deviation = deviation(self.geometry.fidelity(scope))?;
         let tolerance = tolerance()?;
         let room = triangles(mesh);
-        let footprint =
-            footprint_polygons(&room, tolerance).ok_or(LinearQuantityError::Unavailable)?;
+        let footprint = plan_footprint(&room, tolerance).map_err(refused)?;
         if footprint.is_empty() {
             return Err(LinearQuantityError::Unavailable);
         }
@@ -660,6 +673,27 @@ mod tests {
     fn square(size: f64) -> Vec<Edge> {
         let p = [(0.0, 0.0), (size, 0.0), (size, size), (0.0, size)];
         (0..4).map(|i| (p[i], p[(i + 1) % 4])).collect()
+    }
+
+    /// Door clearances whose shadows are past the overlay budget refuse the
+    /// floor by name before the difference is built (#432).
+    #[test]
+    fn clearances_past_the_overlay_budget_are_refused_by_name() {
+        use axiolid_core::Point2;
+        use axiolid_overlay::{Polygon, Ring};
+        let p = Point2::new;
+        let floor = vec![Polygon {
+            outer: Ring {
+                points: vec![p(0.0, 0.0), p(4.0, 0.0), p(4.0, 4.0), p(0.0, 4.0)],
+            },
+            holes: Vec::new(),
+        }];
+        let zones = crate::planar::sliver_polygons();
+        let tolerance = super::tolerance().unwrap();
+        assert_eq!(
+            super::difference(floor, zones, tolerance),
+            Err(axioval_engine::LinearQuantityError::OverBudget)
+        );
     }
 
     #[test]

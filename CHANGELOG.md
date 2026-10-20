@@ -642,6 +642,27 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **Sums of coordinate products run about the body, not the world origin**
+  ([#452](https://github.com/axioval/engine/issues/452)). The signed
+  volume whose sign tells a closed body's outward faces (thickness, facade
+  faces, height above, face distance, walking surfaces, drainage tops, a
+  whole's opening pieces), the shoelace areas of plan pieces, hulls and
+  polygons (vertical surfaces, walking surfaces, height above, convex
+  plan regions, door leaves and swings, ramp ends) and the first moments
+  behind plan centres (`polygon_moments`, walkable regions, placement
+  seeds) summed `a · (b × c)` or `x₁y₂ − x₂y₁` about the world origin. At
+  site coordinates (10⁵–10⁶ m) those terms reach 10¹² m² and 10¹⁸ m³, and
+  their rounding exceeds a small body's area or volume, so a sign could
+  flip and a centre leave its polygon. Each sum now runs about a corner
+  of the body and moves a position back; a box of 4e-4 m³ and a plan of
+  1e-3 m² 1e6 m and 5.6e6 m out keep their orientation and their volume
+  and area within the rounding of placing their corners there. Reports on
+  the public parity models and under the determinism gate are unchanged;
+  one generated test building's report changes only where a room's
+  farthest point is a tie between two corners equally far from its exits
+  (3.5347 to 3.5446 m either way): plan centres now round differently, and
+  the report names the corner at (37.50, 5.00) instead of (37.50, 0.00).
+
 - **The measurement memo keeps its tables in the run's derivation store**
   ([#451](https://github.com/axioval/engine/issues/451)). Installing the
   measured-value providers gave a run's `MeasuredMemo` a second, fresh

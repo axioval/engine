@@ -37,6 +37,22 @@ fn segment_distance(point: [f64; 2], a: [f64; 2], b: [f64; 2]) -> f64 {
     (point[0] - (a[0] + t * dx)).hypot(point[1] - (a[1] + t * dy))
 }
 
+/// Twice the signed area of a ring, summed about its first vertex: about
+/// the origin each term at site coordinates is some 10¹², whose rounding
+/// can exceed a small region's area and flip its sign (#452).
+fn twice_area(ring: &[[f64; 2]]) -> f64 {
+    let Some(&[x, y]) = ring.first() else {
+        return 0.0;
+    };
+    let count = ring.len();
+    (0..count)
+        .map(|index| {
+            let (a, b) = (ring[index], ring[(index + 1) % count]);
+            (a[0] - x) * (b[1] - y) - (b[0] - x) * (a[1] - y)
+        })
+        .sum()
+}
+
 impl ConvexPlanRegion {
     /// A region from its vertices, in order and without repeating the
     /// first. They must be finite, at least three, turn anticlockwise at
@@ -47,7 +63,6 @@ impl ConvexPlanRegion {
         if count < 3 || ring.iter().flatten().any(|c| !c.is_finite()) {
             return Err(ProximityError::InvalidMeasurement);
         }
-        let mut area = 0.0;
         for index in 0..count {
             let (a, b, c) = (
                 ring[index],
@@ -58,9 +73,8 @@ impl ConvexPlanRegion {
             if cross(a, b, c) < -CONVEXITY * scale.max(f64::MIN_POSITIVE) {
                 return Err(ProximityError::InvalidMeasurement);
             }
-            area += a[0] * b[1] - b[0] * a[1];
         }
-        if area <= 0.0 {
+        if twice_area(&ring) <= 0.0 {
             return Err(ProximityError::InvalidMeasurement);
         }
         Ok(Self { ring })
@@ -89,14 +103,7 @@ impl ConvexPlanRegion {
     /// The region's area in square metres.
     #[must_use]
     pub fn area_square_metres(&self) -> f64 {
-        let count = self.ring.len();
-        (0..count)
-            .map(|index| {
-                let (a, b) = (self.ring[index], self.ring[(index + 1) % count]);
-                a[0] * b[1] - b[0] * a[1]
-            })
-            .sum::<f64>()
-            / 2.0
+        twice_area(&self.ring) / 2.0
     }
 
     fn edges(&self) -> impl Iterator<Item = ([f64; 2], [f64; 2])> + '_ {
@@ -184,6 +191,25 @@ mod tests {
                 .unwrap();
         assert!((collinear.area_square_metres() - 1.0).abs() < 1e-12);
         assert_eq!(square(1.0, 2.0, 1.0).bounds(), ([1.0, 2.0], [2.0, 3.0]));
+    }
+
+    /// #452: a thin region at site coordinates keeps its orientation and
+    /// area. About the origin each term is some 10¹² m², whose rounding
+    /// (some 10⁻³ m²) is the region's whole area.
+    #[test]
+    fn a_thin_region_at_site_coordinates_keeps_its_orientation_and_area() {
+        for (x, y) in [(1.0e6_f64, 1.0e6_f64), (4.5e5, 5.6e6)] {
+            let ring = vec![[x, y], [x + 0.1, y], [x + 0.1, y + 0.01], [x, y + 0.01]];
+            let spacing = (y + 0.1).next_up() - (y + 0.1);
+            let region = ConvexPlanRegion::try_new(ring.clone()).unwrap();
+            assert!(
+                (region.area_square_metres() - 1e-3).abs() <= 2.0 * 0.22 * spacing,
+                "({x}, {y}): {}",
+                region.area_square_metres()
+            );
+            let clockwise: Vec<_> = ring.into_iter().rev().collect();
+            assert!(ConvexPlanRegion::try_new(clockwise).is_err(), "({x}, {y})");
+        }
     }
 
     #[test]

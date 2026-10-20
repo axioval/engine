@@ -99,13 +99,9 @@ pub(crate) fn measure(
 
 /// The host's triangles of `class`, indexed.
 fn faces(host: &Body<'_>, class: FaceClass) -> Result<Indexed<Triangle>, FaceDistanceError> {
-    // Twice the signed volume's sign says which way the winding faces.
-    let orientation: f64 = host
-        .soup
-        .items
-        .iter()
-        .map(|[a, b, c]| a.dot(b.cross(*c)))
-        .sum();
+    // The signed volume's sign says which way the winding faces, summed
+    // about a corner of the body so site coordinates do not flip it (#452).
+    let orientation = crate::face_normals::signed_volume(&host.soup.items);
     if !orientation.is_finite() || orientation == 0.0 {
         return Err(FaceDistanceError::NotClosed);
     }

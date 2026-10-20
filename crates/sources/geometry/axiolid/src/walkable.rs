@@ -1394,13 +1394,17 @@ pub(crate) fn centroid(region: &Plan) -> Option<Point2> {
     if area.abs() <= ON_SURFACE {
         return None;
     }
+    // About the first vertex, as `ring_area` sums: about the origin each
+    // term at site coordinates is some 10¹⁸, and the centroid could land
+    // off the region (#452).
+    let origin = points[0];
     let mut sum = Vec2::ZERO;
     for index in 0..points.len() {
-        let a = points[index];
-        let b = points[(index + 1) % points.len()];
+        let a = points[index] - origin;
+        let b = points[(index + 1) % points.len()] - origin;
         sum += (a + b) * a.perp_dot(b);
     }
-    Some(sum / (6.0 * area))
+    Some(origin + sum / (6.0 * area))
 }
 
 fn segment_distance(a: (Point2, Point2), b: (Point2, Point2)) -> f64 {

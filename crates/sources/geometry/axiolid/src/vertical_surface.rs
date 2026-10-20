@@ -153,10 +153,15 @@ pub(crate) fn over(triangle: &Triangle, region: &Plan) -> Vec<Point3> {
     piece
 }
 
+/// The unsigned plan area of a piece, summed about its first corner so
+/// site coordinates do not cancel it away (#452).
 pub(crate) fn plan_area(piece: &[Point3]) -> f64 {
+    let Some(&origin) = piece.first() else {
+        return 0.0;
+    };
     let mut sum = 0.0;
     for (index, a) in piece.iter().enumerate() {
-        let b = piece[(index + 1) % piece.len()];
+        let (a, b) = (*a - origin, piece[(index + 1) % piece.len()] - origin);
         sum += a.x.mul_add(b.y, -(b.x * a.y));
     }
     (sum / 2.0).abs()

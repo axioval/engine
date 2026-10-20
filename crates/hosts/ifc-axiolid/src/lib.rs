@@ -2403,9 +2403,15 @@ impl OpeningCell {
             .into_iter()
             .map(|index| points[index])
             .collect();
+        // About a corner of the piece, so site coordinates do not flip the
+        // sign that orients its planes (#452).
+        let origin = triangles.first().map_or([0.0; 3], |[a, _, _]| points[*a]);
         let volume: f64 = triangles
             .iter()
-            .map(|[a, b, c]| dot(points[*a], cross(points[*b], points[*c])))
+            .map(|corners| {
+                let [a, b, c] = corners.map(|index| sub(points[index], origin));
+                dot(a, cross(b, c))
+            })
             .sum();
         let sign = volume.signum();
         let planes: Vec<([f64; 3], f64)> = triangles
@@ -5672,10 +5678,11 @@ mod tests {
 
     /// The volume a closed triangle mesh encloses, and its surface area.
     fn enclosed_volume_and_area(mesh: &axiolid_mesh::TriMesh) -> (f64, f64) {
+        let origin = mesh.positions[0];
         mesh.indices
             .chunks_exact(3)
             .map(|corners| {
-                let [a, b, c] = [0, 1, 2].map(|k| mesh.positions[corners[k] as usize]);
+                let [a, b, c] = [0, 1, 2].map(|k| mesh.positions[corners[k] as usize] - origin);
                 (a.dot(b.cross(c)) / 6.0, (b - a).cross(c - a).length() / 2.0)
             })
             .fold((0.0, 0.0), |(volume, area), (v, a)| (volume + v, area + a))

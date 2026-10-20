@@ -109,10 +109,24 @@ fn length(vector: [f64; 3]) -> f64 {
 
 /// Six times the signed volume the triangles enclose: positive when they
 /// are wound outward.
+///
+/// The tetrahedra are taken about the first corner, not the world origin.
+/// About the origin every term `a · (b × c)` scales with the cube of the
+/// distance to it: at site coordinates (10⁵–10⁶ m) the terms reach 10¹⁸ m³
+/// and their rounding exceeds a small body's volume, so the sign that says
+/// which way the faces look could flip (#452). Vectors from a corner of the
+/// body are exact up to their own rounding, so the sum is accurate to the
+/// body's size, not to where it lies.
 pub(crate) fn signed_volume(soup: &[Triangle]) -> f64 {
+    let Some(origin) = soup.first().map(|triangle| triangle[0].to_array()) else {
+        return 0.0;
+    };
     soup.iter()
         .map(|triangle| {
-            let [a, b, c] = triangle.map(|point| point.to_array());
+            let [a, b, c] = triangle.map(|point| {
+                let [x, y, z] = point.to_array();
+                [x - origin[0], y - origin[1], z - origin[2]]
+            });
             let bc = [
                 b[1] * c[2] - b[2] * c[1],
                 b[2] * c[0] - b[0] * c[2],
@@ -703,4 +717,111 @@ fn line(
         corner(last.to, tessellation)?,
         sides,
     )
+}
+
+/// #452: sums of products of coordinates run about a point of the body, so
+/// a small body far from the origin, where georeferenced models place
+/// theirs, keeps its orientation, its volume and its plan area.
+#[cfg(test)]
+mod site_coordinate_tests {
+    use axiolid_core::{Point2, Point3};
+    use axiolid_overlay::{Polygon, Ring};
+
+    use super::signed_volume;
+    use crate::geometry::Triangle;
+
+    /// A national grid's distance (1e6 m on every axis), and a
+    /// georeferenced northing (5.6e6 m) with an easting and a height.
+    const OFFSETS: [[f64; 3]; 2] = [[1.0e6, 1.0e6, 1.0e6], [4.5e5, 5.6e6, 120.0]];
+
+    /// A box 0.1 m by 0.08 m by 0.05 m from `at`, wound outward.
+    fn small_box(at: [f64; 3]) -> Vec<Triangle> {
+        let [x, y, z] = at;
+        let corner = |i: usize| {
+            Point3::new(
+                x + if i & 1 == 0 { 0.0 } else { 0.1 },
+                y + if i & 2 == 0 { 0.0 } else { 0.08 },
+                z + if i & 4 == 0 { 0.0 } else { 0.05 },
+            )
+        };
+        [
+            [0, 2, 3, 1],
+            [4, 5, 7, 6],
+            [0, 1, 5, 4],
+            [2, 6, 7, 3],
+            [0, 4, 6, 2],
+            [1, 3, 7, 5],
+        ]
+        .iter()
+        .flat_map(|&[a, b, c, d]| {
+            [
+                [corner(a), corner(b), corner(c)],
+                [corner(a), corner(c), corner(d)],
+            ]
+        })
+        .collect()
+    }
+
+    /// The spacing of doubles at the largest coordinate near `at`: how far
+    /// placing a corner there may move it.
+    fn spacing(at: [f64; 3]) -> f64 {
+        let largest = at.iter().fold(0.0_f64, |m, c| m.max(c.abs() + 0.1));
+        largest.next_up() - largest
+    }
+
+    #[test]
+    fn a_small_body_far_from_the_origin_keeps_its_volume_and_orientation() {
+        let home = signed_volume(&small_box([0.0; 3])) / 6.0;
+        assert!((home - 0.1 * 0.08 * 0.05).abs() < 1e-15, "{home}");
+        for at in OFFSETS {
+            let soup = small_box(at);
+            let far = signed_volume(&soup) / 6.0;
+            assert!(far > 0.0, "the box at {at:?} turned inside out: {far}");
+            // Its corners move by up to the spacing, so its volume by up to
+            // its surface (0.034 m²) times that, twice over.
+            assert!(
+                (far - home).abs() <= 2.0 * 0.034 * spacing(at),
+                "the box at {at:?} moved from {home} m³ to {far} m³"
+            );
+            // About the world origin, as the engine summed before: the
+            // terms reach 10²⁰ m³ and the box's 4e-4 m³ is lost in them.
+            let naive: f64 = soup.iter().map(|[a, b, c]| a.dot(b.cross(*c)) / 6.0).sum();
+            assert!(
+                (naive - home).abs() > 0.5 * home,
+                "the box at {at:?} no longer shows the cancellation: {naive}"
+            );
+            // Reversed, it reads inward wherever it lies.
+            let inward: Vec<Triangle> = soup.iter().map(|&[a, b, c]| [a, c, b]).collect();
+            assert!(signed_volume(&inward) < 0.0, "{at:?}");
+        }
+    }
+
+    #[test]
+    fn a_thin_plan_far_from_the_origin_keeps_its_area_and_centre() {
+        for at @ [x, y, _] in OFFSETS {
+            // 0.1 m by 0.01 m, anticlockwise.
+            let points = vec![
+                Point2::new(x, y),
+                Point2::new(x + 0.1, y),
+                Point2::new(x + 0.1, y + 0.01),
+                Point2::new(x, y + 0.01),
+            ];
+            // Its perimeter (0.22 m) times the spacing, twice over.
+            let bound = 2.0 * 0.22 * spacing(at);
+            let lifted: Vec<Point3> = points.iter().map(|p| Point3::new(p.x, p.y, 0.0)).collect();
+            let area = crate::vertical_surface::plan_area(&lifted);
+            assert!((area - 1e-3).abs() <= bound, "({x}, {y}): {area}");
+            let polygon = Polygon {
+                outer: Ring { points },
+                holes: Vec::new(),
+            };
+            let (area, mx, my) = crate::planar::polygon_moments(&polygon);
+            assert!((area - 1e-3).abs() <= bound, "({x}, {y}): {area}");
+            let centre = [mx / area, my / area];
+            assert!(
+                (centre[0] - (x + 0.05)).abs() < 1e-6 && (centre[1] - (y + 0.005)).abs() < 1e-6,
+                "the centre of the plan at ({x}, {y}) is {centre:?}"
+            );
+        }
+    }
 }

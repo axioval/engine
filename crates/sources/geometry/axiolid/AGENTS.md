@@ -1050,6 +1050,21 @@ Geometry evidence for any source, measured with the Axiolid kernel.
 
 ## Pitfall
 
+Sum products of coordinates about a point of the body, never the world
+origin (#452). Signed volumes (`face_normals::signed_volume`, which
+`thickness`, `facade_area`, `height_above`, `face_distance`,
+`walking_surface` and `drainage` read for orientation), shoelace areas
+(`ring_area`, `vertical_surface::plan_area`, `walking_surface`'s `area`,
+`height_above`'s `signed_area`, `drainage`'s hull) and first moments and
+centroids (`planar::polygon_moments`, `walkable::centroid`,
+`placement`'s `centroids`) all run about a first corner and move the
+result back where it is a position. About the origin each term at site
+coordinates (10⁵–10⁶ m) scales with the distance's square or cube, and
+its rounding exceeds a small body's area or volume and can flip its
+sign. `face_normals.rs` `site_coordinate_tests` pins a box and a thin
+plan 1e6 m and 5.6e6 m out; a new sum of this kind is re-based too, or
+taken from the kernel (`axiolid_measure::mesh::volume_properties`).
+
 Depend only on what the registry publishes. The workspace pins `axiolid-*`
 0.3.0, except `axiolid-measure` 0.3.9 with the `exact` feature (certified
 `boundary_distance` and the `body_*` measurements over several items, in

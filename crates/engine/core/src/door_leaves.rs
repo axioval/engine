@@ -368,11 +368,15 @@ impl SwingSector {
 }
 
 /// Twice the signed area of a plan polygon: positive when anticlockwise.
+/// Summed about its first vertex, so site coordinates do not flip the sign.
 fn signed_area(polygon: &[[f64; 2]]) -> f64 {
+    let Some(&[x, y]) = polygon.first() else {
+        return 0.0;
+    };
     polygon
         .iter()
         .zip(polygon.iter().cycle().skip(1))
-        .map(|(a, b)| a[0] * b[1] - b[0] * a[1])
+        .map(|(a, b)| (a[0] - x) * (b[1] - y) - (b[0] - x) * (a[1] - y))
         .sum()
 }
 

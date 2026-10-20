@@ -1466,16 +1466,19 @@ fn centroids(region: &Region) -> Vec<Point2> {
         if points.len() < 3 {
             continue;
         }
+        // About the first vertex, so site coordinates do not cancel the
+        // sums away (#452).
+        let origin = points[0];
         let (mut area, mut cx, mut cy) = (0.0, 0.0, 0.0);
         for i in 0..points.len() {
-            let (a, b) = (points[i], points[(i + 1) % points.len()]);
+            let (a, b) = (points[i] - origin, points[(i + 1) % points.len()] - origin);
             let cross = a.x * b.y - b.x * a.y;
             area += cross;
             cx += (a.x + b.x) * cross;
             cy += (a.y + b.y) * cross;
         }
         if area.abs() > 0.0 {
-            out.push(Point2::new(cx / (3.0 * area), cy / (3.0 * area)));
+            out.push(origin + Point2::new(cx / (3.0 * area), cy / (3.0 * area)));
         }
         for i in 1..points.len() - 1 {
             let (a, b, c) = (points[0], points[i], points[i + 1]);

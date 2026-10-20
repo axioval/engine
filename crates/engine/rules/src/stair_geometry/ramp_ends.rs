@@ -575,10 +575,13 @@ fn rectangle(
     let [ax, ay, _] = across(direction).components();
     let at = |u: f64, v: f64| [u * dx + v * ax, u * dy + v * ay];
     let mut ring = vec![at(near, low), at(far, low), at(far, high), at(near, high)];
+    // About the first corner, so site coordinates do not flip the sign
+    // (#452).
+    let [x, y] = ring[0];
     let area: f64 = ring
         .iter()
         .zip(ring.iter().cycle().skip(1))
-        .map(|(a, b)| a[0] * b[1] - b[0] * a[1])
+        .map(|(a, b)| (a[0] - x) * (b[1] - y) - (b[0] - x) * (a[1] - y))
         .sum();
     if area < 0.0 {
         ring.reverse();

@@ -129,13 +129,9 @@ fn faces(body: &Body<'_>, looking: Looking) -> Result<Vec<Triangle>, ProximityEr
     if !body.solid {
         return Err(ProximityError::Refused(NOT_CLOSED));
     }
-    // Twice the signed volume's sign says which way the winding faces.
-    let orientation: f64 = body
-        .soup
-        .items
-        .iter()
-        .map(|[a, b, c]| a.dot(b.cross(*c)))
-        .sum();
+    // The signed volume's sign says which way the winding faces, summed
+    // about a corner of the body so site coordinates do not flip it (#452).
+    let orientation = crate::face_normals::signed_volume(&body.soup.items);
     if !orientation.is_finite() || orientation == 0.0 {
         return Err(ProximityError::Refused(NOT_CLOSED));
     }
@@ -232,10 +228,15 @@ fn least_gap(edge: &[Triangle], surfaces: &[Triangle]) -> (f64, Vec<Polygon>) {
     (least, beneath)
 }
 
+/// The signed area of a plan polygon, summed about its first vertex so
+/// site coordinates do not flip its sign (#452).
 fn signed_area(points: &[Point2]) -> f64 {
+    let Some(&origin) = points.first() else {
+        return 0.0;
+    };
     let mut sum = 0.0;
     for (index, a) in points.iter().enumerate() {
-        let b = points[(index + 1) % points.len()];
+        let (a, b) = (*a - origin, points[(index + 1) % points.len()] - origin);
         sum += a.x.mul_add(b.y, -(b.x * a.y));
     }
     sum / 2.0

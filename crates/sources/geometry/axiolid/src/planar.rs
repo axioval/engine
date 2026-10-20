@@ -390,13 +390,23 @@ pub(crate) fn plan_footprint(
 
 /// Area and first moments `(A, ∫x, ∫y)` of a polygon, holes subtracted,
 /// whatever the orientation of its rings.
+///
+/// The sums run about the outer ring's first vertex and are moved back to
+/// the origin at the end: about the origin each term at site coordinates
+/// is some 10¹⁸ and the centre they give could leave the polygon (#452).
 pub(crate) fn polygon_moments(polygon: &Polygon) -> (f64, f64, f64) {
+    let origin = polygon
+        .outer
+        .points
+        .first()
+        .copied()
+        .unwrap_or(Point2::ZERO);
     let ring = |ring: &Ring| {
         let points = &ring.points;
         let (mut area, mut x, mut y) = (0.0, 0.0, 0.0);
         for index in 0..points.len() {
-            let current = points[index];
-            let next = points[(index + 1) % points.len()];
+            let current = points[index] - origin;
+            let next = points[(index + 1) % points.len()] - origin;
             let cross = current.x * next.y - next.x * current.y;
             area += cross;
             x += (current.x + next.x) * cross;
@@ -414,7 +424,7 @@ pub(crate) fn polygon_moments(polygon: &Polygon) -> (f64, f64, f64) {
         x -= hx;
         y -= hy;
     }
-    (area, x, y)
+    (area, area.mul_add(origin.x, x), area.mul_add(origin.y, y))
 }
 
 /// Area of the overlap of two triangle sets' footprints.

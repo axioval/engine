@@ -151,7 +151,16 @@ const ROUNDING: f64 = 1e-12;
 /// The faces of `soup` looking up, wound anticlockwise seen from above.
 fn top_faces(soup: &[[P3; 3]], solid: bool) -> Result<Vec<[P3; 3]>, ProximityError> {
     let orientation = if solid {
-        let volume: f64 = soup.iter().map(|[a, b, c]| dot(*a, cross(*b, *c))).sum();
+        // About a corner of the body, so site coordinates do not flip the
+        // sign (#452).
+        let origin = soup.first().map_or([0.0; 3], |triangle| triangle[0]);
+        let volume: f64 = soup
+            .iter()
+            .map(|triangle| {
+                let [a, b, c] = triangle.map(|point| minus(point, origin));
+                dot(a, cross(b, c))
+            })
+            .sum();
         if !volume.is_finite() || volume == 0.0 {
             return Err(ProximityError::Refused(
                 "the surface's body encloses no volume, so which way its faces look is unknown",
@@ -242,10 +251,16 @@ impl Hull {
         (hull.points.len() >= 3 && hull.area() > LINEAR * LINEAR).then_some(hull)
     }
 
+    /// The hull's area, summed about its first point so site coordinates
+    /// do not cancel it away (#452).
     fn area(&self) -> f64 {
         let n = self.points.len();
+        let Some(&[x, y]) = self.points.first() else {
+            return 0.0;
+        };
+        let local = |p: P2| [p[0] - x, p[1] - y];
         (0..n)
-            .map(|i| cross2(self.points[i], self.points[(i + 1) % n]))
+            .map(|i| cross2(local(self.points[i]), local(self.points[(i + 1) % n])))
             .sum::<f64>()
             / 2.0
     }

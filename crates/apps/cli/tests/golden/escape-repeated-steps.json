@@ -1619,7 +1619,7 @@
         ]
       },
       {
-        "id": "b27efd71-8a58-5fb4-b34f-38edf789276f",
+        "id": "3244d2b0-94fc-5661-8dd5-d78246532375",
         "rule_id": "climbed",
         "object_id": {
           "source": {
@@ -1629,7 +1629,7 @@
           "local_id": "#179"
         },
         "severity": "error",
-        "message": "its farthest point, around (37.50, 0.00), lies between 3.5347 and 3.5446 m from the nearest exit walking; use 0 (office) allows at most 3 m of travel",
+        "message": "its farthest point, around (37.50, 5.00), lies between 3.5347 and 3.5446 m from the nearest exit walking; use 0 (office) allows at most 3 m of travel",
         "related": [
           {
             "source": {
@@ -1764,7 +1764,7 @@
               "system": "ifc-step",
               "document": "arch.ifc"
             },
-            "locator": "axiolid:metric-route:farthest:region=ifc-step:arch.ifc/#179:level=[ifc-step:arch.ifc/#109,ifc-step:arch.ifc/#119,ifc-step:arch.ifc/#129,ifc-step:arch.ifc/#139,ifc-step:arch.ifc/#149,ifc-step:arch.ifc/#159,ifc-step:arch.ifc/#169,ifc-step:arch.ifc/#179,ifc-step:arch.ifc/#189,ifc-step:arch.ifc/#199,ifc-step:arch.ifc/#209,ifc-step:arch.ifc/#219,ifc-step:arch.ifc/#229,ifc-step:arch.ifc/#239,ifc-step:arch.ifc/#249,ifc-step:arch.ifc/#259,ifc-step:arch.ifc/#269]:targets=18:placed=18:step=0.050000:height=2.000000:tolerance=0.010000:cells=3970:lower=bracket=3.534671:upper=3.544568:witness=(37.498779,0.000000)",
+            "locator": "axiolid:metric-route:farthest:region=ifc-step:arch.ifc/#179:level=[ifc-step:arch.ifc/#109,ifc-step:arch.ifc/#119,ifc-step:arch.ifc/#129,ifc-step:arch.ifc/#139,ifc-step:arch.ifc/#149,ifc-step:arch.ifc/#159,ifc-step:arch.ifc/#169,ifc-step:arch.ifc/#179,ifc-step:arch.ifc/#189,ifc-step:arch.ifc/#199,ifc-step:arch.ifc/#209,ifc-step:arch.ifc/#219,ifc-step:arch.ifc/#229,ifc-step:arch.ifc/#239,ifc-step:arch.ifc/#249,ifc-step:arch.ifc/#259,ifc-step:arch.ifc/#269]:targets=18:placed=18:step=0.050000:height=2.000000:tolerance=0.010000:cells=3970:lower=bracket=3.534671:upper=3.544568:witness=(37.498779,5.000000)",
             "exact": true
           },
           {
@@ -5546,7 +5546,7 @@
         ]
       },
       {
-        "id": "038c70e4-a49b-58e4-9878-39008a1425d7",
+        "id": "0a75708d-f9ae-511f-9436-55eba0829595",
         "rule_id": "repeated",
         "object_id": {
           "source": {
@@ -5556,7 +5556,7 @@
           "local_id": "#179"
         },
         "severity": "error",
-        "message": "its farthest point, around (37.50, 0.00), lies between 3.5347 and 3.5446 m from the nearest exit walking; use 0 (office) allows at most 3 m of travel",
+        "message": "its farthest point, around (37.50, 5.00), lies between 3.5347 and 3.5446 m from the nearest exit walking; use 0 (office) allows at most 3 m of travel",
         "related": [
           {
             "source": {
@@ -5691,7 +5691,7 @@
               "system": "ifc-step",
               "document": "arch.ifc"
             },
-            "locator": "axiolid:metric-route:farthest:region=ifc-step:arch.ifc/#179:level=[ifc-step:arch.ifc/#109,ifc-step:arch.ifc/#119,ifc-step:arch.ifc/#129,ifc-step:arch.ifc/#139,ifc-step:arch.ifc/#149,ifc-step:arch.ifc/#159,ifc-step:arch.ifc/#169,ifc-step:arch.ifc/#179,ifc-step:arch.ifc/#189,ifc-step:arch.ifc/#199,ifc-step:arch.ifc/#209,ifc-step:arch.ifc/#219,ifc-step:arch.ifc/#229,ifc-step:arch.ifc/#239,ifc-step:arch.ifc/#249,ifc-step:arch.ifc/#259,ifc-step:arch.ifc/#269]:targets=18:placed=18:step=0.050000:height=2.000000:tolerance=0.010000:cells=3970:lower=bracket=3.534671:upper=3.544568:witness=(37.498779,0.000000)",
+            "locator": "axiolid:metric-route:farthest:region=ifc-step:arch.ifc/#179:level=[ifc-step:arch.ifc/#109,ifc-step:arch.ifc/#119,ifc-step:arch.ifc/#129,ifc-step:arch.ifc/#139,ifc-step:arch.ifc/#149,ifc-step:arch.ifc/#159,ifc-step:arch.ifc/#169,ifc-step:arch.ifc/#179,ifc-step:arch.ifc/#189,ifc-step:arch.ifc/#199,ifc-step:arch.ifc/#209,ifc-step:arch.ifc/#219,ifc-step:arch.ifc/#229,ifc-step:arch.ifc/#239,ifc-step:arch.ifc/#249,ifc-step:arch.ifc/#259,ifc-step:arch.ifc/#269]:targets=18:placed=18:step=0.050000:height=2.000000:tolerance=0.010000:cells=3970:lower=bracket=3.534671:upper=3.544568:witness=(37.498779,5.000000)",
             "exact": true
           },
           {
@@ -9193,7 +9193,7 @@
         ]
       },
       {
-        "id": "02ed74d4-187c-5441-b324-bcd36d9998c5",
+        "id": "06c3f102-f5d8-5bce-9341-1c6e8cd5e4a1",
         "rule_id": "spelled",
         "object_id": {
           "source": {
@@ -9203,7 +9203,7 @@
           "local_id": "#179"
         },
         "severity": "error",
-        "message": "its farthest point, around (37.50, 0.00), lies between 3.5347 and 3.5446 m from the nearest exit walking; use 0 (office) allows at most 3 m of travel",
+        "message": "its farthest point, around (37.50, 5.00), lies between 3.5347 and 3.5446 m from the nearest exit walking; use 0 (office) allows at most 3 m of travel",
         "related": [
           {
             "source": {
@@ -9338,7 +9338,7 @@
               "system": "ifc-step",
               "document": "arch.ifc"
             },
-            "locator": "axiolid:metric-route:farthest:region=ifc-step:arch.ifc/#179:level=[ifc-step:arch.ifc/#109,ifc-step:arch.ifc/#119,ifc-step:arch.ifc/#129,ifc-step:arch.ifc/#139,ifc-step:arch.ifc/#149,ifc-step:arch.ifc/#159,ifc-step:arch.ifc/#169,ifc-step:arch.ifc/#179,ifc-step:arch.ifc/#189,ifc-step:arch.ifc/#199,ifc-step:arch.ifc/#209,ifc-step:arch.ifc/#219,ifc-step:arch.ifc/#229,ifc-step:arch.ifc/#239,ifc-step:arch.ifc/#249,ifc-step:arch.ifc/#259,ifc-step:arch.ifc/#269]:targets=18:placed=18:step=0.050000:height=2.000000:tolerance=0.010000:cells=3970:lower=bracket=3.534671:upper=3.544568:witness=(37.498779,0.000000)",
+            "locator": "axiolid:metric-route:farthest:region=ifc-step:arch.ifc/#179:level=[ifc-step:arch.ifc/#109,ifc-step:arch.ifc/#119,ifc-step:arch.ifc/#129,ifc-step:arch.ifc/#139,ifc-step:arch.ifc/#149,ifc-step:arch.ifc/#159,ifc-step:arch.ifc/#169,ifc-step:arch.ifc/#179,ifc-step:arch.ifc/#189,ifc-step:arch.ifc/#199,ifc-step:arch.ifc/#209,ifc-step:arch.ifc/#219,ifc-step:arch.ifc/#229,ifc-step:arch.ifc/#239,ifc-step:arch.ifc/#249,ifc-step:arch.ifc/#259,ifc-step:arch.ifc/#269]:targets=18:placed=18:step=0.050000:height=2.000000:tolerance=0.010000:cells=3970:lower=bracket=3.534671:upper=3.544568:witness=(37.498779,5.000000)",
             "exact": true
           },
           {

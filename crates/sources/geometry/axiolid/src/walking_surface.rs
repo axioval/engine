@@ -316,7 +316,9 @@ fn solid_body<'g>(
         )));
     }
     let soup = triangles(mesh);
-    let volume: f64 = soup.iter().map(|[a, b, c]| a.dot(b.cross(*c))).sum::<f64>() / 6.0;
+    // Summed about a corner of the body, so site coordinates do not flip
+    // the sign (#452).
+    let volume = crate::face_normals::signed_volume(&soup);
     if volume <= 0.0 {
         return Err(WalkingSurfaceError::Unsupported(format!(
             "the mesh of {object} faces inward, so which faces look up is unknown"
@@ -862,12 +864,17 @@ fn gaps(walking: &[Triangle], obstacle: &[Triangle]) -> Option<(f64, f64, f64)> 
     found
 }
 
-/// Twice the signed area of a plan polygon.
+/// The unsigned area of a plan polygon, summed about its first vertex so
+/// site coordinates do not cancel it away (#452).
 fn area(polygon: &[[f64; 2]]) -> f64 {
+    let Some(&[ox, oy]) = polygon.first() else {
+        return 0.0;
+    };
     let n = polygon.len();
     (0..n)
         .map(|i| {
             let (p, q) = (polygon[i], polygon[(i + 1) % n]);
+            let (p, q) = ([p[0] - ox, p[1] - oy], [q[0] - ox, q[1] - oy]);
             p[0] * q[1] - q[0] * p[1]
         })
         .sum::<f64>()
@@ -1352,9 +1359,15 @@ fn touches(faces: &[Triangle], frame: &PlanFrame, along: (f64, f64), across: (f6
 /// A polygon's corners in counter-clockwise order.
 fn counter_clockwise(mut polygon: Vec<[f64; 2]>) -> Vec<[f64; 2]> {
     let n = polygon.len();
+    let Some(&[ox, oy]) = polygon.first() else {
+        return polygon;
+    };
+    // About the first corner, so site coordinates do not flip the sign
+    // (#452).
     let signed: f64 = (0..n)
         .map(|i| {
             let (p, q) = (polygon[i], polygon[(i + 1) % n]);
+            let (p, q) = ([p[0] - ox, p[1] - oy], [q[0] - ox, q[1] - oy]);
             p[0] * q[1] - q[0] * p[1]
         })
         .sum();

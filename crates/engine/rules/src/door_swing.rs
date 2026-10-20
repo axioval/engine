@@ -345,10 +345,14 @@ impl Footprint {
 }
 
 /// Twice the signed area of a plan ring: positive when anticlockwise.
+/// Summed about its first vertex, so site coordinates do not flip the sign.
 fn signed_area(ring: &[[f64; 2]]) -> f64 {
+    let Some(&[x, y]) = ring.first() else {
+        return 0.0;
+    };
     ring.iter()
         .zip(ring.iter().cycle().skip(1))
-        .map(|(a, b)| a[0] * b[1] - b[0] * a[1])
+        .map(|(a, b)| (a[0] - x) * (b[1] - y) - (b[0] - x) * (a[1] - y))
         .sum()
 }
 

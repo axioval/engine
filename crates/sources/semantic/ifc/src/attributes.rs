@@ -48,6 +48,10 @@ type TypeIndex = BTreeMap<EntityId, Vec<(EntityId, EntityId)>>;
 /// Answers attribute requests for one model.
 pub(crate) struct Attributes {
     release: Release,
+    /// The model's type, layer and style assignments, each indexed on its
+    /// first request.
+    /// Kept with the model, not in a check's derivation store (#443): read
+    /// from the model alone, it is the same for every check of it.
     types: OnceLock<Result<TypeIndex, String>>,
     layers: OnceLock<Result<LayerIndex, String>>,
     styles: OnceLock<Result<StyleIndex, String>>,

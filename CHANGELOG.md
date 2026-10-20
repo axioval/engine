@@ -214,6 +214,34 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **Adapter caches live in the derivation store**
+  ([#443](https://github.com/axioval/engine/issues/443),
+  [ADR 0006](docs/src/adr-0006.md#adapter-caches-on-the-store)). What the
+  Axiolid adapter's services, the IFC-Axiolid host and the IFC adapter
+  kept of their own for a session's life is now a derivation kind of the
+  check's store, each with a complete key, a version naming its kernels,
+  a precision class, a key-completeness test and the services it is read
+  through: the free-space service's obstacle footprints and columns
+  (`band footprint`, `solid column`), the space service's footprints and
+  shared areas (`plan footprint`, `shared plan area`), the proximity
+  service's shells and composed volumes (`body shells`, `union volume`),
+  the derived relationships' space bodies, edges and pairs (`space
+  bodies`, `derived edges`, `intersecting pair`; the space bodies were
+  read again for every request), metric routing's prepared floors and
+  portals (`prepared routes`), doors' glazing items (`door items`) and the
+  relationship service's universes read by entity (`universe entities`,
+  where a ring of four found a universe only by identity). They are built
+  once at a time, held against the memory budget and released after the
+  last rule asking their service, and `check --stats` prints a line for
+  each. `CandidateUniverse` is `Hash`, by its objects' hash taken once,
+  so equal universes built apart are one key. The derived-relationship
+  service no longer copies the whole geometry for its proximity
+  measurements. What stays with a service is part of the source (the IFC
+  adapter's indexes of its model, a parsed schema, an index of the
+  geometry) and is recorded so. Reports are byte-identical before and
+  after on every set measured
+  ([Template performance](docs/src/performance.md#adapter-caches-on-the-store)).
+
 - **The expression evaluation budget refuses alike in any rule order**
   ([#447](https://github.com/axioval/engine/issues/447),
   [ADR 0006](docs/src/adr-0006.md#the-expression-evaluation-budget)).

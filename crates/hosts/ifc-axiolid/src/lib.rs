@@ -3523,6 +3523,9 @@ struct LazyEnvelope {
     objects: Vec<ObjectId>,
     /// Whether reading the declarations prints its time (`Options::timings`).
     timings: bool,
+    /// The service itself, made on the first request from the model's
+    /// declarations: part of the source, not a value a check derives
+    /// (#443).
     declared: OnceLock<AxiolidEnvelopeMembershipService>,
 }
 

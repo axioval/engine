@@ -55,7 +55,9 @@ fn refused(message: impl Into<String>) -> IfcSessionError {
 /// Each release's schema as the codec takes it, by release label.
 type Schemas = std::sync::Mutex<Vec<(&'static str, Arc<Schema>)>>;
 
-/// The release's schema as the codec takes it, built once per release.
+/// The release's schema as the codec takes it, built once per release: a
+/// parsed schema, the same for every model and check, so never a derivation
+/// of a check's store (#443).
 fn shared(release: Release) -> Arc<Schema> {
     static SCHEMAS: OnceLock<Schemas> = OnceLock::new();
     let cache = SCHEMAS.get_or_init(Default::default);

@@ -130,6 +130,8 @@ struct IfcPropertyService {
     model: Arc<Model>,
     /// `ifc-properties`' index of the model's property assignments, built on
     /// the first request (`index`).
+    /// Kept with the model, not in a check's derivation store (#443): read
+    /// from the model alone, it is the same for every check of it.
     index: OnceLock<Yoke<Index<'static>, Arc<Model>>>,
     snapshots: Arc<[SourceSnapshot]>,
     attributes: Attributes,

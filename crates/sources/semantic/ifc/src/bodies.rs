@@ -49,6 +49,9 @@ type Read = Result<Option<Facts>, PropertyResolutionError>;
 /// Answers [`BODY_SET`](axioval_ir::BODY_SET) requests for one model.
 pub(crate) struct Bodies {
     release: Release,
+    /// The project's units and each object's body facts, read once.
+    /// Kept with the model, not in a check's derivation store (#443): read
+    /// from the model alone, it is the same for every check of it.
     units: OnceLock<Result<Units, String>>,
     cache: Mutex<BTreeMap<EntityId, Arc<Read>>>,
 }

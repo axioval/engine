@@ -28,6 +28,9 @@ pub(crate) struct IfcNetworkService {
     release: Release,
     model: Arc<Model>,
     snapshots: Arc<[SourceSnapshot]>,
+    /// The model's distribution network, read once.
+    /// Kept with the model, not in a check's derivation store (#443): read
+    /// from the model alone, it is the same for every check of it.
     network: Mutex<Option<Result<DistributionNetwork, NetworkServiceError>>>,
 }
 

@@ -26,6 +26,9 @@ pub(crate) type LevelHeight = Result<Option<(f64, String)>, String>;
 /// Storey elevations and parents, read once per model.
 pub(crate) struct Levels {
     release: Release,
+    /// The storeys, indexed on the first request.
+    /// Kept with the model, not in a check's derivation store (#443): read
+    /// from the model alone, it is the same for every check of it.
     index: OnceLock<Result<Index, String>>,
 }
 

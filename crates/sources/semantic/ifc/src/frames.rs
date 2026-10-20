@@ -44,7 +44,9 @@ pub(crate) struct IfcObjectFrames {
     /// Placement chains shared between products (storey, building, site).
     resolver: Mutex<PlacementResolver>,
     /// Door leaves already derived: each derivation validates the file's
-    /// property relationships.
+    /// property relationships. Both are kept with the model, not in a
+    /// check's derivation store (#443): read from the model alone, they are
+    /// the same for every check of it.
     doors: Mutex<BTreeMap<EntityId, Result<DoorLeaves, DoorLeavesError>>>,
 }
 

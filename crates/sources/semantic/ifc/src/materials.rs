@@ -63,6 +63,9 @@ struct Resolved {
 /// Answers material requests for one model, each object resolved once.
 pub(crate) struct Materials {
     release: Release,
+    /// Each object's materials, resolved once.
+    /// Kept with the model, not in a check's derivation store (#443): read
+    /// from the model alone, it is the same for every check of it.
     resolved: Mutex<BTreeMap<EntityId, Result<Arc<Resolved>, PropertyResolutionError>>>,
 }
 

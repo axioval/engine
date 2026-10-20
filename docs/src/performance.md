@@ -902,6 +902,57 @@ m07's 17 physical scenes 97 times instead of 17, in the same 69.8 s on
 four threads. Every report is the same byte for byte in every variant
 and as the engine of #408.
 
+### Adapter caches on the store
+
+Since [#443](https://github.com/axioval/engine/issues/443) no adapter keeps
+a cache of its own for its service's whole life: the free-space service's
+obstacle footprints and columns, the space service's plan areas, the
+proximity service's shells and composed volumes, the derived
+relationships' space bodies, edges and pairs, metric routing's prepared
+floors, doors' glazing items and the relationship service's universes
+read by entity are derivation kinds, held against the memory budget and
+released after their last reader. What stays with a service is part of
+the source, listed in
+[ADR 0006](./adr-0006.md#adapter-caches-on-the-store).
+
+Measured as above, one release build per side: the engine before
+("before"), after ("after"), and after with `--no-reuse` ("none"). The
+public parity models are every case over every model it names, as the
+parity harness runs them (162 checks, the least wall time of three runs
+each).
+
+| Model, rule set | Threads | Wall before / after / none | Peak before / after / none |
+|---|---:|---:|---:|
+| m13 (157 spaces), furniture | 1 | 5.3 / 5.3 / 5.3 s | 1109 / 1115 / 1111 MiB |
+| m13, furniture | 4 | 4.0 / 4.3 / 4.3 s | 1158 / 1147 / 1153 MiB |
+| m07 (17 spaces), furniture | 1 | 4.0 / 4.3 / 5.8 s | 634 / 634 / 636 MiB |
+| m07, furniture | 4 | 2.0 / 2.0 / 2.5 s | 1313 / 1310 / 1143 MiB |
+| m07, every physical element | 4 | 70.6 / 70.1 / 107.4 s | 1904 / 1506 / 1966 MiB |
+| m07, clashes | 1 | 6.0 / 6.0 / 19.3 s | 396 / 391 / 375 MiB |
+| m07, clashes | 4 | 6.0 / 6.0 / 19.3 s | 386 / 389 / 380 MiB |
+| public parity models, 162 checks | 4 | 4.97 / 4.71 / 4.98 s | 111 / 104 / 105 MiB |
+
+Run times are the same within a run's noise; the public cases spend 9%
+less CPU (6.06 → 5.50 s), most of it in `openings` (0.70 → 0.40 s), whose
+derived relationships no longer read every declared space's body again
+for each request. m07 among every physical element builds 1398 band
+footprints for 7547 reads, which the free-space service kept before as
+well: at most 104 KiB of them are held, and the peak is the largest
+step's (731 MiB admitted at once), which varies between runs (1432 to
+1594 MiB after). The furniture set on four threads still peaks above
+`--no-reuse`, by what four threads' scenes and footprints hold while they
+are kept for the next rule, now counted against the budget.
+
+One move had to keep a bound of its own: the relationship service's ring
+of four universes read by entity found a universe only by identity, and
+a rule relating each anchor to a universe built for it (the clash
+matrices) found none again. Kept in the store by identity, m07's clashes
+read 272 such universes once each and held 28.7 MiB of them to the last
+relationship rule (440 MiB peak). Keyed by their objects
+(`CandidateUniverse` hashes them once when built) they are one universe
+read 272 times, 103 KiB held, and the kind keeps at most 64 MiB. Every
+report is the same byte for byte before, after and with `--no-reuse`.
+
 ### A bounded geometry reach for every geometric capability
 
 Since [#448](https://github.com/axioval/engine/issues/448) clash,

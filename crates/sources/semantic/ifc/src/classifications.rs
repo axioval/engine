@@ -37,8 +37,11 @@ pub(crate) struct IfcClassificationService {
     snapshots: Arc<[SourceSnapshot]>,
     /// Resolved assignments per classification item: many objects share one
     /// reference, and its hierarchy walk is the same for all of them.
+    /// Kept with the model, not in a check's derivation store (#443): read
+    /// from the model alone, it is the same for every check of it.
     items: Mutex<BTreeMap<EntityId, Result<ClassificationAssignment, String>>>,
-    /// The classification items each resource object is related to.
+    /// The classification items each resource object is related to, kept
+    /// with the model as the items are.
     resources: OnceLock<Result<BTreeMap<EntityId, Vec<EntityId>>, String>>,
 }
 

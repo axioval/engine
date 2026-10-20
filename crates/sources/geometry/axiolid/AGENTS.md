@@ -198,7 +198,28 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   a new service reading scenes is added there, or its rules rebuild them.
   `AxiolidFreeSpaceService::with_reuse(false)` keeps no scene, footprint
   or column, for the determinism gate (#441); every answer must stay the
-  same either way.
+  same either way. A scene's obstacles' band footprints and sure columns
+  are derivations too (`free_space/obstacles.rs`, `BandFootprints` and
+  `SolidColumns`, #443), keyed over `Measuring` by address, the obstacle,
+  which of its meshes is measured (`Body`: its own or its host's
+  enclosure), both limits' bits and the class; `Measuring` keeps nothing
+  but its interned obstacle lists.
+- **No service keeps a cache of its own** (#443, ADR 0006 "Adapter caches
+  on the store"). What a service measures of its geometry for more than
+  one request is a derivation kind keyed over the service's state by
+  address (`derivations::Over`; a service whose keys need its state holds
+  it behind one `Arc`: `Measuring`, the derived relationships' `Declared`,
+  metric routing's `Routing`): the space service's `PlanFootprints` and
+  `SharedPlanAreas` (`space/areas.rs`), the proximity service's
+  `BodyShells` and `UnionVolumes` (`proximity/kept.rs`), the derived
+  relationships' `SpaceBodies`, `DerivedEdges` and `IntersectingPairs`
+  (`derived_relationships/kept.rs`, which measure intersections through
+  `AxiolidProximityService::over`, sharing the geometry), and metric
+  routing's `PreparedRoutes`. Each has a version naming its kernels, a
+  precision class, a `KeyCompleteness` test and `read_through`. Only an
+  index of the geometry itself stays with a service (the space service's
+  enclosing extents); a new cache is a kind, or is recorded as such an
+  index.
   `Scene::inscribed` (#400) estimates the largest disc of each clear
   part in floating point (`placement::inscribed_disc`, the pole of
   inaccessibility over at most `INSCRIBED_CELLS` cells), kept with the

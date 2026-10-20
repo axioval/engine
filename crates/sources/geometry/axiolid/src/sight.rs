@@ -56,11 +56,7 @@ impl AxiolidSightService {
 
     /// The mesh of an object asked about, or why it cannot be used.
     fn mesh(&self, object: &ObjectId, role: &str) -> Result<&TriMesh, SightError> {
-        if let Some((_, reason)) = self
-            .geometry
-            .unmeasured()
-            .find(|(unmeasured, _)| *unmeasured == object)
-        {
+        if let Some((_, reason)) = self.geometry.unmeasured_of(object) {
             return Err(SightError::Unavailable(format!(
                 "{role} {object} has a body that was not measured: {reason}"
             )));
@@ -292,7 +288,7 @@ impl<'g> SightObstacles<'g> {
             if geometry.has_no_body(object) {
                 continue;
             }
-            if let Some((_, reason)) = geometry.unmeasured().find(|(id, _)| *id == object) {
+            if let Some((_, reason)) = geometry.unmeasured_of(object) {
                 return Err(SightError::Unavailable(format!(
                     "obstacle {object} has a body that was not measured: {reason}"
                 )));

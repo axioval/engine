@@ -127,6 +127,38 @@ static STAIR: std::sync::LazyLock<axioval_engine::template::Template> =
 static STAIR_PLANS: crate::templates::Plans = crate::templates::Plans::new();
 
 impl RuleCapability for StairGeometryCheck {
+    /// The bodies of its flights and of the obstacles, spaces, landings,
+    /// doors, handrails, tactile objects and surfaces its selectors pick,
+    /// through the walking-surface, free-space, proximity, object-frame,
+    /// vertical-extent, plan-span and plan-area services (#448).
+    fn geometry_reach(&self, rule: &axioval_engine::CompiledRule) -> axioval_engine::GeometryReach {
+        crate::reach::selected(
+            rule,
+            &[
+                "stair_flights",
+                "headroom_obstacles",
+                "headroom_below_spaces",
+                "landing_objects",
+                "landing_doors",
+                "end_space_obstacles",
+                "clear_width_obstacles",
+                "handrail_objects",
+                "handrail_break_doors",
+                "tactile_objects",
+                "accessible_surface_selector",
+            ],
+            crate::reach::of![
+                WalkingSurfaceServiceHandle,
+                FreeSpaceServiceHandle,
+                ProximityServiceHandle,
+                ObjectFrameServiceHandle,
+                VerticalExtentServiceHandle,
+                PlanSpanServiceHandle,
+                PlanAreaServiceHandle
+            ],
+        )
+    }
+
     fn id(&self) -> &'static str {
         template::STAIR
     }
@@ -178,6 +210,35 @@ static RAMP: std::sync::LazyLock<axioval_engine::template::Template> =
 static RAMP_PLANS: crate::templates::Plans = crate::templates::Plans::new();
 
 impl RuleCapability for RampGeometryCheck {
+    /// As [`StairGeometryCheck`]'s (#448).
+    fn geometry_reach(&self, rule: &axioval_engine::CompiledRule) -> axioval_engine::GeometryReach {
+        crate::reach::selected(
+            rule,
+            &[
+                "stair_flights",
+                "headroom_obstacles",
+                "headroom_below_spaces",
+                "landing_objects",
+                "landing_doors",
+                "end_space_obstacles",
+                "clear_width_obstacles",
+                "handrail_objects",
+                "handrail_break_doors",
+                "tactile_objects",
+                "accessible_surface_selector",
+            ],
+            crate::reach::of![
+                WalkingSurfaceServiceHandle,
+                FreeSpaceServiceHandle,
+                ProximityServiceHandle,
+                ObjectFrameServiceHandle,
+                VerticalExtentServiceHandle,
+                PlanSpanServiceHandle,
+                PlanAreaServiceHandle
+            ],
+        )
+    }
+
     fn id(&self) -> &'static str {
         template::RAMP
     }

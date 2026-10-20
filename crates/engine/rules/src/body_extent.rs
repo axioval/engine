@@ -54,6 +54,16 @@ static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
 static PLANS: Plans = Plans::new();
 
 impl RuleCapability for BodyExtent {
+    /// Its subjects' bodies, through the object-frame and vertical-extent
+    /// services (#448).
+    fn geometry_reach(&self, rule: &axioval_engine::CompiledRule) -> axioval_engine::GeometryReach {
+        crate::reach::selected(
+            rule,
+            &[],
+            crate::reach::of![ObjectFrameServiceHandle, VerticalExtentServiceHandle],
+        )
+    }
+
     fn id(&self) -> &'static str {
         template::ID
     }

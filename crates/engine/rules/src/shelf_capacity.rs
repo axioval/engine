@@ -45,6 +45,16 @@ static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
 static PLANS: crate::templates::Plans = crate::templates::Plans::new();
 
 impl RuleCapability for ShelfCapacity {
+    /// The bodies of its spaces and of the doors and openings its selectors
+    /// pick, through the linear-quantity service (#448).
+    fn geometry_reach(&self, rule: &axioval_engine::CompiledRule) -> axioval_engine::GeometryReach {
+        crate::reach::selected(
+            rule,
+            &["door_selector", "opening_selector", "space_selector"],
+            crate::reach::of![LinearQuantityServiceHandle],
+        )
+    }
+
     fn id(&self) -> &'static str {
         template::ID
     }

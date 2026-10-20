@@ -411,6 +411,15 @@ static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
 static PLANS: crate::templates::Plans = crate::templates::Plans::new();
 
 impl RuleCapability for CoordinateConsistencyCheck {
+    /// Nothing of a mesh (#448): the coordinate systems are those the
+    /// sources state, read through the coordinate-system service.
+    fn geometry_reach(
+        &self,
+        _rule: &axioval_engine::CompiledRule,
+    ) -> axioval_engine::GeometryReach {
+        axioval_engine::GeometryReach::None
+    }
+
     fn id(&self) -> &'static str {
         template::ID
     }

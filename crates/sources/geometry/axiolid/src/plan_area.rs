@@ -219,11 +219,7 @@ impl AxiolidPlanAreaService {
             };
         }
         // An unmeasured body exists with an unknown extent: never zero.
-        if let Some((_, reason)) = self
-            .geometry
-            .unmeasured()
-            .find(|(unmeasured, _)| *unmeasured == object)
-        {
+        if let Some((_, reason)) = self.geometry.unmeasured_of(object) {
             return Err(PlanAreaError::Unavailable(format!(
                 "{named} has a body that was not measured: {reason}"
             )));

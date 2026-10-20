@@ -93,6 +93,20 @@ static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
 static PLANS: crate::templates::Plans = crate::templates::Plans::new();
 
 impl RuleCapability for ParkingBay {
+    /// The bodies of its bays, aisles and obstacles, through the plan-span,
+    /// vertical-extent and proximity services (#448).
+    fn geometry_reach(&self, rule: &axioval_engine::CompiledRule) -> axioval_engine::GeometryReach {
+        crate::reach::selected(
+            rule,
+            &["aisles", "obstacles"],
+            crate::reach::of![
+                PlanSpanServiceHandle,
+                VerticalExtentServiceHandle,
+                ProximityServiceHandle
+            ],
+        )
+    }
+
     fn id(&self) -> &'static str {
         template::ID
     }

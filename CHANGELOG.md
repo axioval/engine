@@ -23,6 +23,26 @@ All notable changes are documented here. This project follows Semantic Versionin
   a kind whose impl states no class. Every request still asks Exact:
   reports are unchanged.
 
+- **A bounded geometry reach for every built-in geometric capability**
+  ([#448](https://github.com/axioval/engine/issues/448),
+  [ADR 0006](docs/src/adr-0006.md)). Clash, clash-matrix, containment,
+  distance, component-clearance and every other built-in capability now
+  state in `geometry_reach` the selectors whose bodies they measure and the
+  service handles they ask (through `reach::selected`), so `check
+  --geometry` meshes only those bodies and the run releases what a service
+  built after the last rule that may ask it: a check of free-floor and
+  clash rules releases its placement scenes after the last free-floor
+  rule. A capability that may ask anything states why: for every rule in
+  the new `axioval_rules::reach::UNBOUNDED_REACH` (escape-route,
+  external-wall-validation, horizontal-guard, level-spacing, light-well,
+  space-distance, space-validation), for some rules in `CONDITIONAL_REACH`
+  (a free-floor or local-circulation rule without `obstacles`, a plan-area
+  or area-ratio rule measuring a facade, a slab-contact rule without
+  `counterparts`, …); `reach::unbounded_reason` reads both. A test fails
+  any registered capability neither bounded nor recorded, and every rules
+  test fixture of a bounded capability fails when it asks a service its
+  reach leaves out. Reports are byte-identical.
+
 - **Derivations released after their last reader and within the memory
   budget** ([#440](https://github.com/axioval/engine/issues/440),
   [ADR 0006](docs/src/adr-0006.md)). A derivation kind names the service
@@ -506,6 +526,22 @@ All notable changes are documented here. This project follows Semantic Versionin
   `CompilationRefused` with the kernel's reason.
 
 ### Fixed
+
+- **Geometry a plan names without the measured set is seen** (#448). An
+  aggregate over a measured list (`{"kind": "measured"}`) and a grouping
+  by compartments now make a plan's geometry demand everything, and
+  `services_asked` any service, as a measured value does; before, an
+  expression over a measured list, or a rule beside compartments, was
+  checked again with every body, and could release a value its rules
+  still read. `free-floor-circle` and `free-floor-rectangle` state the
+  object frames their door swings read.
+
+- **The Axiolid adapter asks about one object where it means one**
+  (#448). A service asking whether one object's body is unmeasured asks
+  about that object, never about every one, and
+  `exact_boundary` asks about the object alone once the host registered
+  an exact body, so a check meshing only its rules' bodies is no longer
+  checked again with every body for those questions.
 
 - **One unmeasured obstacle no longer takes the whole walkability
   snapshot down** ([#422](https://github.com/axioval/engine/issues/422)).

@@ -80,6 +80,16 @@ impl<'a> Config<'a> {
 }
 
 impl RuleCapability for SameContainer {
+    /// Nothing (#448): it reads relationships, properties and the source's
+    /// body set only; a derived relationship on a path makes the plan's
+    /// demand everything.
+    fn geometry_reach(
+        &self,
+        _rule: &axioval_engine::CompiledRule,
+    ) -> axioval_engine::GeometryReach {
+        axioval_engine::GeometryReach::None
+    }
+
     fn id(&self) -> &'static str {
         "axioval:capability.same-container"
     }

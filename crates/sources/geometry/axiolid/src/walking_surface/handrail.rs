@@ -633,11 +633,7 @@ impl AxiolidWalkingSurfaceService {
         if self.geometry.has_no_body(rail) {
             return Ok(None);
         }
-        if let Some((_, reason)) = self
-            .geometry
-            .unmeasured()
-            .find(|(unmeasured, _)| *unmeasured == rail)
-        {
+        if let Some((_, reason)) = self.geometry.unmeasured_of(rail) {
             return Err(WalkingSurfaceError::Unavailable(format!(
                 "rail {rail} has a body that was not measured: {reason}"
             )));

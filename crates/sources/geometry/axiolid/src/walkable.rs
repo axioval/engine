@@ -760,7 +760,7 @@ pub(crate) fn body<'g>(
     if let Some(mesh) = geometry.mesh(id) {
         return Ok(mesh);
     }
-    if let Some((_, reason)) = geometry.unmeasured().find(|(object, _)| *object == id) {
+    if let Some((_, reason)) = geometry.unmeasured_of(id) {
         return Err(format!(
             "{role} {id} has a body that was not measured: {reason}"
         ));

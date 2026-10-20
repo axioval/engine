@@ -382,6 +382,24 @@ static TEMPLATE: std::sync::LazyLock<Template> = std::sync::LazyLock::new(templa
 static PLANS: crate::templates::Plans = crate::templates::Plans::new();
 
 impl RuleCapability for PlanAreaRange {
+    /// The footprints of its subjects and their members, through the
+    /// plan-area service (#448). A facade area depends on every body against
+    /// it, so a rule measuring one may ask anything.
+    fn geometry_reach(&self, rule: &axioval_engine::CompiledRule) -> axioval_engine::GeometryReach {
+        if crate::reach::chooses(
+            rule,
+            &["measure", "numerator_measure", "denominator_measure"],
+            "facade",
+        ) {
+            return axioval_engine::GeometryReach::Unbounded;
+        }
+        crate::reach::selected(
+            rule,
+            &["member_selector"],
+            crate::reach::of![PlanAreaServiceHandle],
+        )
+    }
+
     fn id(&self) -> &'static str {
         template::ID
     }

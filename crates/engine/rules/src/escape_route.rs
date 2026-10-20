@@ -815,6 +815,15 @@ pub(crate) fn check_arguments(
 }
 
 impl RuleCapability for EscapeRoute {
+    /// Anything, for every rule: why is recorded in
+    /// [`crate::reach::UNBOUNDED_REACH`] (#448).
+    fn geometry_reach(
+        &self,
+        _rule: &axioval_engine::CompiledRule,
+    ) -> axioval_engine::GeometryReach {
+        axioval_engine::GeometryReach::Unbounded
+    }
+
     fn id(&self) -> &'static str {
         "axioval:capability.escape-route"
     }

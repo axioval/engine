@@ -302,6 +302,16 @@ static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
 static PLANS: crate::templates::Plans = crate::templates::Plans::new();
 
 impl RuleCapability for TableAllocation {
+    /// The footprints of the objects it allocates, its subjects, through the
+    /// plan-area service (#448). Anchors are read for their keys only.
+    fn geometry_reach(&self, rule: &axioval_engine::CompiledRule) -> axioval_engine::GeometryReach {
+        crate::reach::selected(
+            rule,
+            &["anchor_selector"],
+            crate::reach::of![PlanAreaServiceHandle],
+        )
+    }
+
     fn id(&self) -> &'static str {
         TEMPLATE.id
     }

@@ -11,8 +11,9 @@
 //! The demand is conservative: a capability that states nothing may ask
 //! anything, and so may any rule, value, classification, grouping, relation
 //! or refinement that names a measured value ([`axioval_ir::MEASURED_SET`])
-//! or a relationship derived from geometry
-//! ([`crate::DERIVED_RELATIONSHIP_PREFIX`]). A selector is bounded by the
+//! or list, a relationship derived from geometry
+//! ([`crate::DERIVED_RELATIONSHIP_PREFIX`]) or compartments, whose joins
+//! are measured. A selector is bounded by the
 //! object types it requires; one that cannot be bounded that way (a
 //! property, a relationship, a negation) may select every object. Where a
 //! type cannot be told (an unbound concept, a kind the type hierarchy does
@@ -73,10 +74,23 @@ pub enum GeometryDemand {
     Everything,
 }
 
-/// Whether `text` names a measured value or a derived relationship, either
-/// of which a host's geometry may answer.
+/// How an aggregate over a measured list writes its source, which names
+/// the list without the measured set (`{"kind": "measured", "name": …}`).
+const MEASURED_SOURCE: &str = r#""kind":"measured""#;
+
+/// How a grouping by compartments writes its key, whose joins are measured
+/// through the derived adjacency and the proximity service
+/// (`GroupingKey::Compartment`).
+const COMPARTMENT_KEY: &str = r#""kind":"compartment""#;
+
+/// Whether `text` names a measured value, a measured list, a derived
+/// relationship or compartments, any of which a host's geometry may
+/// answer.
 fn reads_geometry(text: &str) -> bool {
-    text.contains(MEASURED_SET) || text.contains(DERIVED_RELATIONSHIP_PREFIX)
+    text.contains(MEASURED_SET)
+        || text.contains(MEASURED_SOURCE)
+        || text.contains(DERIVED_RELATIONSHIP_PREFIX)
+        || text.contains(COMPARTMENT_KEY)
 }
 
 /// Whether `value`, written as JSON, may read geometry; anything that cannot

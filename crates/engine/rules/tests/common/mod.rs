@@ -41,6 +41,89 @@ pub fn hold_to_reference(
     assert!(parity.holds(), "{}", parity.diff());
 }
 
+/// Every geometry service handle a host may register beside the model's
+/// semantics, with its name. The object frames and coordinate systems are
+/// the semantic source's, read from what it states and never meshed.
+fn geometry_services() -> Vec<(std::any::TypeId, &'static str)> {
+    use axioval_engine::{
+        AlignmentServiceHandle, BoundaryCoverageServiceHandle, ContactServiceHandle,
+        DerivedRelationshipServiceHandle, EnvelopeMembershipServiceHandle, FacadeAreaServiceHandle,
+        FreeSpaceServiceHandle, GuardServiceHandle, LeafGlazingServiceHandle,
+        LinearQuantityServiceHandle, LocalOrigins, MetricRoutingServiceHandle,
+        PlanAreaServiceHandle, PlanSpanServiceHandle, ProximityServiceHandle, ServiceWatch,
+        SightServiceHandle, SpaceServiceHandle, TerrainServiceHandle, TriangleCountServiceHandle,
+        VerticalExtentServiceHandle, WalkabilityServiceHandle, WalkingSurfaceServiceHandle,
+    };
+    vec![
+        ServiceWatch::of::<AlignmentServiceHandle>(),
+        ServiceWatch::of::<BoundaryCoverageServiceHandle>(),
+        ServiceWatch::of::<ContactServiceHandle>(),
+        ServiceWatch::of::<DerivedRelationshipServiceHandle>(),
+        ServiceWatch::of::<EnvelopeMembershipServiceHandle>(),
+        ServiceWatch::of::<FacadeAreaServiceHandle>(),
+        ServiceWatch::of::<FreeSpaceServiceHandle>(),
+        ServiceWatch::of::<GuardServiceHandle>(),
+        ServiceWatch::of::<LeafGlazingServiceHandle>(),
+        ServiceWatch::of::<LinearQuantityServiceHandle>(),
+        ServiceWatch::of::<LocalOrigins>(),
+        ServiceWatch::of::<MetricRoutingServiceHandle>(),
+        ServiceWatch::of::<PlanAreaServiceHandle>(),
+        ServiceWatch::of::<PlanSpanServiceHandle>(),
+        ServiceWatch::of::<ProximityServiceHandle>(),
+        ServiceWatch::of::<SightServiceHandle>(),
+        ServiceWatch::of::<SpaceServiceHandle>(),
+        ServiceWatch::of::<TerrainServiceHandle>(),
+        ServiceWatch::of::<TriangleCountServiceHandle>(),
+        ServiceWatch::of::<VerticalExtentServiceHandle>(),
+        ServiceWatch::of::<WalkabilityServiceHandle>(),
+        ServiceWatch::of::<WalkingSurfaceServiceHandle>(),
+    ]
+}
+
+/// Watches on `services` every geometry service `capability` does not
+/// state `rule` may ask (`RuleCapability::geometry_reach`, #448), so an
+/// evaluation asking one fails ([`assert_reach_held`]). `None` where the
+/// capability states it may ask anything, or the rule names a measured
+/// value or a derived relationship, which may.
+pub fn watch_unstated(
+    capability: &dyn RuleCapability,
+    rule: &CompiledRule,
+    services: &mut ServiceRegistry,
+) -> Option<(axioval_engine::ServiceWatch, String)> {
+    // A rule that cannot be written may name anything, as for the plan.
+    let Ok(written) = serde_json::to_string(&(&rule.selector, &rule.parameters)) else {
+        return None;
+    };
+    if written.contains(axioval_ir::MEASURED_SET)
+        || written.contains(r#""kind":"measured""#)
+        || written.contains(axioval_engine::DERIVED_RELATIONSHIP_PREFIX)
+    {
+        return None;
+    }
+    let stated: Vec<std::any::TypeId> = match capability.geometry_reach(rule) {
+        axioval_engine::GeometryReach::Unbounded => return None,
+        axioval_engine::GeometryReach::None => Vec::new(),
+        axioval_engine::GeometryReach::Selected { services, .. } => services,
+    };
+    let unstated = geometry_services()
+        .into_iter()
+        .filter(|(id, _)| !stated.contains(id))
+        .collect();
+    Some((services.watch(unstated), capability.id().to_owned()))
+}
+
+/// Fails when an evaluation asked a geometry service its capability's
+/// reach does not state ([`watch_unstated`]).
+pub fn assert_reach_held(watch: Option<(axioval_engine::ServiceWatch, String)>) {
+    if let Some((watch, capability)) = watch {
+        let asked = watch.asked();
+        assert!(
+            asked.is_empty(),
+            "`{capability}` asked {asked:?}, which its geometry reach does not state"
+        );
+    }
+}
+
 /// A capability that runs as a template, held to the implementation it
 /// replaced on every evaluation: both run on the same context, are held to
 /// each other under `Parity::contract()` (`hold_to_reference`), and the
@@ -77,7 +160,16 @@ impl RuleCapability for Held {
             project: context.project,
             services: &services,
         };
-        let template = self.0.evaluate(&context, rule);
+        let mut watched = services.clone();
+        let watch = watch_unstated(self.0, rule, &mut watched);
+        let template = self.0.evaluate(
+            &RuleContext {
+                project: context.project,
+                services: &watched,
+            },
+            rule,
+        );
+        assert_reach_held(watch);
         let reference = self.1.evaluate(&context, rule);
         hold_to_reference(self.0.id(), &reference, &template);
         template
@@ -334,6 +426,7 @@ impl Model {
     ) -> CapabilityEvaluation {
         let mut registered = ServiceRegistry::new();
         extra(&mut registered);
+        let watch = watch_unstated(capability, rule, &mut registered);
         let project = Project::new(self.objects.clone()).unwrap();
         let shared = Arc::new(self);
         let registry =
@@ -360,13 +453,15 @@ impl Model {
             .unwrap();
         registry.install_measured(&mut services, &project);
         services.register(values).unwrap();
-        capability.evaluate(
+        let evaluation = capability.evaluate(
             &RuleContext {
                 project: &project,
                 services: &services,
             },
             rule,
-        )
+        );
+        assert_reach_held(watch);
+        evaluation
     }
 
     pub fn evaluate_measured(
@@ -388,6 +483,7 @@ impl Model {
             .register(RelationshipSelectionServiceHandle::new(shared.clone()))
             .unwrap();
         extra(&mut inner);
+        let inner_watch = watch_unstated(capability, rule, &mut inner);
         registry.install_measured(&mut inner, &project);
         // A template reads a measured value directly, as a run reads it.
         let values = axioval_engine::MeasuredValues::of(&inner, &project);
@@ -404,16 +500,20 @@ impl Model {
             .register(RelationshipSelectionServiceHandle::new(shared))
             .unwrap();
         extra(&mut services);
+        let watch = watch_unstated(capability, rule, &mut services);
         // Aggregates over measured members ask the providers directly.
         registry.install_measured(&mut services, &project);
         services.register(values).unwrap();
-        capability.evaluate(
+        let evaluation = capability.evaluate(
             &RuleContext {
                 project: &project,
                 services: &services,
             },
             rule,
-        )
+        );
+        assert_reach_held(inner_watch);
+        assert_reach_held(watch);
+        evaluation
     }
 
     /// Evaluates `template` as a run does (the measured set answered) and
@@ -507,13 +607,16 @@ impl Model {
             .register(RelationshipSelectionServiceHandle::new(shared))
             .unwrap();
         extra(&mut services);
-        capability.evaluate(
+        let watch = watch_unstated(capability, rule, &mut services);
+        let evaluation = capability.evaluate(
             &RuleContext {
                 project: &project,
                 services: &services,
             },
             rule,
-        )
+        );
+        assert_reach_held(watch);
+        evaluation
     }
 }
 

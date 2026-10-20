@@ -74,6 +74,23 @@ static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
 static PLANS: crate::templates::Plans = crate::templates::Plans::new();
 
 impl RuleCapability for WallSpacing {
+    /// The bodies of its subjects, members and footprints, through the
+    /// plan-span, proximity, vertical-extent and plan-area services (#448):
+    /// its paths reach members and footprints among those selectors' objects
+    /// only.
+    fn geometry_reach(&self, rule: &axioval_engine::CompiledRule) -> axioval_engine::GeometryReach {
+        crate::reach::selected(
+            rule,
+            &["members", "footprints"],
+            crate::reach::of![
+                PlanSpanServiceHandle,
+                ProximityServiceHandle,
+                VerticalExtentServiceHandle,
+                PlanAreaServiceHandle
+            ],
+        )
+    }
+
     fn id(&self) -> &'static str {
         template::ID
     }

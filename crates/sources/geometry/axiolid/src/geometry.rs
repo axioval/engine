@@ -689,6 +689,16 @@ impl AxiolidGeometry {
         self.unmeasured.contains_key(object)
     }
 
+    /// `object` and the host's reason, when its body could not be measured:
+    /// a question about that object alone, never about the whole set
+    /// ([`Self::unmeasured`]).
+    pub(crate) fn unmeasured_of(&self, object: &ObjectId) -> Option<(&ObjectId, &str)> {
+        self.ask(object);
+        self.unmeasured
+            .get_key_value(object)
+            .map(|(object, reason)| (object, reason.as_str()))
+    }
+
     /// Every object whose body could not be measured, with the host's reason.
     pub fn unmeasured(&self) -> impl Iterator<Item = (&ObjectId, &str)> {
         self.ask_all();
@@ -781,16 +791,28 @@ impl AxiolidGeometry {
     /// The exact body registered for an object.
     #[must_use]
     pub fn exact_boundary(&self, object: &ObjectId) -> Option<&ExactBody> {
-        // The host registers exact bodies only when some tessellated body
-        // of the whole set has one, so any answer depends on every object.
-        self.ask_all();
+        self.ask_boundary(object);
         self.boundaries.get(object).map(Arc::as_ref)
+    }
+
+    /// Notes a question about `object`'s exact body. The host registers
+    /// exact bodies only when some tessellated body of the set it meshed
+    /// has one: once it registered any, each object's answer is its own,
+    /// as among every object; while it registered none, the bodies left
+    /// out might have made it register some, so the answer depends on
+    /// every object.
+    fn ask_boundary(&self, object: &ObjectId) {
+        if self.boundaries.is_empty() {
+            self.ask_all();
+        } else {
+            self.ask(object);
+        }
     }
 
     /// The exact body registered for an object, shared, to hand out beside
     /// its surface.
     pub(crate) fn shared_exact_boundary(&self, object: &ObjectId) -> Option<Arc<ExactBody>> {
-        self.ask_all();
+        self.ask_boundary(object);
         self.boundaries.get(object).cloned()
     }
 

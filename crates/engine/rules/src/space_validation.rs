@@ -83,6 +83,15 @@ static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
 static PLANS: crate::templates::Plans = crate::templates::Plans::new();
 
 impl RuleCapability for SpaceValidation {
+    /// Anything, for every rule: why is recorded in
+    /// [`crate::reach::UNBOUNDED_REACH`] (#448).
+    fn geometry_reach(
+        &self,
+        _rule: &axioval_engine::CompiledRule,
+    ) -> axioval_engine::GeometryReach {
+        axioval_engine::GeometryReach::Unbounded
+    }
+
     fn id(&self) -> &'static str {
         template::ID
     }

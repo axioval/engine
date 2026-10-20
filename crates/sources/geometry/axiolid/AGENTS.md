@@ -1092,11 +1092,16 @@ shared `LeftOutWatch` once the host armed it (`arm`, after every service is
 built): a per-object reader (`mesh`, `fidelity`, `has_no_body`,
 `is_unmeasured`, `void`, `enclosure`, `unmeasured_bound`, `vertical_bounds`,
 `enclosing_extent`, `parts_of`, `pieces`, `applied_openings`,
-`whole_openings`, `body_note`, `compose`, `parts_bounds`) when the object
-is left out, a reader of the whole set (`objects`, `unmeasured`,
-`measured_voids`) and `exact_boundary` (the host registers exact bodies
-only when some tessellated body of the whole set has one) always, and
-`tessellated_near` when a left-out object would not be skipped. Add the
-note to every new reader; a service keeping its own copy of objects (voids,
-spaces, portals) is watched by the host through the registry instead.
-`tests/left_out.rs` pins it.
+`whole_openings`, `body_note`, `compose`, `parts_bounds`, `unmeasured_of`)
+when the object is left out, a reader of the whole set (`objects`,
+`unmeasured`, `measured_voids`) always, `exact_boundary` as a reader of
+the object once the host registered any exact body and of the whole set
+while it registered none (it registers them only when some tessellated
+body of the set it meshed has one, so the bodies left out might have made
+it register some), and `tessellated_near` when a left-out object would not
+be skipped. A service asking whether one object is unmeasured asks
+`unmeasured_of`, never `unmeasured().find(…)`, which is a question about
+every object and makes the host check again with every body (#448). Add
+the note to every new reader; a service keeping its own copy of objects
+(voids, spaces, portals) is watched by the host through the registry
+instead. `tests/left_out.rs` pins it.

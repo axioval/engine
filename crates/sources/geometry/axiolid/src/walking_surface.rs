@@ -282,10 +282,7 @@ fn solid_body<'g>(
             "{object} is declared to have no body"
         )));
     }
-    if let Some((_, reason)) = geometry
-        .unmeasured()
-        .find(|(unmeasured, _)| *unmeasured == object)
-    {
+    if let Some((_, reason)) = geometry.unmeasured_of(object) {
         return Err(WalkingSurfaceError::Unavailable(format!(
             "{object} has a body that was not measured: {reason}"
         )));
@@ -361,10 +358,7 @@ pub(crate) fn headroom(
         if geometry.has_no_body(obstacle) {
             continue;
         }
-        if let Some((_, reason)) = geometry
-            .unmeasured()
-            .find(|(unmeasured, _)| *unmeasured == obstacle)
-        {
+        if let Some((_, reason)) = geometry.unmeasured_of(obstacle) {
             return Err(WalkingSurfaceError::Unavailable(format!(
                 "obstacle {obstacle} has a body that was not measured: {reason}"
             )));
@@ -622,11 +616,7 @@ impl WalkingSurfaceService for AxiolidWalkingSurfaceService {
             if self.geometry.has_no_body(space) {
                 continue;
             }
-            if let Some((_, reason)) = self
-                .geometry
-                .unmeasured()
-                .find(|(unmeasured, _)| *unmeasured == space)
-            {
+            if let Some((_, reason)) = self.geometry.unmeasured_of(space) {
                 return Err(WalkingSurfaceError::Unavailable(format!(
                     "space {space} has a body that was not measured: {reason}"
                 )));
@@ -1239,11 +1229,7 @@ impl AxiolidWalkingSurfaceService {
         if self.geometry.has_no_body(carrier) {
             return Ok(Vec::new());
         }
-        if let Some((_, reason)) = self
-            .geometry
-            .unmeasured()
-            .find(|(unmeasured, _)| *unmeasured == carrier)
-        {
+        if let Some((_, reason)) = self.geometry.unmeasured_of(carrier) {
             return Err(WalkingSurfaceError::Unavailable(format!(
                 "candidate landing {carrier} has a body that was not measured: {reason}"
             )));

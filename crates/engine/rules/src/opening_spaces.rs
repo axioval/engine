@@ -55,6 +55,15 @@ static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
 static PLANS: crate::templates::Plans = crate::templates::Plans::new();
 
 impl RuleCapability for OpeningSpaces {
+    /// Nothing (#448): it reads relationships and properties only; a derived
+    /// relationship on a path makes the plan's demand everything.
+    fn geometry_reach(
+        &self,
+        _rule: &axioval_engine::CompiledRule,
+    ) -> axioval_engine::GeometryReach {
+        axioval_engine::GeometryReach::None
+    }
+
     fn id(&self) -> &'static str {
         template::ID
     }

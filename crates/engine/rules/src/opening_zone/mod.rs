@@ -257,6 +257,27 @@ pub(crate) fn check_arguments(
 }
 
 impl RuleCapability for OpeningZone {
+    /// Nothing unless a rule states `support_gap` (#448): the zones are read
+    /// from the source's body set. Contact with supports is measured through
+    /// the proximity service on the hosts and supports their selectors pick,
+    /// and either defaults to every object, so a rule stating `support_gap`
+    /// without both may ask anything.
+    fn geometry_reach(&self, rule: &axioval_engine::CompiledRule) -> axioval_engine::GeometryReach {
+        if !crate::reach::states(rule, "support_gap") {
+            return axioval_engine::GeometryReach::None;
+        }
+        if !crate::reach::selects(rule, "host_selector")
+            || !crate::reach::selects(rule, "support_selector")
+        {
+            return axioval_engine::GeometryReach::Unbounded;
+        }
+        crate::reach::selected(
+            rule,
+            &["host_selector", "support_selector"],
+            crate::reach::of![ProximityServiceHandle],
+        )
+    }
+
     fn id(&self) -> &'static str {
         ID
     }

@@ -87,6 +87,27 @@ static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
 static PLANS: crate::templates::Plans = crate::templates::Plans::new();
 
 impl RuleCapability for EffectiveCoverage {
+    /// The bodies of its subjects, sources and blockers, through the
+    /// plan-area and proximity services (#448). An `access_path` joins spaces,
+    /// every object one unless `space_selector` says otherwise, so a rule
+    /// stating one may ask anything.
+    fn geometry_reach(&self, rule: &axioval_engine::CompiledRule) -> axioval_engine::GeometryReach {
+        if crate::reach::states(rule, "access_path") {
+            return axioval_engine::GeometryReach::Unbounded;
+        }
+        crate::reach::selected(
+            rule,
+            &[
+                "sources",
+                "blockers",
+                "door_selector",
+                "opening_selector",
+                "space_selector",
+            ],
+            crate::reach::of![PlanAreaServiceHandle, ProximityServiceHandle],
+        )
+    }
+
     fn id(&self) -> &'static str {
         template::ID
     }

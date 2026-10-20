@@ -301,6 +301,16 @@ pub(crate) fn check_arguments(
 }
 
 impl RuleCapability for ExitSeparation {
+    /// The bodies of its subjects and their exits, through the plan-span and
+    /// proximity services (#448).
+    fn geometry_reach(&self, rule: &axioval_engine::CompiledRule) -> axioval_engine::GeometryReach {
+        crate::reach::selected(
+            rule,
+            &["exit_selector"],
+            crate::reach::of![PlanSpanServiceHandle, ProximityServiceHandle],
+        )
+    }
+
     fn id(&self) -> &'static str {
         template::ID
     }

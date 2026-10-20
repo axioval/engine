@@ -402,6 +402,35 @@ pub(crate) fn check_arguments(
 }
 
 impl RuleCapability for LocalCirculation {
+    /// The bodies of its spaces, components, partners and of the obstacles,
+    /// doors and openings its selectors pick, through the free-space,
+    /// proximity and object-frame services (#448). Without an `obstacles`
+    /// selector every object obstructs, and a `merge_path` maps spaces no
+    /// selector bounds, so such a rule may ask anything.
+    fn geometry_reach(&self, rule: &axioval_engine::CompiledRule) -> axioval_engine::GeometryReach {
+        if !crate::reach::selects(rule, "obstacles") || crate::reach::states(rule, "merge_path") {
+            return axioval_engine::GeometryReach::Unbounded;
+        }
+        crate::reach::selected(
+            rule,
+            &[
+                "obstacles",
+                "subtract_door_swings",
+                "door_selector",
+                "opening_selector",
+                "space_selector",
+                "component_selector",
+                "partner_selector",
+                "end_exempt_selector",
+            ],
+            crate::reach::of![
+                FreeSpaceServiceHandle,
+                ProximityServiceHandle,
+                ObjectFrameServiceHandle
+            ],
+        )
+    }
+
     fn id(&self) -> &'static str {
         "axioval:capability.local-circulation"
     }

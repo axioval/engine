@@ -181,7 +181,44 @@ static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
 /// The plans of the rules bound to it, kept across runs.
 static PLANS: crate::templates::Plans = crate::templates::Plans::new();
 
+/// The parameters asking for passing spaces, routed over the whole level.
+const PASSING: [&str; 4] = [
+    "passing_width_metres",
+    "passing_length_metres",
+    "passing_spacing_metres",
+    "passing_reach_metres",
+];
+
 impl RuleCapability for AccessibleRoute {
+    /// The bodies of its destinations and of the routes, starts, portals,
+    /// connectors, obstacles and doors its selectors pick, through the
+    /// walkability, walking-surface and object-frame services (#448). Passing
+    /// spaces are routed over the whole level, so a rule stating a
+    /// `passing_…` parameter may ask anything.
+    fn geometry_reach(&self, rule: &axioval_engine::CompiledRule) -> axioval_engine::GeometryReach {
+        if PASSING.iter().any(|name| crate::reach::states(rule, name)) {
+            return axioval_engine::GeometryReach::Unbounded;
+        }
+        crate::reach::selected(
+            rule,
+            &[
+                "route_selector",
+                "start_selector",
+                "portal_selector",
+                "lift_selector",
+                "ramp_selector",
+                "stair_selector",
+                "obstacle_selector",
+                "subtract_door_swings",
+            ],
+            crate::reach::of![
+                WalkabilityServiceHandle,
+                WalkingSurfaceServiceHandle,
+                ObjectFrameServiceHandle
+            ],
+        )
+    }
+
     fn id(&self) -> &'static str {
         TEMPLATE.id
     }

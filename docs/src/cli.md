@@ -1336,16 +1336,23 @@ does not need. Without it, geometric rules report `missing-service` (status 4),
 never pass, and the summary suggests `--geometry`.
 
 `--geometry` meshes only the bodies some rule of the check can ask about
-(#410). Each capability states what its rules may ask of geometry: nothing
-(the property, count, classification, conformance, numbering and
-expression capabilities), only the bodies of the objects some of their
-selectors select through named services (`free-floor-circle` and
-`free-floor-rectangle` with an `obstacles` selector and no `merge_path` or
-`access_path`: the spaces, those obstacles and the doors and openings their
-selectors name, through the free-space service), or anything (every other
-capability). A rule, value, classification, grouping, relation or
-refinement naming a measured value (`axioval:measured`) or a derived
-relationship (`axioval:derived.…`) may ask anything, and so may a check
+(#410, #448). Each capability states what its rules may ask of geometry:
+nothing (the property, count, classification, conformance, numbering,
+expression, grouping, opening and coordinate capabilities, which read the
+source's semantics and body set), only the bodies of the objects its
+subjects and selector parameters select through named services (a clash
+rule its subjects and counterparts, through the proximity service; a
+free-floor rule with an `obstacles` selector its spaces, those obstacles
+and the doors and openings its selectors name, through the free-space
+service; most geometric capabilities alike), or anything. A capability
+that may ask anything for every rule (`escape-route`,
+`external-wall-validation`, `horizontal-guard`, `level-spacing`,
+`light-well`, `space-distance`, `space-validation`), or for some rules
+(such as a free-floor rule without `obstacles`, or a `plan-area` rule
+measuring a facade), records why (`axioval_rules::reach`). A rule, value,
+classification, grouping, relation or refinement naming a measured value
+(`axioval:measured`) or list, a derived relationship (`axioval:derived.…`)
+or compartments may ask anything, and so may a check
 with `--locate geometry`, `--derived-from`, `--bcf-snapshots` or `--zones`
 (whose placement is checked against every body). A check
 whose rules ask nothing reads no model for geometry and registers no

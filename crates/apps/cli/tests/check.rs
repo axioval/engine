@@ -1517,7 +1517,13 @@ impl Case {
 fn with_geometry_a_clash_between_real_ifc_bodies_is_found() {
     let case = Case::new("geometry-clash");
     let saved = case.path("result.json");
-    let output = case.clash_check(&["--geometry", "--report", saved.to_str().unwrap()]);
+    // Every body meshed: the proxy no rule pairs is counted too.
+    let output = case.clash_check(&[
+        "--geometry",
+        "--mesh-all",
+        "--report",
+        saved.to_str().unwrap(),
+    ]);
     assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
 
     let result: Value = serde_json::from_str(&std::fs::read_to_string(&saved).unwrap()).unwrap();
@@ -2908,7 +2914,12 @@ fn a_real_without_a_decimal_point_is_read_and_reported_as_an_integrity_warning()
         .arg(definitions)
         .arg("--ruleset")
         .arg(ruleset)
-        .args(["--geometry", "--report", saved.to_str().unwrap()])
+        .args([
+            "--geometry",
+            "--mesh-all",
+            "--report",
+            saved.to_str().unwrap(),
+        ])
         .output()
         .unwrap();
     assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
@@ -3034,7 +3045,12 @@ fn with_geometry_ifc4x3_families_are_measured_or_unmeasured_by_name() {
         .arg(definitions)
         .arg("--ruleset")
         .arg(ruleset)
-        .args(["--geometry", "--report", saved.to_str().unwrap()])
+        .args([
+            "--geometry",
+            "--mesh-all",
+            "--report",
+            saved.to_str().unwrap(),
+        ])
         .output()
         .unwrap();
     assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
@@ -4719,8 +4735,9 @@ fn crossing_walls_with_opening(identifier: Option<&str>) -> String {
     ))
 }
 
-/// A wall/wall clash over `model` with geometry: the exit status and the
-/// saved result.
+/// A wall/wall clash over `model` with geometry, every body meshed
+/// (`--mesh-all`, so the `geometry` record counts the bodies beside the
+/// walls too): the exit status and the saved result.
 fn geometry_clash(case: &Case, model: &str) -> (Output, Value) {
     let model = case.write("model.ifc", model);
     let saved = case.path("result.json");
@@ -4733,7 +4750,12 @@ fn geometry_clash(case: &Case, model: &str) -> (Output, Value) {
         .arg(definitions)
         .arg("--ruleset")
         .arg(ruleset)
-        .args(["--geometry", "--report", saved.to_str().unwrap()])
+        .args([
+            "--geometry",
+            "--mesh-all",
+            "--report",
+            saved.to_str().unwrap(),
+        ])
         .output()
         .unwrap();
     let result = std::fs::read_to_string(&saved)
@@ -4847,7 +4869,9 @@ fn crossing_walls_with(extra: &str) -> String {
 }
 
 impl Case {
-    /// Runs a wall/wall clash rule with the registry's full signature.
+    /// Runs a wall/wall clash rule with the registry's full signature,
+    /// meshing every body (`--mesh-all`): the tests reading its `geometry`
+    /// record count the bodies beside the walls too.
     fn wall_clash(&self, model: &str, parameters: &Value) -> (Output, Value) {
         let mut bound = json!({
             "counterparts": {"type": "selector", "value": entity("wall")},
@@ -4856,13 +4880,18 @@ impl Case {
         for (name, value) in parameters.as_object().unwrap() {
             bound[name] = value.clone();
         }
-        self.geometry_rule(
-            model,
+        self.write("model.ifc", model);
+        self.geometry_rule_with(
+            &["model.ifc"],
             &[],
-            "axioval:capability.clash",
-            &registry_signature("axioval:capability.clash"),
+            (
+                "axioval:capability.clash",
+                &registry_signature("axioval:capability.clash"),
+            ),
             entity("wall"),
             bound,
+            &json!({}),
+            &["--mesh-all"],
         )
     }
 }
@@ -26450,4 +26479,118 @@ fn with_geometry_a_property_rule_meshes_nothing() {
     assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
     assert_eq!(every["geometry"]["exact"], 6, "{:#}", every["geometry"]);
     assert_eq!(report_text(&nothing), report_text(&every));
+}
+
+/// A rule of `capability` over the pipe of [`room_among_unselected_products`]
+/// with `parameters` (whose selectors name the pipe and the beam) meshes
+/// only the pipe and the beam, and no rule asks for a service or body it
+/// left out (#448): the room, wardrobe, wall and door stay unmeshed, the
+/// run is not checked again, and the report is the one `--mesh-all` gives,
+/// byte for byte.
+fn meshes_only_the_pipe_and_the_beam(case: &str, capability: &str, parameters: &Value) {
+    let case = Case::new(case);
+    case.write("model.ifc", &room_among_unselected_products());
+    let check = |args: &[&str]| {
+        case.geometry_rule_with(
+            &["model.ifc"],
+            &[("pipe", "IfcPipeSegment"), ("beam", "IfcBeam")],
+            (capability, &registry_signature(capability)),
+            entity("pipe"),
+            parameters.clone(),
+            &json!({}),
+            args,
+        )
+    };
+    let (output, selected) = check(&[]);
+    assert!(
+        matches!(output.status.code(), Some(0 | 3 | 4)),
+        "{}",
+        stderr(&output)
+    );
+    assert!(
+        !stderr(&output).contains("checking again"),
+        "{}",
+        stderr(&output)
+    );
+    let geometry = &selected["geometry"];
+    assert_eq!(geometry["not_meshed"], 4, "{geometry:#}");
+    let (output, every) = check(&["--mesh-all"]);
+    assert!(
+        matches!(output.status.code(), Some(0 | 3 | 4)),
+        "{}",
+        stderr(&output)
+    );
+    assert_eq!(every["geometry"]["not_meshed"], json!(null));
+    assert_eq!(report_text(&selected), report_text(&every));
+}
+
+/// The beam as a selector parameter.
+fn the_beam() -> Value {
+    json!({"type": "selector", "value": entity("beam")})
+}
+
+#[test]
+fn with_geometry_a_clash_rule_meshes_only_the_bodies_it_pairs() {
+    meshes_only_the_pipe_and_the_beam(
+        "geometry-demand-clash",
+        "axioval:capability.clash",
+        &json!({"counterparts": the_beam(),
+               "penetration_tolerance_metres": {"type": "number", "value": 0.001},
+               "clearance_metres": {"type": "number", "value": 0.5}}),
+    );
+}
+
+#[test]
+fn with_geometry_a_distance_rule_meshes_only_the_bodies_it_measures() {
+    meshes_only_the_pipe_and_the_beam(
+        "geometry-demand-distance",
+        "axioval:capability.distance",
+        &json!({"counterparts": the_beam(),
+               "minimum_metres": {"type": "number", "value": 0.5}}),
+    );
+}
+
+#[test]
+fn with_geometry_a_containment_rule_meshes_only_the_bodies_it_measures() {
+    meshes_only_the_pipe_and_the_beam(
+        "geometry-demand-containment",
+        "axioval:capability.containment",
+        &json!({"counterparts": the_beam(),
+               "minimum_volume_ratio": {"type": "number", "value": 0.3}}),
+    );
+}
+
+#[test]
+fn with_geometry_a_triangle_count_rule_meshes_only_its_subjects() {
+    let case = Case::new("geometry-demand-triangles");
+    case.write("model.ifc", &room_among_unselected_products());
+    let check = |args: &[&str]| {
+        case.geometry_rule_with(
+            &["model.ifc"],
+            &[("pipe", "IfcPipeSegment")],
+            (
+                "axioval:capability.triangle-count",
+                &registry_signature("axioval:capability.triangle-count"),
+            ),
+            entity("pipe"),
+            json!({"maximum": {"type": "integer", "value": 4}}),
+            &json!({}),
+            args,
+        )
+    };
+    let (output, selected) = check(&[]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert!(
+        !stderr(&output).contains("checking again"),
+        "{}",
+        stderr(&output)
+    );
+    assert_eq!(
+        selected["geometry"]["not_meshed"], 5,
+        "{:#}",
+        selected["geometry"]
+    );
+    let (output, every) = check(&["--mesh-all"]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(report_text(&selected), report_text(&every));
 }

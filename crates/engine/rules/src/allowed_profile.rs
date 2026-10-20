@@ -381,6 +381,14 @@ impl Config {
 }
 
 impl RuleCapability for AllowedProfile {
+    /// Nothing (#448): profiles are read from the source's body set.
+    fn geometry_reach(
+        &self,
+        _rule: &axioval_engine::CompiledRule,
+    ) -> axioval_engine::GeometryReach {
+        axioval_engine::GeometryReach::None
+    }
+
     fn id(&self) -> &'static str {
         "axioval:capability.allowed-profile"
     }

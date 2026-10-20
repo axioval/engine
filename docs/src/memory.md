@@ -89,11 +89,12 @@ refused and never wait, and what they hold never takes a step's room
   (`DerivationKind::read_through`), and the runtime releases its values
   before the first rule after the last one that may ask any of them
   (`DerivationStore::release_unread`), as the rules' capabilities state
-  what they may ask (#410). A free-floor rule asks the free-space service
-  alone, a property rule no geometry, so scenes are released once the last
-  free-floor or circulation rule has run, and body indexes once the last
-  rule that may measure a pair has. Where a capability does not state what
-  it asks, it may ask anything, and the values wait for it.
+  what they may ask (#410, #448). A free-floor rule asks the free-space
+  service, a clash rule the proximity service, a property rule no
+  geometry, so scenes are released once the last free-floor or
+  circulation rule has run, and body indexes once the last rule that may
+  measure a pair has. Where a capability may ask anything (it records
+  why), the values wait for it.
 - **Within the budget.** Whenever a value lands or grows, the store
   releases the values read least recently, of any kind, while what it
   keeps and what running steps were admitted with pass the check's budget.

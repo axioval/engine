@@ -422,6 +422,17 @@ impl Cell<'_> {
 }
 
 impl RuleCapability for ClashMatrix {
+    /// The bodies of its subjects and counterparts, through the proximity
+    /// service, and the object frames its tolerance cases read (#448). A
+    /// cell's selectors only pick among those pairs.
+    fn geometry_reach(&self, rule: &axioval_engine::CompiledRule) -> axioval_engine::GeometryReach {
+        crate::reach::selected(
+            rule,
+            &["counterparts"],
+            crate::reach::of![ProximityServiceHandle, ObjectFrameServiceHandle],
+        )
+    }
+
     fn id(&self) -> &'static str {
         crate::clash::template::CLASH_MATRIX
     }

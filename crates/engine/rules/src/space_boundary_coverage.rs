@@ -58,6 +58,11 @@ static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
 static PLANS: crate::templates::Plans = crate::templates::Plans::new();
 
 impl RuleCapability for SpaceBoundaryCoverage {
+    /// Its spaces' bodies, through the boundary-coverage service (#448).
+    fn geometry_reach(&self, rule: &axioval_engine::CompiledRule) -> axioval_engine::GeometryReach {
+        crate::reach::selected(rule, &[], crate::reach::of![BoundaryCoverageServiceHandle])
+    }
+
     fn id(&self) -> &'static str {
         template::ID
     }

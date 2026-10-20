@@ -56,6 +56,20 @@ static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
 static PLANS: crate::templates::Plans = crate::templates::Plans::new();
 
 impl RuleCapability for SlabContact {
+    /// The bodies of its subjects and counterparts, through the contact
+    /// service (#448). Without `counterparts`, a face may rest on every other
+    /// object, so such a rule may ask anything.
+    fn geometry_reach(&self, rule: &axioval_engine::CompiledRule) -> axioval_engine::GeometryReach {
+        if !crate::reach::selects(rule, "counterparts") {
+            return axioval_engine::GeometryReach::Unbounded;
+        }
+        crate::reach::selected(
+            rule,
+            &["counterparts"],
+            crate::reach::of![ContactServiceHandle],
+        )
+    }
+
     fn id(&self) -> &'static str {
         template::ID
     }

@@ -52,6 +52,17 @@ static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
 static PLANS: crate::templates::Plans = crate::templates::Plans::new();
 
 impl RuleCapability for DoorSwing {
+    /// The bodies of its doors and the spaces they may swing into, through
+    /// the object-frame and free-space services (#448): only spaces its
+    /// `swing_into` and `swing_not_into` selectors pick are probed.
+    fn geometry_reach(&self, rule: &axioval_engine::CompiledRule) -> axioval_engine::GeometryReach {
+        crate::reach::selected(
+            rule,
+            &["swing_into", "swing_not_into"],
+            crate::reach::of![ObjectFrameServiceHandle, FreeSpaceServiceHandle],
+        )
+    }
+
     fn id(&self) -> &'static str {
         template::ID
     }

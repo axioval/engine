@@ -113,17 +113,29 @@ impl RuleCapability for PropertyRequirements {
 
     /// Reads the model's semantics only, unless a row is judged per
     /// measured area, volume or face area (`per` `measured-…`), which
-    /// measures bodies. Rows not stated inline are not read before the
-    /// run, so they may (#410).
+    /// measures its subjects' bodies through the plan-area and proximity
+    /// services (#448). A face area depends on every body against it, and
+    /// rows not stated inline are not read before the run, so either may
+    /// ask anything (#410).
     fn geometry_reach(&self, rule: &CompiledRule) -> axioval_engine::GeometryReach {
-        match rule.parameters.get("requirements") {
-            Some(table @ axioval_ir::contract::ParameterValue::Table { .. })
-                if serde_json::to_string(table)
-                    .is_ok_and(|written| !written.contains("measured")) =>
-            {
-                axioval_engine::GeometryReach::None
-            }
-            _ => axioval_engine::GeometryReach::Unbounded,
+        let Some(table @ axioval_ir::contract::ParameterValue::Table { .. }) =
+            rule.parameters.get("requirements")
+        else {
+            return axioval_engine::GeometryReach::Unbounded;
+        };
+        let Ok(written) = serde_json::to_string(table) else {
+            return axioval_engine::GeometryReach::Unbounded;
+        };
+        if !written.contains("measured") {
+            axioval_engine::GeometryReach::None
+        } else if written.contains("measured-face-area") {
+            axioval_engine::GeometryReach::Unbounded
+        } else {
+            crate::reach::selected(
+                rule,
+                &[],
+                crate::reach::of![PlanAreaServiceHandle, ProximityServiceHandle],
+            )
         }
     }
 

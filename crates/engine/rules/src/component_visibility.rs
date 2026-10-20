@@ -57,6 +57,21 @@ static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
 static PLANS: crate::templates::Plans = crate::templates::Plans::new();
 
 impl RuleCapability for ComponentVisibility {
+    /// The bodies of its subjects, targets and blockers, through the sight,
+    /// plan-span and vertical-extent services (#448): a sight line is
+    /// blocked by the blockers named alone.
+    fn geometry_reach(&self, rule: &axioval_engine::CompiledRule) -> axioval_engine::GeometryReach {
+        crate::reach::selected(
+            rule,
+            &["targets", "blockers"],
+            crate::reach::of![
+                SightServiceHandle,
+                PlanSpanServiceHandle,
+                VerticalExtentServiceHandle
+            ],
+        )
+    }
+
     fn id(&self) -> &'static str {
         template::ID
     }

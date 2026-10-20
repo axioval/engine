@@ -261,7 +261,7 @@ impl AxiolidDerivedRelationshipService {
                 tessellated: self.geometry.is_tessellated(object),
             }));
         }
-        if let Some((_, reason)) = self.geometry.unmeasured().find(|(id, _)| *id == object) {
+        if let Some((_, reason)) = self.geometry.unmeasured_of(object) {
             return Err(format!(
                 "{object} has a body that was not measured: {reason}"
             ));
@@ -783,7 +783,7 @@ impl AxiolidDerivedRelationshipService {
                 .map(Some)
                 .ok_or_else(|| format!("{object} has an empty mesh"));
         }
-        if let Some((_, reason)) = self.geometry.unmeasured().find(|(id, _)| *id == object) {
+        if let Some((_, reason)) = self.geometry.unmeasured_of(object) {
             return Err(format!(
                 "{object} has a body that was not measured: {reason}"
             ));

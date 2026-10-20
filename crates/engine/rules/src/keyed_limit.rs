@@ -1035,6 +1035,29 @@ static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
 static PLANS: crate::templates::Plans = crate::templates::Plans::new();
 
 impl RuleCapability for KeyedLimit {
+    /// The bodies of its subjects and members, through the plan-area,
+    /// object-frame and leaf-glazing services (#448). A sill height or a
+    /// threshold step is measured against the floors `floor_path` reaches,
+    /// which no selector bounds, and a `measured` value may be any, so such a
+    /// rule may ask anything.
+    fn geometry_reach(&self, rule: &axioval_engine::CompiledRule) -> axioval_engine::GeometryReach {
+        if crate::reach::chooses(rule, &["quantity"], "sill-height")
+            || crate::reach::chooses(rule, &["quantity"], "threshold-step")
+            || crate::reach::chooses(rule, &["quantity"], "measured")
+        {
+            return axioval_engine::GeometryReach::Unbounded;
+        }
+        crate::reach::selected(
+            rule,
+            &["member_selector"],
+            crate::reach::of![
+                PlanAreaServiceHandle,
+                ObjectFrameServiceHandle,
+                LeafGlazingServiceHandle
+            ],
+        )
+    }
+
     fn id(&self) -> &'static str {
         template::ID
     }

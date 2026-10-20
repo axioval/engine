@@ -83,3 +83,36 @@ fn a_geometry_set_leaving_nothing_out_has_no_watch() {
         .with_left_out(BTreeSet::new());
     assert!(geometry.left_out().is_none());
 }
+
+/// Whether one object is unmeasured is a question about that object alone
+/// (#448): counting a meshed body's triangles reaches nothing left out,
+/// counting a left-out one's does, and whether an exact body is registered
+/// is a question about every object while the host registered none.
+#[test]
+fn a_question_about_one_object_reaches_only_that_object() {
+    use axioval_axiolid::AxiolidTriangleCountService;
+    use axioval_engine::TriangleCountService;
+
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("column"), body(8.0, 9.0, 8.0, 9.0, 0.0, 3.0))
+        .with_unmeasured(id("beam"), "no shape representation")
+        .with_left_out(BTreeSet::from([id("pipe")]));
+    let watch = geometry.left_out().expect("a watch over the pipe");
+    let service = AxiolidTriangleCountService::new(geometry.clone());
+    watch.arm();
+
+    service.count_triangles(&id("column")).expect("countable");
+    assert!(service.count_triangles(&id("beam")).is_err());
+    assert!(!watch.reached());
+
+    let _ = service.count_triangles(&id("pipe"));
+    assert!(watch.reached());
+
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("column"), body(8.0, 9.0, 8.0, 9.0, 0.0, 3.0))
+        .with_left_out(BTreeSet::from([id("pipe")]));
+    let watch = geometry.left_out().expect("a watch over the pipe");
+    watch.arm();
+    assert!(geometry.exact_boundary(&id("column")).is_none());
+    assert!(watch.reached());
+}

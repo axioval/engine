@@ -78,11 +78,7 @@ impl AxiolidVerticalExtentService {
                 ))),
             };
         }
-        if let Some((_, reason)) = self
-            .geometry
-            .unmeasured()
-            .find(|(unmeasured, _)| *unmeasured == object)
-        {
+        if let Some((_, reason)) = self.geometry.unmeasured_of(object) {
             return Err(VerticalExtentError::Unavailable(format!(
                 "{object} has a body that was not measured: {reason}"
             )));

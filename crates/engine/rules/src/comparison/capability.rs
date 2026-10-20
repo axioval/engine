@@ -352,6 +352,25 @@ fn select<'a>(context: &RuleContext<'a>, selector: &Selector, source: &SourceId)
 }
 
 impl RuleCapability for CompareModels {
+    /// The bodies of the objects it compares, through the proximity,
+    /// object-frame and coordinate-system services (#448). The `related`
+    /// matcher measures the hosts `match_path` reaches, which no selector
+    /// bounds, so a rule stating one may ask anything.
+    fn geometry_reach(&self, rule: &axioval_engine::CompiledRule) -> axioval_engine::GeometryReach {
+        if crate::reach::states(rule, "match_path") {
+            return axioval_engine::GeometryReach::Unbounded;
+        }
+        crate::reach::selected(
+            rule,
+            &["revised_selector"],
+            crate::reach::of![
+                ProximityServiceHandle,
+                ObjectFrameServiceHandle,
+                CoordinateSystemServiceHandle
+            ],
+        )
+    }
+
     fn id(&self) -> &'static str {
         "axioval:capability.model-comparison"
     }

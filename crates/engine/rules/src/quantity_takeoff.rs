@@ -72,6 +72,18 @@ const KINDS: &str = "property, related, boundary_area, property_set, profile or 
 pub struct QuantityTakeoff;
 
 impl RuleCapability for QuantityTakeoff {
+    /// Nothing, unless a measure is a `boundary_area`: then its members'
+    /// bodies, through the boundary-coverage service (#448).
+    fn geometry_reach(&self, rule: &axioval_engine::CompiledRule) -> axioval_engine::GeometryReach {
+        if serde_json::to_string(&rule.parameters)
+            .map_or(true, |written| written.contains("boundary_area"))
+        {
+            crate::reach::selected(rule, &[], crate::reach::of![BoundaryCoverageServiceHandle])
+        } else {
+            axioval_engine::GeometryReach::None
+        }
+    }
+
     fn id(&self) -> &'static str {
         "axioval:capability.quantity-takeoff"
     }

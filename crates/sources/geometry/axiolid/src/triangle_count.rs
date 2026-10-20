@@ -51,11 +51,7 @@ impl TriangleCountService for AxiolidTriangleCountService {
         if self.geometry.has_no_body(object) {
             return TriangleCount::try_new(object.clone(), 0, evidence(true));
         }
-        if let Some((_, reason)) = self
-            .geometry
-            .unmeasured()
-            .find(|(unmeasured, _)| *unmeasured == object)
-        {
+        if let Some((_, reason)) = self.geometry.unmeasured_of(object) {
             return Err(TriangleCountError::Unavailable(format!(
                 "{object} has a body that was not meshed: {reason}"
             )));

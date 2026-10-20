@@ -103,6 +103,21 @@ static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
 static PLANS: crate::templates::Plans = crate::templates::Plans::new();
 
 impl RuleCapability for CounterpartCoverage {
+    /// The bodies of its subjects and (infill) counterparts, through the
+    /// plan-area, proximity, vertical-extent and plan-span services (#448).
+    fn geometry_reach(&self, rule: &axioval_engine::CompiledRule) -> axioval_engine::GeometryReach {
+        crate::reach::selected(
+            rule,
+            &["counterparts", "infill_counterparts"],
+            crate::reach::of![
+                PlanAreaServiceHandle,
+                ProximityServiceHandle,
+                VerticalExtentServiceHandle,
+                PlanSpanServiceHandle
+            ],
+        )
+    }
+
     fn id(&self) -> &'static str {
         template::ID
     }

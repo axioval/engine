@@ -901,3 +901,50 @@ one byte (`--keep-derivations 1`, the determinism gate's variant) builds
 m07's 17 physical scenes 97 times instead of 17, in the same 69.8 s on
 four threads. Every report is the same byte for byte in every variant
 and as the engine of #408.
+
+### A bounded geometry reach for every geometric capability
+
+Since [#448](https://github.com/axioval/engine/issues/448) clash,
+clash-matrix, containment, distance and every other built-in geometric
+capability state the selectors whose bodies they measure and the services
+they ask (`RuleCapability::geometry_reach`), and those that may ask
+anything record why (`axioval_rules::reach`). Two things follow: `check
+--geometry` meshes only the bodies some rule selects (#410), and the run
+releases what a service built after the last rule that may ask it (#440).
+Before, a clash rule may have asked anything, so every body was meshed and
+every scene waited for the last clash rule.
+
+Measured on one release build per side, the free-floor circles and
+rectangles of the furniture set and then the public parity clashes
+("floors, clashes"), and the clashes alone; one run each.
+
+| Model, rule set | Threads | Wall before / after | Peak before / after | Bodies meshed before / after |
+|---|---:|---:|---:|---:|
+| m07, floors, clashes | 1 | 9.3 / 9.3 s | 719 / 655 MiB | 897 / 612 |
+| m07, floors, clashes | 4 | 7.3 / 7.3 s | 1458 / 1355 MiB | 897 / 612 |
+| m07, clashes | 1 | 7.5 / 5.8 s | 387 / 323 MiB | 897 / 595 |
+| m07, clashes | 4 | 7.0 / 5.8 s | 382 / 319 MiB | 897 / 595 |
+| m13, floors, clashes | 1 | 73.8 / 73.6 s | 1894 / 1904 MiB | 4781 / 4781 |
+| m13, floors, clashes | 4 | 73.8 / 72.1 s | 1879 / 1901 MiB | 4781 / 4781 |
+| m13, clashes | 1 | 78.6 / 71.1 s | 1834 / 1896 MiB | 4781 / 4781 |
+| public architecture model, clashes | 1 | 0.3 / 0.3 s | 45 / 43 MiB | 14 / 9 |
+
+What is held over the run: m07's 17 placement scenes (169 KiB) and m13's
+157 (509 KiB) are now released before the first clash rule, where they
+were held to the end of the check; the indexed bodies (8.2 MiB on m07,
+24.4 MiB on m13) are read by every clash rule and released after the last,
+as before. Nothing is evicted under the default budget. m13 meshes every
+body still: it is an IFC2X3 model, and one clash rule selects a concept
+bound to a class the IFC2X3 schema does not declare (`IfcDuctSegment`),
+which the type hierarchy cannot decide, so every object may be selected
+(on the public IFC2X3 architecture model that rule alone meshes every
+body, any other of the set alone half of them). Every report is the same
+byte for byte before and after; the result's `geometry` record and the
+model-data warnings now cover the bodies meshed.
+
+A rule may still be checked again with every body where the host's answer
+depends on bodies it left out: an exact body is registered only when some
+tessellated body of the set meshed has one, so a check whose selected
+bodies have none, while some other body has one, asks about every object
+(a distance through a window, a model comparison of moved openings, in
+`tests/check.rs`). The report is the same; the check runs twice.

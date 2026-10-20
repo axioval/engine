@@ -83,6 +83,16 @@ static TEMPLATE: LazyLock<Template> = LazyLock::new(template::clash);
 static PLANS: crate::templates::Plans = crate::templates::Plans::new();
 
 impl RuleCapability for Clash {
+    /// The bodies of its subjects and counterparts, through the proximity
+    /// service, and the object frames its tolerance cases read (#448).
+    fn geometry_reach(&self, rule: &axioval_engine::CompiledRule) -> axioval_engine::GeometryReach {
+        crate::reach::selected(
+            rule,
+            &["counterparts"],
+            crate::reach::of![ProximityServiceHandle, ObjectFrameServiceHandle],
+        )
+    }
+
     fn id(&self) -> &'static str {
         template::CLASH
     }

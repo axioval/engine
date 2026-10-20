@@ -1090,6 +1090,32 @@ static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
 static PLANS: crate::templates::Plans = crate::templates::Plans::new();
 
 impl RuleCapability for ComponentClearance {
+    /// The bodies of its subjects, obstacles, allowed intruders, walls and
+    /// supports, through the object-frame, vertical-extent, free-space and
+    /// plan-span services (#448). A `space_path` reaches spaces no selector
+    /// bounds, whose bodies are measured, so a rule stating one may ask
+    /// anything.
+    fn geometry_reach(&self, rule: &axioval_engine::CompiledRule) -> axioval_engine::GeometryReach {
+        if crate::reach::states(rule, "space_path") {
+            return axioval_engine::GeometryReach::Unbounded;
+        }
+        crate::reach::selected(
+            rule,
+            &[
+                "obstacles",
+                "allowed_intruders",
+                "wall_selector",
+                "support_selector",
+            ],
+            crate::reach::of![
+                ObjectFrameServiceHandle,
+                VerticalExtentServiceHandle,
+                FreeSpaceServiceHandle,
+                PlanSpanServiceHandle
+            ],
+        )
+    }
+
     fn id(&self) -> &'static str {
         ID
     }

@@ -9,7 +9,7 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-use axioval::ifc::{IFC4_TYPE_SYSTEM, IFC4X3_TYPE_SYSTEM};
+use axioval::ifc::{IFC2X3_TYPE_SYSTEM, IFC4_TYPE_SYSTEM, IFC4X3_TYPE_SYSTEM};
 use serde_json::{Value, json};
 
 const FIXTURES: &str = concat!(
@@ -7272,6 +7272,183 @@ fn with_geometry_an_opening_void_connects_the_spaces_it_passes_between() {
         "forward",
         2,
     );
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert!(finding_ids(&result).is_empty(), "{result:#}");
+}
+
+/// One 4 m x 4 m x 3 m `IfcSpace` of an IFC4 file, from (0, 0) to (4, 4).
+fn ifc4_room() -> String {
+    ifc_file_of(
+        "IFC4",
+        "",
+        "$",
+        "#10=IFCCARTESIANPOINT((2.,2.));\n\
+         #11=IFCAXIS2PLACEMENT2D(#10,$);\n\
+         #12=IFCRECTANGLEPROFILEDEF(.AREA.,$,#11,4.,4.);\n\
+         #13=IFCEXTRUDEDAREASOLID(#12,#2,#4,3.);\n\
+         #14=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#13));\n\
+         #15=IFCPRODUCTDEFINITIONSHAPE($,$,(#14));\n\
+         #16=IFCSPACE('0000000000000000000016',$,$,$,$,#3,#15,$,.ELEMENT.,$,$);\n",
+    )
+}
+
+/// An IFC2X3 file of `IfcFlowTerminal`s, each `(first id, centre x, centre y)`
+/// a 0.5 m square body 0.9 m high.
+fn ifc2x3_devices(devices: &[(u32, f64, f64)]) -> String {
+    let mut data = String::new();
+    for &(first, x, y) in devices {
+        let [p, pos, profile, solid, shape, product, device] =
+            [0, 1, 2, 3, 4, 5, 6].map(|offset| first + offset);
+        let _ = write!(
+            data,
+            "#{p}=IFCCARTESIANPOINT(({x:?},{y:?}));\n\
+             #{pos}=IFCAXIS2PLACEMENT2D(#{p},$);\n\
+             #{profile}=IFCRECTANGLEPROFILEDEF(.AREA.,$,#{pos},0.5,0.5);\n\
+             #{solid}=IFCEXTRUDEDAREASOLID(#{profile},#2,#4,0.9);\n\
+             #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{solid}));\n\
+             #{product}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n\
+             #{device}=IFCFLOWTERMINAL('00000000000000000000{first}',#94,$,$,$,#3,#{product},$);\n"
+        );
+    }
+    ifc_file_of(
+        "IFC2X3",
+        "#90=IFCPERSON($,$,$,$,$,$,$,$);\n\
+         #91=IFCORGANIZATION($,'o',$,$,$);\n\
+         #92=IFCPERSONANDORGANIZATION(#90,#91,$);\n\
+         #93=IFCAPPLICATION(#91,'1','a','a');\n\
+         #94=IFCOWNERHISTORY(#92,#93,$,.ADDED.,$,$,$,0);\n",
+        "#94",
+        &data,
+    )
+}
+
+/// A metre-based file of `schema` holding `data`, with `prelude` before the
+/// project and `owner` as its owner history.
+fn ifc_file_of(schema: &str, prelude: &str, owner: &str, data: &str) -> String {
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('{schema}'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         {prelude}\
+         #80=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #81=IFCUNITASSIGNMENT((#80));\n\
+         #82=IFCPROJECT('0000000000000000000082',{owner},'p',$,$,$,$,(#5),#81);\n\
+         {data}ENDSEC;\nEND-ISO-10303-21;\n"
+    )
+}
+
+/// Each device of the IFC2X3 file in `devices` must lie in a space of an
+/// IFC4 file, through `relationship`; returns the result of the federated
+/// check.
+fn devices_in_spaces(
+    name: &str,
+    devices: &[(u32, f64, f64)],
+    relationship: &str,
+) -> (Output, Value) {
+    let case = Case::new(name);
+    let definitions = case.definitions(true);
+    let mut definitions: Value =
+        serde_json::from_str(&std::fs::read_to_string(definitions).unwrap()).unwrap();
+    for (id, name) in [("space", "IfcSpace"), ("device", "IfcFlowTerminal")] {
+        definitions["objectTypes"][format!("axioval:example.ifc.{id}")] = json!({
+            "id": format!("axioval:example.ifc.{id}"),
+            "name": {"default": name, "translations": {}},
+            "externalNames": [
+                {"typeSystem": IFC4_TYPE_SYSTEM, "name": name},
+                {"typeSystem": IFC2X3_TYPE_SYSTEM, "name": name},
+            ],
+            "citations": [],
+        });
+    }
+    let declare = |id: &str, kind: &str| {
+        json!({"id": id, "name": {"default": id, "translations": {}}, "kind": kind,
+               "required": false, "allowedValues": [], "citations": []})
+    };
+    definitions["definitions"]["axioval:example.related-count"] = json!({
+        "id": "axioval:example.related-count",
+        "name": {"default": "Related count", "translations": {}},
+        "description": {"default": "Each anchor has enough related objects.", "translations": {}},
+        "capability": "axioval:capability.related-count",
+        "parameters": {
+            "related_selector": declare("related_selector", "selector"),
+            "minimum": declare("minimum", "integer"),
+            "maximum": declare("maximum", "integer"),
+            "same_ends": declare("same_ends", "stringList"),
+            "relationship": declare("relationship", "string"),
+            "direction": declare("direction", "string"),
+            "follow_chain": declare("follow_chain", "boolean"),
+            "path": declare("path", "stringList"),
+            "skip_absent_relationship_ends":
+                declare("skip_absent_relationship_ends", "boolean"),
+        },
+        "citations": [],
+        "tags": [],
+    });
+    let text = std::fs::read_to_string(format!("{FIXTURES}/ruleset.json")).unwrap();
+    let mut ruleset: Value = serde_json::from_str(&text).unwrap();
+    let rule = &mut ruleset["root"]["rules"][0];
+    rule["id"] = json!("derived-count");
+    rule["definitionId"] = json!("axioval:example.related-count");
+    rule["parameters"] = json!({
+        "related_selector": {"type": "selector", "value": {
+            "kind": "entityType", "objectType": "axioval:example.ifc.space",
+            "includeSubtypes": true}},
+        "minimum": {"type": "integer", "value": 1},
+        "relationship": {"type": "string", "value": relationship},
+        "direction": {"type": "string", "value": "forward"},
+    });
+    rule["applicability"]["groups"]["walls"]["selector"]["objectType"] =
+        json!("axioval:example.ifc.device");
+    let rooms = case.write("rooms.ifc", &ifc4_room());
+    let devices = case.write("devices.ifc", &ifc2x3_devices(devices));
+    let definitions = case.write("definitions.json", &definitions.to_string());
+    let ruleset = case.write("ruleset.json", &ruleset.to_string());
+    let saved = case.path("result.json");
+    let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+        .arg("check")
+        .arg("--model")
+        .arg(rooms)
+        .arg("--model")
+        .arg(devices)
+        .arg("--definitions")
+        .arg(definitions)
+        .arg("--ruleset")
+        .arg(ruleset)
+        .args(["--geometry", "--declare-shared-frame"])
+        .args(["--report", saved.to_str().unwrap()])
+        .output()
+        .unwrap();
+    let result = std::fs::read_to_string(&saved)
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or(Value::Null);
+    (output, result)
+}
+
+#[test]
+fn with_geometry_a_device_of_an_ifc2x3_model_lies_in_a_space_of_an_ifc4_one() {
+    // Device 1 sits inside the room; device 2 straddles the room's west
+    // face: its body is mostly inside, but the centre of its extent lies
+    // 0.05 m outside the room in plan.
+    let devices = [(30, 1.0, 2.0), (40, -0.05, 2.0)];
+    let (output, result) = devices_in_spaces(
+        "geometry-derived-across-schemas",
+        &devices,
+        "axioval:derived.contained-in-space",
+    );
+    // Contained devices are found across the schemas; the one whose point
+    // lies outside is not, since the default offsets are zero.
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(finding_ids(&result), ["#46"], "{result:#}");
+    let (output, result) = devices_in_spaces(
+        "geometry-derived-across-schemas-near",
+        &devices,
+        "axioval:derived.contained-in-space;horizontal=0.1",
+    );
+    // Stating `horizontal` reaches the space beside the point.
     assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
     assert!(finding_ids(&result).is_empty(), "{result:#}");
 }

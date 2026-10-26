@@ -50,7 +50,10 @@ pub enum Derivation {
     /// body contains its reference point, or, when none does, to the one
     /// nearest space whose surface lies within `horizontal` metres in plan
     /// and `vertical` metres in elevation of it. Both default to zero, which
-    /// asks for containment alone.
+    /// asks for containment alone. The reference point is the centre of the
+    /// body's extent, so a device flush with or recessed into a wall has it
+    /// in the wall, outside every space: a rule for such elements must state
+    /// `horizontal`.
     ContainedInSpace {
         /// Largest plan offset to a space's nearest surface point, in metres.
         horizontal_metres: f64,

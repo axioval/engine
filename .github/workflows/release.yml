@@ -38,7 +38,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master 2026-08-31
         with:
-          toolchain: 1.88.0
+          toolchain: 1.99.1
       - name: Test release tooling and publication order
         run: |
           python3 scripts/test_publish_workspace.py
@@ -99,7 +99,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master 2026-08-31
         with:
-          toolchain: 1.88.0
+          toolchain: 1.99.1
       - name: Scan every archive for forbidden terms
         # The denylist is the `crates.io` environment secret
         # AXIOVAL_FORBIDDEN_TERMS_JSON, holding private/forbidden-terms.json.

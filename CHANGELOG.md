@@ -244,6 +244,12 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **Minimum supported Rust version raised to 1.99**
+  ([#462](https://github.com/axioval/engine/issues/462)). The workspace
+  builds and tests on Rust 1.99.1 (pinned in `rust-toolchain.toml` and CI)
+  and declares `rust-version = "1.99"`; a consumer on an older compiler
+  must upgrade. No behaviour changes.
+
 - **Facade areas beside bodies warped within a small width**
   ([#454](https://github.com/axioval/engine/issues/454)). The facade-area
   service no longer refuses because another body within reach is a

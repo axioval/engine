@@ -15,7 +15,7 @@ if ! command -v cargo >/dev/null 2>&1; then
   . "$HOME/.cargo/env"
 fi
 
-rustup toolchain install 1.88.0 --profile minimal --component clippy --component rustfmt
+rustup toolchain install 1.99.1 --profile minimal --component clippy --component rustfmt
 command -v cargo-deny >/dev/null 2>&1 || cargo install --locked cargo-deny
 command -v mdbook >/dev/null 2>&1 || cargo install --locked mdbook
 

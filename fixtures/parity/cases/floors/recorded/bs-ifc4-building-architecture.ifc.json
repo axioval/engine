@@ -11,6 +11,109 @@
           }
         },
         {
+          "exact": true,
+          "locator": "axioval:derived.contained-in-space;horizontal=0;vertical=0:derived-from:ifc-step:bs-ifc4-building-architecture.ifc/#116:2 space(s)",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axioval:derived.contained-in-space;horizontal=0;vertical=0:ifc-step:bs-ifc4-building-architecture.ifc/#116->ifc-step:bs-ifc4-building-architecture.ifc/#85:contains-point(7.850000,6.300000,0.450000)",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "clearance_checks;side=@side;sides=@sides;quantifier=@quantifier;front_axis=@front_axis;both_sides=@both_sides;width=@width;width_mode=@width_mode;width_minimum=@width_minimum;width_maximum=@width_maximum;depth=@depth;depth_mode=@depth_mode;depth_minimum=@depth_minimum;depth_maximum=@depth_maximum;depth_from=@depth_from;radius=@radius;height=@height;height_mode=@height_mode;height_minimum=@height_minimum;height_maximum=@height_maximum;size_mode=@size_mode;size_tolerance=@size_tolerance;offset=@offset;lateral_offset=@lateral_offset;align=@align;slide_from=@slide_from;slide_to=@slide_to;depth_slide_from=@depth_slide_from;depth_slide_to=@depth_slide_to;height_reference=@height_reference;vertical_offset=@vertical_offset;top_datum=@top_datum;top_offset=@top_offset;obstacles=@obstacles;allowed_intruders=@allowed_intruders;protrusion=@protrusion;within_space=@within_space;space_path=@space_path;wall_selector=@wall_selector;wall_reach=@wall_reach;wall_inset=@wall_inset;support_selector=@support_selector;support_tolerance=@support_tolerance;clear_width_property=@clear_width_property;clear_width_from_leaves=@clear_width_from_leaves;overall_width=@overall_width;width_deduction=@width_deduction#1",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "directional-extent:ifc-step:bs-ifc4-building-architecture.ifc/#116:[-0.0000000000000015394380663318816,-1,0.0000000000000005661703895142863]",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "directional-extent:ifc-step:bs-ifc4-building-architecture.ifc/#116:[1,-0.0000000000000015394380663318816,-0.00000000000000000000000000000007032049538395806]",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:8790a1e193e82b8e7e7f337ec2633cd40f2120590317a1443503a25b079e2e80:placement:#116:#120<#87<#47<#40<#30<#23",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-building-architecture.ifc/#116",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-building-architecture.ifc/#85",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "f49ff94f-fc1d-55ea-acdb-53b92d5ba7b3",
+      "message": "front clearance (1.2 m wide, 0.6 m deep, up to 0.05 m above the component's top) is obstructed by ifc-step:bs-ifc4-building-architecture.ifc/#182, ifc-step:bs-ifc4-building-architecture.ifc/#228",
+      "object_id": {
+        "local_id": "#116",
+        "source": {
+          "document": "bs-ifc4-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#182",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#228",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cc-component-sized",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:free-space",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
           "exact": false,
           "locator": "clearance_checks;side=@side;sides=@sides;quantifier=@quantifier;front_axis=@front_axis;both_sides=@both_sides;width=@width;width_mode=@width_mode;width_minimum=@width_minimum;width_maximum=@width_maximum;depth=@depth;depth_mode=@depth_mode;depth_minimum=@depth_minimum;depth_maximum=@depth_maximum;depth_from=@depth_from;radius=@radius;height=@height;height_mode=@height_mode;height_minimum=@height_minimum;height_maximum=@height_maximum;size_mode=@size_mode;size_tolerance=@size_tolerance;offset=@offset;lateral_offset=@lateral_offset;align=@align;slide_from=@slide_from;slide_to=@slide_to;depth_slide_from=@depth_slide_from;depth_slide_to=@depth_slide_to;height_reference=@height_reference;vertical_offset=@vertical_offset;top_datum=@top_datum;top_offset=@top_offset;obstacles=@obstacles;allowed_intruders=@allowed_intruders;protrusion=@protrusion;within_space=@within_space;space_path=@space_path;wall_selector=@wall_selector;wall_reach=@wall_reach;wall_inset=@wall_inset;support_selector=@support_selector;support_tolerance=@support_tolerance;clear_width_property=@clear_width_property;clear_width_from_leaves=@clear_width_from_leaves;overall_width=@overall_width;width_deduction=@width_deduction#1",
           "source": {
@@ -77,6 +180,115 @@
         }
       ],
       "rule_id": "cc-cylinder",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:free-space",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axioval:derived.contained-in-space;horizontal=0;vertical=0:derived-from:ifc-step:bs-ifc4-building-architecture.ifc/#116:2 space(s)",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axioval:derived.contained-in-space;horizontal=0;vertical=0:ifc-step:bs-ifc4-building-architecture.ifc/#116->ifc-step:bs-ifc4-building-architecture.ifc/#85:contains-point(7.850000,6.300000,0.450000)",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "clearance_checks;side=@side;sides=@sides;quantifier=@quantifier;front_axis=@front_axis;both_sides=@both_sides;width=@width;width_mode=@width_mode;width_minimum=@width_minimum;width_maximum=@width_maximum;depth=@depth;depth_mode=@depth_mode;depth_minimum=@depth_minimum;depth_maximum=@depth_maximum;depth_from=@depth_from;radius=@radius;height=@height;height_mode=@height_mode;height_minimum=@height_minimum;height_maximum=@height_maximum;size_mode=@size_mode;size_tolerance=@size_tolerance;offset=@offset;lateral_offset=@lateral_offset;align=@align;slide_from=@slide_from;slide_to=@slide_to;depth_slide_from=@depth_slide_from;depth_slide_to=@depth_slide_to;height_reference=@height_reference;vertical_offset=@vertical_offset;top_datum=@top_datum;top_offset=@top_offset;obstacles=@obstacles;allowed_intruders=@allowed_intruders;protrusion=@protrusion;within_space=@within_space;space_path=@space_path;wall_selector=@wall_selector;wall_reach=@wall_reach;wall_inset=@wall_inset;support_selector=@support_selector;support_tolerance=@support_tolerance;clear_width_property=@clear_width_property;clear_width_from_leaves=@clear_width_from_leaves;overall_width=@overall_width;width_deduction=@width_deduction#1",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "directional-extent:ifc-step:bs-ifc4-building-architecture.ifc/#116:[-0.0000000000000015394380663318816,-1,0.0000000000000005661703895142863]",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "directional-extent:ifc-step:bs-ifc4-building-architecture.ifc/#116:[1,-0.0000000000000015394380663318816,-0.00000000000000000000000000000007032049538395806]",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:8790a1e193e82b8e7e7f337ec2633cd40f2120590317a1443503a25b079e2e80:placement:#116:#120<#87<#47<#40<#30<#23",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-building-architecture.ifc/#85",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "20630c33-04c6-5ada-a9aa-6dfcde8e75c1",
+      "message": "front clearance (0.7 m wide, 0.9 m deep, 2 m high) is obstructed by ifc-step:bs-ifc4-building-architecture.ifc/#182, ifc-step:bs-ifc4-building-architecture.ifc/#228, ifc-step:bs-ifc4-building-architecture.ifc/#252, ifc-step:bs-ifc4-building-architecture.ifc/#285",
+      "object_id": {
+        "local_id": "#116",
+        "source": {
+          "document": "bs-ifc4-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#182",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#228",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#252",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#285",
+          "source": {
+            "document": "bs-ifc4-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cc-front",
       "severity": "warning"
     },
     {
@@ -656,7 +868,7 @@
       "rule_id": "cc-against-wall"
     },
     {
-      "message": "left or right or back clearance: no side is surely free and not every side surely fails (left: free space: free-space geometry is unavailable for `ifc-step:bs-ifc4-building-architecture.ifc/#220`; right: free space: free-space geometry is unavailable for `ifc-step:bs-ifc4-building-architecture.ifc/#220`; back: free space: free-space geometry is unavailable for `ifc-step:bs-ifc4-building-architecture.ifc/#220`)",
+      "message": "left or right or back clearance: no side is surely free and not every side surely fails (back: free space: free space is undecided: 1 unmeasured obstacle(s) could reach it: ifc-step:bs-ifc4-building-architecture.ifc/#220 (no shape representation))",
       "object_id": {
         "local_id": "#116",
         "source": {
@@ -664,32 +876,8 @@
           "system": "ifc-step"
         }
       },
-      "reason": "backend_unavailable",
+      "reason": "incomplete_evidence",
       "rule_id": "cc-any-side"
-    },
-    {
-      "message": "front clearance: free space: free-space geometry is unavailable for `ifc-step:bs-ifc4-building-architecture.ifc/#220`",
-      "object_id": {
-        "local_id": "#116",
-        "source": {
-          "document": "bs-ifc4-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "backend_unavailable",
-      "rule_id": "cc-component-sized"
-    },
-    {
-      "message": "front clearance: free space: free-space geometry is unavailable for `ifc-step:bs-ifc4-building-architecture.ifc/#220`",
-      "object_id": {
-        "local_id": "#116",
-        "source": {
-          "document": "bs-ifc4-building-architecture.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "backend_unavailable",
-      "rule_id": "cc-front"
     },
     {
       "message": "component-clearance: side `up` is unsupported; use `front`, `back`, `left` or `right`",
@@ -698,7 +886,7 @@
       "rule_id": "cc-invalid"
     },
     {
-      "message": "right clearance: free space: free-space geometry is unavailable for `ifc-step:bs-ifc4-building-architecture.ifc/#220`",
+      "message": "right clearance: free space: free space is undecided: 1 unmeasured obstacle(s) could reach it: ifc-step:bs-ifc4-building-architecture.ifc/#220 (no shape representation)",
       "object_id": {
         "local_id": "#116",
         "source": {
@@ -706,11 +894,11 @@
           "system": "ifc-step"
         }
       },
-      "reason": "backend_unavailable",
+      "reason": "incomplete_evidence",
       "rule_id": "cc-maximum"
     },
     {
-      "message": "right clearance: free space: free-space geometry is unavailable for `ifc-step:bs-ifc4-building-architecture.ifc/#220`",
+      "message": "right clearance: free space: free space is undecided: 1 unmeasured obstacle(s) could reach it: ifc-step:bs-ifc4-building-architecture.ifc/#220 (no shape representation)",
       "object_id": {
         "local_id": "#116",
         "source": {
@@ -718,11 +906,11 @@
           "system": "ifc-step"
         }
       },
-      "reason": "backend_unavailable",
+      "reason": "incomplete_evidence",
       "rule_id": "cc-maximum"
     },
     {
-      "message": "right clearance: free space: free-space geometry is unavailable for `ifc-step:bs-ifc4-building-architecture.ifc/#220`",
+      "message": "right clearance: free space: free space is undecided: 1 unmeasured obstacle(s) could reach it: ifc-step:bs-ifc4-building-architecture.ifc/#220 (no shape representation)",
       "object_id": {
         "local_id": "#116",
         "source": {
@@ -730,11 +918,11 @@
           "system": "ifc-step"
         }
       },
-      "reason": "backend_unavailable",
+      "reason": "incomplete_evidence",
       "rule_id": "cc-maximum"
     },
     {
-      "message": "right clearance: free space: free-space geometry is unavailable for `ifc-step:bs-ifc4-building-architecture.ifc/#220`",
+      "message": "right clearance: free space: free space is undecided: 1 unmeasured obstacle(s) could reach it: ifc-step:bs-ifc4-building-architecture.ifc/#220 (no shape representation)",
       "object_id": {
         "local_id": "#116",
         "source": {
@@ -742,11 +930,11 @@
           "system": "ifc-step"
         }
       },
-      "reason": "backend_unavailable",
+      "reason": "incomplete_evidence",
       "rule_id": "cc-maximum"
     },
     {
-      "message": "front clearance: free space: free-space geometry is unavailable for `ifc-step:bs-ifc4-building-architecture.ifc/#220`",
+      "message": "front clearance: free space: free space is undecided: 1 unmeasured obstacle(s) could reach it: ifc-step:bs-ifc4-building-architecture.ifc/#220 (no shape representation)",
       "object_id": {
         "local_id": "#116",
         "source": {
@@ -754,11 +942,11 @@
           "system": "ifc-step"
         }
       },
-      "reason": "backend_unavailable",
+      "reason": "incomplete_evidence",
       "rule_id": "cc-slide"
     },
     {
-      "message": "free-space geometry is unavailable for `ifc-step:bs-ifc4-building-architecture.ifc/#220`",
+      "message": "free space is undecided: 1 unmeasured obstacle(s) could reach it: ifc-step:bs-ifc4-building-architecture.ifc/#220 (no shape representation)",
       "object_id": {
         "local_id": "#135",
         "source": {
@@ -766,11 +954,11 @@
           "system": "ifc-step"
         }
       },
-      "reason": "backend_unavailable",
+      "reason": "incomplete_evidence",
       "rule_id": "ff-circle"
     },
     {
-      "message": "free-space geometry is unavailable for `ifc-step:bs-ifc4-building-architecture.ifc/#220`",
+      "message": "free space is undecided: 1 unmeasured obstacle(s) could reach it: ifc-step:bs-ifc4-building-architecture.ifc/#220 (no shape representation)",
       "object_id": {
         "local_id": "#85",
         "source": {
@@ -778,7 +966,7 @@
           "system": "ifc-step"
         }
       },
-      "reason": "backend_unavailable",
+      "reason": "incomplete_evidence",
       "rule_id": "ff-circle"
     },
     {
@@ -806,7 +994,7 @@
       "rule_id": "ff-circle-band"
     },
     {
-      "message": "free-space geometry is unavailable for `ifc-step:bs-ifc4-building-architecture.ifc/#220`",
+      "message": "free space is undecided: 1 unmeasured obstacle(s) could reach it: ifc-step:bs-ifc4-building-architecture.ifc/#220 (no shape representation)",
       "object_id": {
         "local_id": "#135",
         "source": {
@@ -814,11 +1002,11 @@
           "system": "ifc-step"
         }
       },
-      "reason": "backend_unavailable",
+      "reason": "incomplete_evidence",
       "rule_id": "ff-rectangle-large"
     },
     {
-      "message": "free-space geometry is unavailable for `ifc-step:bs-ifc4-building-architecture.ifc/#220`",
+      "message": "free space is undecided: 1 unmeasured obstacle(s) could reach it: ifc-step:bs-ifc4-building-architecture.ifc/#220 (no shape representation)",
       "object_id": {
         "local_id": "#85",
         "source": {
@@ -826,7 +1014,7 @@
           "system": "ifc-step"
         }
       },
-      "reason": "backend_unavailable",
+      "reason": "incomplete_evidence",
       "rule_id": "ff-rectangle-large"
     },
     {
@@ -854,7 +1042,7 @@
       "rule_id": "ff-rectangle-unoriented"
     },
     {
-      "message": "the circulation of ifc-step:bs-ifc4-building-architecture.ifc/#85 is not mapped: free-space geometry is unavailable for `ifc-step:bs-ifc4-building-architecture.ifc/#220`",
+      "message": "the circulation of ifc-step:bs-ifc4-building-architecture.ifc/#85 is not mapped: free space is undecided: 1 unmeasured obstacle(s) could reach it: ifc-step:bs-ifc4-building-architecture.ifc/#220 (no shape representation)",
       "object_id": {
         "local_id": "#116",
         "source": {
@@ -862,11 +1050,11 @@
           "system": "ifc-step"
         }
       },
-      "reason": "backend_unavailable",
+      "reason": "incomplete_evidence",
       "rule_id": "lc-ends"
     },
     {
-      "message": "the circulation of ifc-step:bs-ifc4-building-architecture.ifc/#135 is not mapped: free-space geometry is unavailable for `ifc-step:bs-ifc4-building-architecture.ifc/#220`",
+      "message": "the circulation of ifc-step:bs-ifc4-building-architecture.ifc/#135 is not mapped: free space is undecided: 1 unmeasured obstacle(s) could reach it: ifc-step:bs-ifc4-building-architecture.ifc/#220 (no shape representation)",
       "object_id": {
         "local_id": "#135",
         "source": {
@@ -874,11 +1062,11 @@
           "system": "ifc-step"
         }
       },
-      "reason": "backend_unavailable",
+      "reason": "incomplete_evidence",
       "rule_id": "lc-ends"
     },
     {
-      "message": "the circulation of ifc-step:bs-ifc4-building-architecture.ifc/#85 is not mapped: free-space geometry is unavailable for `ifc-step:bs-ifc4-building-architecture.ifc/#220`",
+      "message": "the circulation of ifc-step:bs-ifc4-building-architecture.ifc/#85 is not mapped: free space is undecided: 1 unmeasured obstacle(s) could reach it: ifc-step:bs-ifc4-building-architecture.ifc/#220 (no shape representation)",
       "object_id": {
         "local_id": "#85",
         "source": {
@@ -886,7 +1074,7 @@
           "system": "ifc-step"
         }
       },
-      "reason": "backend_unavailable",
+      "reason": "incomplete_evidence",
       "rule_id": "lc-ends"
     },
     {
@@ -896,7 +1084,7 @@
       "rule_id": "lc-invalid"
     },
     {
-      "message": "the circulation of ifc-step:bs-ifc4-building-architecture.ifc/#85 is not mapped: free-space geometry is unavailable for `ifc-step:bs-ifc4-building-architecture.ifc/#220`",
+      "message": "the circulation of ifc-step:bs-ifc4-building-architecture.ifc/#85 is not mapped: free space is undecided: 1 unmeasured obstacle(s) could reach it: ifc-step:bs-ifc4-building-architecture.ifc/#220 (no shape representation)",
       "object_id": {
         "local_id": "#116",
         "source": {
@@ -904,11 +1092,11 @@
           "system": "ifc-step"
         }
       },
-      "reason": "backend_unavailable",
+      "reason": "incomplete_evidence",
       "rule_id": "lc-link"
     },
     {
-      "message": "the circulation of ifc-step:bs-ifc4-building-architecture.ifc/#85 is not mapped: free-space geometry is unavailable for `ifc-step:bs-ifc4-building-architecture.ifc/#220`",
+      "message": "the circulation of ifc-step:bs-ifc4-building-architecture.ifc/#85 is not mapped: free space is undecided: 1 unmeasured obstacle(s) could reach it: ifc-step:bs-ifc4-building-architecture.ifc/#220 (no shape representation)",
       "object_id": {
         "local_id": "#85",
         "source": {
@@ -916,11 +1104,11 @@
           "system": "ifc-step"
         }
       },
-      "reason": "backend_unavailable",
+      "reason": "incomplete_evidence",
       "rule_id": "lc-link"
     },
     {
-      "message": "the circulation of ifc-step:bs-ifc4-building-architecture.ifc/#85 is not mapped: free-space geometry is unavailable for `ifc-step:bs-ifc4-building-architecture.ifc/#220`",
+      "message": "the circulation of ifc-step:bs-ifc4-building-architecture.ifc/#85 is not mapped: free space is undecided: 1 unmeasured obstacle(s) could reach it: ifc-step:bs-ifc4-building-architecture.ifc/#220 (no shape representation)",
       "object_id": {
         "local_id": "#116",
         "source": {
@@ -928,11 +1116,11 @@
           "system": "ifc-step"
         }
       },
-      "reason": "backend_unavailable",
+      "reason": "incomplete_evidence",
       "rule_id": "lc-passing"
     },
     {
-      "message": "the circulation of ifc-step:bs-ifc4-building-architecture.ifc/#85 is not mapped: free-space geometry is unavailable for `ifc-step:bs-ifc4-building-architecture.ifc/#220`",
+      "message": "the circulation of ifc-step:bs-ifc4-building-architecture.ifc/#85 is not mapped: free space is undecided: 1 unmeasured obstacle(s) could reach it: ifc-step:bs-ifc4-building-architecture.ifc/#220 (no shape representation)",
       "object_id": {
         "local_id": "#85",
         "source": {
@@ -940,11 +1128,11 @@
           "system": "ifc-step"
         }
       },
-      "reason": "backend_unavailable",
+      "reason": "incomplete_evidence",
       "rule_id": "lc-passing"
     },
     {
-      "message": "the circulation of ifc-step:bs-ifc4-building-architecture.ifc/#85 is not mapped: free-space geometry is unavailable for `ifc-step:bs-ifc4-building-architecture.ifc/#220`",
+      "message": "the circulation of ifc-step:bs-ifc4-building-architecture.ifc/#85 is not mapped: free space is undecided: 1 unmeasured obstacle(s) could reach it: ifc-step:bs-ifc4-building-architecture.ifc/#220 (no shape representation)",
       "object_id": {
         "local_id": "#116",
         "source": {
@@ -952,11 +1140,11 @@
           "system": "ifc-step"
         }
       },
-      "reason": "backend_unavailable",
+      "reason": "incomplete_evidence",
       "rule_id": "lc-touch"
     },
     {
-      "message": "the circulation of ifc-step:bs-ifc4-building-architecture.ifc/#85 is not mapped: free-space geometry is unavailable for `ifc-step:bs-ifc4-building-architecture.ifc/#220`",
+      "message": "the circulation of ifc-step:bs-ifc4-building-architecture.ifc/#85 is not mapped: free space is undecided: 1 unmeasured obstacle(s) could reach it: ifc-step:bs-ifc4-building-architecture.ifc/#220 (no shape representation)",
       "object_id": {
         "local_id": "#85",
         "source": {
@@ -964,7 +1152,7 @@
           "system": "ifc-step"
         }
       },
-      "reason": "backend_unavailable",
+      "reason": "incomplete_evidence",
       "rule_id": "lc-touch"
     }
   ],
@@ -985,10 +1173,10 @@
     },
     {
       "checked": 1,
-      "failed": 0,
-      "not_evaluated": 1,
+      "failed": 1,
+      "not_evaluated": 0,
       "rule_id": "cc-component-sized",
-      "status": "not_evaluated"
+      "status": "failed"
     },
     {
       "checked": 1,
@@ -999,10 +1187,10 @@
     },
     {
       "checked": 1,
-      "failed": 0,
-      "not_evaluated": 1,
+      "failed": 1,
+      "not_evaluated": 0,
       "rule_id": "cc-front",
-      "status": "not_evaluated"
+      "status": "failed"
     },
     {
       "checked": 1,

@@ -583,14 +583,21 @@ fn declarations_and_services_fail_closed() {
         unevaluated(&outcome)[0].0,
         NotEvaluatedReason::InvalidDeclaration
     );
-    // An obstacle without a body the host could measure refuses clear.
+    // An obstacle the host declared unmeasured, with no bound apart from the
+    // volume, leaves it undecided, naming it.
     let mut scene = Scene::wc();
     scene.objects.push(Object::new(id("crate"), "fixture"));
     scene.geometry = scene.geometry.with_unmeasured(id("crate"), "no mesh");
     let outcome = scene.check(&[]);
     assert_eq!(
         unevaluated(&outcome)[0].0,
-        NotEvaluatedReason::BackendUnavailable,
+        NotEvaluatedReason::IncompleteEvidence,
+        "{outcome:#?}"
+    );
+    assert!(
+        unevaluated(&outcome)[0]
+            .1
+            .contains("cad:model/crate (no mesh)"),
         "{outcome:#?}"
     );
 }

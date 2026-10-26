@@ -13068,6 +13068,103 @@ fn washroom_with_walls() -> String {
     )
 }
 
+/// The washroom with its walls and no chair, and one furnishing element whose
+/// only face crosses itself (so its body is unmeasured, #298) at `(x, y)`,
+/// or one with no shape representation when `at` is `None`.
+fn washroom_with_unmeasured_product(at: Option<(f64, f64)>) -> String {
+    let chair = placed_box(
+        50,
+        [1.2, 1.3, 0.0],
+        [0.2, 0.2, 0.9],
+        "IFCFURNISHINGELEMENT('GID',$,$,$,$,PL,REP,$)",
+    );
+    let model = washroom_with_walls().replace(&chair, "");
+    let product = match at {
+        Some((x, y)) => face_set_wall(
+            70,
+            &[
+                (x - 0.1, y - 0.1),
+                (x + 0.1, y - 0.1),
+                (x - 0.1, y + 0.1),
+                (x + 0.1, y + 0.1),
+            ],
+            &[1, 2, 3, 4],
+        )
+        .replace("IFCWALL(", "IFCFURNISHINGELEMENT(")
+        .replace(",$,$);", ",$);")
+        // Lifted into the clearance volume's height: a flat face at the floor lies
+        // below it.
+        .replace(",0.)", ",1.)"),
+        None => "#79=IFCFURNISHINGELEMENT('0000000000000000000079',$,$,$,$,#3,$,$);\n".to_owned(),
+    };
+    model.replace("ENDSEC;\nEND-ISO", &format!("{product}ENDSEC;\nEND-ISO"))
+}
+
+/// A product whose body is unmeasured (a face crossing itself) leaves a
+/// clearance volume far from it clear, and one near it not evaluated, naming
+/// the product and why (#423); one with no shape representation at all still
+/// refuses, naming that.
+#[test]
+fn with_geometry_an_unmeasured_product_refuses_only_where_it_could_reach() {
+    let case = Case::new("geometry-clearance-unmeasured-product");
+    let run = |model: &str| {
+        case.geometry_rule(
+            model,
+            &[
+                ("wall", "IfcWall"),
+                ("terminal", "IfcSanitaryTerminal"),
+                ("furniture", "IfcFurnishingElement"),
+            ],
+            "axioval:capability.component-clearance",
+            &registry_signature("axioval:capability.component-clearance"),
+            entity("terminal"),
+            json!({
+                "side": {"type": "string", "value": "front"},
+                "front_axis": {"type": "string", "value": "against-wall"},
+                "wall_selector": {"type": "selector", "value": entity("wall")},
+                "wall_reach": {"type": "quantity", "value": 1.5, "unit": "m"},
+                "wall_inset": {"type": "quantity", "value": 1, "unit": "cm"},
+                "width": {"type": "quantity", "value": 0.8, "unit": "m"},
+                "depth": {"type": "quantity", "value": 1.2, "unit": "m"},
+                "height": {"type": "quantity", "value": 2, "unit": "m"},
+                "height_reference": {"type": "string", "value": "bottom"},
+                "obstacles": {"type": "selector", "value": entity("furniture")},
+            }),
+        )
+    };
+    let (output, result) = run(&washroom_with_unmeasured_product(Some((2.8, 2.8))));
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}{result:#}",
+        stderr(&output)
+    );
+    assert!(finding_messages(&result).is_empty(), "{result:#}");
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+
+    let (_, result) = run(&washroom_with_unmeasured_product(Some((1.2, 1.0))));
+    let not_evaluated = result["report"]["not_evaluated"].to_string();
+    assert!(not_evaluated.contains("\"#29\""), "{result:#}");
+    assert!(not_evaluated.contains("#79"), "{result:#}");
+    assert!(
+        not_evaluated.contains("mesh compilation refused"),
+        "{result:#}"
+    );
+
+    let (_, result) = run(&washroom_with_unmeasured_product(None));
+    let not_evaluated = result["report"]["not_evaluated"].to_string();
+    assert!(not_evaluated.contains("#79"), "{result:#}");
+    assert!(
+        not_evaluated.contains("no shape representation"),
+        "{result:#}"
+    );
+}
+
 #[test]
 fn with_geometry_a_front_is_derived_from_the_wall_behind_a_wc() {
     let case = Case::new("geometry-clearance-against-wall");
@@ -23136,7 +23233,7 @@ fn with_geometry_unmeasured_obstacles_bounded_apart_leave_a_floor_search_decided
         floors,
         BTreeMap::from([
             ("#16".to_owned(), "#66".to_owned()),
-            ("#26".to_owned(), "#78".to_owned()),
+            ("#26".to_owned(), "#78 #80".to_owned()),
             ("#46".to_owned(), "#106".to_owned()),
             ("#96".to_owned(), "decided".to_owned()),
         ]),

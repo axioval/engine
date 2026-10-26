@@ -233,7 +233,7 @@ impl DerivationKind for PlacementScenes {
     /// kernel crates changing what they return, so a value kept across
     /// checks (#409) is never read for another.
     const VERSION: DerivationVersion = DerivationVersion::new(
-        1,
+        2,
         &[AXIOLID_CORE, AXIOLID_MEASURE, AXIOLID_MESH, AXIOLID_OVERLAY],
     );
     type Key = SceneKey;

@@ -2212,7 +2212,9 @@ pub(crate) fn free_space_error(error: &FreeSpaceError) -> Unavailable {
         FreeSpaceError::MissingGeometry(_) | FreeSpaceError::Unavailable(_) => {
             NotEvaluatedReason::BackendUnavailable
         }
-        FreeSpaceError::IncompleteClearanceEvidence => NotEvaluatedReason::IncompleteEvidence,
+        FreeSpaceError::IncompleteClearanceEvidence | FreeSpaceError::UnmeasuredObstacles(_) => {
+            NotEvaluatedReason::IncompleteEvidence
+        }
         _ => NotEvaluatedReason::InvalidEvidence,
     };
     (reason, format!("free space: {error}"))
@@ -2679,4 +2681,23 @@ fn negate(a: [f64; 3]) -> [f64; 3] {
 
 fn dot(a: [f64; 3], b: [f64; 3]) -> f64 {
     a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axioval_engine::UnmeasuredObstacles;
+    use axioval_ir::SourceId;
+
+    #[test]
+    fn unmeasured_obstacles_leave_the_evidence_incomplete_and_are_named() {
+        let pipe = ObjectId::new(SourceId::new("cad", "model").unwrap(), "pipe").unwrap();
+        let unmeasured =
+            UnmeasuredObstacles::new(vec![(pipe, "unsupported representation".into())]).unwrap();
+        let (reason, message) =
+            free_space_error(&FreeSpaceError::UnmeasuredObstacles(Box::new(unmeasured)));
+        assert_eq!(reason, NotEvaluatedReason::IncompleteEvidence);
+        assert!(message.contains("cad:model/pipe"), "{message}");
+        assert!(message.contains("unsupported representation"), "{message}");
+    }
 }

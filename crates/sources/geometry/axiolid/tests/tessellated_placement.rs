@@ -496,14 +496,14 @@ fn an_unmeasured_obstacle_bounded_elsewhere_is_left_out() {
     let shape = || rectangle(1.0, 1.0, Some((1.0, 0.0)));
     assert!(matches!(
         place(room(), "room", shape(), &["lost"]),
-        Err(FreeSpaceError::MissingGeometry(_))
+        Err(FreeSpaceError::UnmeasuredObstacles(_))
     ));
     let far = room().with_unmeasured_bound(id("lost"), [10.0, 0.0, 0.0], [12.0, 1.2, 3.0]);
     found(place(far, "room", shape(), &["lost"]));
     let near = room().with_unmeasured_bound(id("lost"), [3.0, 0.0, 0.0], [5.0, 1.2, 3.0]);
     assert!(matches!(
         place(near, "room", shape(), &["lost"]),
-        Err(FreeSpaceError::MissingGeometry(_))
+        Err(FreeSpaceError::UnmeasuredObstacles(_))
     ));
     // Under the whole room but below its floor (a slab whose top is the
     // floor), or high above the band: it occupies nothing in the band.
@@ -515,7 +515,7 @@ fn an_unmeasured_obstacle_bounded_elsewhere_is_left_out() {
     let into = room().with_unmeasured_bound(id("lost"), [-1.0, -1.0, -0.3], [5.0, 2.2, 0.01]);
     assert!(matches!(
         place(into, "room", shape(), &["lost"]),
-        Err(FreeSpaceError::MissingGeometry(_))
+        Err(FreeSpaceError::UnmeasuredObstacles(_))
     ));
 }
 
@@ -666,7 +666,7 @@ fn an_unmeasured_obstacle_is_a_possible_obstacle_within_its_enclosure() {
     let refused = |geometry: AxiolidGeometry| {
         assert!(matches!(
             place(geometry, "room", square(), &["wall"]),
-            Err(FreeSpaceError::MissingGeometry(_))
+            Err(FreeSpaceError::UnmeasuredObstacles(_))
         ));
     };
     let solid = || prisms(&[rect(2.8, 3.0, 0.0, 3.0)], 0.0, 3.0);
@@ -677,6 +677,36 @@ fn an_unmeasured_obstacle_is_a_possible_obstacle_within_its_enclosure() {
     refused(room_with(3.0, |g| {
         lost(g.with_unmeasured_enclosure(id("wall"), solid(), None, None))
     }));
+}
+
+/// An unmeasured obstacle nothing bounds is reported before any band
+/// footprint is built, so another obstacle whose band the overlay refuses
+/// cannot mask it.
+#[test]
+fn an_unbounded_unmeasured_obstacle_is_named_before_a_refused_band() {
+    let mut broken = prisms(&[rect(1.0, 2.0, 0.2, 0.8)], 0.0, 3.0);
+    // A triangle addressing no position: the shell is neither open nor
+    // closed, so no band footprint is read from it.
+    broken.indices.extend([0, 1, 99]);
+    let room = || {
+        AxiolidGeometry::new()
+            .with_mesh(id("room"), prisms(&[rect(0.0, 4.0, 0.0, 1.2)], 0.0, 3.0))
+            .with_mesh(id("broken"), broken.clone())
+    };
+    let shape = || rectangle(1.0, 1.0, Some((1.0, 0.0)));
+    // The measured obstacle alone refuses its band.
+    let alone = place(room(), "room", shape(), &["broken"]);
+    assert!(
+        matches!(alone, Err(FreeSpaceError::Unavailable(_))),
+        "{alone:?}"
+    );
+    let lost = room().with_unmeasured(id("lost"), "not meshed");
+    let Err(FreeSpaceError::UnmeasuredObstacles(named)) =
+        place(lost, "room", shape(), &["broken", "lost"])
+    else {
+        panic!("the unmeasured obstacle must be named");
+    };
+    assert_eq!(named.obstacles(), [(id("lost"), "not meshed".to_owned())]);
 }
 
 /// An unmeasured obstacle bounded by several boxes (a whole by its parts,
@@ -694,7 +724,7 @@ fn an_unmeasured_obstacle_bounded_by_boxes_either_side_is_left_out() {
     let refused = |geometry: AxiolidGeometry| {
         assert!(matches!(
             place(geometry, "room", shape(), &["lost"]),
-            Err(FreeSpaceError::MissingGeometry(_))
+            Err(FreeSpaceError::UnmeasuredObstacles(_))
         ));
     };
     let (west, east) = (

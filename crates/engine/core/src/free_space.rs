@@ -62,8 +62,64 @@ pub enum FreeSpaceError {
     ResponseRequestMismatch,
     #[error("free-space geometry is unavailable for `{0}`")]
     MissingGeometry(Box<ObjectId>),
+    #[error("free space is undecided: {0}")]
+    UnmeasuredObstacles(Box<UnmeasuredObstacles>),
     #[error("free-space query unavailable: {0}")]
     Unavailable(String),
+}
+
+/// How many unmeasured obstacles the message of [`UnmeasuredObstacles`] names.
+const NAMED_UNMEASURED_OBSTACLES: usize = 3;
+
+/// Obstacles the host declared unmeasured that could reach a free-space query,
+/// each with the host's reason, in identity order, once each.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UnmeasuredObstacles {
+    obstacles: Vec<(ObjectId, String)>,
+}
+impl UnmeasuredObstacles {
+    /// Orders the obstacles by identity and keeps the first reason given for
+    /// a repeated one; `None` when there is none.
+    pub fn new(mut obstacles: Vec<(ObjectId, String)>) -> Option<Self> {
+        obstacles.sort_by(|a, b| a.0.cmp(&b.0));
+        obstacles.dedup_by(|later, first| later.0 == first.0);
+        if obstacles.is_empty() {
+            return None;
+        }
+        Some(Self { obstacles })
+    }
+    /// The obstacles with the host's reason, in identity order.
+    pub fn obstacles(&self) -> &[(ObjectId, String)] {
+        &self.obstacles
+    }
+}
+impl std::fmt::Display for UnmeasuredObstacles {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} unmeasured obstacle(s) could reach it: ",
+            self.obstacles.len()
+        )?;
+        for (index, (object, reason)) in self
+            .obstacles
+            .iter()
+            .take(NAMED_UNMEASURED_OBSTACLES)
+            .enumerate()
+        {
+            if index > 0 {
+                f.write_str(", ")?;
+            }
+            write!(f, "{object} ({reason})")?;
+        }
+        let more = self
+            .obstacles
+            .len()
+            .saturating_sub(NAMED_UNMEASURED_OBSTACLES);
+        if more > 0 {
+            write!(f, ", +{more} more")?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

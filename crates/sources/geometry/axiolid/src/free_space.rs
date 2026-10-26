@@ -24,7 +24,7 @@ use axioval_engine::{
     ElevationBand, FrameOffsetPlacement, FreeAreaEvidence, FreeAreaRequest, FreeFloorEvidence,
     FreeSpaceError, FreeSpaceService, LargestDiscEstimate, MetricDirection, MetricFrame,
     MetricPoint, ObstructionEvidence, PlacementDomain, PlacementOrientation, PlacementOutcome,
-    PlacementRequest, PlacementShape, SupportedPlacement, SweptDoor,
+    PlacementRequest, PlacementShape, SupportedPlacement, SweptDoor, UnmeasuredObstacles,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
@@ -565,6 +565,27 @@ fn reach(
     }
 }
 
+/// Whether the host's bound or enclosure keeps an unmeasured obstacle
+/// strictly apart from `reachable`: every box its body lies within the union
+/// of, or the box of the closed solid it lies within, grown by that solid's
+/// deviation, has a positive gap to it. Without either, it could be anywhere.
+fn unmeasured_misses(geometry: &AxiolidGeometry, obstacle: &ObjectId, reachable: &Extent) -> bool {
+    if let Some(bound) = geometry.unmeasured_bound(obstacle)
+        && bound
+            .iter()
+            .all(|piece| extent_gap(reachable, piece, false) > 0.0)
+    {
+        return true;
+    }
+    geometry.enclosure(obstacle).is_some_and(|enclosure| {
+        mesh_extent(&enclosure.mesh).is_some_and(|(low, high)| {
+            let d = enclosure.deviation;
+            let grown: Extent = (low.map(|c| c - d), high.map(|c| c + d));
+            extent_gap(reachable, &grown, false) > 0.0
+        })
+    })
+}
+
 impl Measuring {
     /// The footprint of `scope` and `merged` (which must share its floor),
     /// what `obstacles` and the sectors of `swept` doors occupy in `band`
@@ -758,6 +779,34 @@ impl Measuring {
                 .collect();
             placement::union(&rings, tolerance)
         };
+        // A body the host declared unmeasured, with no bound to place it
+        // apart and no enclosure to take its place, could stand anywhere: the
+        // scene is undecided. They are classified first, before any band
+        // footprint is built, so a refusal of another obstacle cannot mask
+        // them and no scene is built only to be refused; each is named.
+        let unresolved: Vec<(ObjectId, String)> = obstacles
+            .iter()
+            .filter(|obstacle| !self.geometry.has_no_body(obstacle))
+            .filter(|obstacle| self.geometry.mesh(obstacle).is_none())
+            .filter_map(|obstacle| {
+                let (_, reason) = self.geometry.unmeasured_of(obstacle)?;
+                let apart = self
+                    .geometry
+                    .unmeasured_bound(obstacle)
+                    .is_some_and(|bound| {
+                        bound.iter().all(|piece| {
+                            extent_gap(piece, &room_box, true) > 0.0
+                                || piece.1[2] <= low - u
+                                || piece.0[2] >= high + u
+                        })
+                    });
+                (!apart && self.geometry.enclosure(obstacle).is_none())
+                    .then(|| (obstacle.clone(), reason.to_owned()))
+            })
+            .collect();
+        if let Some(unmeasured) = UnmeasuredObstacles::new(unresolved) {
+            return Err(FreeSpaceError::UnmeasuredObstacles(Box::new(unmeasured)));
+        }
         for obstacle in obstacles {
             if self.geometry.has_no_body(obstacle) {
                 continue;
@@ -1296,19 +1345,27 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
         }
 
         let volume = clearance_volume(request)?;
+        let reachable = volume.outer.as_ref().unwrap_or(&volume.inner).extent;
         let mut blockers = Vec::new();
+        let mut unresolved = Vec::new();
         let mut undecided = false;
         for obstacle in request.obstacles() {
             if self.over.geometry.has_no_body(obstacle) {
                 continue;
             }
             // A named obstacle without geometry cannot be shown to be clear of
-            // the volume, and `Clear` asserts that nothing obstructs it.
-            let mesh = self
-                .over
-                .geometry
-                .mesh(obstacle)
-                .ok_or_else(|| FreeSpaceError::MissingGeometry(Box::new(obstacle.clone())))?;
+            // the volume, and `Clear` asserts that nothing obstructs it. One
+            // the host declared unmeasured is set aside unless its bound or
+            // enclosure keeps it apart; all of them are named at the end.
+            let Some(mesh) = self.over.geometry.mesh(obstacle) else {
+                let Some((_, reason)) = self.over.geometry.unmeasured_of(obstacle) else {
+                    return Err(FreeSpaceError::MissingGeometry(Box::new(obstacle.clone())));
+                };
+                if !unmeasured_misses(&self.over.geometry, obstacle, &reachable) {
+                    unresolved.push((obstacle.clone(), reason.to_owned()));
+                }
+                continue;
+            };
             match reach(&volume, obstacle, mesh, tolerance)? {
                 Reach::Obstructs => blockers.push(obstacle.clone()),
                 Reach::Undecided => undecided = true,
@@ -1316,6 +1373,11 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
             }
         }
 
+        if blockers.is_empty()
+            && let Some(unmeasured) = UnmeasuredObstacles::new(unresolved)
+        {
+            return Err(FreeSpaceError::UnmeasuredObstacles(Box::new(unmeasured)));
+        }
         if blockers.is_empty() && undecided {
             return Err(FreeSpaceError::Unavailable(
                 "an obstacle lies within the cylinder's approximation band".into(),

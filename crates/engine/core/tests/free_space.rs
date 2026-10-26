@@ -9,6 +9,7 @@ use axioval_engine::{
     ObstructionEvidence, PlacementDomain, PlacementOrientation, PlacementOutcome, PlacementRequest,
     PlacementShape, ServiceRegistry, SignedDistanceInterval, SupportCoverageEvidence,
     SupportCoverageOutcome, SupportCoverageRequest, SupportedPlacement, ThresholdVerdict,
+    UnmeasuredObstacles,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 use std::sync::Arc;
@@ -881,5 +882,52 @@ fn support_coverage_is_refused_by_default_and_bound_to_its_request() {
     assert_eq!(
         handle.assess_support_coverage(&request),
         Err(FreeSpaceError::ResponseRequestMismatch)
+    );
+}
+
+#[test]
+fn unmeasured_obstacles_are_sorted_once_each_and_never_empty() {
+    assert!(UnmeasuredObstacles::new(Vec::new()).is_none());
+    let listed = UnmeasuredObstacles::new(vec![
+        (object("a", "b"), "second".into()),
+        (object("a", "a"), "first".into()),
+        (object("a", "b"), "again".into()),
+    ])
+    .unwrap();
+    let names: Vec<_> = listed
+        .obstacles()
+        .iter()
+        .map(|(id, why)| (id.local_id.as_str(), why.as_str()))
+        .collect();
+    assert_eq!(names, [("a", "first"), ("b", "second")]);
+}
+
+#[test]
+fn unmeasured_obstacles_name_three_and_count_the_rest() {
+    let many = |n: usize| {
+        UnmeasuredObstacles::new(
+            (0..n)
+                .map(|i| (object("a", &format!("o{i}")), format!("why{i}")))
+                .collect(),
+        )
+        .unwrap()
+    };
+    let three = many(3).to_string();
+    assert!(
+        three.starts_with("3 unmeasured obstacle(s) could reach it: "),
+        "{three}"
+    );
+    assert!(
+        three.ends_with("o2 (why2)") && !three.contains("more"),
+        "{three}"
+    );
+    let five = FreeSpaceError::UnmeasuredObstacles(Box::new(many(5))).to_string();
+    assert!(
+        five.starts_with("free space is undecided: 5 unmeasured"),
+        "{five}"
+    );
+    assert!(
+        five.contains("o2 (why2), +2 more") && !five.contains("o3"),
+        "{five}"
     );
 }

@@ -255,7 +255,8 @@ fn a_bodiless_candidate_is_no_obstacle() {
     );
 }
 
-/// An unmeasured obstacle is not bodiless: it still refuses.
+/// An unmeasured obstacle is not bodiless: with nothing to place it apart it
+/// refuses, naming it and the host's reason.
 #[test]
 fn an_unmeasured_obstacle_still_refuses() {
     let geometry =
@@ -266,10 +267,139 @@ fn an_unmeasured_obstacle_still_refuses() {
         box_shape(0.8, 0.8, 2.0),
         vec![id("column")],
     );
-    assert!(matches!(
-        service.assess_clearance(&request),
-        Err(FreeSpaceError::MissingGeometry(_))
+    let Err(FreeSpaceError::UnmeasuredObstacles(unresolved)) = service.assess_clearance(&request)
+    else {
+        panic!("an unmeasured obstacle must leave the volume undecided");
+    };
+    assert_eq!(
+        unresolved.obstacles(),
+        [(id("column"), "unsupported representation".to_owned())]
+    );
+}
+
+fn small_volume(obstacles: &[&str]) -> ClearanceRequest {
+    ClearanceRequest::new(
+        frame_at(1.0, 1.0, 0.0),
+        box_shape(0.8, 0.8, 2.0),
+        obstacles.iter().map(|name| id(name)).collect(),
+    )
+}
+
+fn unmeasured(names: &[&str]) -> AxiolidGeometry {
+    names.iter().fold(AxiolidGeometry::new(), |geometry, name| {
+        geometry.with_unmeasured(id(name), "unsupported representation")
+    })
+}
+
+fn is_clear(geometry: AxiolidGeometry, request: &ClearanceRequest) -> bool {
+    let service = AxiolidFreeSpaceService::new(geometry, source());
+    matches!(
+        service.assess_clearance(request).expect("decided"),
+        ClearanceOutcome::Clear(_)
+    )
+}
+
+fn is_undecided(geometry: AxiolidGeometry, request: &ClearanceRequest) -> bool {
+    let service = AxiolidFreeSpaceService::new(geometry, source());
+    matches!(
+        service.assess_clearance(request),
+        Err(FreeSpaceError::UnmeasuredObstacles(_))
+    )
+}
+
+/// A bound that keeps the body away from the volume settles it: clear.
+#[test]
+fn an_unmeasured_obstacle_bounded_apart_leaves_the_volume_clear() {
+    let geometry =
+        unmeasured(&["pipe"]).with_unmeasured_bound(id("pipe"), [8.0, 8.0, 0.0], [9.0, 9.0, 3.0]);
+    assert!(is_clear(geometry, &small_volume(&["pipe"])));
+}
+
+/// A bound across the volume cannot settle it, and the refusal names the
+/// obstacle and why it is unmeasured.
+#[test]
+fn an_unmeasured_obstacle_bounded_across_the_volume_refuses_naming_it_and_why() {
+    let geometry =
+        unmeasured(&["pipe"]).with_unmeasured_bound(id("pipe"), [0.0, 0.0, 0.0], [3.0, 3.0, 3.0]);
+    let service = AxiolidFreeSpaceService::new(geometry, source());
+    let error = service
+        .assess_clearance(&small_volume(&["pipe"]))
+        .expect_err("undecided");
+    assert!(matches!(error, FreeSpaceError::UnmeasuredObstacles(_)));
+    let message = error.to_string();
+    assert!(message.contains("cad:model/pipe"), "{message}");
+    assert!(message.contains("unsupported representation"), "{message}");
+}
+
+/// A body bounded by several boxes lies within their union: it misses the
+/// volume only when every box does.
+#[test]
+fn a_bound_of_several_boxes_misses_only_when_every_box_does() {
+    let apart = [
+        ([8.0, 8.0, 0.0], [9.0, 9.0, 3.0]),
+        ([6.0, 6.0, 0.0], [7.0, 7.0, 3.0]),
+    ];
+    let reaching = [
+        ([8.0, 8.0, 0.0], [9.0, 9.0, 3.0]),
+        ([0.5, 0.5, 0.0], [1.5, 1.5, 3.0]),
+    ];
+    let request = small_volume(&["pipe"]);
+    assert!(is_clear(
+        unmeasured(&["pipe"]).with_unmeasured_bounds(id("pipe"), apart.to_vec()),
+        &request
     ));
+    assert!(is_undecided(
+        unmeasured(&["pipe"]).with_unmeasured_bounds(id("pipe"), reaching.to_vec()),
+        &request
+    ));
+}
+
+/// A closed solid the body lies within, grown by its deviation, settles it
+/// where it stays apart.
+#[test]
+fn an_unmeasured_obstacle_enclosed_apart_leaves_the_volume_clear() {
+    let enclosed = |x0: f64, deviation: f64| {
+        unmeasured(&["wall"]).with_unmeasured_enclosure(
+            id("wall"),
+            closed_box(x0, x0 + 1.0, 0.0, 3.0, 0.0, 3.0),
+            Some(deviation),
+            None,
+        )
+    };
+    let request = small_volume(&["wall"]);
+    assert!(is_clear(enclosed(4.0, 0.01), &request));
+    // Grown by a deviation that reaches the volume, it is no longer apart.
+    assert!(is_undecided(enclosed(1.5, 0.2), &request));
+}
+
+/// A measured blocker is a finding even beside an obstacle that stays
+/// unmeasured: the volume is obstructed whatever the rest is.
+#[test]
+fn a_measured_blocker_obstructs_beside_an_unmeasured_obstacle() {
+    let geometry =
+        unmeasured(&["pipe"]).with_mesh(id("column"), closed_box(0.9, 1.1, 0.9, 1.1, 0.0, 3.0));
+    let service = AxiolidFreeSpaceService::new(geometry, source());
+    match service
+        .assess_clearance(&small_volume(&["pipe", "column"]))
+        .expect("decided")
+    {
+        ClearanceOutcome::Obstructed(evidence) => {
+            assert_eq!(evidence.blockers(), [id("column")]);
+        }
+        other @ ClearanceOutcome::Clear(_) => panic!("expected an obstruction, got {other:?}"),
+    }
+}
+
+/// A bound touching the volume's face misses it, as a mesh in contact does
+/// (the volume is inset by the contact tolerance); one reaching in does not.
+#[test]
+fn a_bound_touching_the_volume_face_misses() {
+    // The volume spans x in [0.6, 1.4].
+    let bounded = |x0: f64| {
+        unmeasured(&["pipe"]).with_unmeasured_bound(id("pipe"), [x0, 0.0, 0.0], [3.0, 3.0, 3.0])
+    };
+    assert!(is_clear(bounded(1.4), &small_volume(&["pipe"])));
+    assert!(is_undecided(bounded(1.3), &small_volume(&["pipe"])));
 }
 
 /// A 2 m × 0.4 m box turned by 45°. Its axis-aligned bounding square

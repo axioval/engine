@@ -463,8 +463,10 @@ impl AxiolidGeometry {
     /// ([`fn@crate::difference_subjects`]): a curved wall less openings
     /// the exact boolean cannot cut lies within the uncut wall.
     ///
-    /// The body stays unmeasured. Only a free-floor search reads the
-    /// enclosure, as a possible obstacle: witnesses avoid the enclosure,
+    /// The body stays unmeasured. Only a free-floor search and a
+    /// clearance assessment read the enclosure (a clearance only to leave
+    /// the body out where its solid, grown by the deviation, is apart from
+    /// the volume), as a possible obstacle: witnesses avoid the enclosure,
     /// absence is proven without it. An empty mesh, a deviation that bounds
     /// nothing, or a call for an object not declared unmeasured declares
     /// nothing; a `height` that is not finite, is reversed or contradicts

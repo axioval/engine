@@ -155,7 +155,7 @@ Geometry evidence for any source, measured with the Axiolid kernel.
 - `src/guard.rs` implements `GuardService`: barriers, landings and climbing
   aids around a walking surface's edge. Proximity is footprint-to-footprint,
   never vertex-to-vertex.
-- `src/free_space.rs` implements `FreeSpaceService` for clearance, placement
+- `src/free_space.rs` implements `FreeSpaceService` for clearance, placement (#423: `assess_clearance` and the placement scene set aside every unmeasured obstacle and refuse once with `UnmeasuredObstacles`, naming each with the host's reason; a clearance leaves one out only through `unmeasured_misses`, its bound or enclosure grown by the deviation strictly apart from the volume, and a measured blocker is reported first; never refuse on the first)
   and free area. `find_placement` builds the scene (scope footprint, and each
   obstacle's `walkable::band_footprint` in the open band from the scope's
   floor up by the shape's height, never its whole projection; built once

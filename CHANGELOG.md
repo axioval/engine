@@ -748,6 +748,23 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **A clearance volume is decided beside objects that could not be measured**
+  ([#423](https://github.com/axioval/engine/issues/423)).
+  The Axiolid clearance assessment refused the whole volume as soon as any listed obstacle lacked a mesh,
+  wherever it stands. It now leaves out an unmeasured obstacle whose
+  declared bound or enclosing solid (grown by its deviation) is apart from
+  the volume, as a placement search already did, reports a measured
+  blocker whatever else is unmeasured, and otherwise refuses naming every
+  unmeasured obstacle that could reach it and why. The placement scene names
+  them all too, rather than the first. The rules map it to
+  `IncompleteEvidence`, not `BackendUnavailable`. An object with no geometry
+  at all and no declared reason still refuses as missing geometry.
+  Recorded parity outcomes naming such an obstacle change: some become
+  findings the refusal had masked. **Breaking** for code matching
+  `FreeSpaceError` exhaustively: `FreeSpaceError` gains the variant
+  `UnmeasuredObstacles`, carrying the new `UnmeasuredObstacles` struct
+  (the objects the host declared unmeasured, each with its reason, in
+  identity order, once each).
 - **Sums of coordinate products run about the body, not the world origin**
   ([#452](https://github.com/axioval/engine/issues/452)). The signed
   volume whose sign tells a closed body's outward faces (thickness, facade

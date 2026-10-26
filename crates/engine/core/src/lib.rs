@@ -1283,7 +1283,7 @@ pub use free_space::{
     FreeSpaceError, FreeSpaceService, FreeSpaceServiceHandle, LargestDiscEstimate, MetricDirection,
     MetricFrame, ObstructionEvidence, PlacementDomain, PlacementOrientation, PlacementOutcome,
     PlacementRequest, PlacementShape, SignedDistanceInterval, SupportCoverageEvidence,
-    SupportCoverageOutcome, SupportCoverageRequest, SupportedPlacement,
+    SupportCoverageOutcome, SupportCoverageRequest, SupportedPlacement, UnmeasuredObstacles,
 };
 pub use geometry_demand::{
     GeometryDemand, GeometryReach, geometry_demand, rule_selectors, services_asked,

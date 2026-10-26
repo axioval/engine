@@ -433,7 +433,7 @@ fn an_unmeasured_obstacle_refuses() {
     let geometry = room(&[rect(0.0, 3.0, 0.0, 3.0)]).with_unmeasured(id("cabinet"), "no body");
     assert!(matches!(
         place(geometry, rectangle(1.5, 1.5, along(1.0, 0.0)), &["cabinet"]),
-        Err(FreeSpaceError::MissingGeometry(_))
+        Err(FreeSpaceError::UnmeasuredObstacles(_))
     ));
 }
 

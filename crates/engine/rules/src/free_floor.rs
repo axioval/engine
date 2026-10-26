@@ -572,7 +572,9 @@ fn error(error: &FreeSpaceError) -> Unavailable {
         FreeSpaceError::MissingGeometry(_) | FreeSpaceError::Unavailable(_) => {
             NotEvaluatedReason::BackendUnavailable
         }
-        FreeSpaceError::IncompleteClearanceEvidence => NotEvaluatedReason::IncompleteEvidence,
+        FreeSpaceError::IncompleteClearanceEvidence | FreeSpaceError::UnmeasuredObstacles(_) => {
+            NotEvaluatedReason::IncompleteEvidence
+        }
         _ => NotEvaluatedReason::InvalidEvidence,
     };
     (reason, error.to_string())

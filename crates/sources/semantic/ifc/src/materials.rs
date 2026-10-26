@@ -201,7 +201,7 @@ impl Writer<'_> {
             .attributes(entity)
             .iter()
             .find(|candidate| candidate.name.eq_ignore_ascii_case(attribute))
-            .map(|candidate| candidate.type_name.to_string())
+            .map(|candidate| candidate.type_name.clone())
             .ok_or_else(|| {
                 PropertyResolutionError::Incomplete(format!("{entity} declares no {attribute}"))
             })?;

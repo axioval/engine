@@ -248,14 +248,14 @@ fn a_lift_carries_a_body_between_the_cars_it_holds() {
         WalkabilityRouteOutcome::Reachable(_)
     ));
     // A lobby's hub is outside the car: no ride from it is proven.
-    assert!(
+    assert_eq!(
         snapshot
             .passages()
             .iter()
             .filter(|passage| passage.connector().is_some())
             .filter(|passage| passage.evidence().locator.contains("ride=proven"))
-            .count()
-            == 1
+            .count(),
+        1
     );
     assert_eq!(
         snapshot

@@ -241,8 +241,10 @@ fn a_column_closed_through_a_zero_area_triangle_obstructs() {
     let (b0, b1, t1) = (0, 1, 5);
     let side = column
         .indices
-        .chunks_exact(3)
-        .position(|triangle| triangle == [b0, b1, t1])
+        .as_chunks::<3>()
+        .0
+        .iter()
+        .position(|triangle| *triangle == [b0, b1, t1])
         .unwrap();
     column.indices.splice(
         3 * side..3 * side + 3,

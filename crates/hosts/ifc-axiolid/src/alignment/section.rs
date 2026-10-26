@@ -527,7 +527,7 @@ impl Sweep<'_> {
 
     /// Whether `solid` can reach into the envelope swept over `[a, b]`.
     fn near(&self, solid: &Solid, (a, b): (f64, f64)) -> Result<Near, String> {
-        let middle = 0.5 * (a + b);
+        let middle = f64::midpoint(a, b);
         let half = 0.5 * (b - a);
         let frame = self.centreline.frame_at(middle)?;
         let bounds = self.centreline.derivative_bounds(a, b)?;
@@ -682,7 +682,7 @@ impl Sweep<'_> {
                 Near::Inside(at) => return sure(at),
                 Near::Within(why) => why,
             };
-            let middle = 0.5 * (a + b);
+            let middle = f64::midpoint(a, b);
             let mut stations = vec![middle];
             if depth == 0 {
                 stations.extend([a, b]);

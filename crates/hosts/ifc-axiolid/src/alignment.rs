@@ -511,7 +511,7 @@ impl Probe<'_> {
         let mut found: Vec<(f64, f64)> = Vec::new();
         while let Some((a, b)) = pending.pop() {
             let (first, second) = self.bounds(a, b)?;
-            let middle = 0.5 * (a + b);
+            let middle = f64::midpoint(a, b);
             let half = 0.5 * (b - a);
             let sample = self.sample(middle)?;
             let (g, reach, _) = self.measures(&sample);
@@ -536,7 +536,7 @@ impl Probe<'_> {
     /// The plan distance from the point to the curve over `[a, b]`.
     fn distance_over(&mut self, a: f64, b: f64) -> Result<(f64, f64), Refusal> {
         let (first, _) = self.bounds(a, b)?;
-        let sample = self.sample(0.5 * (a + b))?;
+        let sample = self.sample(f64::midpoint(a, b))?;
         let (_, reach, _) = self.measures(&sample);
         let spread = first * 0.5 * (b - a) + self.slack;
         Ok(((reach - spread).max(0.0), reach + spread))
@@ -679,7 +679,10 @@ impl Probe<'_> {
 
 /// A candidate's place along the curve, for a reason.
 fn describe(candidate: Candidate) -> String {
-    format!("{:.3}", 0.5 * (candidate.bracket.0 + candidate.bracket.1))
+    format!(
+        "{:.3}",
+        f64::midpoint(candidate.bracket.0, candidate.bracket.1)
+    )
 }
 
 /// The foot of `point` (in the curve's frame) on `centreline`.

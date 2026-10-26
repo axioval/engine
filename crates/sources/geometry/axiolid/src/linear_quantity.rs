@@ -336,14 +336,14 @@ fn inside_runs(edges: &[Edge], polygons_inside: impl Fn(Point) -> bool, v0: f64,
     }
     breaks.sort_by(f64::total_cmp);
     breaks.dedup();
-    let middle = 0.5 * (v0 + v1);
+    let middle = f64::midpoint(v0, v1);
     let mut runs: Runs = Vec::new();
     for pair in breaks.windows(2) {
         let (a, b) = (pair[0], pair[1]);
         if b <= a {
             continue;
         }
-        let u = 0.5 * (a + b);
+        let u = f64::midpoint(a, b);
         let met = edges.iter().any(|&(p, q)| {
             if (p.0 - u) * (q.0 - u) > 0.0 || (p.0 - q.0).abs() == 0.0 {
                 return false;
@@ -381,7 +381,7 @@ fn possible_runs(region: &Plan, v0: f64, v1: f64, margin: f64) -> Runs {
     let (low, high) = if v1 - v0 > 2.0 * margin {
         (v0 + margin, v1 - margin)
     } else {
-        let middle = 0.5 * (v0 + v1);
+        let middle = f64::midpoint(v0, v1);
         (middle, middle)
     };
     let mut runs: Runs = Vec::new();

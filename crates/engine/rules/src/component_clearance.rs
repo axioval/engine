@@ -385,7 +385,7 @@ impl Size {
         let height = match self.height {
             Height::Of(height) => format!("{} high", length_shown(height)),
             Height::ToTop(raised) => {
-                let (reference, offset) = config.top.map_or((Reference::Top, 0.0), |top| top);
+                let (reference, offset) = config.top.unwrap_or((Reference::Top, 0.0));
                 format!(
                     "up to {} above the {}",
                     metres(offset + raised),
@@ -645,12 +645,12 @@ fn sizing(
             })
         }
         Some("component_clamped") => {
-            if let (Some(minimum), Some(maximum)) = (minimum, maximum) {
-                if minimum > maximum {
-                    return Err(invalid(format!(
-                        "`{dimension}_minimum` exceeds `{dimension}_maximum`"
-                    )));
-                }
+            if let (Some(minimum), Some(maximum)) = (minimum, maximum)
+                && minimum > maximum
+            {
+                return Err(invalid(format!(
+                    "`{dimension}_minimum` exceeds `{dimension}_maximum`"
+                )));
             }
             if !clamps {
                 return Err(invalid(format!(

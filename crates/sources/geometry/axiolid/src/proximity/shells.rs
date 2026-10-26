@@ -71,7 +71,9 @@ pub(crate) fn shells(mesh: &TriMesh) -> Option<Vec<Shell>> {
     let mut parent: Vec<usize> = (0..positions).collect();
     let corners: Vec<[usize; 3]> = mesh
         .indices
-        .chunks_exact(3)
+        .as_chunks::<3>()
+        .0
+        .iter()
         .map(|corner| [corner[0] as usize, corner[1] as usize, corner[2] as usize])
         .collect();
     if corners.iter().flatten().any(|&index| index >= positions) {

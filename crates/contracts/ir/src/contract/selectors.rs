@@ -5,7 +5,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
+#[derive(Default)]
 pub enum Selector {
+    #[default]
     All,
     EntityType {
         #[serde(rename = "objectType")]
@@ -259,11 +261,6 @@ impl SourceField {
         }
     }
 }
-impl Default for Selector {
-    fn default() -> Self {
-        Self::All
-    }
-}
 impl Selector {
     /// Every expression this selector holds, in its own `expression`
     /// operands and those of its nested selectors, in written order.
@@ -302,9 +299,9 @@ impl Selector {
             Self::RuleOutcome { rule, .. } => *rule = rename(rule),
             Self::Expression { expression } => expression.rename_rules(rename),
             Self::AllOf { operands } | Self::AnyOf { operands } => {
-                operands
-                    .iter_mut()
-                    .for_each(|operand| operand.rename_rules(rename));
+                for operand in operands {
+                    operand.rename_rules(rename);
+                }
             }
             Self::Not { operand } => operand.rename_rules(rename),
             Self::Related { selector, .. } => selector.rename_rules(rename),

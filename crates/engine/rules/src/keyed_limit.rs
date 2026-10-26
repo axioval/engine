@@ -218,17 +218,17 @@ impl<'a> ClearWidth<'a> {
     /// chain rather than being replaced by an approximation.
     fn measure(&self, context: &RuleContext<'_>, object: &Object) -> Result<Measured, Unavailable> {
         let mut evidence = Vec::new();
-        if let Some(stated) = self.stated {
-            if let Some((lower, upper)) = stated_width(context, object, stated, &mut evidence)? {
-                evidence.push(Self::record(&object.id, "stated", upper <= lower));
-                return Ok(Measured {
-                    lower,
-                    upper,
-                    unit: " m".into(),
-                    what: format!("clear width ({stated})"),
-                    evidence,
-                });
-            }
+        if let Some(stated) = self.stated
+            && let Some((lower, upper)) = stated_width(context, object, stated, &mut evidence)?
+        {
+            evidence.push(Self::record(&object.id, "stated", upper <= lower));
+            return Ok(Measured {
+                lower,
+                upper,
+                unit: " m".into(),
+                what: format!("clear width ({stated})"),
+                evidence,
+            });
         }
         if let Some(mode) = self.leaves
             && let Some(measured) = Self::from_leaves(context, object, mode, &mut evidence)?

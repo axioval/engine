@@ -206,13 +206,11 @@ fn members(
             #[cfg(feature = "parity-reference")]
             risers: None,
         };
-        match handrails::measure(stairs, check, candidates, &along) {
-            Ok(measured) => {
-                for (rail, _) in measured.rails() {
-                    members.insert(rail.clone(), Tri::Sure);
-                }
+        {
+            let measured = handrails::measure(stairs, check, candidates, &along)?;
+            for (rail, _) in measured.rails() {
+                members.insert(rail.clone(), Tri::Sure);
             }
-            Err(message) => return Err(message),
         }
     }
     // The selected rails joined to them: surely through touching pairs,

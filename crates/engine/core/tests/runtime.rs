@@ -432,7 +432,7 @@ impl RuleCapability for ListsSources {
 fn the_runtime_lists_every_session_source_including_an_empty_one() {
     let (definitions, rules) = packages();
     let registry = CapabilityRegistry::new().register(ListsSources).unwrap();
-    let session_plan = compile(&registry, &[definitions.clone()], &rules).unwrap();
+    let session_plan = compile(&registry, std::slice::from_ref(&definitions), &rules).unwrap();
     let bare_plan = compile(&registry, &[definitions], &rules).unwrap();
     let source = |document: &str| SourceId::new("test", document).unwrap();
     let snapshot =

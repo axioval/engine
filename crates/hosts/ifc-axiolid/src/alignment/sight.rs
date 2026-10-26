@@ -202,7 +202,7 @@ impl Look<'_> {
                 open = true;
                 continue;
             }
-            let mid = 0.5 * (a + b);
+            let mid = f64::midpoint(a, b);
             let mid_value = value(mid, self.height(mid)?.0);
             stack.push((a, fa, mid, mid_value, depth + 1));
             stack.push((mid, mid_value, b, fb, depth + 1));
@@ -288,7 +288,7 @@ impl Look<'_> {
             let mut below = clear;
             while at - below > TOLERANCE && spent <= SIGHT_BUDGET {
                 spent += 1;
-                let middle = 0.5 * (below + at);
+                let middle = f64::midpoint(below, at);
                 let blocking = self.blocked(middle)?;
                 if blocking.is_empty() {
                     below = middle;
@@ -312,7 +312,7 @@ impl Look<'_> {
     /// Whether every target from `a` to `b` ahead is proven in view; the
     /// reason where not.
     fn clear(&self, a: f64, b: f64) -> Result<Result<(), String>, String> {
-        let (middle, half) = (0.5 * (a + b), 0.5 * (b - a));
+        let (middle, half) = (f64::midpoint(a, b), 0.5 * (b - a));
         let (low, high) = self.grades(self.start, self.start + b)?;
         let shift = half * (high - low);
         if middle <= 0.0 || self.gap(middle, shift)? != Gap::Clear {
@@ -343,7 +343,7 @@ impl Look<'_> {
     fn reach(&self, a: f64, b: f64) -> Result<Option<f64>, String> {
         let (from, to) = (self.start + a, self.start + b);
         let half = 0.5 * (to - from);
-        let frame = self.centreline.frame_at(0.5 * (from + to))?;
+        let frame = self.centreline.frame_at(f64::midpoint(from, to))?;
         let bounds = self.centreline.derivative_bounds(from, to)?;
         let speed = frame.speed - bounds.1 * half;
         if speed < 0.5 {

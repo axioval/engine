@@ -172,7 +172,7 @@ pub fn write_zip(members: &[(String, Vec<u8>)]) -> Vec<u8> {
         out.extend(name.as_bytes());
         out.extend(&stored);
         central.extend(b"PK\x01\x02");
-        central.extend(((3_u16 << 8) | 20).to_le_bytes());
+        central.extend(((3_u16 << 8) | 0x14).to_le_bytes());
         central.extend(20_u16.to_le_bytes());
         fields(&mut central);
         central.extend(0_u16.to_le_bytes()); // comment

@@ -1088,10 +1088,10 @@ fn validate_placement_witness(
     if offsets.is_some_and(|offsets| !offsets.contains_frame(frame)) {
         return Err(FreeSpaceError::PlacementDomainMismatch);
     }
-    if let Some(PlacementOrientation::Fixed(fixed)) = request.shape().orientation() {
-        if !same_axes(fixed, frame) {
-            return Err(FreeSpaceError::PlacementOrientationMismatch);
-        }
+    if let Some(PlacementOrientation::Fixed(fixed)) = request.shape().orientation()
+        && !same_axes(fixed, frame)
+    {
+        return Err(FreeSpaceError::PlacementOrientationMismatch);
     }
     if !reviewable_exact_evidence(evidence) {
         return Err(FreeSpaceError::InexactPlacementEvidence);

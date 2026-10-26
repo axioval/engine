@@ -239,7 +239,7 @@ pub(crate) fn trapezoids(plan: &Plan) -> Vec<Polygon> {
                 .collect();
             crossing.sort_by(|a, b| a.0.total_cmp(&b.0));
             let (y0, y1) = (levels[index], levels[index + 1]);
-            for pair in crossing.chunks_exact(2) {
+            for pair in crossing.as_chunks::<2>().0 {
                 pieces.extend(polygon(vec![
                     Point2::new(pair[0].1, y0),
                     Point2::new(pair[1].1, y0),

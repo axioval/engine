@@ -441,15 +441,14 @@ impl SightServiceHandle {
                 request.target()
             )));
         }
-        if let Some(SightOutcome::Hidden { occluders }) = answer.outcome() {
-            if let Some(stranger) = occluders
+        if let Some(SightOutcome::Hidden { occluders }) = answer.outcome()
+            && let Some(stranger) = occluders
                 .iter()
                 .find(|occluder| request.blockers().binary_search(occluder).is_err())
-            {
-                return Err(SightError::InvalidEvidence(format!(
-                    "{stranger} was not among the requested blockers"
-                )));
-            }
+        {
+            return Err(SightError::InvalidEvidence(format!(
+                "{stranger} was not among the requested blockers"
+            )));
         }
         if answer.outcome().is_none()
             && !request

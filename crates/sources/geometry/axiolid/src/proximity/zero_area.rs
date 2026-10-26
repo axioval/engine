@@ -239,7 +239,7 @@ impl Surface {
         let limit = audit_limit();
         let mut indices = Vec::with_capacity(mesh.indices.len());
         let mut omitted_area = 0.0;
-        for corners in mesh.indices.chunks_exact(3) {
+        for corners in mesh.indices.as_chunks::<3>().0 {
             let [a, b, c] =
                 [corners[0], corners[1], corners[2]].map(|index| mesh.positions[index as usize]);
             let squared = (b - a).cross(c - a).length_squared();
@@ -250,9 +250,8 @@ impl Surface {
             }
         }
         let rest = TriMesh::new(mesh.positions.clone(), indices);
-        let usable = tolerance()
-            .map(|tolerance| audit_mesh(&rest, tolerance).is_surface_usable())
-            .unwrap_or(false);
+        let usable =
+            tolerance().is_ok_and(|tolerance| audit_mesh(&rest, tolerance).is_surface_usable());
         Some(Self {
             closed: usable && closed_chain(&mesh.indices),
             mesh: rest,
@@ -282,7 +281,7 @@ impl Surface {
 /// a corner index bounds nothing and is left out.
 fn closed_chain(indices: &[u32]) -> bool {
     let mut edges: Vec<(u32, u32, i8)> = Vec::with_capacity(indices.len());
-    for corners in indices.chunks_exact(3) {
+    for corners in indices.as_chunks::<3>().0 {
         let [a, b, c] = [corners[0], corners[1], corners[2]];
         if a == b || b == c || c == a {
             continue;

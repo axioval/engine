@@ -4759,8 +4759,7 @@ fn geometry_clash(case: &Case, model: &str) -> (Output, Value) {
         .output()
         .unwrap();
     let result = std::fs::read_to_string(&saved)
-        .map(|text| serde_json::from_str(&text).unwrap())
-        .unwrap_or(Value::Null);
+        .map_or(Value::Null, |text| serde_json::from_str(&text).unwrap());
     (output, result)
 }
 

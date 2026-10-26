@@ -105,12 +105,11 @@ fn visit(
         let is_mapped = model
             .get(item)
             .is_some_and(|entity| schema.is_a(&entity.type_name, "IFCMAPPEDITEM"));
-        if is_mapped {
-            if let Some(map) = reference(schema, model, item, "MappingSource")? {
-                if let Some(mapped) = reference(schema, model, map, "MappedRepresentation")? {
-                    visit(schema, model, index, mapped, found, seen, depth + 1)?;
-                }
-            }
+        if is_mapped
+            && let Some(map) = reference(schema, model, item, "MappingSource")?
+            && let Some(mapped) = reference(schema, model, map, "MappedRepresentation")?
+        {
+            visit(schema, model, index, mapped, found, seen, depth + 1)?;
         }
     }
     Ok(())

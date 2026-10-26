@@ -861,7 +861,7 @@ impl Fenwick {
         let mut index = position + 1;
         while index < self.0.len() {
             self.0[index] += delta;
-            index += index & index.wrapping_neg();
+            index += index.isolate_lowest_one();
         }
     }
 
@@ -870,7 +870,7 @@ impl Fenwick {
         let (mut index, mut sum) = (end, 0_i64);
         while index > 0 {
             sum += self.0[index];
-            index -= index & index.wrapping_neg();
+            index -= index.isolate_lowest_one();
         }
         u64::try_from(sum).unwrap_or(0)
     }
@@ -989,9 +989,9 @@ mod tests {
     #[test]
     fn an_overlay_within_the_budget_is_admitted() {
         let unit = square(0.0, 0.0, 1.0);
-        assert!(admit(&[&[unit.clone()], &[unit.clone()]]).is_ok());
+        assert!(admit(&[std::slice::from_ref(&unit), std::slice::from_ref(&unit)]).is_ok());
         assert_eq!(
-            count(&[&[unit.clone()], &[unit]]),
+            count(&[std::slice::from_ref(&unit), std::slice::from_ref(&unit)]),
             Ok(Counted {
                 edges: 8,
                 pairs: 20

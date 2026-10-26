@@ -23,7 +23,7 @@ const END_LEN: usize = 22;
 const LOCAL_LEN: usize = 30;
 const CENTRAL_LEN: usize = 46;
 /// ZIP 2.0, made on Unix.
-const MADE_BY: u16 = (3 << 8) | 20;
+const MADE_BY: u16 = (3 << 8) | 0x14;
 const NEEDED: u16 = 20;
 /// 1980-01-01 00:00:00 in MS-DOS time and date.
 const DOS_TIME: u16 = 0;

@@ -4,7 +4,7 @@
 //! model, so a finding needs an identity that does not depend on how the
 //! source numbers its objects. The identity is a UUIDv5 over the rule, the
 //! identities of the finding's objects in a *stable scheme* the host names
-//! (an [`ExternalId`](crate::ExternalId) scheme whose values survive a
+//! (an [`ExternalId`] scheme whose values survive a
 //! re-export, such as a globally unique id the authoring tool keeps), and the
 //! message. An object without an alias in that scheme falls back to its
 //! source-qualified [`ObjectId`], which is only as stable as the source's

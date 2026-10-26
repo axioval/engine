@@ -1450,7 +1450,7 @@ fn candidates(region: &Region) -> Vec<Point2> {
                 }
             }
             crossings.sort_by(f64::total_cmp);
-            for inside in crossings.chunks_exact(2) {
+            for inside in crossings.as_chunks::<2>().0 {
                 out.push(Point2::new(f64::midpoint(inside[0], inside[1]), y));
             }
         }

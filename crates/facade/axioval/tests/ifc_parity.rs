@@ -82,7 +82,8 @@ fn run_case(case: &Path) -> Vec<String> {
     let mut failures = Vec::new();
     for model in models {
         let registry = register_builtins(CapabilityRegistry::new()).expect("built-ins");
-        let plan = compile(&registry, &[definitions.clone()], &ruleset).expect("ruleset compiles");
+        let plan = compile(&registry, std::slice::from_ref(&definitions), &ruleset)
+            .expect("ruleset compiles");
         let bytes = std::fs::read(&model).expect("readable model");
         let name = model.file_name().unwrap().to_string_lossy().into_owned();
         let session = import_ifc_session(&name, &bytes).expect("model imports");

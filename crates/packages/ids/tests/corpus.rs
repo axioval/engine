@@ -99,7 +99,7 @@ fn classify(case: &Path) -> Option<(Class, String)> {
     let registry = default_registry().expect("built-in registry");
     let plan = compile(
         &registry,
-        &[translation.definitions.clone()],
+        std::slice::from_ref(&translation.definitions),
         &translation.ruleset,
     )
     .expect("translated packages compile");
@@ -196,7 +196,7 @@ fn verdicts(
     let registry = default_registry().expect("built-in registry");
     let plan = compile(
         &registry,
-        &[translation.definitions.clone()],
+        std::slice::from_ref(&translation.definitions),
         &translation.ruleset,
     )
     .expect("translated packages compile");
@@ -234,7 +234,7 @@ fn subjects(
     let registry = default_registry().expect("built-in registry");
     let plan = compile(
         &registry,
-        &[translation.definitions.clone()],
+        std::slice::from_ref(&translation.definitions),
         &translation.ruleset,
     )
     .expect("translated packages compile");

@@ -912,6 +912,9 @@ impl<'o> Writer<'o> {
                 continue;
             }
             // Being applicable means meeting the facet as a requirement would.
+            // The closure's `Err` is the writer's `Reason`, which every
+            // translation step returns by value; it is not on a hot path.
+            #[allow(clippy::result_large_err)]
             let translated = self.attempt(|writer| match writer.facet_selector(facet, &scope) {
                 Ok(Some(selector)) => Ok(Ok(selector)),
                 Ok(None) => writer
@@ -2448,10 +2451,8 @@ fn occurrences(
     releases: &[IfcVersion],
     matched: bool,
 ) -> Result<Vec<String>, Reason> {
-    if !matched {
-        if let Some(unknown) = names.iter().find(|name| !defined(name, &names, releases)) {
-            return Err(Reason::UnknownEntity(unknown.clone()));
-        }
+    if !matched && let Some(unknown) = names.iter().find(|name| !defined(name, &names, releases)) {
+        return Err(Reason::UnknownEntity(unknown.clone()));
     }
     Ok(names)
 }

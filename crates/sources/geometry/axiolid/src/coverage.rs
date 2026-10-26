@@ -538,7 +538,9 @@ fn travel(
             Some(false) => {}
             None if depth < MAX_DEPTH && budget > 0 => {
                 let [a, b, c] = corners;
-                let mid = |p: Point2, q: Point2| Point2::new(0.5 * (p.x + q.x), 0.5 * (p.y + q.y));
+                let mid = |p: Point2, q: Point2| {
+                    Point2::new(f64::midpoint(p.x, q.x), f64::midpoint(p.y, q.y))
+                };
                 let (ab, bc, ca) = (mid(a, b), mid(b, c), mid(c, a));
                 for child in [[a, ab, ca], [ab, b, bc], [ca, bc, c], [ab, bc, ca]] {
                     cells.push((child, depth + 1));

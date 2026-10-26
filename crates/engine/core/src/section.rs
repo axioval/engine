@@ -431,7 +431,7 @@ impl BodySection {
                 continue;
             }
             let (nx, ny) = (-dy / length, dx / length);
-            let middle = [0.5 * (a[0] + b[0]), 0.5 * (a[1] + b[1])];
+            let middle = [f64::midpoint(a[0], b[0]), f64::midpoint(a[1], b[1])];
             let scale = middle[0].abs().max(middle[1].abs()).max(1.0);
             let base = self.radius * (1.0 + 1e-9) + 1e-12 * scale;
             for factor in [1.0, 2.0, 4.0] {

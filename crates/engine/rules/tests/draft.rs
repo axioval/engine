@@ -80,7 +80,7 @@ fn a_valid_draft_compiles_with_its_context() {
     let validation = validate_rule(
         &registry(),
         &[vocabulary()],
-        &[context.clone()],
+        std::slice::from_ref(&context),
         &draft.to_string(),
     );
     assert!(
@@ -295,7 +295,7 @@ fn a_draft_that_does_not_parse_names_its_line() {
     let validation = validate_rule(
         &registry(),
         &[vocabulary()],
-        &[context.clone()],
+        std::slice::from_ref(&context),
         "{\n  \"id\": \"x\",\n  oops\n}",
     );
     assert_eq!(validation.diagnostics[0].code, "syntax");
@@ -315,7 +315,7 @@ fn an_expression_draft_is_positioned_within_itself() {
     let validation = validate_expression(
         &registry(),
         &[vocabulary()],
-        &[context.clone()],
+        std::slice::from_ref(&context),
         "cover",
         "requirement",
         &draft.to_string(),

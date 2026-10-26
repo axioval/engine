@@ -80,7 +80,7 @@ impl EvaluationBudget {
     pub fn spend(&self) -> bool {
         let spent = self
             .remaining
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |left| {
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |left| {
                 left.checked_sub(1)
             })
             .is_ok();
@@ -99,7 +99,7 @@ impl EvaluationBudget {
         let charged = !cost.refused
             && self
                 .remaining
-                .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |left| {
+                .try_update(Ordering::Relaxed, Ordering::Relaxed, |left| {
                     left.checked_sub(cost.nodes)
                 })
                 .is_ok();

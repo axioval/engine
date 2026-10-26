@@ -103,7 +103,7 @@ fn open(report: &Report) -> Vec<(String, NotEvaluatedReason, String)> {
             (
                 outcome
                     .object_id()
-                    .map(|object| object.local_id.to_string())
+                    .map(|object| object.local_id.clone())
                     .unwrap_or_default(),
                 outcome.reason.clone(),
                 outcome.message.clone(),

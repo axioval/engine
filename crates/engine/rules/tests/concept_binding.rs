@@ -310,7 +310,7 @@ fn single_target_group_runs_and_multi_group_is_reported_not_dropped() {
     ))
     .unwrap();
     let registry = register_builtins(CapabilityRegistry::new()).unwrap();
-    let plan = compile(&registry, &[definitions.clone()], &rules).unwrap();
+    let plan = compile(&registry, std::slice::from_ref(&definitions), &rules).unwrap();
     assert_eq!(plan.rules().len(), 1);
     assert!(plan.deferred().is_empty());
 

@@ -74,7 +74,7 @@ impl IfcMaterialLayers {
             .attributes("IfcMaterialLayer")
             .iter()
             .find(|attribute| attribute.name.eq_ignore_ascii_case("LayerThickness"))
-            .map(|attribute| attribute.type_name.to_string())
+            .map(|attribute| attribute.type_name.clone())
             .ok_or("IfcMaterialLayer declares no LayerThickness")?;
         match si_value(&self.model, &declared, None, value) {
             Ok(Some(PropertyValue::Quantity { value, .. })) => Ok(value),

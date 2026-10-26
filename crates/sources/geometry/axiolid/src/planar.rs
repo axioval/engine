@@ -703,7 +703,10 @@ pub(crate) fn refused_ring(ring: &Ring, tolerance: axiolid_core::Tolerance) -> b
 fn area_bound(points: &[Point2]) -> f64 {
     let [a, b, c] = [points[0], points[1], points[2]];
     let (ab, ac) = (b - a, c - a);
-    0.5 * (ab.perp_dot(ac).abs() + 4.0 * f64::EPSILON * ab.length() * ac.length())
+    f64::midpoint(
+        ab.perp_dot(ac).abs(),
+        4.0 * f64::EPSILON * ab.length() * ac.length(),
+    )
 }
 
 /// Sides of the regular polygons that stand in for a disc when a footprint

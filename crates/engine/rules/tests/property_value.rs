@@ -199,10 +199,18 @@ fn patterns_and_lengths_apply_to_text() {
             value: vec!["EI [0-9]+".into()],
         },
     );
-    assert!(meets(&check(string("EI 90"), None, &[pattern.clone()])));
+    assert!(meets(&check(
+        string("EI 90"),
+        None,
+        std::slice::from_ref(&pattern)
+    )));
     assert!(fails(&check(string("REI 90"), None, &[pattern])));
     let length = ("max_length", ParameterValue::Integer { value: 3 });
-    assert!(meets(&check(string("äöü"), None, &[length.clone()])));
+    assert!(meets(&check(
+        string("äöü"),
+        None,
+        std::slice::from_ref(&length)
+    )));
     assert!(fails(&check(string("abcd"), None, &[length])));
     let broken = (
         "patterns",

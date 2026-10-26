@@ -234,36 +234,36 @@ fn judge(config: &Config, nearest: &Nearest, evidence: &[Evidence]) -> Judged {
             Vec::new(),
         )));
     };
-    if let (Some(minimum), Some((wall, low, high))) = (config.minimum, &nearest.sure) {
-        if *high < minimum {
-            return Ok(Some((
-                format!(
-                    "too close: {} from {wall}, less than the minimum {}",
-                    shown(*low, *high),
-                    metres(minimum)
-                ),
-                cited(),
-                vec![wall.clone()],
-            )));
-        }
+    if let (Some(minimum), Some((wall, low, high))) = (config.minimum, &nearest.sure)
+        && *high < minimum
+    {
+        return Ok(Some((
+            format!(
+                "too close: {} from {wall}, less than the minimum {}",
+                shown(*low, *high),
+                metres(minimum)
+            ),
+            cited(),
+            vec![wall.clone()],
+        )));
     }
-    if let Some(maximum) = config.maximum {
-        if lower > maximum {
-            let message = match &nearest.sure {
-                Some((wall, low, high)) => format!(
-                    "too far: {} from {wall}, more than the maximum {}",
-                    shown(*low, *high),
-                    metres(maximum)
-                ),
-                None => format!("too far: no wall within the maximum {}", metres(maximum)),
-            };
-            let related = nearest
-                .sure
-                .iter()
-                .map(|(wall, _, _)| wall.clone())
-                .collect();
-            return Ok(Some((message, cited(), related)));
-        }
+    if let Some(maximum) = config.maximum
+        && lower > maximum
+    {
+        let message = match &nearest.sure {
+            Some((wall, low, high)) => format!(
+                "too far: {} from {wall}, more than the maximum {}",
+                shown(*low, *high),
+                metres(maximum)
+            ),
+            None => format!("too far: no wall within the maximum {}", metres(maximum)),
+        };
+        let related = nearest
+            .sure
+            .iter()
+            .map(|(wall, _, _)| wall.clone())
+            .collect();
+        return Ok(Some((message, cited(), related)));
     }
     let near_enough = config.minimum.is_none_or(|minimum| lower >= minimum);
     let far_enough = config.maximum.is_none_or(|maximum| {

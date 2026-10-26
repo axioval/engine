@@ -147,7 +147,10 @@ fn flight(risers: &[f64], angle: f64) -> AxiolidWalkingSurfaceService {
 fn a_straight_flight_measures_its_risers_and_goings_exactly() {
     let measured = walk(&flight(&[0.17, 0.17, 0.21, 0.17], 0.0), "flight").unwrap();
     assert!(measured.is_exact(), "{measured:?}");
-    assert!(direction(&measured) == MetricDirection::try_new([1.0, 0.0, 0.0]).unwrap());
+    assert_eq!(
+        direction(&measured),
+        MetricDirection::try_new([1.0, 0.0, 0.0]).unwrap()
+    );
     assert_eq!(measured.treads().len(), 4);
     assert!(!measured.ends_in_riser());
     let risers = measured.risers();
@@ -314,7 +317,10 @@ fn a_ramp_measures_the_slope_of_its_run() {
     assert!(gentle.is_exact());
     assert_eq!(gentle.runs().len(), 1);
     let run = gentle.runs()[0];
-    assert!(run.direction() == MetricDirection::try_new([1.0, 0.0, 0.0]).unwrap());
+    assert_eq!(
+        run.direction(),
+        MetricDirection::try_new([1.0, 0.0, 0.0]).unwrap()
+    );
     assert!(holds(run.rise(), 0.5) && holds(run.length(), 6.0));
     assert!(holds(run.slope(), 0.5 / 6.0), "{:?}", run.slope());
 
@@ -621,13 +627,19 @@ fn a_flight_measures_the_landings_at_its_ends() {
     assert_eq!(top.landing().unwrap().carrier(), &id("landing"));
     assert!(holds(top.depth().unwrap(), 2.12 - 0.84), "{top:?}");
     assert!(holds(top.width().unwrap(), 1.5));
-    assert!(top.direction() == MetricDirection::try_new([1.0, 0.0, 0.0]).unwrap());
+    assert_eq!(
+        top.direction(),
+        MetricDirection::try_new([1.0, 0.0, 0.0]).unwrap()
+    );
     // The floor runs on under the flight; its landing reaches 2 m back.
     let bottom = landing(&stairs, WalkingEnd::FlightBottom, &candidates).unwrap();
     assert_eq!(bottom.landing().unwrap().carrier(), &id("floor"));
     assert!(holds(bottom.depth().unwrap(), 2.0), "{bottom:?}");
     assert!(holds(bottom.width().unwrap(), 4.0));
-    assert!(bottom.direction() == MetricDirection::try_new([-1.0, 0.0, 0.0]).unwrap());
+    assert_eq!(
+        bottom.direction(),
+        MetricDirection::try_new([-1.0, 0.0, 0.0]).unwrap()
+    );
     // Without candidates nothing carries a landing: the flight's own top
     // tread is no landing.
     let none = landing(&stairs, WalkingEnd::FlightTop, &[]).unwrap();
@@ -1603,12 +1615,18 @@ fn a_quarter_turn_flight_measures_headroom_below_landings_and_width() {
         &["floor", "upper", "hall"],
     )
     .unwrap();
-    assert!(bottom.direction() == MetricDirection::try_new([-1.0, 0.0, 0.0]).unwrap());
+    assert_eq!(
+        bottom.direction(),
+        MetricDirection::try_new([-1.0, 0.0, 0.0]).unwrap()
+    );
     assert_eq!(bottom.landing().unwrap().carrier(), &id("floor"));
     assert!(holds(bottom.depth().unwrap(), 1.5), "{bottom:?}");
     assert!(holds(bottom.width().unwrap(), 1.4), "{bottom:?}");
     let top = landing(&stairs, WalkingEnd::FlightTop, &["floor", "upper", "hall"]).unwrap();
-    assert!(top.direction() == MetricDirection::try_new([0.0, 1.0, 0.0]).unwrap());
+    assert_eq!(
+        top.direction(),
+        MetricDirection::try_new([0.0, 1.0, 0.0]).unwrap()
+    );
     assert_eq!(top.landing().unwrap().carrier(), &id("upper"));
     assert!(holds(top.depth().unwrap(), 3.0 - 1.56), "{top:?}");
     assert!(holds(top.width().unwrap(), 1.0), "{top:?}");
@@ -1654,7 +1672,10 @@ fn handrails_along_a_quarter_turn_are_measured_part_by_part() {
     )
     .unwrap();
     assert_eq!(measured.parts().len(), 2, "{measured:?}");
-    assert!(measured.parts()[1].direction() == MetricDirection::try_new([0.0, 1.0, 0.0]).unwrap());
+    assert_eq!(
+        measured.parts()[1].direction(),
+        MetricDirection::try_new([0.0, 1.0, 0.0]).unwrap()
+    );
     let (first, last) = (
         rail_of(&measured, "lower"),
         rail_of(&measured, "upper_rail"),

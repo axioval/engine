@@ -679,7 +679,7 @@ fn requirement_gaps_leave_the_other_requirements_translated() {
     // Every definition compiles against the capability it names.
     compile(
         &default_registry().unwrap(),
-        &[translation.definitions.clone()],
+        std::slice::from_ref(&translation.definitions),
         &translation.ruleset,
     )
     .unwrap();
@@ -784,7 +784,7 @@ fn run(translation: &Translation, model: &str) -> Report {
     let registry = default_registry().unwrap();
     let plan = compile(
         &registry,
-        &[translation.definitions.clone()],
+        std::slice::from_ref(&translation.definitions),
         &translation.ruleset,
     )
     .unwrap();
@@ -1598,7 +1598,7 @@ fn name_patterns_and_enumerations_are_enumerated() {
     assert_eq!(rows[0]["state"], text("exclude"));
     compile(
         &default_registry().unwrap(),
-        &[translation.definitions.clone()],
+        std::slice::from_ref(&translation.definitions),
         &translation.ruleset,
     )
     .unwrap();

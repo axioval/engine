@@ -108,14 +108,14 @@ impl Spread {
             } => (*dimension, *lower, *upper),
             _ => return None,
         };
-        if let Self::Quantity(_, wanted) = self {
-            if dimension != Some(wanted) {
-                return Some(Err(format!(
-                    "the tolerance {} does not apply to {}",
-                    self.shown(),
-                    display(Some(value))
-                )));
-            }
+        if let Self::Quantity(_, wanted) = self
+            && dimension != Some(wanted)
+        {
+            return Some(Err(format!(
+                "the tolerance {} does not apply to {}",
+                self.shown(),
+                display(Some(value))
+            )));
         }
         if !(lower.is_finite() && upper.is_finite() && lower <= upper) {
             return Some(Err(format!(
@@ -263,20 +263,20 @@ impl RuleCapability for ConsistentValue {
         for (shown_key, members) in groups.into_values() {
             let distinct: BTreeSet<&str> = members.iter().map(|m| m.value.as_str()).collect();
             if distinct.len() < 2 {
-                if let (Some(spread), Some(first)) = (spread, members.first()) {
-                    if first.span.is_some() {
-                        let unit = first.value.strip_prefix("numeric:quantity:");
-                        let unit = unit.map(|unit| format!(" {unit}")).unwrap_or_default();
-                        let group = SpreadGroup {
-                            rule,
-                            names,
-                            shown_key: shown_key.as_deref(),
-                            members: &members,
-                            spread,
-                            unit: &unit,
-                        };
-                        group.judge(&mut evaluation);
-                    }
+                if let (Some(spread), Some(first)) = (spread, members.first())
+                    && first.span.is_some()
+                {
+                    let unit = first.value.strip_prefix("numeric:quantity:");
+                    let unit = unit.map(|unit| format!(" {unit}")).unwrap_or_default();
+                    let group = SpreadGroup {
+                        rule,
+                        names,
+                        shown_key: shown_key.as_deref(),
+                        members: &members,
+                        spread,
+                        unit: &unit,
+                    };
+                    group.judge(&mut evaluation);
                 }
                 continue;
             }

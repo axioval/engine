@@ -152,7 +152,13 @@ fn decode(png: &[u8]) -> (u32, u32, Vec<[u8; 3]>) {
     let mut pixels = Vec::new();
     for row in raw.chunks_exact(width as usize * 3 + 1) {
         assert_eq!(row[0], 0, "unfiltered rows");
-        pixels.extend(row[1..].chunks_exact(3).map(|p| [p[0], p[1], p[2]]));
+        pixels.extend(
+            row[1..]
+                .as_chunks::<3>()
+                .0
+                .iter()
+                .map(|p| [p[0], p[1], p[2]]),
+        );
     }
     assert_eq!(pixels.len(), (width * height) as usize);
     (width, height, pixels)

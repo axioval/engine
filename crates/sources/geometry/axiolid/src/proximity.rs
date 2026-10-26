@@ -2494,7 +2494,9 @@ impl ProximityService for AxiolidProximityService {
         let triangles = body
             .mesh
             .indices
-            .chunks_exact(3)
+            .as_chunks::<3>()
+            .0
+            .iter()
             .map(|corners| [corners[0], corners[1], corners[2]])
             .collect();
         BodySurface::try_new(

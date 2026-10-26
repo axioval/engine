@@ -2365,7 +2365,9 @@ impl OpeningCell {
         let mut parent: Vec<usize> = (0..count).collect();
         let triangles: Vec<[usize; 3]> = mesh
             .indices
-            .chunks_exact(3)
+            .as_chunks::<3>()
+            .0
+            .iter()
             .map(|corners| [corners[0], corners[1], corners[2]].map(|corner| corner as usize))
             .filter(|corners| corners.iter().all(|corner| *corner < count))
             .collect();
@@ -2925,7 +2927,7 @@ fn cell_cut(part: &axiolid_mesh::TriMesh, cell: &OpeningCell) -> Option<Cut> {
         let p = part.positions[index as usize];
         [p.x, p.y, p.z]
     };
-    let reached = part.indices.chunks_exact(3).any(|corners| {
+    let reached = part.indices.as_chunks::<3>().0.iter().any(|corners| {
         cell.reached(
             [point(corners[0]), point(corners[1]), point(corners[2])],
             TOUCHING_DEPTH,
@@ -2958,7 +2960,9 @@ fn winding_number(mesh: &axiolid_mesh::TriMesh, point: [f64; 3]) -> f64 {
     };
     winding(
         mesh.indices
-            .chunks_exact(3)
+            .as_chunks::<3>()
+            .0
+            .iter()
             .map(|corners| [corner(corners[0]), corner(corners[1]), corner(corners[2])]),
         point,
     )
@@ -3076,7 +3080,7 @@ fn contact_area(mesh: &axiolid_mesh::TriMesh, (min, max): Extent) -> f64 {
         [p.x, p.y, p.z]
     };
     let mut area = 0.0;
-    for corners in mesh.indices.chunks_exact(3) {
+    for corners in mesh.indices.as_chunks::<3>().0 {
         let mut polygon = vec![point(corners[0]), point(corners[1]), point(corners[2])];
         for axis in 0..3 {
             for (sign, level) in [(-1.0, min[axis]), (1.0, max[axis])] {
@@ -5695,7 +5699,9 @@ mod tests {
     fn enclosed_volume_and_area(mesh: &axiolid_mesh::TriMesh) -> (f64, f64) {
         let origin = mesh.positions[0];
         mesh.indices
-            .chunks_exact(3)
+            .as_chunks::<3>()
+            .0
+            .iter()
             .map(|corners| {
                 let [a, b, c] = [0, 1, 2].map(|k| mesh.positions[corners[k] as usize] - origin);
                 (a.dot(b.cross(c)) / 6.0, (b - a).cross(c - a).length() / 2.0)

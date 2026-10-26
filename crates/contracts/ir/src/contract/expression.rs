@@ -1117,9 +1117,9 @@ impl Expression {
             | Self::Min { operands, .. }
             | Self::Max { operands, .. }
             | Self::Concat { operands, .. } => {
-                operands
-                    .iter_mut()
-                    .for_each(|operand| operand.rename_rules(rename));
+                for operand in operands {
+                    operand.rename_rules(rename);
+                }
             }
             Self::OneOf {
                 operand, values, ..
@@ -1128,9 +1128,9 @@ impl Expression {
                 operand, values, ..
             } => {
                 operand.rename_rules(rename);
-                values
-                    .iter_mut()
-                    .for_each(|value| value.rename_rules(rename));
+                for value in values {
+                    value.rename_rules(rename);
+                }
             }
             Self::Not { operand, .. }
             | Self::IsDefined { operand, .. }
@@ -1151,7 +1151,9 @@ impl Expression {
             | Self::Next { operand, .. } => operand.rename_rules(rename),
             Self::Floor { operand, step, .. } | Self::Ceil { operand, step, .. } => {
                 operand.rename_rules(rename);
-                step.iter_mut().for_each(|step| step.rename_rules(rename));
+                if let Some(step) = step {
+                    step.rename_rules(rename);
+                }
             }
             Self::Implies {
                 antecedent: left,
@@ -1336,8 +1338,8 @@ impl Expression {
             Self::Literal {
                 value: ScalarValue::Quantity { unit, .. },
                 ..
-            } => blank(kind, "unit", unit)?,
-            Self::InUnit { unit, .. } => blank(kind, "unit", unit)?,
+            }
+            | Self::InUnit { unit, .. } => blank(kind, "unit", unit)?,
             Self::Property { property, .. } => blank(kind, "property", property)?,
             Self::Parameter { name, .. } | Self::Derived { name, .. } => {
                 blank(kind, "name", name)?;

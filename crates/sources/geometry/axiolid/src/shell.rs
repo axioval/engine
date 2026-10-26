@@ -154,7 +154,9 @@ fn single_fans(corners: &[[u32; 3]]) -> bool {
 pub(crate) fn welded_where_closed(mesh: TriMesh) -> TriMesh {
     let as_given: Vec<[u32; 3]> = mesh
         .indices
-        .chunks_exact(3)
+        .as_chunks::<3>()
+        .0
+        .iter()
         .map(|corners| [corners[0], corners[1], corners[2]])
         .collect();
     if two_manifold(&as_given) {

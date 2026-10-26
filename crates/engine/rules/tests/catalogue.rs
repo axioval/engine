@@ -84,7 +84,8 @@ fn the_catalogue_lists_a_package_s_concepts() {
     ))
     .unwrap();
     let package: DefinitionPackage = serde_json::from_str(&text).unwrap();
-    let value: serde_json::Value = serde_json::from_str(&rendered(&[package.clone()])).unwrap();
+    let value: serde_json::Value =
+        serde_json::from_str(&rendered(std::slice::from_ref(&package))).unwrap();
     let concepts = &value["concepts"][0];
     assert_eq!(concepts["package"], package.package.id.as_str());
     assert_eq!(

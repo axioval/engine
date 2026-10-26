@@ -380,7 +380,7 @@ fn a_column_on_its_footing_is_measured_exactly_against_a_wall() {
 
     // The column's surface is 1.5 - 0.2 from the wall; the footing,
     // turned 0.4 rad, reaches cos 0.4 + sin 0.4 of its half width.
-    let footing = 0.5 * (0.4_f64.cos() + 0.4_f64.sin());
+    let footing = f64::midpoint(0.4_f64.cos(), 0.4_f64.sin());
     let expected = (1.5 - 0.2_f64).min(1.5 - footing);
     let geometry = AxiolidGeometry::new()
         .with_tessellated_mesh(id("column"), mesh(&graph, body), DEVIATION)
@@ -681,7 +681,7 @@ fn a_column_on_its_footing_is_certified_against_a_wall_in_plan() {
     let body = column_on_footing(&mut builder, [0.0, 0.0], 0.5);
     let wall = plain_wall(&mut builder);
     let graph = builder.finish(vec![body, wall]).unwrap();
-    let expected = 1.5 - 0.5 * (0.4_f64.cos() + 0.4_f64.sin());
+    let expected = 1.5 - f64::midpoint(0.4_f64.cos(), 0.4_f64.sin());
     let geometry = |exact: bool| {
         let geometry = AxiolidGeometry::new()
             .with_tessellated_mesh(id("column"), mesh(&graph, body), DEVIATION)
@@ -876,7 +876,7 @@ fn a_whole_of_parts_with_exact_bodies_is_certified_as_their_union() {
     assert_eq!(exact.items().len(), 2);
     assert!(exact.is_exact());
 
-    let footing_reach = 0.5 * (0.4_f64.cos() + 0.4_f64.sin());
+    let footing_reach = f64::midpoint(0.4_f64.cos(), 0.4_f64.sin());
     let expected = (1.5 - 0.2_f64).min(1.5 - footing_reach);
     let request = ProximityRequest::try_new(id("whole"), id("wall")).unwrap();
     let measured = AxiolidProximityService::new(geometry)

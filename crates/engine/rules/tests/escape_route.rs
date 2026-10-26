@@ -369,7 +369,7 @@ impl MetricRoutingService for Geometry {
         &self,
         request: &NearestTargetRequest,
     ) -> Result<NearestTargetOutcome, MetricRoutingError> {
-        assert!(request.profile().radius_metres() == 0.0);
+        assert_eq!(request.profile().radius_metres(), 0.0);
         let from = request.origin().subject();
         match self.lookup(
             from,
@@ -475,7 +475,7 @@ impl MetricRoutingService for Geometry {
         &self,
         request: &FarthestPointRequest,
     ) -> Result<FarthestPointOutcome, MetricRoutingError> {
-        assert!(request.profile().radius_metres() == 0.0);
+        assert_eq!(request.profile().radius_metres(), 0.0);
         let region = request.region();
         let witness = MetricPoint::try_new(region.clone(), [19.0, 0.0, 0.0])?;
         match self.lookup(

@@ -2248,7 +2248,10 @@ fn a_door_on_or_swinging_over_a_stair_landing_is_found() {
             format!("door {door} stands on the landing at the top of the flight")
         )]
     );
-    assert_eq!(evaluation.findings()[0].related, [door.clone()]);
+    assert_eq!(
+        evaluation.findings()[0].related,
+        std::slice::from_ref(&door)
+    );
     // Swinging over it from beside it.
     let evaluation = run([0.0, -1.0, 0.0], true, Floor::default());
     assert_eq!(

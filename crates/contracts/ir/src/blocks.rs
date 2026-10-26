@@ -16,7 +16,7 @@
 //! | Block type | Node |
 //! | --- | --- |
 //! | `expression.<kind>` | an expression node of [`EXPRESSION_KINDS`](crate::catalogue::EXPRESSION_KINDS) |
-//! | `measured.<name>` | a `property` read of a [`MEASURED_SET`](crate::MEASURED_SET) value, its parameters as fields |
+//! | `measured.<name>` | a `property` read of a [`MEASURED_SET`] value, its parameters as fields |
 //! | `selector.<kind>` | a selector of [`SELECTOR_KINDS`](crate::catalogue::SELECTOR_KINDS) |
 //! | `source.<kind>` | what an aggregate ranges over, of [`AGGREGATE_SOURCES`](crate::catalogue::AGGREGATE_SOURCES) |
 //! | `members.<name>` | a measured member list an aggregate ranges over, its parameters as fields |

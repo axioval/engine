@@ -5,7 +5,9 @@
 //! under a module named for the format or library it adapts, behind a feature
 //! of the same name. Output sinks follow the same rule (`bcf`, `bcf_api`
 //! for BCF API servers, `bcf_snapshot` for viewpoint images, `xlsx` for
-//! spreadsheet workbooks, and `html` for HTML reports). Host compositions
+//! spreadsheet workbooks, and `html` for HTML reports). Package archives
+//! are read through `mcs` (`.mcs` rule sets and template libraries), which
+//! shares the facade's `axioval-ir` types. Host compositions
 //! of several adapters come from the host layer: `ifc_geometry` (feature
 //! `ifc-geometry`) meshes IFC bodies and registers them as the Axiolid
 //! geometry services of an IFC session.
@@ -31,6 +33,8 @@ pub use axioval_html as html;
 pub use axioval_icdd as icdd;
 #[cfg(feature = "ifc")]
 pub use axioval_ifc as ifc;
+#[cfg(feature = "mcs")]
+pub use axioval_mcs as mcs;
 #[cfg(feature = "xlsx")]
 pub use axioval_xlsx as xlsx;
 

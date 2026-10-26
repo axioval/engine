@@ -592,6 +592,7 @@ dependencies = [
  "axioval-icdd",
  "axioval-ifc",
  "axioval-ir",
+ "axioval-mcs",
  "axioval-rules",
  "axioval-xlsx",
  "openbim-bcf",
@@ -825,9 +826,9 @@ dependencies = [
 name = "axioval-mcs"
 version = "0.7.0"
 dependencies = [
- "axioval",
  "axioval-engine",
  "axioval-ir",
+ "axioval-rules",
  "caseless",
  "flate2",
  "serde",

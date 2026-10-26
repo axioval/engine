@@ -22,6 +22,7 @@ axioval-bcf-snapshot = { workspace = true, optional = true }
 axioval-xlsx = { workspace = true, optional = true }
 axioval-html = { workspace = true, optional = true }
 axioval-host-ifc-axiolid = { workspace = true, optional = true }
+axioval-mcs = { workspace = true, optional = true }
 
 [dev-dependencies]
 # The implementations templates replaced, held to them in tests.
@@ -53,6 +54,10 @@ bcf-snapshot = ["bcf", "dep:axioval-bcf-snapshot"]
 xlsx = ["dep:axioval-xlsx"]
 # Self-contained HTML reports from templates.
 html = ["dep:axioval-html"]
+# Package archives: `.mcs` rule sets and template libraries, read fail closed.
+# The facade pins the `axioval-ir` version the archive's types come from, so a
+# host takes this one feature and cannot drift from it.
+mcs = ["dep:axioval-mcs"]
 # Host compositions are features too, named for what they give a host. IFC
 # bodies meshed and registered as the Axiolid geometry services
 # (`axioval-host-ifc-axiolid`, the bridge `check --geometry` runs), with the

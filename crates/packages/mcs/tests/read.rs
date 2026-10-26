@@ -80,7 +80,8 @@ fn ruleset_archives_read_with_the_definitions_they_carry() {
 
 #[test]
 fn the_template_library_compiles_with_a_ruleset_instantiating_it() {
-    let registry = axioval::default_registry().unwrap();
+    let registry =
+        axioval_rules::register_builtins(axioval_engine::CapabilityRegistry::new()).unwrap();
     let (ruleset, carried) = read(&fixture("library-rules.mcs"))
         .unwrap()
         .into_ruleset()
@@ -88,14 +89,14 @@ fn the_template_library_compiles_with_a_ruleset_instantiating_it() {
     let definitions = resolve_definitions(library().into_definitions().unwrap(), carried).unwrap();
     // The carried copy equals the supplied one, so it is kept once.
     assert_eq!(definitions.len(), 2);
-    let plan = axioval::engine::compile(&registry, &definitions, &ruleset).unwrap();
+    let plan = axioval_engine::compile(&registry, &definitions, &ruleset).unwrap();
     assert_eq!(plan.rules().len(), 1);
     assert_eq!(
         plan.rules()[0].capability,
         "axioval:capability.property-exists"
     );
     // The library's own definitions bind as a catalogue too.
-    axioval::catalogue(library().definitions()).unwrap();
+    axioval_rules::catalogue::catalogue(&registry, library().definitions()).unwrap();
 }
 
 #[test]
@@ -240,22 +241,23 @@ fn rules_without_library() -> Vec<u8> {
 
 #[test]
 fn a_definition_package_neither_carried_nor_supplied_is_refused_by_the_compiler() {
-    let registry = axioval::default_registry().unwrap();
+    let registry =
+        axioval_rules::register_builtins(axioval_engine::CapabilityRegistry::new()).unwrap();
     let (ruleset, carried) = read(&rules_without_library())
         .unwrap()
         .into_ruleset()
         .unwrap();
     let definitions = resolve_definitions(Vec::new(), carried.clone()).unwrap();
-    let error = axioval::engine::compile(&registry, &definitions, &ruleset).unwrap_err();
+    let error = axioval_engine::compile(&registry, &definitions, &ruleset).unwrap_err();
     assert_eq!(
         error,
-        axioval::engine::EngineError::MissingDefinitionPackage(
+        axioval_engine::EngineError::MissingDefinitionPackage(
             "axioval:example.template-library".into()
         )
     );
     // Supplying the definitions archive resolves it.
     let definitions = resolve_definitions(library().into_definitions().unwrap(), carried).unwrap();
-    axioval::engine::compile(&registry, &definitions, &ruleset).unwrap();
+    axioval_engine::compile(&registry, &definitions, &ruleset).unwrap();
 }
 
 #[test]

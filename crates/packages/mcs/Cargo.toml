@@ -33,9 +33,11 @@ unicode-normalization.workspace = true
 caseless.workspace = true
 
 # The tests compile what they read against the built-in capabilities. A
-# path-only dev-dependency is left out of the published manifest.
+# path-only dev-dependency is left out of the published manifest. The facade
+# re-exports this crate (feature `mcs`), so the tests take the rules directly:
+# a dev-dependency on the facade would be a publication cycle.
 [dev-dependencies]
-axioval = { path = "../../facade/axioval" }
+axioval-rules.workspace = true
 
 [lints]
 workspace = true

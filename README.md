@@ -31,7 +31,7 @@ There is deliberately no combined OpenBIM–Axiolid adapter. `axioval-ifc` maps 
 | `axioval-export` | Export profiles: rule packages written as other formats, every loss stated |
 | `axioval-mcs` | MCS package archives (`.mcs`), rule sets and template libraries, read fail closed |
 | `axioval-java-stream` | Java object serialization stream codec, byte-exact round trips |
-| `axioval` | Batteries-included facade |
+| `axioval` | Batteries-included facade; feature `mcs` re-exports `axioval-mcs` as `axioval::mcs` |
 | `axioval-cli` | Portable command-line runner |
 
 ## Usage

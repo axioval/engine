@@ -6,6 +6,12 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **The facade re-exports the MCS archive reader**
+  ([#461](https://github.com/axioval/engine/issues/461)). Feature `mcs`
+  of `axioval` exposes `axioval-mcs` as `axioval::mcs`, so a host reading
+  `.mcs` packages gets archive types built on the facade's own
+  `axioval-ir` and cannot drift from it.
+
 - **Independent rules run at once**
   ([#406](https://github.com/axioval/engine/issues/406)).
   `Runtime::with_rules_at_once` evaluates as many of a plan's rules at

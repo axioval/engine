@@ -100,6 +100,11 @@ geometry every host evaluates is the one the parity harness proves. Hosts
 take it through the facade's `ifc-geometry` feature, which also pins the
 Axiolid and IFC geometry versions it was proven with.
 
+Hosts that run `.mcs` packages take `axioval-mcs` through the facade's `mcs`
+feature (`axioval::mcs::read`), so the archive's rule set and definitions are
+built on the same `axioval-ir` the facade's engine compiles; a separate
+`axioval-mcs` dependency could drift and `compile` would refuse its types.
+
 A host may also declare that one source was derived from another
 (`Options::with_derived_from`, #390): a discipline model exported from
 another and keeping copies of its objects, or another export of one

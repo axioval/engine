@@ -24,7 +24,7 @@ the normalized packages as the IR's `RuleSetPackage` and
 - Core to the architecture gate: it reads packages, never a model, and
   depends on `axioval-ir`, `axioval-engine` (`PackageFiles`, the table-file
   loaders) and format-neutral libraries (`flate2`, `sha2`,
-  `unicode-normalization`, `caseless`). The facade is a path-only dev-dependency.
+  `unicode-normalization`, `caseless`). `axioval-rules` is a path-only dev-dependency; the facade re-exports this crate, so it is never one.
 - Fixtures are real MCS packer output (`fixtures/mcs-v0.1.0`, commit in
   `fixtures/README.md`); tests change one thing in an unpacked copy
   (`tests/support`) and assert the exact refusal. Never edit a fixture

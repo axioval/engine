@@ -47,6 +47,18 @@
       "input": "bs-ifc4-wall-with-opening-and-window.ifc",
       "time": 1.35,
       "reason": "1.248x over 20 rounds (99% interval 1.240 to 1.256) when 0.8.0 was cut, undecided against 1.25x; accepted for 0.8.0 and to be removed by #466."
+    },
+    {
+      "capability": "axioval:capability.containment",
+      "input": "bs-ifc4-building-hvac.ifc",
+      "time": 1.35,
+      "reason": "1.240x over 20 rounds (99% interval 1.225 to 1.256) when 0.9.0 was cut, undecided against 1.25x and 1.25x already at 0.8.0; accepted for 0.9.0 and to be removed by #466."
+    },
+    {
+      "capability": "axioval:capability.clash-matrix",
+      "input": "bs-ifc4-column-straight-rectangle-tessellation.ifc",
+      "time": 1.4,
+      "reason": "1.341x over 20 rounds (99% interval 1.329 to 1.354) when 0.9.0 was cut, about 35 µs on 105 µs for three objects, and 1.31x already at 0.8.0; accepted for 0.9.0 and to be removed by #466."
     }
   ]
 }

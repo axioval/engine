@@ -4,6 +4,12 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+### Changed
+
+- **rheonda holds the copyright.** `LICENSE` names rheonda as the copyright
+  holder, and the contributor licence terms in `CONTRIBUTING.md` grant their
+  licence to rheonda. The licence expression is unchanged.
+
 ## [0.8.0] - 2026-10-28
 
 Every crate is dual-licensed `AGPL-3.0-or-later OR LicenseRef-Commercial`,

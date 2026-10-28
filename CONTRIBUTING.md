@@ -23,7 +23,7 @@ accepted only under these terms. By submitting a contribution (a pull request,
 patch, or other material intended for inclusion), you agree that:
 
 1. You keep the copyright in your contribution.
-2. You grant Friedrich Schrödter, as the copyright holder of Axioval, a
+2. You grant rheonda, as the copyright holder of Axioval, a
    perpetual, worldwide, non-exclusive, royalty-free, irrevocable licence to
    use, reproduce, modify, distribute, and sublicense your contribution, and
    to license it, alone or as part of Axioval, under any terms, including the

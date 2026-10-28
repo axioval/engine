@@ -479,11 +479,15 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   `planar::bounded_footprint` and `bounded_plan_overlap`, `[lower, upper]`
   with the refused slivers' area (only slivers whose box meets the other
   footprint's). A decision is taken only where both ends agree (`contains`
-  for duplicates and the containment class, `intersects` and the dust
-  floor for overlaps), else `SpaceError::Refused`; a reported area may not
+  for duplicates and the containment class, `SpaceOverlap::reading` at the
+  request's contact width and the dust floor for overlaps), else `SpaceError::Refused`; a reported area may not
   move by more than `planar::snapping_area` of the space's footprint; a
   cap covered past its area within that snapping is the whole area
-  (`within_rounding`). Never default a refused plan area to zero (a zero
+  (`within_rounding`). A partial overlap higher than the width whose upper
+  area reaches `OVERLAP_AREA_EPSILON_M2` carries a `PlanDepth` from `plan_depth` (#425): the disc-area
+  shortcut, then `planar::morphology` erosions at half the width of the
+  shared region (inner non-empty: deeper; outer empty: not; else refused);
+  never read it without the budget. Never default a refused plan area to zero (a zero
   area read "not mutually contained" and passed duplicates), and map every
   overlay refusal to `SpaceError::Refused(overlay_refusal(..))`, never
   `Unavailable`. Spans and heights are checked before any overlay runs, so

@@ -340,11 +340,11 @@ fn overlaps() -> FormCheck {
                 overlap("contains", "contained_body: space contains another body"),
                 partial(
                     true,
-                    "intersecting_space: space intersects another space over {area:fixed4} m2",
+                    "intersecting_space: space intersects another space over {area:m2}",
                 ),
                 partial(
                     false,
-                    "intersecting_component: space intersects a component over {area:fixed4} m2",
+                    "intersecting_component: space intersects a component over {area:m2}",
                 ),
             ],
             together: None,

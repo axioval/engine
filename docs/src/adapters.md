@@ -690,12 +690,23 @@ area, rounding included, bounds what they could add, counting only the
 slivers whose box meets the other footprint's. Each decision holds for
 every area the bound allows or is refused: a duplicate needs mutual
 containment at both ends, an overlap's inclusion, containment class and
-`intersects` reading must agree at both ends (one that is dust either way
+`SpaceOverlap::reading` must agree at both ends (one that is dust either way
 and never an intersection is left out), and a cap element is cited only
 where it surely covers more than dust. A reported area must not move by
 more than the overlay's own grid snapping of the space's footprint
 (`planar::snapping_area`, axiolid/kernel#173), and a cap measured
 covered a hair past its own area within that snapping is fully covered.
+A partial overlap higher than the request's contact width whose upper
+area reaches `OVERLAP_AREA_EPSILON_M2` also carries a `PlanDepth` (#425): whether the shared plan
+region holds a disc wider than `OverlapRequest::contact_width_metres`.
+A region whose upper area is below that of such a disc is not deeper
+without any work; otherwise the region is eroded by a disc of half the
+width (`planar::morphology`, held to the disc budget): the inscribed
+erosion leaving anything is deeper, the circumscribed one leaving
+nothing is not (unless slivers could add area, which refuses), and the
+two disagreeing is refused. The reading is taken at the requested width,
+never `NEG_INFINITY`, and an overlap that stays undecided is refused. A
+negative or non-finite width is `SpaceError::InvalidQuantity`.
 A refused plan area is never read as zero. Every such refusal, and every
 overlay refusal left after the slivers are out, is
 `SpaceError::Refused` with its reason (the overlay's error by name), not

@@ -15,7 +15,8 @@ use crate::expression::Interval;
 use super::{Answer, Measures};
 use crate::properties::PropertyResolutionError;
 use crate::space::{
-    BoundaryRequest, Cap, CapRequest, OverlapRequest, SpaceError, SpaceService, UnallocatedRegion,
+    BoundaryRequest, Cap, CapRequest, OverlapRequest, SpaceError, SpaceOverlap, SpaceService,
+    UnallocatedRegion,
 };
 
 /// The names measured here.
@@ -148,18 +149,17 @@ impl Measures {
                 ))
             }
             "intersection_count" => {
-                let mut request = OverlapRequest::new();
+                let tolerance = length(call, "tolerance").unwrap_or(0.0);
+                let mut request = OverlapRequest::new().with_contact_width(tolerance);
                 if let Some(elements) = elements {
                     request = request.with_elements(elements);
                 }
-                let tolerance = length(call, "tolerance").unwrap_or(0.0);
                 let overlaps = service
                     .measure_overlaps(object, &request)
                     .map_err(unavailable)?;
-                let intersecting = overlaps
-                    .iter()
-                    .filter(|overlap| overlap.intersects(tolerance))
-                    .count();
+                let intersecting = SpaceOverlap::intersections(overlaps, tolerance)
+                    .map_err(unavailable)?
+                    .len();
                 Ok(count(intersecting, locator, exact))
             }
             "cap_coverage" => {

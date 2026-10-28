@@ -7,13 +7,14 @@ use std::collections::BTreeMap;
 use axioval_engine::{
     BoundaryRequest, Cap, CapRequest, CapabilityEvaluation, CompiledRule, Containment, Deviation,
     NotEvaluatedReason, OverlapRequest, ParameterDescriptor, ParameterType, RuleCapability,
-    RuleContext, SpaceError, SpaceService, SpaceServiceHandle, UnallocatedRegion,
+    RuleContext, SpaceError, SpaceOverlap, SpaceService, SpaceServiceHandle, UnallocatedRegion,
 };
 use axioval_ir::contract::{ParameterValue, Selector};
 use axioval_ir::{Evidence, Finding, ObjectId, Severity};
 
 use super::{SpaceCategory, reason};
 use crate::selection::select_objects;
+use crate::templates::square_metres_spanned;
 
 /// Default measurement tolerance, in metres, when a rule declares none. A
 /// space is only "low" when it misses the requirement by more than this, and
@@ -117,7 +118,7 @@ impl RuleCapability for SpaceValidation {
             context,
             policy.intersection_elements.as_ref(),
             "intersection",
-            OverlapRequest::new(),
+            OverlapRequest::new().with_contact_width(policy.tolerance_metres),
             OverlapRequest::with_elements,
         );
 
@@ -519,43 +520,44 @@ fn check_overlaps(
     evidence: &Evidence,
     evaluation: &mut CapabilityEvaluation,
 ) {
-    match service.measure_overlaps(space, request) {
+    let overlaps = service
+        .measure_overlaps(space, request)
+        .and_then(|overlaps| SpaceOverlap::intersections(overlaps, policy.tolerance_metres));
+    match overlaps {
         Ok(overlaps) => {
             for overlap in overlaps {
                 let message = match overlap.containment() {
-                    Containment::SubjectInsideOther => Some(message(
+                    Containment::SubjectInsideOther => message(
                         SpaceCategory::ContainedBody,
                         "space is contained by another body",
-                    )),
-                    Containment::OtherInsideSubject => Some(message(
-                        SpaceCategory::ContainedBody,
-                        "space contains another body",
-                    )),
-                    // Contact, not intersection, as `SpaceOverlap::intersects`
-                    // reads it for the measured `intersection_count` too.
-                    Containment::Partial if overlap.intersects(policy.tolerance_metres) => {
+                    ),
+                    Containment::OtherInsideSubject => {
+                        message(SpaceCategory::ContainedBody, "space contains another body")
+                    }
+                    // Only an intersection at the tolerance reaches here, as
+                    // `SpaceOverlap::intersections` reads it for the measured
+                    // `intersection_count` too.
+                    Containment::Partial => {
                         let (category, other) = if overlap.other_is_space() {
                             (SpaceCategory::IntersectingSpace, "another space")
                         } else {
                             (SpaceCategory::IntersectingComponent, "a component")
                         };
-                        Some(message(
+                        let (lower, upper) = overlap.area_bounds();
+                        message(
                             category,
                             &format!(
-                                "space intersects {other} over {:.4} m2",
-                                overlap.area_square_metres()
+                                "space intersects {other} over {}",
+                                square_metres_spanned(lower, upper)
                             ),
-                        ))
+                        )
                     }
-                    Containment::Partial => None,
                 };
-                if let Some(message) = message {
-                    evaluation.push_finding(
-                        finding(rule, space.clone(), Severity::Error, message, evidence)
-                            // The body it overlaps, so a reviewer can open it.
-                            .with_related([overlap.other().clone()]),
-                    );
-                }
+                evaluation.push_finding(
+                    finding(rule, space.clone(), Severity::Error, message, evidence)
+                        // The body it overlaps, so a reviewer can open it.
+                        .with_related([overlap.other().clone()]),
+                );
             }
         }
         Err(error) => {

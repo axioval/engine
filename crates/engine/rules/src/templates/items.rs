@@ -180,6 +180,13 @@ impl<'p, 't> Scope<'_, 'p, 't> {
             }
         }
         let unit = unit_of(format);
+        // A member's area with its unit, as the `m2` format of a value shows it.
+        if format == "m2"
+            && let Some(member) = self.member
+            && let Field::Number((lower, upper)) = field(member, name)
+        {
+            return Some(super::square_metres_spanned(lower, upper));
+        }
         // A number with a fixed number of decimals, or a hundredfold.
         if let Some(member) = self.member
             && let Field::Number(span) = field(member, name)

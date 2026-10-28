@@ -1245,7 +1245,7 @@ service request, so a comparison reproduces its verdict:
 | duplicate bodies | `duplicate_count = 0` |
 | clear height | `clear_height >= required` |
 | uncovered boundary | `boundary_gap;at_least=<segment> = 0` (the total of gaps at least the segment long; `measure=longest` for the longest) |
-| containment and intersection | `intersection_count = 0`: bodies containing or contained by the space, or partly overlapping it by area and higher than `tolerance` (default 5 mm) |
+| containment and intersection | `intersection_count = 0`: bodies containing or contained by the space, or partly overlapping it by area (at least 1e-8 m²), higher than `tolerance` (default 5 mm) and sharing a plan region that holds a disc wider than `tolerance`; an undecided overlap refuses the space |
 | cap coverage | `cap_coverage;cap=top >= 0.98`, a share from 0 to 1 |
 | unallocated region | `largest_unallocated_region <= allowance`, on the storey |
 | unallocated share | `unallocated_share <= maximum`, on the storey |

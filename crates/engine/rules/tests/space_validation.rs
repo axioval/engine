@@ -12,10 +12,11 @@ use std::{
 
 use axioval_engine::{
     BoundaryGap, BoundaryRequest, Cap, CapCoverage, CapRequest, ClearHeightEvidence, CompiledRule,
-    Containment, NotEvaluatedReason, OverlapRequest, PropertyRequest, PropertyResolution,
-    PropertyResolutionError, PropertyResolutionService, PropertyResolutionServiceHandle,
-    RuleCapability, RuleContext, ServiceRegistry, SpaceAspect, SpaceError, SpaceOverlap,
-    SpaceService, SpaceServiceHandle, SupportCounts, UnallocatedRegion,
+    Containment, NotEvaluatedReason, OverlapRequest, PlanDepth, PropertyRequest,
+    PropertyResolution, PropertyResolutionError, PropertyResolutionService,
+    PropertyResolutionServiceHandle, RuleCapability, RuleContext, ServiceRegistry, SpaceAspect,
+    SpaceError, SpaceOverlap, SpaceService, SpaceServiceHandle, SupportCounts, UNDECIDED_OVERLAP,
+    UnallocatedRegion,
 };
 use axioval_ir::contract::{ParameterValue, Selector, Severity as RuleSeverity};
 use axioval_ir::{Evidence, Object, ObjectId, Project, RuleId, Severity, SourceId};
@@ -78,7 +79,9 @@ fn rule() -> CompiledRule {
 /// One stubbed answer per aspect.
 type Answer<T> = Option<Result<T, SpaceError>>;
 type GapRows = Vec<(f64, Vec<ObjectId>)>;
-type OverlapRows = Vec<(bool, f64, f64, Containment)>;
+/// Is-space, plan area bounds, height, containment, and whether the shared
+/// plan region is deeper than the request's width (`None`: not measured).
+type OverlapRows = Vec<(bool, (f64, f64), f64, Containment, Option<bool>)>;
 type ResidualRows = Vec<(ObjectId, f64, Vec<ObjectId>)>;
 
 #[derive(Default)]
@@ -151,8 +154,11 @@ impl SpaceService for Stub {
             .clone()
             .unwrap_or(Ok(Vec::new()))?
             .into_iter()
-            .map(|(is_space, area, height, containment)| {
-                SpaceOverlap::try_new(oid("other"), is_space, area, height, containment)
+            .map(|(is_space, area, height, containment, deeper)| {
+                let depth = deeper
+                    .map(|deeper| PlanDepth::try_new(request.contact_width_metres(), deeper))
+                    .transpose()?;
+                SpaceOverlap::try_new(oid("other"), is_space, area, height, containment, depth)
             })
             .collect()
     }
@@ -369,7 +375,13 @@ fn only_boundary_gaps_at_least_the_declared_length_count() {
 fn containment_and_substantial_intersection_are_errors_but_contact_is_not() {
     let contained = evaluate(
         Stub {
-            overlaps: Some(Ok(vec![(false, 0.0, 0.0, Containment::SubjectInsideOther)])),
+            overlaps: Some(Ok(vec![(
+                false,
+                (0.0, 0.0),
+                0.0,
+                Containment::SubjectInsideOther,
+                None,
+            )])),
             ..Stub::default()
         },
         &rule(),
@@ -378,7 +390,13 @@ fn containment_and_substantial_intersection_are_errors_but_contact_is_not() {
 
     let intersecting = evaluate(
         Stub {
-            overlaps: Some(Ok(vec![(true, 2.0, 1.0, Containment::Partial)])),
+            overlaps: Some(Ok(vec![(
+                true,
+                (2.0, 2.0),
+                1.0,
+                Containment::Partial,
+                Some(true),
+            )])),
             ..Stub::default()
         },
         &rule(),
@@ -388,7 +406,13 @@ fn containment_and_substantial_intersection_are_errors_but_contact_is_not() {
     // Touching faces: real contact, not an intersection.
     let touching = evaluate(
         Stub {
-            overlaps: Some(Ok(vec![(false, 1.0, 0.001, Containment::Partial)])),
+            overlaps: Some(Ok(vec![(
+                false,
+                (1.0, 1.0),
+                0.001,
+                Containment::Partial,
+                Some(true),
+            )])),
             ..Stub::default()
         },
         &rule(),
@@ -685,7 +709,13 @@ fn invalid_declaration_is_refused() {
 fn findings_name_the_objects_a_reviewer_must_open() {
     let overlap = evaluate(
         Stub {
-            overlaps: Some(Ok(vec![(false, 2.0, 1.0, Containment::Partial)])),
+            overlaps: Some(Ok(vec![(
+                false,
+                (2.0, 2.0),
+                1.0,
+                Containment::Partial,
+                Some(true),
+            )])),
             ..Stub::default()
         },
         &rule(),
@@ -724,12 +754,139 @@ fn the_rule_sets_the_height_tolerance() {
     assert!(evaluate(low(), &lenient).findings().is_empty());
 }
 
+/// A wall touching a space overlaps it over its whole height, but holds no
+/// plan region wider than the tolerance: contact, however tall (#425).
+#[test]
+fn a_space_touching_a_wall_is_contact_however_tall() {
+    let touching = || Stub {
+        overlaps: Some(Ok(vec![(
+            false,
+            (5.0e-6, 5.0e-6),
+            2.7,
+            Containment::Partial,
+            Some(false),
+        )])),
+        ..Stub::default()
+    };
+    assert!(evaluate(touching(), &rule()).findings().is_empty());
+    let lenient = rule_with(&[("tolerance_metres", ParameterValue::Number { value: 0.025 })]);
+    assert!(evaluate(touching(), &lenient).findings().is_empty());
+}
+
+/// A reported intersection states the area it has, to the micrometre.
+#[test]
+fn a_small_deep_overlap_states_its_area() {
+    let outcome = evaluate(
+        Stub {
+            overlaps: Some(Ok(vec![(
+                false,
+                (2.0e-5, 2.0e-5),
+                2.7,
+                Containment::Partial,
+                Some(true),
+            )])),
+            ..Stub::default()
+        },
+        &rule(),
+    );
+    assert_eq!(
+        outcome.findings()[0].message,
+        "intersecting_component: space intersects a component over 0.00002 m²"
+    );
+}
+
+/// An area the slivers leave open is stated as the range it lies in.
+#[test]
+fn a_bracketed_overlap_states_its_range() {
+    let outcome = evaluate(
+        Stub {
+            overlaps: Some(Ok(vec![(
+                false,
+                (2.0, 2.0001),
+                2.7,
+                Containment::Partial,
+                Some(true),
+            )])),
+            ..Stub::default()
+        },
+        &rule(),
+    );
+    assert_eq!(
+        outcome.findings()[0].message,
+        "intersecting_component: space intersects a component over between 2 m² and 2.0001 m²"
+    );
+}
+
+/// An overlap whose area straddles the dust floor is neither read as an
+/// intersection nor dropped: the space is not evaluated.
+#[test]
+fn an_overlap_straddling_the_dust_floor_is_not_evaluated() {
+    let outcome = evaluate(
+        Stub {
+            overlaps: Some(Ok(vec![(
+                false,
+                (5.0e-9, 2.0e-8),
+                2.7,
+                Containment::Partial,
+                Some(true),
+            )])),
+            ..Stub::default()
+        },
+        &rule(),
+    );
+    assert!(outcome.findings().is_empty());
+    let undecided = &outcome.not_evaluated_outcomes()[0];
+    assert_eq!(undecided.reason(), &NotEvaluatedReason::IncompleteEvidence);
+    assert_eq!(
+        undecided.message(),
+        SpaceError::Refused(UNDECIDED_OVERLAP).to_string()
+    );
+}
+
+/// An overlap measured without its depth cannot be read, so it is refused.
+#[test]
+fn an_overlap_without_its_depth_is_not_evaluated() {
+    let outcome = evaluate(
+        Stub {
+            overlaps: Some(Ok(vec![(
+                false,
+                (1.0, 1.0),
+                2.7,
+                Containment::Partial,
+                None,
+            )])),
+            ..Stub::default()
+        },
+        &rule(),
+    );
+    assert!(outcome.findings().is_empty());
+    assert_eq!(
+        outcome.not_evaluated_outcomes()[0].reason(),
+        &NotEvaluatedReason::IncompleteEvidence
+    );
+}
+
+/// The overlaps are measured at the rule's tolerance.
+#[test]
+fn overlaps_are_requested_at_the_rules_tolerance() {
+    let stub = Arc::new(Stub::default());
+    evaluate_shared(&stub, &rule());
+    let requests = stub.overlap_requests.lock().unwrap();
+    assert!((requests[0].contact_width_metres() - 0.005).abs() < 1e-12);
+}
+
 /// The same tolerance separates contact from intersection: a 1 cm overlap
 /// intersects under the default 5 mm and is contact under 2 cm.
 #[test]
 fn the_rule_sets_the_overlap_thickness_tolerance() {
     let thin = || Stub {
-        overlaps: Some(Ok(vec![(false, 2.0, 0.01, Containment::Partial)])),
+        overlaps: Some(Ok(vec![(
+            false,
+            (2.0, 2.0),
+            0.01,
+            Containment::Partial,
+            Some(true),
+        )])),
         ..Stub::default()
     };
     assert_eq!(evaluate(thin(), &rule()).findings().len(), 1);
@@ -896,7 +1053,13 @@ fn each_sub_check_reports_its_category() {
     let bottom = rule_with(&[on("check_bottom_cap")]);
     let residual = rule_with(&[on("check_unallocated_area")]);
     let overlap = |is_space, containment| Stub {
-        overlaps: Some(Ok(vec![(is_space, 2.0, 1.0, containment)])),
+        overlaps: Some(Ok(vec![(
+            is_space,
+            (2.0, 2.0),
+            1.0,
+            containment,
+            Some(true),
+        )])),
         ..Stub::default()
     };
     let half_cap = || Stub {
@@ -1038,7 +1201,13 @@ fn element_selectors_choose_the_bounding_and_intersecting_elements() {
 fn an_element_selector_selecting_nothing_skips_its_sub_check() {
     let stub = Arc::new(Stub {
         gaps: Some(Ok(vec![(2.0, Vec::new())])),
-        overlaps: Some(Ok(vec![(false, 2.0, 1.0, Containment::Partial)])),
+        overlaps: Some(Ok(vec![(
+            false,
+            (2.0, 2.0),
+            1.0,
+            Containment::Partial,
+            Some(true),
+        )])),
         ..Stub::default()
     });
     let outcome = evaluate_shared(
@@ -1275,9 +1444,32 @@ fn every_aspect_is_a_measured_value_and_a_comparison() {
             |gap| gap == 0.0,
         ),
         (
+            "a sliver touching a wall",
+            || Stub {
+                overlaps: Some(Ok(vec![(
+                    false,
+                    (5.0e-6, 5.0e-6),
+                    2.7,
+                    Containment::Partial,
+                    Some(false),
+                )])),
+                ..Stub::default()
+            },
+            vec![],
+            "space-1",
+            "intersection_count",
+            |n| n == 0.0,
+        ),
+        (
             "a flat overlap",
             || Stub {
-                overlaps: Some(Ok(vec![(true, 2.0, 0.001, Containment::Partial)])),
+                overlaps: Some(Ok(vec![(
+                    true,
+                    (2.0, 2.0),
+                    0.001,
+                    Containment::Partial,
+                    Some(true),
+                )])),
                 ..Stub::default()
             },
             vec![],
@@ -1288,7 +1480,13 @@ fn every_aspect_is_a_measured_value_and_a_comparison() {
         (
             "an intersecting space",
             || Stub {
-                overlaps: Some(Ok(vec![(true, 2.0, 1.0, Containment::Partial)])),
+                overlaps: Some(Ok(vec![(
+                    true,
+                    (2.0, 2.0),
+                    1.0,
+                    Containment::Partial,
+                    Some(true),
+                )])),
                 ..Stub::default()
             },
             vec![],
@@ -1299,7 +1497,13 @@ fn every_aspect_is_a_measured_value_and_a_comparison() {
         (
             "a contained space",
             || Stub {
-                overlaps: Some(Ok(vec![(true, 2.0, 0.0, Containment::SubjectInsideOther)])),
+                overlaps: Some(Ok(vec![(
+                    true,
+                    (2.0, 2.0),
+                    0.0,
+                    Containment::SubjectInsideOther,
+                    None,
+                )])),
                 ..Stub::default()
             },
             vec![],
@@ -1520,7 +1724,13 @@ fn the_aspects_as_expression_rules_hold_to_the_parity_harness() {
         (
             "contained",
             Stub {
-                overlaps: Some(Ok(vec![(false, 0.0, 0.0, Containment::SubjectInsideOther)])),
+                overlaps: Some(Ok(vec![(
+                    false,
+                    (0.0, 0.0),
+                    0.0,
+                    Containment::SubjectInsideOther,
+                    None,
+                )])),
                 ..Stub::default()
             },
             vec![],
@@ -1528,7 +1738,13 @@ fn the_aspects_as_expression_rules_hold_to_the_parity_harness() {
         (
             "intersecting",
             Stub {
-                overlaps: Some(Ok(vec![(true, 2.0, 1.0, Containment::Partial)])),
+                overlaps: Some(Ok(vec![(
+                    true,
+                    (2.0, 2.0),
+                    1.0,
+                    Containment::Partial,
+                    Some(true),
+                )])),
                 ..Stub::default()
             },
             vec![],
@@ -1536,7 +1752,13 @@ fn the_aspects_as_expression_rules_hold_to_the_parity_harness() {
         (
             "touching",
             Stub {
-                overlaps: Some(Ok(vec![(false, 1.0, 0.001, Containment::Partial)])),
+                overlaps: Some(Ok(vec![(
+                    false,
+                    (1.0, 1.0),
+                    0.001,
+                    Containment::Partial,
+                    Some(true),
+                )])),
                 ..Stub::default()
             },
             vec![],
@@ -1853,11 +2075,13 @@ mod generated {
                         overlaps
                             .into_iter()
                             .map(|(space, area, height, containment)| {
+                                let area = f64::from(area) / 100.0;
                                 (
                                     space,
-                                    f64::from(area) / 100.0,
+                                    (area, area),
                                     f64::from(height) / 1000.0,
                                     containment,
+                                    Some(true),
                                 )
                             })
                             .collect()

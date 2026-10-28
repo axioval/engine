@@ -55910,7 +55910,7 @@
                       "judge": {
                         "kind": "fails"
                       },
-                      "fail": "intersecting_space: space intersects another space over {area:fixed4} m2",
+                      "fail": "intersecting_space: space intersects another space over {area:m2}",
                       "undecided": "{why}",
                       "related": "other"
                     },
@@ -55931,7 +55931,7 @@
                       "judge": {
                         "kind": "fails"
                       },
-                      "fail": "intersecting_component: space intersects a component over {area:fixed4} m2",
+                      "fail": "intersecting_component: space intersects a component over {area:m2}",
                       "undecided": "{why}",
                       "related": "other"
                     }
@@ -77503,11 +77503,11 @@
           "help": [
             {
               "language": "en",
-              "text": "A partial overlap no higher than this is no intersection, in metres."
+              "text": "A partial overlap no higher than this, or whose shared plan region holds no disc wider than this, is no intersection, in metres."
             },
             {
               "language": "de",
-              "text": "Eine Teilüberlappung, die nicht höher ist, ist keine Durchdringung, in Metern."
+              "text": "Eine Teilüberlappung, die nicht höher ist oder deren gemeinsamer Grundriss keine breitere Kreisscheibe enthält, ist keine Durchdringung, in Metern."
             }
           ],
           "references": "length"
@@ -85146,11 +85146,11 @@
           "help": [
             {
               "language": "en",
-              "text": "A partial overlap no thicker than this is contact, in metres."
+              "text": "A partial overlap no higher than this, or whose shared plan region holds no disc wider than this, is contact, in metres."
             },
             {
               "language": "de",
-              "text": "Eine teilweise Überlappung, die nicht dicker ist, ist Berührung, in Metern."
+              "text": "Eine teilweise Überlappung, die nicht höher ist oder deren gemeinsamer Grundriss keine breitere Kreisscheibe enthält, ist Berührung, in Metern."
             }
           ],
           "references": "length"
@@ -114335,11 +114335,11 @@
           "help": [
             {
               "language": "en",
-              "text": "A partial overlap no thicker than this is contact, in metres."
+              "text": "A partial overlap no higher than this, or whose shared plan region holds no disc wider than this, is contact, in metres."
             },
             {
               "language": "de",
-              "text": "Eine teilweise Überlappung, die nicht dicker ist, ist Berührung, in Metern."
+              "text": "Eine teilweise Überlappung, die nicht höher ist oder deren gemeinsamer Grundriss keine breitere Kreisscheibe enthält, ist Berührung, in Metern."
             }
           ],
           "references": "length"
@@ -114366,11 +114366,11 @@
       "help": [
         {
           "language": "en",
-          "text": "Each body a space contains, is contained by or intersects (a partial overlap thicker than `tolerance`), as `space-validation` judges them."
+          "text": "Each body a space contains, is contained by or intersects (a partial overlap higher than `tolerance` whose shared plan region holds a disc wider than it), as `space-validation` judges them; the area may be a range."
         },
         {
           "language": "de",
-          "text": "Jeder Körper, den ein Raum enthält, der ihn enthält oder ihn durchdringt (eine teilweise Überlappung dicker als `tolerance`), wie `space-validation` sie beurteilt."
+          "text": "Jeder Körper, den ein Raum enthält, der ihn enthält oder ihn durchdringt (eine teilweise Überlappung höher als `tolerance`, deren gemeinsamer Grundriss eine breitere Kreisscheibe enthält), wie `space-validation` sie beurteilt; die Fläche kann ein Bereich sein."
         }
       ],
       "fields": [

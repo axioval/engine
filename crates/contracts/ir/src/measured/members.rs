@@ -5493,10 +5493,12 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             label: &en_de("Intersecting bodies", "Durchdringende Körper"),
             help: &en_de(
                 "Each body a space contains, is contained by or intersects (a partial \
-                 overlap thicker than `tolerance`), as `space-validation` judges them.",
+                 overlap higher than `tolerance` whose shared plan region holds a disc \
+                 wider than it), as `space-validation` judges them; the area may be a range.",
                 "Jeder Körper, den ein Raum enthält, der ihn enthält oder ihn durchdringt \
-                 (eine teilweise Überlappung dicker als `tolerance`), wie \
-                 `space-validation` sie beurteilt.",
+                 (eine teilweise Überlappung höher als `tolerance`, deren gemeinsamer \
+                 Grundriss eine breitere Kreisscheibe enthält), wie `space-validation` sie \
+                 beurteilt; die Fläche kann ein Bereich sein.",
             ),
         },
         fields: &[

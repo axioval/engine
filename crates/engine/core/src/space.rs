@@ -234,33 +234,96 @@ pub enum Containment {
     OtherInsideSubject,
 }
 
+/// Whether the plan region an overlap shares holds a disc wider than
+/// `width_metres` (#425).
+///
+/// An adapter measures it at the width the request carried
+/// ([`OverlapRequest::contact_width_metres`]), and a reader trusts it only
+/// toward that width: a deeper region holds a disc at least as wide at any
+/// narrower tolerance, a region that is not deeper holds none wider at any
+/// wider one.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PlanDepth {
+    width_metres: f64,
+    deeper: bool,
+}
+
+impl PlanDepth {
+    pub fn try_new(width_metres: f64, deeper: bool) -> Result<Self, SpaceError> {
+        if !finite_non_negative(width_metres) {
+            return Err(SpaceError::InvalidQuantity);
+        }
+        Ok(Self {
+            width_metres: width_metres + 0.0,
+            deeper,
+        })
+    }
+    /// The disc width, in metres, the depth was measured at.
+    pub fn width_metres(&self) -> f64 {
+        self.width_metres
+    }
+    /// Whether the shared plan region holds a disc wider than
+    /// [`Self::width_metres`].
+    pub fn deeper(&self) -> bool {
+        self.deeper
+    }
+}
+
+/// How a measured overlap reads at a tolerance.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OverlapReading {
+    /// The bodies intersect.
+    Intersection,
+    /// The bodies only touch, within the tolerance.
+    Contact,
+    /// The measurement leaves open which of the two it is.
+    Undecided,
+}
+
+/// The reason a reader gives for an overlap it cannot read
+/// ([`SpaceOverlap::intersections`]).
+pub const UNDECIDED_OVERLAP: &str = "an overlap's measured plan area, height or depth leaves \
+     undecided whether it is an intersection at the tolerance";
+
 /// A measured overlap between a space and another body.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SpaceOverlap {
     other: ObjectId,
     other_is_space: bool,
-    area_square_metres: f64,
+    area_square_metres: (f64, f64),
     height_metres: f64,
     containment: Containment,
+    depth: Option<PlanDepth>,
 }
 
 impl SpaceOverlap {
+    /// An overlap whose plan area lies in `area_square_metres` (a point, or
+    /// an interval where slivers leave it open) and whose shared plan region
+    /// has the measured `depth`, or `None` where none was measured.
     pub fn try_new(
         other: ObjectId,
         other_is_space: bool,
-        area_square_metres: f64,
+        area_square_metres: (f64, f64),
         height_metres: f64,
         containment: Containment,
+        depth: Option<PlanDepth>,
     ) -> Result<Self, SpaceError> {
-        if !finite_non_negative(area_square_metres) || !finite_non_negative(height_metres) {
+        let (lower, upper) = area_square_metres;
+        if !finite_non_negative(lower)
+            || !finite_non_negative(upper)
+            || lower > upper
+            || !finite_non_negative(height_metres)
+        {
             return Err(SpaceError::InvalidQuantity);
         }
         Ok(Self {
             other,
             other_is_space,
-            area_square_metres,
-            height_metres,
+            // A kernel can hand back -0.0; it renders as "-0.0".
+            area_square_metres: (lower + 0.0, upper + 0.0),
+            height_metres: height_metres + 0.0,
             containment,
+            depth,
         })
     }
     pub fn other(&self) -> &ObjectId {
@@ -270,7 +333,12 @@ impl SpaceOverlap {
     pub fn other_is_space(&self) -> bool {
         self.other_is_space
     }
+    /// The lower bound of the plan area.
     pub fn area_square_metres(&self) -> f64 {
+        self.area_square_metres.0
+    }
+    /// The plan area as a lower and an upper bound.
+    pub fn area_bounds(&self) -> (f64, f64) {
         self.area_square_metres
     }
     pub fn height_metres(&self) -> f64 {
@@ -279,25 +347,68 @@ impl SpaceOverlap {
     pub fn containment(&self) -> Containment {
         self.containment
     }
-    /// Whether the overlap is an intersection rather than contact: either
-    /// body containing the other always is, a partial overlap only over an
-    /// area of at least `OVERLAP_AREA_EPSILON_M2` and thicker than
-    /// `tolerance_metres`. The one reading `space-validation` judges and
-    /// `axioval:measured` `intersection_count` counts.
-    pub fn intersects(&self, tolerance_metres: f64) -> bool {
+    /// The measured depth of the shared plan region, or `None` where none
+    /// was measured.
+    pub fn depth(&self) -> Option<PlanDepth> {
+        self.depth
+    }
+    /// How the overlap reads at `tolerance_metres`: either body containing
+    /// the other is always an intersection; a partial overlap is one only
+    /// when higher than the tolerance, over a plan area of at least
+    /// `OVERLAP_AREA_EPSILON_M2` at both ends, and sharing a plan region that
+    /// holds a disc wider than the tolerance. It is contact when it is no
+    /// higher, when its area surely falls below the floor, or when its depth
+    /// surely holds no such disc, and undecided otherwise (a depth not
+    /// measured, or measured at a narrower width than the tolerance).
+    pub fn reading(&self, tolerance_metres: f64) -> OverlapReading {
         match self.containment {
-            Containment::SubjectInsideOther | Containment::OtherInsideSubject => true,
+            Containment::SubjectInsideOther | Containment::OtherInsideSubject => {
+                OverlapReading::Intersection
+            }
             Containment::Partial => {
-                self.area_square_metres >= OVERLAP_AREA_EPSILON_M2
-                    && self.height_metres > tolerance_metres
+                let (lower, upper) = self.area_square_metres;
+                if self.height_metres <= tolerance_metres || upper < OVERLAP_AREA_EPSILON_M2 {
+                    return OverlapReading::Contact;
+                }
+                match self.depth {
+                    Some(depth) if !depth.deeper && depth.width_metres <= tolerance_metres => {
+                        OverlapReading::Contact
+                    }
+                    Some(depth) if depth.deeper && depth.width_metres >= tolerance_metres => {
+                        if lower >= OVERLAP_AREA_EPSILON_M2 {
+                            OverlapReading::Intersection
+                        } else {
+                            OverlapReading::Undecided
+                        }
+                    }
+                    _ => OverlapReading::Undecided,
+                }
             }
         }
     }
+    /// The overlaps that are intersections at `tolerance_metres`, in order:
+    /// the one reading `space-validation` judges and `axioval:measured`
+    /// `intersection_count` counts. Refuses with [`UNDECIDED_OVERLAP`] when
+    /// any overlap reads undecided, so a reader never counts around it.
+    pub fn intersections(
+        overlaps: Vec<Self>,
+        tolerance_metres: f64,
+    ) -> Result<Vec<Self>, SpaceError> {
+        let mut kept = Vec::new();
+        for overlap in overlaps {
+            match overlap.reading(tolerance_metres) {
+                OverlapReading::Intersection => kept.push(overlap),
+                OverlapReading::Contact => {}
+                OverlapReading::Undecided => return Err(SpaceError::Refused(UNDECIDED_OVERLAP)),
+            }
+        }
+        Ok(kept)
+    }
 }
 
-/// The area, in square metres, below which a partial overlap is contact,
-/// not intersection ([`SpaceOverlap::intersects`]).
-const OVERLAP_AREA_EPSILON_M2: f64 = 1.0e-8;
+/// The plan area, in square metres, below which a partial overlap is
+/// contact, not intersection ([`SpaceOverlap::reading`]).
+pub const OVERLAP_AREA_EPSILON_M2: f64 = 1.0e-8;
 
 /// How much of a space's horizontal cap is covered by elements.
 ///
@@ -620,9 +731,14 @@ impl BoundaryRequest {
 /// [`Self::with_elements`] carries the rule's selection, and the service then
 /// measures overlaps with exactly those elements. Without it every other body
 /// is measured.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+///
+/// [`Self::with_contact_width`] carries the tolerance the overlaps are read
+/// at, so the service measures the depth of each shared plan region at it
+/// (#425). Without it the width is zero: any overlap region is deeper.
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct OverlapRequest {
     elements: Option<Vec<ObjectId>>,
+    contact_width_metres: f64,
 }
 
 impl OverlapRequest {
@@ -640,6 +756,17 @@ impl OverlapRequest {
     /// The elements the caller chose, or `None` for every other body.
     pub fn elements(&self) -> Option<&[ObjectId]> {
         self.elements.as_deref()
+    }
+    /// Asks for each shared plan region's depth at this contact width. The
+    /// service refuses a width that is negative or not finite.
+    #[must_use]
+    pub fn with_contact_width(mut self, metres: f64) -> Self {
+        self.contact_width_metres = metres;
+        self
+    }
+    /// The width, in metres, the depth is measured at.
+    pub fn contact_width_metres(&self) -> f64 {
+        self.contact_width_metres
     }
 }
 
@@ -669,7 +796,10 @@ pub trait SpaceService: Send + Sync + 'static {
         request: &BoundaryRequest,
     ) -> Result<Vec<BoundaryGap>, SpaceError>;
     /// Bodies overlapping `space`: the elements `request` names or, when it
-    /// names none, every other body.
+    /// names none, every other body. A partial overlap higher than
+    /// `request.contact_width_metres()` whose upper area reaches
+    /// [`OVERLAP_AREA_EPSILON_M2`] carries a [`PlanDepth`] measured at that
+    /// width; without one it reads as undecided.
     // gate: measures volume, area
     fn measure_overlaps(
         &self,
@@ -765,18 +895,72 @@ mod tests {
         ObjectId::new(source(), local).unwrap()
     }
 
-    /// Containment always intersects; a partial overlap only over a real
-    /// area and thicker than the tolerance.
+    fn overlap(
+        area: (f64, f64),
+        height: f64,
+        containment: Containment,
+        depth: Option<(f64, bool)>,
+    ) -> SpaceOverlap {
+        let depth = depth.map(|(width, deeper)| PlanDepth::try_new(width, deeper).unwrap());
+        SpaceOverlap::try_new(oid("other"), true, area, height, containment, depth).unwrap()
+    }
+
+    /// Containment always intersects; a partial overlap is contact within the
+    /// tolerance in height, area or depth.
     #[test]
-    fn an_overlap_intersects_beyond_contact() {
-        let overlap = |area, height, containment| {
-            SpaceOverlap::try_new(oid("other"), true, area, height, containment).unwrap()
+    fn an_overlap_reads_contact_within_the_tolerance_in_height_area_or_depth() {
+        use OverlapReading::{Contact, Intersection, Undecided};
+        let t = 0.005;
+        let reading =
+            |area, height, depth| overlap(area, height, Containment::Partial, depth).reading(t);
+        for containment in [
+            Containment::SubjectInsideOther,
+            Containment::OtherInsideSubject,
+        ] {
+            assert_eq!(
+                overlap((0.0, 0.0), 0.0, containment, None).reading(t),
+                Intersection
+            );
+        }
+        assert_eq!(reading((1.0, 1.0), 0.01, Some((t, true))), Intersection);
+        assert_eq!(reading((1.0, 1.0), t, Some((t, true))), Contact);
+        assert_eq!(
+            reading((1.0e-8, 1.0e-8), 1.0, Some((t, true))),
+            Intersection
+        );
+        assert_eq!(reading((0.0, 0.99e-8), 1.0, Some((t, true))), Contact);
+        assert_eq!(reading((5.0e-9, 2.0e-8), 1.0, Some((t, true))), Undecided);
+        assert_eq!(reading((1.0, 1.0), 1.0, None), Undecided);
+        assert_eq!(reading((1.0, 1.0), 1.0, Some((t, false))), Contact);
+    }
+
+    /// A depth speaks only toward the width it was measured at.
+    #[test]
+    fn a_depth_reads_only_toward_its_width() {
+        use OverlapReading::{Contact, Intersection, Undecided};
+        let reading = |deeper, t| {
+            overlap((1.0, 1.0), 1.0, Containment::Partial, Some((0.01, deeper))).reading(t)
         };
-        assert!(overlap(0.0, 0.0, Containment::SubjectInsideOther).intersects(0.005));
-        assert!(overlap(0.0, 0.0, Containment::OtherInsideSubject).intersects(0.005));
-        assert!(overlap(1.0, 0.01, Containment::Partial).intersects(0.005));
-        assert!(!overlap(1.0, 0.005, Containment::Partial).intersects(0.005));
-        assert!(!overlap(1.0e-9, 1.0, Containment::Partial).intersects(0.005));
+        assert_eq!(reading(true, 0.005), Intersection);
+        assert_eq!(reading(true, 0.02), Undecided);
+        assert_eq!(reading(false, 0.02), Contact);
+        assert_eq!(reading(false, 0.005), Undecided);
+        assert_eq!(reading(true, f64::NAN), Undecided);
+    }
+
+    #[test]
+    fn intersections_refuse_an_undecided_overlap() {
+        let deep = overlap((1.0, 1.0), 1.0, Containment::Partial, Some((0.005, true)));
+        let touching = overlap((1.0, 1.0), 1.0, Containment::Partial, Some((0.005, false)));
+        let unknown = overlap((1.0, 1.0), 1.0, Containment::Partial, None);
+        assert_eq!(
+            SpaceOverlap::intersections(vec![touching.clone(), deep.clone()], 0.005),
+            Ok(vec![deep.clone()])
+        );
+        assert_eq!(
+            SpaceOverlap::intersections(vec![deep, touching, unknown], 0.005),
+            Err(SpaceError::Refused(UNDECIDED_OVERLAP))
+        );
     }
 
     /// A storey's share holds the exact one, and is undefined without one
@@ -875,9 +1059,17 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn boundary_and_overlap_requests_are_canonical_and_absent_by_default() {
         assert_eq!(BoundaryRequest::new().elements(), None);
         assert_eq!(OverlapRequest::new().elements(), None);
+        assert_eq!(OverlapRequest::new().contact_width_metres(), 0.0);
+        assert_eq!(
+            OverlapRequest::new()
+                .with_contact_width(0.005)
+                .contact_width_metres(),
+            0.005
+        );
         let ids = vec![oid("b"), oid("a"), oid("b")];
         assert_eq!(
             BoundaryRequest::new().with_elements(ids.clone()).elements(),
@@ -908,7 +1100,15 @@ mod tests {
                 .is_err()
         );
         assert!(BoundaryGap::try_new(f64::INFINITY, Vec::new()).is_err());
-        assert!(SpaceOverlap::try_new(oid("o"), false, -1.0, 1.0, Containment::Partial).is_err());
+        let overlap = |area, depth| {
+            SpaceOverlap::try_new(oid("o"), false, area, 1.0, Containment::Partial, depth)
+        };
+        assert!(overlap((-1.0, 1.0), None).is_err());
+        assert!(overlap((2.0, 1.0), None).is_err());
+        assert!(overlap((f64::NAN, 1.0), None).is_err());
+        assert!(overlap((0.0, f64::INFINITY), None).is_err());
+        assert!(PlanDepth::try_new(-1.0, true).is_err());
+        assert!(PlanDepth::try_new(f64::NAN, false).is_err());
         assert!(UnallocatedRegion::try_new(oid("st"), f64::NAN, Vec::new()).is_err());
         let region = UnallocatedRegion::try_new(oid("st"), 5.0, Vec::new()).unwrap();
         assert_eq!(region.floor_area_square_metres(), None);

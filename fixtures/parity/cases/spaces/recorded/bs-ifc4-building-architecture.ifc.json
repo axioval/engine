@@ -227,7 +227,7 @@
         }
       ],
       "id": "87a6c508-578a-5186-abdd-4724f8ab5915",
-      "message": "intersecting_component: space intersects a component over 3.0400 m2",
+      "message": "intersecting_component: space intersects a component over 3.04 m²",
       "object_id": {
         "local_id": "#135",
         "source": {
@@ -290,7 +290,7 @@
         }
       ],
       "id": "69c6a9f5-2a8a-5dab-86c7-136f05c621ec",
-      "message": "intersecting_component: space intersects a component over 11.2750 m2",
+      "message": "intersecting_component: space intersects a component over 11.275 m²",
       "object_id": {
         "local_id": "#85",
         "source": {

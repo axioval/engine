@@ -527,8 +527,10 @@ pub(super) const SPACE_TOLERANCE: MeasuredParameter = MeasuredParameter {
     required: true,
     default: None,
     help: &en_de(
-        "A partial overlap no thicker than this is contact, in metres.",
-        "Eine teilweise Überlappung, die nicht dicker ist, ist Berührung, in Metern.",
+        "A partial overlap no higher than this, or whose shared plan region holds no disc \
+         wider than this, is contact, in metres.",
+        "Eine teilweise Überlappung, die nicht höher ist oder deren gemeinsamer Grundriss \
+         keine breitere Kreisscheibe enthält, ist Berührung, in Metern.",
     ),
 };
 
@@ -5378,8 +5380,10 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
                 required: false,
                 default: Some("0.005"),
                 help: &en_de(
-                    "A partial overlap no higher than this is no intersection, in metres.",
-                    "Eine Teilüberlappung, die nicht höher ist, ist keine Durchdringung, \
+                    "A partial overlap no higher than this, or whose shared plan region \
+                     holds no disc wider than this, is no intersection, in metres.",
+                    "Eine Teilüberlappung, die nicht höher ist oder deren gemeinsamer \
+                     Grundriss keine breitere Kreisscheibe enthält, ist keine Durchdringung, \
                      in Metern.",
                 ),
             },

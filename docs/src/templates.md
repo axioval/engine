@@ -1891,7 +1891,7 @@ them), `insufficient_height: clear height {height:upper3} below required
 m of space boundary is uncovered` (relating the elements along the runs),
 `contained_body: space is contained by another body`, `… contains another
 body`, `intersecting_space: space intersects another space over
-{area:fixed4} m2`, `intersecting_component: …` (each relating the body)
+{area:m2}`, `intersecting_component: …` (each relating the body)
 and `uncovered_top_cap: top cap only {top:hundred1}% covered` (relating
 the covering elements), all `ungraded`. A region of floor reads
 `unallocated_area: a region of {area:fixed3} m2 of storey floor belongs to

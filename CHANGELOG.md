@@ -264,6 +264,22 @@ All notable changes are documented here. This project follows Semantic Versionin
   and declares `rust-version = "1.99"`; a consumer on an older compiler
   must upgrade. No behaviour changes.
 
+- **Breaking: overlaps carry a contact width and a measured depth**
+  ([#425](https://github.com/axioval/engine/issues/425)).
+  `OverlapRequest::with_contact_width` states the tolerance the overlaps are
+  read at; `SpaceOverlap::try_new` takes the plan area as bounds and an
+  optional `PlanDepth` (whether the shared plan region holds a disc wider
+  than the width); `SpaceOverlap::intersects` is replaced by `reading`
+  (`OverlapReading`: intersection, contact or undecided) and
+  `SpaceOverlap::intersections`, which refuses what is undecided
+  (`UNDECIDED_OVERLAP`). `OverlapRequest` is no longer `Eq`. A `SpaceService` implementation
+  must give a partial overlap taller than the contact width, whose upper
+  area reaches `OVERLAP_AREA_EPSILON_M2`, a `PlanDepth` measured at that
+  width; one it leaves without reads as undecided. A space with an
+  undecided overlap is not evaluated, nor is its `intersection_count` or
+  `space_overlaps`. Findings state an overlap's area with the `m2` format
+  (`0.00002 m²`, or a range) instead of four decimals.
+
 - **Facade areas beside bodies warped within a small width**
   ([#454](https://github.com/axioval/engine/issues/454)). The facade-area
   service no longer refuses because another body within reach is a
@@ -785,6 +801,13 @@ All notable changes are documented here. This project follows Semantic Versionin
   `UnmeasuredObstacles`, carrying the new `UnmeasuredObstacles` struct
   (the objects the host declared unmeasured, each with its reason, in
   identity order, once each).
+
+- **Spaces touching a wall are not reported as intersecting it**
+  ([#425](https://github.com/axioval/engine/issues/425)).
+  A partial overlap is an intersection only when its shared plan region
+  holds a disc wider than the tolerance, so a hair-thin overlap along a tall
+  wall reads as contact and no longer reports `over 0.0000 m2`.
+
 - **Sums of coordinate products run about the body, not the world origin**
   ([#452](https://github.com/axioval/engine/issues/452)). The signed
   volume whose sign tells a closed body's outward faces (thickness, facade

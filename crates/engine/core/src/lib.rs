@@ -1410,8 +1410,9 @@ pub use sight_distance::{SightDistance, SightDistanceRequest, SightObstruction};
 pub use source_metadata::{SourceMetadata, SourceMetadataIndex};
 pub use space::{
     BoundaryGap, BoundaryRequest, Cap, CapCoverage, CapRequest, ClearHeightEvidence, Containment,
-    OverlapRequest, SpaceAspect, SpaceError, SpaceOverlap, SpaceService, SpaceServiceHandle,
-    SupportCounts, UnallocatedRegion, UnallocatedShare, UnmeasuredObjects,
+    OVERLAP_AREA_EPSILON_M2, OverlapReading, OverlapRequest, PlanDepth, SpaceAspect, SpaceError,
+    SpaceOverlap, SpaceService, SpaceServiceHandle, SupportCounts, UNDECIDED_OVERLAP,
+    UnallocatedRegion, UnallocatedShare, UnmeasuredObjects,
 };
 pub use station_profile::{
     AlignmentProfile, AlignmentProfileRequest, ProfileExtreme, ProfileExtremeValue, ProfilePiece,

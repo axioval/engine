@@ -6,8 +6,8 @@ use axiolid_core::Point3;
 use axiolid_mesh::TriMesh;
 use axioval_axiolid::{AxiolidGeometry, AxiolidSpaceService};
 use axioval_engine::{
-    BoundaryRequest, Cap, CapRequest, Containment, OverlapRequest, SpaceAspect, SpaceError,
-    SpaceService,
+    BoundaryRequest, Cap, CapRequest, Containment, OverlapReading, OverlapRequest, SpaceAspect,
+    SpaceError, SpaceOverlap, SpaceService,
 };
 use axioval_ir::{ObjectId, SourceId};
 
@@ -135,6 +135,7 @@ fn a_partial_intersection_reports_its_shared_extent() {
     assert_eq!(overlaps[0].containment(), Containment::Partial);
     // 1 m x 4 m of shared plan, 2 m of shared height.
     assert!((overlaps[0].area_square_metres() - 4.0).abs() < 1e-6);
+    assert!(overlaps[0].depth().expect("measured").deeper());
     assert!((overlaps[0].height_metres() - 2.0).abs() < 1e-9);
 }
 
@@ -956,6 +957,7 @@ fn a_space_casting_slivers_in_plan_is_measured() {
     assert_eq!(overlaps.len(), 1);
     assert_eq!(overlaps[0].containment(), Containment::Partial);
     assert!((overlaps[0].area_square_metres() - 4.0).abs() < 1e-6);
+    assert!(overlaps[0].depth().expect("measured").deeper());
     let coverage = service
         .measure_cap_coverage(&id("space"), &CapRequest::new(Cap::Top))
         .expect("measured");
@@ -1567,4 +1569,135 @@ fn geometry_hull(boxes: &[([f64; 3], [f64; 3])]) -> ([f64; 3], [f64; 3]) {
             std::array::from_fn(|axis| max[axis].max(high[axis])),
         )
     })
+}
+
+/// Reads the overlaps of `space` with `wall` at `width`.
+fn overlaps_at(space: TriMesh, wall: TriMesh, width: f64) -> Result<Vec<SpaceOverlap>, SpaceError> {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("space"), space)
+        .with_mesh(id("wall"), wall);
+    AxiolidSpaceService::new(geometry, source())
+        .with_space(id("space"))
+        .measure_overlaps(
+            &id("space"),
+            &OverlapRequest::new().with_contact_width(width),
+        )
+}
+
+/// A space whose wall overlaps it by a hair, however tall, is contact (#425).
+#[test]
+fn a_space_touching_a_wall_within_the_tolerance_is_contact() {
+    let overlaps = overlaps_at(
+        body(0.0, 4.0, 0.0, 4.0, 0.0, 3.0),
+        body(3.99999, 4.2, 0.0, 4.0, 0.0, 3.0),
+        0.005,
+    )
+    .expect("measured");
+    assert_eq!(overlaps.len(), 1);
+    let depth = overlaps[0].depth().expect("measured");
+    assert!(!depth.deeper());
+    assert!((overlaps[0].area_square_metres() - 4.0e-5).abs() < 1e-9);
+    assert_eq!(overlaps[0].reading(0.005), OverlapReading::Contact);
+    assert_eq!(SpaceOverlap::intersections(overlaps, 0.005), Ok(Vec::new()));
+}
+
+/// A 10 mm overlap along a 4 m wall holds area but no wide disc: contact at
+/// 25 mm, an intersection at 5 mm.
+#[test]
+fn a_thin_long_overlap_reads_by_its_depth() {
+    let (space, wall) = (
+        || body(0.0, 4.0, 0.0, 4.0, 0.0, 3.0),
+        || body(3.99, 4.2, 0.0, 4.0, 0.0, 3.0),
+    );
+    let wide = overlaps_at(space(), wall(), 0.025).expect("measured");
+    assert!(!wide[0].depth().expect("measured").deeper());
+    assert_eq!(SpaceOverlap::intersections(wide, 0.025), Ok(Vec::new()));
+    let narrow = overlaps_at(space(), wall(), 0.005).expect("measured");
+    assert!(narrow[0].depth().expect("measured").deeper());
+    assert!((narrow[0].area_square_metres() - 0.04).abs() < 1e-6);
+    assert_eq!(
+        SpaceOverlap::intersections(narrow, 0.005)
+            .expect("decided")
+            .len(),
+        1
+    );
+}
+
+/// Without a width every overlap region is deeper, as before (#425).
+#[test]
+#[allow(clippy::float_cmp)]
+fn a_request_without_a_width_reads_any_overlap_deeper() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("space"), body(0.0, 4.0, 0.0, 4.0, 0.0, 3.0))
+        .with_mesh(id("wall"), body(3.99999, 4.2, 0.0, 4.0, 0.0, 3.0));
+    let overlaps = AxiolidSpaceService::new(geometry, source())
+        .with_space(id("space"))
+        .measure_overlaps(&id("space"), &OverlapRequest::new())
+        .expect("measured");
+    let depth = overlaps[0].depth().expect("measured");
+    assert!(depth.deeper());
+    assert_eq!(depth.width_metres(), 0.0);
+}
+
+/// A negative or non-finite width is refused, never read as zero.
+#[test]
+fn a_contact_width_that_is_not_a_length_is_refused() {
+    for width in [-0.1, f64::NAN, f64::INFINITY] {
+        assert_eq!(
+            overlaps_at(
+                body(0.0, 4.0, 0.0, 4.0, 0.0, 3.0),
+                body(3.0, 6.0, 0.0, 4.0, 0.0, 3.0),
+                width
+            ),
+            Err(SpaceError::InvalidQuantity)
+        );
+    }
+}
+
+/// Slivers that could add to a region measured at the width, and so change
+/// whether it holds a wide disc, are refused.
+#[test]
+fn a_depth_the_slivers_could_change_is_refused() {
+    let Err(SpaceError::Refused(reason)) = overlaps_at(
+        leaning_room(1e-10),
+        closed_box(3.9999, 4.2, 0.0, 4.0, 0.0, 3.0),
+        0.005,
+    ) else {
+        panic!("a refusal");
+    };
+    assert!(
+        reason.contains("could change the plan area this decision rests on"),
+        "{reason}"
+    );
+}
+
+/// A shared region smaller than a disc of the width holds none, so its
+/// depth is decided without the overlay, slivers or not.
+#[test]
+fn a_region_smaller_than_the_disc_is_never_deeper() {
+    let overlaps = overlaps_at(
+        leaning_room(1e-10),
+        closed_box(3.9999, 4.2, 0.0, 4.0, 0.0, 3.0),
+        0.025,
+    )
+    .expect("decided by its area");
+    assert!(!overlaps[0].depth().expect("measured").deeper());
+    assert_eq!(overlaps[0].reading(0.025), OverlapReading::Contact);
+}
+
+/// A strip exactly as wide as the tolerance holds no disc wider than it:
+/// never deeper, or refused where the erosions cannot tell.
+#[test]
+fn a_strip_as_wide_as_the_tolerance_is_never_deeper() {
+    match overlaps_at(
+        body(0.0, 4.0, 0.0, 4.0, 0.0, 3.0),
+        body(3.995, 4.2, 0.0, 4.0, 0.0, 3.0),
+        0.005,
+    ) {
+        Ok(overlaps) => assert!(overlaps.iter().all(|o| !o.depth().unwrap().deeper())),
+        Err(SpaceError::Refused(reason)) => {
+            assert!(reason.contains("disc erosions leave undecided"), "{reason}");
+        }
+        Err(other) => panic!("unexpected {other:?}"),
+    }
 }

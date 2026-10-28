@@ -2165,12 +2165,25 @@ fn spanned(plan: &Plan<'_>, read: &Read, name: &str, show: fn(f64) -> String) ->
             (value, value)
         }
     };
+    Some(shown_between(lower, upper, show))
+}
+
+/// The two ends each shown by `show`: one where they show alike,
+/// `between … and …` otherwise.
+fn shown_between(lower: f64, upper: f64, show: fn(f64) -> String) -> String {
     let (low, high) = (show(lower), show(upper));
-    Some(if low == high {
+    if low == high {
         low
     } else {
         format!("between {low} and {high}")
-    })
+    }
+}
+
+/// An area interval as the `m2` format shows it (#425): `7.5 m²`, or
+/// `between … and …`, for a member's area and for the findings that state an
+/// area without a template.
+pub(crate) fn square_metres_spanned(lower: f64, upper: f64) -> String {
+    shown_between(lower, upper, square_metres)
 }
 
 /// An area in square metres, rounded to the micrometre squared: `7.5 m²`.

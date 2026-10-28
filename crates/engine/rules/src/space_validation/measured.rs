@@ -28,7 +28,7 @@ use std::sync::Arc;
 use axioval_engine::{
     BoundaryRequest, Cap, CapRequest, Citation, MeasuredMember, MeasuredMemo, MeasuredProvider,
     Measurement, MemberValue, OverlapRequest, PropertyResolutionError, RuleContext, SpaceError,
-    SpaceService, SpaceServiceHandle, SupportCounts, UnallocatedRegion,
+    SpaceOverlap, SpaceService, SpaceServiceHandle, SupportCounts, UnallocatedRegion,
 };
 use axioval_ir::measured::{MeasuredArgument, MeasuredCall, MeasuredSelection, SelectionIdentity};
 use axioval_ir::{Evidence, NotEvaluatedReason, ObjectId, QuantityDimension};
@@ -152,7 +152,7 @@ fn overlaps(
     context: &RuleContext<'_>,
     call: &MeasuredCall,
     space: &ObjectId,
-) -> Result<Option<Arc<Vec<axioval_engine::SpaceOverlap>>>, Unavailable> {
+) -> Result<Option<Arc<Vec<SpaceOverlap>>>, Unavailable> {
     // The elements by the selection's identity: a rule binds one selection
     // into each value naming it.
     #[derive(Hash, PartialEq, Eq)]
@@ -171,20 +171,18 @@ fn overlaps(
             tolerance.to_bits(),
         ),
         || {
-            let mut request = OverlapRequest::new();
+            let mut request = OverlapRequest::new().with_contact_width(tolerance);
             if let Some(named) = named {
                 request = request.with_elements(picked(named));
             }
             let overlaps = service(context)?
                 .measure_overlaps(space, &request)
                 .map_err(|error| refusal(&error))?;
-            // Contact, not intersection, as `SpaceOverlap::intersects` reads it.
-            Ok(Arc::new(
-                overlaps
-                    .into_iter()
-                    .filter(|overlap| overlap.intersects(tolerance))
-                    .collect(),
-            ))
+            // Contact, not intersection, as `SpaceOverlap::intersections`
+            // reads it; an overlap it leaves undecided refuses the space.
+            SpaceOverlap::intersections(overlaps, tolerance)
+                .map(Arc::new)
+                .map_err(|error| refusal(&error))
         },
     )
     .map(Some)
@@ -387,7 +385,6 @@ fn overlap_members(
             let at = |field: &str| format!("{OVERLAPS}:{space}#{}:{field}", index + 1);
             let containment = overlap.containment();
             let partial = containment == Containment::Partial;
-            let area = overlap.area_square_metres();
             MeasuredMember {
                 certain: true,
                 exact,
@@ -409,7 +406,10 @@ fn overlap_members(
                         "space",
                         truth_of(partial && overlap.other_is_space(), at("space")),
                     ),
-                    ("area", number(Some((area, area)), AREA, at("area"))),
+                    (
+                        "area",
+                        number(Some(overlap.area_bounds()), AREA, at("area")),
+                    ),
                     ("other", objects(vec![overlap.other().clone()])),
                 ]),
             }

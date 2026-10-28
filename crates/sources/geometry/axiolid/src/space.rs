@@ -17,20 +17,21 @@ use std::sync::{Arc, OnceLock};
 
 use axioval_engine::{
     BoundaryRequest, Cap, CapCoverage, CapRequest, ClearHeightEvidence, Containment,
-    DerivationStore, OverlapRequest, SpaceAspect, SpaceError, SpaceOverlap, SpaceService,
-    SupportCounts, UnallocatedRegion,
+    DerivationStore, OVERLAP_AREA_EPSILON_M2, OverlapReading, OverlapRequest, PlanDepth,
+    SpaceAspect, SpaceError, SpaceOverlap, SpaceService, SupportCounts, UnallocatedRegion,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
 use crate::free_space::within_deviation;
 use crate::geometry::{AxiolidGeometry, Extent, Triangle, VerticalBounds, extent_gap, triangles};
 use crate::planar::{
-    BoundedOverlap, PlanarRefusal, boundary_rings, bounded_footprint, bounded_plan_overlap,
-    footprint_polygons, plan_frame, plan_overlay, polygon_area, ring_segments, snapping_area,
+    BoundedOverlap, Morphology, PlanarRefusal, boundary_rings, bounded_footprint,
+    bounded_plan_overlap, footprint_polygons, morphology, plan_frame, plan_overlay, polygon_area,
+    ring_segments, snapping_area,
 };
 use axiolid_core::Point2;
 use axiolid_mesh::TriMesh;
-use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, Polygon};
+use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, Polygon, Region};
 
 /// Areas below this are numerical dust, not a measured overlap.
 ///
@@ -410,6 +411,12 @@ const SLIVERS_EXCEED_ROUNDING: &str = "the slivers of near-vertical faces the pl
      refuses (RepeatedVertex, ZeroArea) could change the area by more than the overlay's \
      rounding";
 
+/// Why a depth is refused when the plan overlay's disc erosions leave it
+/// open: the inscribed erosion found no disc and the circumscribed one still
+/// holds a region (#425).
+const DEPTH_UNDECIDED: &str = "the plan overlay's disc erosions leave undecided whether the \
+     shared plan region holds a disc wider than the tolerance";
+
 /// Why unallocated regions are refused beside a tessellated storey body
 /// (engine#454).
 ///
@@ -452,6 +459,52 @@ fn shared_area(
     bounded_plan_overlap(first, second, tolerance)
         .map(PlanArea::of)
         .map_err(|error| refused(&error))
+}
+
+/// Whether the plan region `subject` and `other` share holds a disc wider
+/// than `width` (#425), as [`PlanDepth`] states it.
+///
+/// A region of area below that of a disc of the width holds none, so it is
+/// not deeper without any erosion. Otherwise the shared region is eroded by
+/// a disc of radius `width / 2`: the inscribed erosion (`erode_inner`)
+/// leaving anything proves a wider disc; the circumscribed one
+/// (`erode_outer`) leaving nothing proves none; both together leave it open
+/// and it is refused. A region the slivers could still enlarge is not read
+/// as shallow.
+fn plan_depth(
+    subject: &[Triangle],
+    other: &[Triangle],
+    shared: SharedArea,
+    width: f64,
+    tolerance: axiolid_core::Tolerance,
+) -> Result<PlanDepth, SpaceError> {
+    let depth = |deeper| PlanDepth::try_new(width, deeper);
+    // A disc of this width has this area; the margin keeps rounding from
+    // deciding a region just that big.
+    let disc = 0.25 * std::f64::consts::PI * width * width;
+    if shared.upper < disc * (1.0 - 8.0 * f64::EPSILON) {
+        return depth(false);
+    }
+    let measured = shared_area(subject, other, tolerance)?;
+    if measured.polygons.is_empty() {
+        return Err(SpaceError::Refused(SLIVERS_COULD_DECIDE));
+    }
+    if width == 0.0 {
+        return depth(true);
+    }
+    let region = Region::new(measured.polygons, tolerance)
+        .map_err(|error| refused(&PlanarRefusal::Overlay(error)))?;
+    let eroded = |kind| morphology(&region, kind, width / 2.0, tolerance).map_err(|e| refused(&e));
+    if !eroded(Morphology::ErodeInner)?.is_empty() {
+        return depth(true);
+    }
+    if !eroded(Morphology::ErodeOuter)?.is_empty() {
+        return Err(SpaceError::Refused(DEPTH_UNDECIDED));
+    }
+    if shared.upper > shared.lower {
+        return Err(SpaceError::Refused(SLIVERS_COULD_DECIDE));
+    }
+    depth(false)
 }
 
 /// Whether `shared` holds at least [`CONTAINMENT_RATIO`] of a positive
@@ -813,6 +866,10 @@ impl SpaceService for AxiolidSpaceService {
         space: &ObjectId,
         request: &OverlapRequest,
     ) -> Result<Vec<SpaceOverlap>, SpaceError> {
+        let width = request.contact_width_metres();
+        if !(width.is_finite() && width >= 0.0) {
+            return Err(SpaceError::InvalidQuantity);
+        }
         let requested = request.elements();
         let aspect = SpaceAspect::Overlaps;
         let subject = self.subject(aspect, space)?;
@@ -898,34 +955,35 @@ impl SpaceService for AxiolidSpaceService {
                 &shared,
             )
             .ok_or(SpaceError::Refused(SLIVERS_COULD_DECIDE))?;
-            let overlap = |area| {
-                SpaceOverlap::try_new(
-                    candidate.clone(),
-                    self.is_space(candidate),
-                    area,
-                    height,
-                    class,
-                )
-            };
-            // Every reading of the overlap (`intersects` at any height
-            // tolerance) must hold at both ends of what the slivers allow.
-            let (lower, upper) = (overlap(shared.lower)?, overlap(shared.upper)?);
-            let intersects = |overlap: &SpaceOverlap| overlap.intersects(f64::NEG_INFINITY);
-            if intersects(&lower) != intersects(&upper) {
-                return Err(SpaceError::Refused(SLIVERS_COULD_DECIDE));
-            }
-            if shared.lower <= AREA_EPSILON_M2 {
-                // Dust either way, and never an intersection: nothing
-                // reads it.
-                if intersects(&upper) {
+            // Only a partial overlap higher than the tolerance and over more
+            // than dust has a depth to read; the rest read by height or area.
+            let depth = (class == Containment::Partial
+                && height > width
+                && shared.upper >= OVERLAP_AREA_EPSILON_M2)
+                .then(|| plan_depth(&subject, &other, shared, width, tolerance))
+                .transpose()?;
+            // Every reading of the overlap must hold at both ends of what
+            // the slivers allow, so it is read at the request's width.
+            let overlap = SpaceOverlap::try_new(
+                candidate.clone(),
+                self.is_space(candidate),
+                (shared.lower, shared.upper),
+                height,
+                class,
+                depth,
+            )?;
+            match (overlap.reading(width), shared.lower <= AREA_EPSILON_M2) {
+                (OverlapReading::Undecided, _) | (OverlapReading::Intersection, true) => {
                     return Err(SpaceError::Refused(SLIVERS_COULD_DECIDE));
                 }
-                continue;
+                // Dust, and never an intersection: nothing reads it.
+                (OverlapReading::Contact, true) => continue,
+                _ => {}
             }
             if shared.upper - shared.lower > snapping_area(&subject_area.polygons) {
                 return Err(SpaceError::Refused(SLIVERS_EXCEED_ROUNDING));
             }
-            overlaps.push(lower);
+            overlaps.push(overlap);
         }
         Ok(overlaps)
     }

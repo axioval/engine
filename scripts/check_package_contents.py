@@ -139,7 +139,7 @@ def verify(package_dir: Path, versions: dict[str, str], terms: tuple[str, ...]) 
                         )
             manifest = crate.extractfile(root + "Cargo.toml")
             text = manifest.read().decode() if manifest is not None else ""
-            if 'license = "AGPL-3.0-or-later"' not in text:
+            if 'license = "AGPL-3.0-or-later OR LicenseRef-Commercial"' not in text:
                 errors.append(f"{archive.name}: missing SPDX license expression")
             if 'readme = "README.md"' not in text:
                 errors.append(f"{archive.name}: missing README metadata")

@@ -1,12 +1,19 @@
 Axioval Engine
-Copyright (C) 2026 Axioval contributors
+Copyright (C) 2026 Friedrich Schrödter and Axioval contributors
 
-SPDX-License-Identifier: AGPL-3.0-or-later
+SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 
-Axioval Schema is free software: you can redistribute it and/or modify it under
-the terms of the GNU Affero General Public License as published by the Free
-Software Foundation, either version 3 of the License, or (at your option) any
-later version. The complete license text follows.
+Axioval Engine is dual-licensed. You may use it under either of:
+
+- the GNU Affero General Public License as published by the Free Software
+  Foundation, either version 3 of the License, or (at your option) any later
+  version (AGPL-3.0-or-later). The complete license text follows.
+- LicenseRef-Commercial: commercial licences are available from the copyright
+  holder. No commercial licence is granted by this file; one exists only as a
+  separate written agreement with the copyright holder.
+
+Contributions are accepted under the contributor licence terms in
+CONTRIBUTING.md, which keep both options available.
 
 GNU AFFERO GENERAL PUBLIC LICENSE
 Version 3, 19 November 2007

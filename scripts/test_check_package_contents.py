@@ -25,7 +25,7 @@ class PackageContentsTests(unittest.TestCase):
                         "LICENSE": b"license",
                         "README.md": b"readme",
                         "Cargo.toml": (
-                            b'license = "AGPL-3.0-or-later"\nreadme = "README.md"\n'
+                            b'license = "AGPL-3.0-or-later OR LicenseRef-Commercial"\nreadme = "README.md"\n'
                         ),
                     }.items():
                         info = tarfile.TarInfo(root + relative)

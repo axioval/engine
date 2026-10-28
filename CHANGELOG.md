@@ -244,6 +244,13 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **Dual licence.** Every crate is now licensed
+  `AGPL-3.0-or-later OR LicenseRef-Commercial`. The AGPL terms are
+  unchanged; `LicenseRef-Commercial` states that commercial licences are
+  available from the copyright holder. Contributions are accepted under the
+  contributor licence terms in `CONTRIBUTING.md`, which let the holder offer
+  both licences.
+
 - **Minimum supported Rust version raised to 1.99**
   ([#462](https://github.com/axioval/engine/issues/462)). The workspace
   builds and tests on Rust 1.99.1 (pinned in `rust-toolchain.toml` and CI)

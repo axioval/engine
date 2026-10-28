@@ -66,4 +66,6 @@ The published facade contains the bounded property-comparison slice and `axioval
 
 ## License
 
-AGPL-3.0-or-later. Dependencies and adapters retain their own licenses; Axiolid is MPL-2.0.
+`AGPL-3.0-or-later OR LicenseRef-Commercial`: Axioval is free software under the GNU Affero General Public License, version 3 or later, and commercial licences are available from the copyright holder (see [LICENSE](LICENSE)). Dependencies and adapters retain their own licenses; Axiolid is MPL-2.0.
+
+Contributions are accepted under the [contributor licence terms](CONTRIBUTING.md#contributor-licence-terms).

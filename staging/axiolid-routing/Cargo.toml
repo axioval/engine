@@ -8,7 +8,7 @@ name = "axioval-axiolid-routing"
 version = "0.0.0"
 edition = "2024"
 rust-version = "1.99"
-license = "AGPL-3.0-or-later"
+license = "AGPL-3.0-or-later OR LicenseRef-Commercial"
 description = "Staging: metric routing over unpublished Axiolid pathfinding crates"
 publish = false
 

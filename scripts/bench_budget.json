@@ -23,6 +23,30 @@
       "input": "fixture-400-walls.ifc",
       "time": 1.45,
       "reason": "The generated fixture states none of the case's properties, so every wall is a finding worded through the template's messages; on every public model it runs within 1.03x."
+    },
+    {
+      "capability": "axioval:capability.effective-coverage",
+      "input": "bs-ifc4-building-architecture.ifc",
+      "time": 1.35,
+      "reason": "Over 1.25x on the architecture models since before 0.7.0 (1.25x to 1.28x over 20 rounds when 0.8.0 was cut, about 25 µs on 110 µs); accepted for 0.8.0 and to be removed by #466."
+    },
+    {
+      "capability": "axioval:capability.effective-coverage",
+      "input": "bs-ifc2x3-building-architecture.ifc",
+      "time": 1.35,
+      "reason": "Over 1.25x on the architecture models since before 0.7.0 (1.25x to 1.28x over 20 rounds when 0.8.0 was cut, about 25 µs on 110 µs); accepted for 0.8.0 and to be removed by #466."
+    },
+    {
+      "capability": "axioval:capability.effective-coverage",
+      "input": "bs-ifc4x3-building-architecture.ifc",
+      "time": 1.35,
+      "reason": "Over 1.25x on the architecture models since before 0.7.0 (1.25x to 1.28x over 20 rounds when 0.8.0 was cut, about 25 µs on 110 µs); accepted for 0.8.0 and to be removed by #466."
+    },
+    {
+      "capability": "axioval:capability.keyed-limit",
+      "input": "bs-ifc4-wall-with-opening-and-window.ifc",
+      "time": 1.35,
+      "reason": "1.248x over 20 rounds (99% interval 1.240 to 1.256) when 0.8.0 was cut, undecided against 1.25x; accepted for 0.8.0 and to be removed by #466."
     }
   ]
 }

@@ -576,7 +576,7 @@ dependencies = [
 
 [[package]]
 name = "axioval"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "axiolid-construct",
  "axiolid-core",
@@ -601,7 +601,7 @@ dependencies = [
 
 [[package]]
 name = "axioval-axiolid"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "axiolid-brep",
  "axiolid-construct",
@@ -630,7 +630,7 @@ dependencies = [
 
 [[package]]
 name = "axioval-bcf"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "axioval-ir",
  "openbim-bcf",
@@ -642,7 +642,7 @@ dependencies = [
 
 [[package]]
 name = "axioval-bcf-api"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "axioval-bcf",
  "axioval-ir",
@@ -655,7 +655,7 @@ dependencies = [
 
 [[package]]
 name = "axioval-bcf-snapshot"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "axioval-bcf",
  "axioval-ir",
@@ -666,7 +666,7 @@ dependencies = [
 
 [[package]]
 name = "axioval-cli"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "axiolid-evaluate",
  "axioval",
@@ -692,7 +692,7 @@ dependencies = [
 
 [[package]]
 name = "axioval-engine"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "axioval-ir",
  "foldhash",
@@ -710,7 +710,7 @@ dependencies = [
 
 [[package]]
 name = "axioval-export"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "axioval-ir",
  "serde_json",
@@ -718,7 +718,7 @@ dependencies = [
 
 [[package]]
 name = "axioval-host-ifc-axiolid"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "axiolid-construct",
  "axiolid-contracts",
@@ -747,7 +747,7 @@ dependencies = [
 
 [[package]]
 name = "axioval-html"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "axioval-ir",
  "thiserror",
@@ -755,14 +755,14 @@ dependencies = [
 
 [[package]]
 name = "axioval-icdd"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "thiserror",
 ]
 
 [[package]]
 name = "axioval-ids"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "axioval",
  "axioval-engine",
@@ -778,7 +778,7 @@ dependencies = [
 
 [[package]]
 name = "axioval-ifc"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "axioval-engine",
  "axioval-ir",
@@ -803,7 +803,7 @@ dependencies = [
 
 [[package]]
 name = "axioval-ir"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "indexmap",
  "jsonschema",
@@ -817,14 +817,14 @@ dependencies = [
 
 [[package]]
 name = "axioval-java-stream"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "thiserror",
 ]
 
 [[package]]
 name = "axioval-mcs"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "axioval-engine",
  "axioval-ir",
@@ -840,7 +840,7 @@ dependencies = [
 
 [[package]]
 name = "axioval-rules"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "axioval-engine",
  "axioval-ir",
@@ -856,7 +856,7 @@ dependencies = [
 
 [[package]]
 name = "axioval-xlsx"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "axioval-ir",
  "rust_xlsxwriter",

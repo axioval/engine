@@ -4,6 +4,20 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-28
+
+Every crate is dual-licensed `AGPL-3.0-or-later OR LicenseRef-Commercial`,
+and so is every IFC crate it depends on, now that it is on openbim-ifc 0.38.2,
+ifc-geometry 0.31.2 and ifc-step 0.6.2 with openbim-step 0.11.2. A check
+builds each derivation once in a shared store, runs independent rules at
+once, and works within a memory budget. Spaces touching a wall within the
+tolerance no longer intersect it, and a clearance volume is decided beside
+objects that could not be measured. Breaking: `SpaceOverlap::intersects`
+gives way to `reading` and `intersections` and `OverlapRequest` is no longer
+`Eq` (#425), `FreeSpaceError` gains `UnmeasuredObstacles` (#423), the IFC
+and geometry types in the API move to their new minor versions, and the
+minimum Rust version is 1.99.
+
 ### Added
 
 - **The facade re-exports the MCS archive reader**
@@ -7869,7 +7883,8 @@ meshes with `axiolid-mesh` 0.1.
 
 - Placement offset bounds no longer admit tolerance-expanded witnesses; supported found placements now require exact frame-bound whole-base support evidence.
 
-[Unreleased]: https://github.com/axioval/engine/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/axioval/engine/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/axioval/engine/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/axioval/engine/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/axioval/engine/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/axioval/engine/compare/v0.5.0...v0.6.0

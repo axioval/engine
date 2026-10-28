@@ -211,8 +211,8 @@ openbim-ids = { version = "0.2.2", features = ["audit-schema"] }
 # compiles no geometry kernel.
 # 0.24 re-exports `ifc-geometry` 0.18 (0.35 re-exports 0.28, 0.36 re-exports
 # 0.29); its `authoring` feature stays off.
-openbim_ifc = { package = "openbim-ifc", version = "0.38.1", default-features = false, features = ["geometry-select", "properties", "ifc2x3", "ifc4", "ifc4x3"] }
-ifc-classification = "0.5.1"
+openbim_ifc = { package = "openbim-ifc", version = "0.38.2", default-features = false, features = ["geometry-select", "properties", "ifc2x3", "ifc4", "ifc4x3"] }
+ifc-classification = "0.5.2"
 # The CLI reads each `IfcAlignment`'s centreline, stationing and cant to
 # locate products along it (engine#252). 0.7 evaluates Viennese bends for
 # the section's cant and refuses those it does not determine (#312, #364);
@@ -223,7 +223,7 @@ ifc-classification = "0.5.1"
 # curve (#364), for ifc-geometry 0.19 (0.8.1 for ifc-geometry 0.20). 0.9
 # is the release ifc-geometry 0.26 requires; its writers refuse malformed
 # GlobalIds.
-ifc-alignment = "0.10.1"
+ifc-alignment = "0.10.2"
 # 0.9 lowers IFC4X3 stations, offset curves by distances and sectioned
 # solids and surfaces (openbimrs/ifc#307) and, since 0.8.2, refuses an
 # `IfcParameterValue` along an alignment by name (openbimrs/ifc#347). 0.10
@@ -281,26 +281,26 @@ ifc-alignment = "0.10.1"
 # `CompilationRefused` with the kernel's reason. 0.30.1 compiles partial
 # B-spline and polyline edges (#525) and planar and curved faces sharing
 # straight edges watertight (#528), with axiolid-mesh-compile 0.3.31.
-ifc-geometry = { version = "0.31.1", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
+ifc-geometry = { version = "0.31.2", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
 # Map conversions only: without the default `transform` feature it links no
 # geometry crate (never Axiolid). 0.7 resolves IFC2X3's
 # ePSet_MapConversion and ePSet_ProjectedCRS (openbimrs/ifc#451), where
 # IFC2X3 was refused.
-ifc-georef = { version = "0.8.1", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
-ifc-material = "0.6.1"
-ifc-spatial = "0.6.1"
-ifc-model = "0.4.1"
-ifc-properties = "0.10.1"
-ifc-schema = "0.3.4"
-ifc-step = "0.6.1"
+ifc-georef = { version = "0.8.2", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
+ifc-material = "0.6.2"
+ifc-spatial = "0.6.2"
+ifc-model = "0.4.2"
+ifc-properties = "0.10.2"
+ifc-schema = "0.3.5"
+ifc-step = "0.6.2"
 # ifcXML: the codec's own layout and the buildingSMART XSD configuration,
 # both read schema-strict.
-ifc-xml = "0.5.1"
+ifc-xml = "0.5.2"
 # `xml.rs` bounds an ifcXML document's start tags and reads its root with it;
 # `axioval-engine` reads xlsx rule parameter tables with it.
 quick-xml = "0.42"
-ifc-style = "0.6.1"
-ifc-systems = "0.6.1"
+ifc-style = "0.6.2"
+ifc-systems = "0.6.2"
 regex = "1.11.2"
 sha2 = "0.11.0"
 # ifcZIP archives; deflate is the only compression method they use.

@@ -251,12 +251,12 @@ All notable changes are documented here. This project follows Semantic Versionin
   contributor licence terms in `CONTRIBUTING.md`, which let the holder offer
   both licences.
 
-- Moved to openbim-ifc 0.38.1 and the dual-licensed ifc-* releases
-  (ifc-geometry 0.31.1, ifc-model 0.4.1, ifc-schema 0.3.4, ifc-step 0.6.1
-  and the rest), so the IFC stack carries
+- Moved to openbim-ifc 0.38.2 and the dual-licensed ifc-* releases
+  (ifc-geometry 0.31.2, ifc-model 0.4.2, ifc-schema 0.3.5, ifc-step 0.6.2
+  with openbim-step 0.11.2, and the rest), so the IFC stack carries
   `AGPL-3.0-or-later OR LicenseRef-Commercial` as well
-  ([#464](https://github.com/axioval/engine/issues/464)). openbim-step and
-  openbim-bcf follow once their dual-licensed releases are out.
+  ([#464](https://github.com/axioval/engine/issues/464)). openbim-bcf
+  follows once its dual-licensed release is out.
 
 - **Minimum supported Rust version raised to 1.99**
   ([#462](https://github.com/axioval/engine/issues/462)). The workspace

@@ -413,7 +413,10 @@ clashes and distances with the other models, and its own geometric checks,
 are not evaluated rather than measured in the wrong place. Check such a
 model alone, or fix its georeference; a `coordinate-consistency` rule
 reports the difference as a finding (see [Coordinate
-consistency](./capabilities.md#coordinate-consistency)).
+consistency](./capabilities.md#coordinate-consistency)). A model whose
+length unit does not resolve (none declared, or an unreadable or ambiguous
+one) has every physical object unmeasured alike, with the units' reason,
+rather than read in metres.
 
 Many delivered models state no frame that can be compared: their only
 representation context is a `Plan` or `Design` one rather than `Model`, or
@@ -1857,7 +1860,9 @@ placement from curves (an `IfcLinearPlacement`, an `IfcGridPlacement`, an
 alignment), states a representation context whose world coordinate system
 is rotated, has a product with a body but no placement, or has a placement
 whose location cannot be read: every model is measured about one origin, or
-none is. `compare` always measures in model coordinates, since it compares
+none is. A model whose length unit does not resolve is never meshed, so it
+does not count here, except as the first `--model`, which gives no origin
+then. `compare` always measures in model coordinates, since it compares
 bodies and extents across two sessions.
 
 Everything that is not a length, an area or a volume moves back into model

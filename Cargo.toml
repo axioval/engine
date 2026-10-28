@@ -210,8 +210,9 @@ openbim-ids = { version = "0.2.2", features = ["audit-schema"] }
 # only in the IFC facade, which joins `ifc-geometry` and `ifc-properties`; `geometry-select`
 # compiles no geometry kernel.
 # 0.24 re-exports `ifc-geometry` 0.18 (0.35 re-exports 0.28, 0.36 re-exports
-# 0.29); its `authoring` feature stays off.
-openbim_ifc = { package = "openbim-ifc", version = "0.38.2", default-features = false, features = ["geometry-select", "properties", "ifc2x3", "ifc4", "ifc4x3"] }
+# 0.29); its `authoring` feature stays off. 0.39 re-exports `ifc-geometry` 0.32:
+# units resolve fails closed (openbimrs/ifc#585).
+openbim_ifc = { package = "openbim-ifc", version = "0.39.0", default-features = false, features = ["geometry-select", "properties", "ifc2x3", "ifc4", "ifc4x3"] }
 ifc-classification = "0.5.2"
 # The CLI reads each `IfcAlignment`'s centreline, stationing and cant to
 # locate products along it (engine#252). 0.7 evaluates Viennese bends for
@@ -222,8 +223,9 @@ ifc-classification = "0.5.2"
 # 0.8 lowers a Viennese bend that rotates about a held rail to the banked
 # curve (#364), for ifc-geometry 0.19 (0.8.1 for ifc-geometry 0.20). 0.9
 # is the release ifc-geometry 0.26 requires; its writers refuse malformed
-# GlobalIds.
-ifc-alignment = "0.10.2"
+# GlobalIds. 0.11 holds the plane-angle factor as an `Option`: no declared
+# unit refuses the angle readings (openbimrs/ifc#585).
+ifc-alignment = "0.11.0"
 # 0.9 lowers IFC4X3 stations, offset curves by distances and sectioned
 # solids and surfaces (openbimrs/ifc#307) and, since 0.8.2, refuses an
 # `IfcParameterValue` along an alignment by name (openbimrs/ifc#347). 0.10
@@ -280,8 +282,11 @@ ifc-alignment = "0.10.2"
 # axiolid/kernel#333), and the polyline refusals left are
 # `CompilationRefused` with the kernel's reason. 0.30.1 compiles partial
 # B-spline and polyline edges (#525) and planar and curved faces sharing
-# straight edges watertight (#528), with axiolid-mesh-compile 0.3.31.
-ifc-geometry = { version = "0.31.2", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
+# straight edges watertight (#528), with axiolid-mesh-compile 0.3.31. 0.32
+# resolves units fail-closed: no declared, an unreadable or an ambiguous
+# length unit refuses, and a missing angle unit refuses angles
+# (openbimrs/ifc#585).
+ifc-geometry = { version = "0.32.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
 # Map conversions only: without the default `transform` feature it links no
 # geometry crate (never Axiolid). 0.7 resolves IFC2X3's
 # ePSet_MapConversion and ePSet_ProjectedCRS (openbimrs/ifc#451), where

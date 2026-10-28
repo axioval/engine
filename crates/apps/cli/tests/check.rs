@@ -1456,6 +1456,10 @@ fn crossing_walls() -> String {
          #3=IFCLOCALPLACEMENT($,#2);\n\
          #4=IFCDIRECTION((0.,0.,1.));\n\
          #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #9001=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #9002=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);\n\
+         #9003=IFCUNITASSIGNMENT((#9001,#9002));\n\
+         #9004=IFCPROJECT('0000000000000000009004',$,'P',$,$,$,$,(#5),#9003);\n\
          {}{}\
          #30=IFCBUILDINGELEMENTPROXY('0000000000000000000030',$,$,$,$,#3,$,$,$);\n\
          ENDSEC;\nEND-ISO-10303-21;\n",
@@ -2209,6 +2213,10 @@ fn wholes_of_parts() -> String {
          #3=IFCLOCALPLACEMENT($,#2);\n\
          #4=IFCDIRECTION((0.,0.,1.));\n\
          #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #9001=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #9002=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);\n\
+         #9003=IFCUNITASSIGNMENT((#9001,#9002));\n\
+         #9004=IFCPROJECT('0000000000000000009004',$,'P',$,$,$,$,(#5),#9003);\n\
          {model}\
          #30=IFCBUILDINGELEMENTPROXY('0000000000000000000030',$,$,$,$,#3,$,$,$);\n\
          #100=IFCWALL('0000000000000000000100',$,$,$,$,#3,$,$,$);\n\
@@ -3165,7 +3173,7 @@ fn an_alignment_parameter_is_refused_by_name_and_a_length_is_placed() {
     use ifc_model::EntityId;
 
     let model = axioval::ifc::read_ifc_step(linearly_placed_cubes().as_bytes()).unwrap();
-    let units = ifc_geometry::units::resolve(&model);
+    let units = ifc_geometry::units::resolve(&model).unwrap();
     let evaluator = ReferenceCurveEvaluator::new();
     let place = |product: u64| {
         product_world_transform_with_evaluator(
@@ -3611,6 +3619,10 @@ fn alignment_by_layouts() -> String {
      #4=IFCCARTESIANPOINT((0.,0.,0.));\n\
      #5=IFCAXIS2PLACEMENT3D(#4,$,$);\n\
      #7=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-6,#5,$);\n\
+     #9001=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+     #9002=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);\n\
+     #9003=IFCUNITASSIGNMENT((#9001,#9002));\n\
+     #9004=IFCPROJECT('0000000000000000009004',$,'P',$,$,$,$,(#7),#9003);\n\
      #100=IFCCARTESIANPOINT((0.,0.));\n\
      #101=IFCALIGNMENTHORIZONTALSEGMENT($,$,#100,0.,0.,0.,300.,$,.LINE.);\n\
      #104=IFCCARTESIANPOINT((300.,0.));\n\
@@ -3797,6 +3809,10 @@ fn alignment_with_a_crest() -> String {
          #4=IFCCARTESIANPOINT((0.,0.,0.));\n\
          #5=IFCAXIS2PLACEMENT3D(#4,$,$);\n\
          #7=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-6,#5,$);\n\
+         #9001=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #9002=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);\n\
+         #9003=IFCUNITASSIGNMENT((#9001,#9002));\n\
+         #9004=IFCPROJECT('0000000000000000009004',$,'P',$,$,$,$,(#7),#9003);\n\
          #100=IFCCARTESIANPOINT((0.,0.));\n\
          #101=IFCALIGNMENTHORIZONTALSEGMENT($,$,#100,0.,0.,0.,100.,$,.LINE.);\n\
          #102=IFCCARTESIANPOINT((100.,0.));\n\
@@ -3906,7 +3922,11 @@ fn alignment_with(horizontal: &[&str], vertical: &[&str], extra: &str) -> String
         "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\n\
          FILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4X3_ADD2'));\nENDSEC;\n\
          DATA;\n#4=IFCCARTESIANPOINT((0.,0.,0.));\n#5=IFCAXIS2PLACEMENT3D(#4,$,$);\n\
-         #7=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-6,#5,$);\n",
+         #7=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-6,#5,$);\n\
+         #9001=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #9002=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);\n\
+         #9003=IFCUNITASSIGNMENT((#9001,#9002));\n\
+         #9004=IFCPROJECT('0000000000000000009004',$,'P',$,$,$,$,(#7),#9003);\n",
     );
     let mut nest = |kind: &str, base: usize, segments: &[&str], parent: usize| {
         use std::fmt::Write as _;
@@ -4232,6 +4252,10 @@ fn face_set_roof_with(triangles: &[([f64; 3], [[f64; 3]; 3])], more: &str) -> St
          #3=IFCLOCALPLACEMENT($,#2);\n\
          #4=IFCDIRECTION((0.,0.,1.));\n\
          #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #9001=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #9002=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);\n\
+         #9003=IFCUNITASSIGNMENT((#9001,#9002));\n\
+         #9004=IFCPROJECT('0000000000000000009004',$,'P',$,$,$,$,(#5),#9003);\n\
          {}\
          #30=IFCROOF('0000000000000000000030',$,$,$,$,#3,#13,$,.GABLE_ROOF.);\n\
          {more}\
@@ -5679,6 +5703,10 @@ fn envelope_model() -> String {
          #3=IFCLOCALPLACEMENT($,#2);\n\
          #4=IFCDIRECTION((0.,0.,1.));\n\
          #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #9001=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #9002=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);\n\
+         #9003=IFCUNITASSIGNMENT((#9001,#9002));\n\
+         #9004=IFCPROJECT('0000000000000000009004',$,'P',$,$,$,$,(#5),#9003);\n\
          {}{}{}{}{}{}{}{}\
          #90=IFCZONE('0000000000000000000090',$,'Envelope',$,$,$);\n\
          #91=IFCRELASSIGNSTOGROUP('0000000000000000000091',$,$,$,(#16),$,#90);\n\
@@ -6035,6 +6063,10 @@ fn landings() -> String {
          #3=IFCLOCALPLACEMENT($,#2);\n\
          #4=IFCDIRECTION((0.,0.,1.));\n\
          #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #9001=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #9002=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);\n\
+         #9003=IFCUNITASSIGNMENT((#9001,#9002));\n\
+         #9004=IFCPROJECT('0000000000000000009004',$,'P',$,$,$,$,(#5),#9003);\n\
          {}{}{}{}{}{}\
          ENDSEC;\nEND-ISO-10303-21;\n",
         slab(10, 2.0),
@@ -6189,6 +6221,10 @@ fn spaces_in_a_zone(bodiless_member: bool) -> String {
          #3=IFCLOCALPLACEMENT($,#2);\n\
          #4=IFCDIRECTION((0.,0.,1.));\n\
          #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #9001=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #9002=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);\n\
+         #9003=IFCUNITASSIGNMENT((#9001,#9002));\n\
+         #9004=IFCPROJECT('0000000000000000009004',$,'P',$,$,$,$,(#5),#9003);\n\
          {}{}{}\
          #50=IFCSPACE('0000000000000000000050',$,$,$,$,#3,$,$,.ELEMENT.,$,$);\n\
          #90=IFCZONE('0000000000000000000090',$,'Compartment',$,$,$);\n\
@@ -6209,6 +6245,10 @@ fn spaces_on_a_slab() -> String {
          #3=IFCLOCALPLACEMENT($,#2);\n\
          #4=IFCDIRECTION((0.,0.,1.));\n\
          #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #9001=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #9002=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);\n\
+         #9003=IFCUNITASSIGNMENT((#9001,#9002));\n\
+         #9004=IFCPROJECT('0000000000000000009004',$,'P',$,$,$,$,(#5),#9003);\n\
          {}{}{}\
          ENDSEC;\nEND-ISO-10303-21;\n",
         body(
@@ -6632,6 +6672,10 @@ fn stacked_slabs() -> String {
          #3=IFCLOCALPLACEMENT($,#2);\n\
          #4=IFCDIRECTION((0.,0.,1.));\n\
          #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #9001=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #9002=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);\n\
+         #9003=IFCUNITASSIGNMENT((#9001,#9002));\n\
+         #9004=IFCPROJECT('0000000000000000009004',$,'P',$,$,$,$,(#5),#9003);\n\
          {}{}{}\
          ENDSEC;\nEND-ISO-10303-21;\n",
         slab(7, 0.0),
@@ -6905,6 +6949,10 @@ fn rooms_without_containment() -> String {
          #3=IFCLOCALPLACEMENT($,#2);\n\
          #4=IFCDIRECTION((0.,0.,1.));\n\
          #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #9001=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #9002=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);\n\
+         #9003=IFCUNITASSIGNMENT((#9001,#9002));\n\
+         #9004=IFCPROJECT('0000000000000000009004',$,'P',$,$,$,$,(#5),#9003);\n\
          {}{}{}{}{}{}{}{}\
          ENDSEC;\nEND-ISO-10303-21;\n",
         product(10, 2.0, 4.0, 3.0, space),
@@ -7119,6 +7167,10 @@ fn rooms_between_walls() -> String {
          #3=IFCLOCALPLACEMENT($,#2);\n\
          #4=IFCDIRECTION((0.,0.,1.));\n\
          #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #9001=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #9002=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);\n\
+         #9003=IFCUNITASSIGNMENT((#9001,#9002));\n\
+         #9004=IFCPROJECT('0000000000000000009004',$,'P',$,$,$,$,(#5),#9003);\n\
          {}{}{}{}\
          ENDSEC;\nEND-ISO-10303-21;\n",
         product(10, 2.0, 4.0, space),
@@ -7818,6 +7870,10 @@ fn walls_with_openings() -> String {
          #3=IFCLOCALPLACEMENT($,#2);\n\
          #4=IFCDIRECTION((0.,0.,1.));\n\
          #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #9001=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #9002=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);\n\
+         #9003=IFCUNITASSIGNMENT((#9001,#9002));\n\
+         #9004=IFCPROJECT('0000000000000000009004',$,'P',$,$,$,$,(#5),#9003);\n\
          {data}\
          ENDSEC;\nEND-ISO-10303-21;\n"
     )
@@ -9186,6 +9242,129 @@ fn a_declared_shared_frame_shares_the_local_origin() {
     );
     assert_eq!(
         result["geometry"]["declared_frame_sources"][0]["document"], "struct.ifc",
+        "{result:#}"
+    );
+}
+
+/// `model` (a [`walls_file`] or the storey models) with no length unit
+/// declared: its project states no unit assignment.
+fn without_length_unit(model: &str) -> String {
+    let stripped = model
+        .replace(",(#5),#7);\n", ",(#5),$);\n")
+        .replace(",$,#21);\n", ",$,$);\n");
+    assert_ne!(stripped, model, "no project unit assignment to strip");
+    stripped
+}
+
+/// Every `not_evaluated` reason of `result` naming `local`.
+fn not_evaluated_reasons(result: &Value, local: &str) -> Vec<String> {
+    result["report"]["not_evaluated"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|outcome| outcome["object_id"]["local_id"] == local)
+        .map(ToString::to_string)
+        .collect()
+}
+
+/// A model with no declared length unit is not read in metres: a geometric
+/// rule over its wall is not evaluated, naming the units, and nothing is
+/// measured.
+#[test]
+fn with_geometry_a_model_without_a_length_unit_is_not_evaluated() {
+    let case = Case::new("geometry-no-length-unit");
+    let model = without_length_unit(&walls_file(&[(
+        10,
+        2.0,
+        0.0,
+        4.0,
+        0.2,
+        "0000000000000000000A16",
+    )]));
+    let (output, result) = case.geometry_rule(
+        &model,
+        &[("wall", "IfcWall")],
+        "axioval:capability.expression",
+        &registry_signature("axioval:capability.expression"),
+        entity("wall"),
+        json!({"requirement": {"type": "expression", "value": {
+            "kind": "compare", "operator": "greaterThan", "label": "value",
+            "left": {"kind": "property", "propertySet": "axioval:measured", "property": "volume"},
+            "right": {"kind": "literal", "value": {"type": "quantity", "value": 0.0, "unit": "m3"}},
+        }}}),
+    );
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    assert_eq!(result["report"]["findings"], json!([]), "{result:#}");
+    assert_eq!(result["geometry"]["exact"], 0, "{result:#}");
+    let reasons = not_evaluated_reasons(&result, "#16");
+    assert_eq!(reasons.len(), 1, "{result:#}");
+    assert!(
+        result["geometry"]["unmeasured"][0]["reason"]
+            .as_str()
+            .unwrap()
+            .contains("units cannot be resolved"),
+        "{result:#}"
+    );
+}
+
+/// One model without a length unit costs the others neither their local
+/// origin nor the shared frame they are measured in: only its own objects
+/// are unmeasured, with the units' reason.
+#[test]
+fn a_model_without_a_length_unit_leaves_the_others_their_local_origin() {
+    let case = Case::new("discipline-clash-no-length-unit-far");
+    let (arch, structure) = discipline_walls();
+    let site = [600_000.0, 5_600_000.0];
+    case.write("arch.ifc", &placed_at(&arch, site));
+    case.write(
+        "struct.ifc",
+        &without_length_unit(&design_context(&placed_at(&structure, site))),
+    );
+    let models = ["arch.ifc:architecture", "struct.ifc:structure"];
+    let output = case.clash_across(&models, &["--geometry", "--declare-shared-frame"]);
+    let result = json(&output);
+    assert_eq!(result["report"]["findings"], json!([]), "{result:#}");
+    assert_eq!(result["geometry"]["exact"], 2, "{result:#}");
+    assert_eq!(
+        result["geometry"]["local_origin"],
+        json!(site),
+        "{result:#}"
+    );
+    assert!(
+        result["geometry"].get("declared_frame_sources").is_none(),
+        "{result:#}"
+    );
+    let unmeasured = result["geometry"]["unmeasured"].as_array().unwrap();
+    assert_eq!(unmeasured.len(), 1, "{result:#}");
+    assert_eq!(unmeasured[0]["object"]["source"]["document"], "struct.ifc");
+    assert!(
+        unmeasured[0]["reason"]
+            .as_str()
+            .unwrap()
+            .contains("units cannot be resolved"),
+        "{result:#}"
+    );
+}
+
+/// With no length unit on the first model, no local origin is taken from it
+/// and nothing of it is measured.
+#[test]
+fn a_first_model_without_a_length_unit_gives_no_local_origin() {
+    let case = Case::new("discipline-clash-no-length-unit-first");
+    let (arch, structure) = discipline_walls();
+    let site = [600_000.0, 5_600_000.0];
+    case.write("arch.ifc", &without_length_unit(&placed_at(&arch, site)));
+    case.write("struct.ifc", &design_context(&placed_at(&structure, site)));
+    let models = ["arch.ifc:architecture", "struct.ifc:structure"];
+    let output = case.clash_across(&models, &["--geometry", "--declare-shared-frame"]);
+    let result = json(&output);
+    assert_eq!(result["report"]["findings"], json!([]), "{result:#}");
+    assert!(result["geometry"]["local_origin"].is_null(), "{result:#}");
+    assert!(
+        !result["geometry"]["unmeasured"]
+            .as_array()
+            .unwrap()
+            .is_empty(),
         "{result:#}"
     );
 }
@@ -19206,6 +19385,10 @@ fn space_in_furniture() -> String {
          #3=IFCLOCALPLACEMENT($,#2);\n\
          #4=IFCDIRECTION((0.,0.,1.));\n\
          #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #9001=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #9002=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);\n\
+         #9003=IFCUNITASSIGNMENT((#9001,#9002));\n\
+         #9004=IFCPROJECT('0000000000000000009004',$,'P',$,$,$,$,(#5),#9003);\n\
          {}{}{}\
          ENDSEC;\nEND-ISO-10303-21;\n",
         body(
@@ -22863,6 +23046,10 @@ fn spaces_beside_an_unmeasured_slab(bound: bool, roof: bool) -> String {
          #3=IFCLOCALPLACEMENT($,#2);\n\
          #4=IFCDIRECTION((0.,0.,1.));\n\
          #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #9001=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #9002=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);\n\
+         #9003=IFCUNITASSIGNMENT((#9001,#9002));\n\
+         #9004=IFCPROJECT('0000000000000000009004',$,'P',$,$,$,$,(#5),#9003);\n\
          {}{}{slab}{roof}\
          ENDSEC;\nEND-ISO-10303-21;\n",
         space(10, 2.0),
@@ -23039,6 +23226,10 @@ fn spaces_beside_unmeasured_obstacles(extra: &str) -> String {
          #3=IFCLOCALPLACEMENT($,#2);\n\
          #4=IFCDIRECTION((0.,0.,1.));\n\
          #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #9001=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #9002=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);\n\
+         #9003=IFCUNITASSIGNMENT((#9001,#9002));\n\
+         #9004=IFCPROJECT('0000000000000000009004',$,'P',$,$,$,$,(#5),#9003);\n\
          {}{}{}{}\
          #50=IFCCARTESIANPOINT((1.5,1.5));\n\
          #51=IFCAXIS2PLACEMENT2D(#50,$);\n\

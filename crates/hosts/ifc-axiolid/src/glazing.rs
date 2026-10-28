@@ -83,9 +83,9 @@ impl Readers {
         if let Some(reason) = parsed.linear.refusal(&parsed.model, entity) {
             return Err(reason);
         }
-        let Some(description) =
-            ifc_geometry::body_description(&parsed.model, &parsed.units, entity)
-                .map_err(|error| format!("the body cannot be described: {error}"))?
+        let units = parsed.units()?;
+        let Some(description) = ifc_geometry::body_description(&parsed.model, units, entity)
+            .map_err(|error| format!("the body cannot be described: {error}"))?
         else {
             return Ok(None);
         };
@@ -93,7 +93,7 @@ impl Readers {
         let mut items = Vec::with_capacity(description.items.len());
         for item in &description.items {
             let label = format!("#{}", item.item.0);
-            let mut lowering = session(&parsed.model, &parsed.units);
+            let mut lowering = session(&parsed.model, units);
             let node = lower_representation_item(&mut lowering, item.item, item.item_world)
                 .map_err(|error| format!("item {label} cannot be lowered: {error}"))?;
             let lowered = lowering
@@ -177,7 +177,7 @@ pub(super) struct ItemsKey {
 /// versions the workspace locks.
 const IFC_GEOMETRY: Kernel = Kernel {
     name: "ifc-geometry",
-    version: "0.31.2",
+    version: "0.32.0",
 };
 const AXIOLID_MESH_COMPILE: Kernel = Kernel {
     name: "axiolid-mesh-compile",
@@ -193,7 +193,7 @@ impl DerivationKind for DoorItems {
     /// description, the lowering, the meshing or the glazing reader
     /// changing what they return.
     const VERSION: DerivationVersion =
-        DerivationVersion::new(1, &[IFC_GEOMETRY, AXIOLID_MESH_COMPILE]);
+        DerivationVersion::new(2, &[IFC_GEOMETRY, AXIOLID_MESH_COMPILE]);
     type Key = ItemsKey;
     /// A door whose items cannot be read is refused alike for every leaf.
     type Value = Items;
@@ -253,6 +253,10 @@ mod tests {
              #3=IFCLOCALPLACEMENT($,#2);\n\
              #4=IFCDIRECTION((0.,0.,1.));\n\
              #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+             #9001=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+             #9002=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);\n\
+             #9003=IFCUNITASSIGNMENT((#9001,#9002));\n\
+             #9004=IFCPROJECT('0000000000000000009004',$,'P',$,$,$,$,(#5),#9003);\n\
              {}#40=IFCDOOR('0000000000000000000040',$,$,$,$,#3,#35,$,{height},0.9,$,$,$);\n\
              {}#70=IFCSLAB('0000000000000000000070',$,$,$,$,#3,#65,$,.FLOOR.);\n\
              ENDSEC;\nEND-ISO-10303-21;\n",

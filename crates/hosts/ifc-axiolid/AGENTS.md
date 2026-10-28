@@ -34,6 +34,14 @@ benchmark) is its first consumer.
 - Each model's bytes are parsed with the IFC adapter's `read_ifc_xml`
   (ifcXML, `is_ifc_xml`) or `read_ifc_step`, never a codec directly, so
   geometry sees the model the session proved.
+- Units: a source whose units do not resolve (`Parsed::units`: no declared
+  length unit, an unreadable or ambiguous one) has nothing measured from it,
+  never a metre default. Every bodied object is unmeasured with the reason
+  (as for `unaligned`), its opening voids, space boundaries, storey heights,
+  placements, glazing items and alignment readings are refusals.
+  `local_frame::localize` skips it (the others keep their origin) and takes
+  none when it is the first source. A missing plane-angle unit refuses
+  only the angle-dependent readings.
 - Federation: every source is meshed into one set only where it shares the
   first source's frame (`unaligned`, through
   `axioval_rules::compare_coordinate_systems(..).shares_frame()` with the

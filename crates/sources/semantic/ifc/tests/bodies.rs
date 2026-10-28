@@ -291,7 +291,7 @@ fn an_unreadable_body_is_refused_and_a_missing_one_is_absent() {
 }
 
 #[test]
-fn an_unresolved_angle_unit_refuses_the_angles_alone() {
+fn an_unresolved_angle_unit_refuses_a_body_holding_an_angle() {
     let data = "\
 #90=IFCSIUNIT(*,.LENGTHUNIT.,.MILLI.,.METRE.);
 #91=IFCUNITASSIGNMENT((#90));
@@ -307,14 +307,64 @@ fn an_unresolved_angle_unit_refuses_the_angles_alone() {
 #20=IFCPRODUCTDEFINITIONSHAPE($,$,(#19));
 #10=IFCCOLUMN('0000000000000000000010',$,'C1',$,$,#11,#20,$,.COLUMN.);
 ";
+    // The profile holds a slope in plane angle, so the body description
+    // itself refuses (ifc-geometry 0.32 reads no angle in an unstated unit):
+    // its lengths are refused with it, the length unit being declared.
+    for name in ["Profile.OverallDepth", "Profile.FlangeSlope"] {
+        let Err(PropertyResolutionError::Incomplete(reason)) =
+            resolve_in("IFC4", data, "#10", name)
+        else {
+            panic!("{name} resolved without a plane-angle unit");
+        };
+        assert!(reason.contains("PLANEANGLEUNIT"), "{name}: {reason}");
+    }
+}
+
+/// A column of `profile`, in millimetres, under the given plane-angle unit
+/// lines (none for an undeclared one).
+fn column_with_angle_unit(profile: &str, angle_unit: &str, assigned: &str) -> String {
+    format!(
+        "\
+#90=IFCSIUNIT(*,.LENGTHUNIT.,.MILLI.,.METRE.);
+{angle_unit}#91=IFCUNITASSIGNMENT((#90{assigned}));
+#92=IFCPROJECT('000000000000000000000P',$,'P',$,$,$,$,(#5),#91);
+#1=IFCCARTESIANPOINT((0.,0.,0.));
+#2=IFCAXIS2PLACEMENT3D(#1,$,$);
+#4=IFCDIRECTION((0.,0.,1.));
+#5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);
+#11=IFCLOCALPLACEMENT($,#2);
+#14={profile};
+#18=IFCEXTRUDEDAREASOLID(#14,#2,#4,6000.);
+#19=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#18));
+#20=IFCPRODUCTDEFINITIONSHAPE($,$,(#19));
+#10=IFCCOLUMN('0000000000000000000010',$,'C1',$,$,#11,#20,$,.COLUMN.);
+"
+    )
+}
+
+#[test]
+fn a_body_holding_no_angle_keeps_its_lengths_without_an_angle_unit() {
+    let data = column_with_angle_unit("IFCRECTANGLEPROFILEDEF(.AREA.,$,$,100.,200.)", "", "");
     assert!(matches!(
-        value_in("IFC4", data, "#10", "Profile.OverallDepth"),
-        Some(PropertyValue::Quantity { value, .. }) if (value - 0.29).abs() < 1e-12
+        value_in("IFC4", &data, "#10", "Profile.XDim"),
+        Some(PropertyValue::Quantity { value, .. }) if (value - 0.1).abs() < 1e-12
     ));
-    assert!(matches!(
-        resolve_in("IFC4", data, "#10", "Profile.FlangeSlope"),
-        Err(PropertyResolutionError::Incomplete(_))
-    ));
+}
+
+#[test]
+fn an_unreadable_angle_unit_is_reported_by_the_adapters_own_reason() {
+    let data = column_with_angle_unit(
+        "IFCISHAPEPROFILEDEF(.AREA.,$,$,300.,290.,8.5,14.,$,$,0.1)",
+        "#93=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.METRE.);\n",
+        ",#93",
+    );
+    let Err(PropertyResolutionError::Incomplete(reason)) =
+        resolve_in("IFC4", &data, "#10", "Profile.OverallDepth")
+    else {
+        panic!("resolved with an unreadable plane-angle unit");
+    };
+    assert!(reason.contains("cannot be resolved exactly"), "{reason}");
+    assert!(!reason.contains("declares no"), "{reason}");
 }
 
 #[test]

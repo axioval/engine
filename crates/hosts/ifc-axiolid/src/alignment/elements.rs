@@ -265,9 +265,17 @@ fn labelled(
 impl Layouts {
     /// The layouts `alignment` of `source` nests.
     pub(super) fn read(source: &Parsed, alignment: EntityId) -> Self {
-        let units = AlignmentUnits {
-            length_to_metres: source.units.length_to_metres,
-            angle_to_radians: source.units.angle_to_radians,
+        let units = match source.units() {
+            Ok(units) => AlignmentUnits {
+                length_to_metres: units.length_to_metres,
+                angle_to_radians: units.angle_to_radians,
+            },
+            Err(reason) => {
+                return Self {
+                    horizontal: Err(reason.clone()),
+                    vertical: Err(reason),
+                };
+            }
         };
         let stationing = match Stationing::resolve(&source.model, alignment, units) {
             Ok(stationing) if stationing.equations().is_empty() => Ok(None),
@@ -398,6 +406,10 @@ mod tests {
              #4=IFCCARTESIANPOINT((0.,0.,0.));\n\
              #5=IFCAXIS2PLACEMENT3D(#4,$,$);\n\
              #7=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-6,#5,$);\n\
+             #9001=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+             #9002=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);\n\
+             #9003=IFCUNITASSIGNMENT((#9001,#9002));\n\
+             #9004=IFCPROJECT('0000000000000000009004',$,'P',$,$,$,$,(#7),#9003);\n\
              #100=IFCCARTESIANPOINT((0.,0.));\n\
              #101=IFCALIGNMENTHORIZONTALSEGMENT($,$,#100,0.,0.,0.,100.,$,.LINE.);\n\
              #102=IFCCARTESIANPOINT((100.,0.));\n\

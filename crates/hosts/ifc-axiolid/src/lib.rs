@@ -743,12 +743,22 @@ pub type ModelBytes = BTreeMap<SourceId, Vec<u8>>;
 /// One parsed model and its unit scale, per source.
 struct Parsed {
     model: Model,
-    units: ifc_geometry::units::UnitScale,
+    /// The model's unit scale, or why its units cannot be resolved (no
+    /// declared length unit, an unreadable or an ambiguous one). Nothing is
+    /// measured from such a source, never read in a default scale.
+    units: Result<ifc_geometry::units::UnitScale, String>,
     /// How the host's openings are subtracted: `Reference`-only openings
     /// taken as applied in an IFC4 or IFC4X3 file ([`net_options`]).
     net: NetOptions,
     /// Linear placements whose derivation would ignore a stated frame.
     linear: Linear,
+}
+
+impl Parsed {
+    /// The unit scale, or the reason the source is unmeasured.
+    fn units(&self) -> Result<&ifc_geometry::units::UnitScale, String> {
+        self.units.as_ref().map_err(Clone::clone)
+    }
 }
 
 /// The curve evaluator every `IfcLinearPlacement` is derived with: the
@@ -1166,9 +1176,14 @@ fn parse(
             axioval_ifc::read_ifc_step(bytes).map_err(|error| error.to_string())
         }
         .map_err(|error| format!("{}: {error}", source.document))?;
-        let units = ifc_geometry::units::resolve(&model);
+        let units = ifc_geometry::units::resolve(&model)
+            .map_err(|error| format!("its model's units cannot be resolved: {error}"));
         let net = net_options(snapshot.schema());
-        let linear = Linear::scan(&model, &units);
+        // Nothing is placed in a source whose units do not resolve, so
+        // there is no linear placement to scan.
+        let linear = units
+            .as_ref()
+            .map_or_else(|_| Linear::default(), |units| Linear::scan(&model, units));
         parsed.insert(
             source.clone(),
             Parsed {
@@ -1262,8 +1277,11 @@ pub fn attach(
 
     let Alignment {
         unaligned,
-        declared: declared_frame_sources,
+        declared: mut declared_frame_sources,
     } = alignment(&session, &snapshots, options.declared_shared_frame);
+    // A source whose units do not resolve is measured in no frame either;
+    // it is refused per object below, with that reason.
+    declared_frame_sources.retain(|source| parsed.get(source).is_some_and(|p| p.units.is_ok()));
     let backend = ifc_geometry::compile::default_backend();
     let mut geometry = AxiolidGeometry::new().with_local_origins(origins.clone());
     let mut report = GeometryReport {
@@ -1303,7 +1321,14 @@ pub fn attach(
         };
         let is_space = is_a(&id, "IfcSpace");
         let bodiless = !bodied(&id, &is_a);
-        let unaligned = unaligned.get(&id.source);
+        let units = units.as_ref().map_err(Clone::clone);
+        // Why this source's objects are unmeasured: its units first, then
+        // its frame.
+        let refusal = units
+            .as_ref()
+            .err()
+            .or_else(|| unaligned.get(&id.source))
+            .cloned();
         // An opening's void is meshed too, so it is left out alike.
         if wanted.as_ref().is_some_and(|wanted| !wanted.contains(&id))
             && (!bodiless || is_a(&id, "IfcOpeningElement"))
@@ -1312,7 +1337,7 @@ pub fn attach(
             continue;
         }
         if bodiless {
-            if let (true, Some(reason)) = (is_a(&id, "IfcOpeningElement"), unaligned) {
+            if let (true, Some(reason)) = (is_a(&id, "IfcOpeningElement"), &refusal) {
                 voids.push((id.clone(), Err(reason.clone())));
             } else if is_a(&id, "IfcOpeningElement") {
                 let void = entity_id(&id)
@@ -1321,7 +1346,7 @@ pub fn attach(
                         mesh(
                             &backend,
                             model,
-                            units,
+                            units.clone()?,
                             linear,
                             entity,
                             false,
@@ -1339,11 +1364,14 @@ pub fn attach(
             report.no_body += 1;
             continue;
         }
-        if let Some(reason) = unaligned {
-            report.unmeasured.push((id.clone(), reason.clone()));
-            geometry = geometry.with_unmeasured(id, reason.clone());
-            continue;
-        }
+        let units = match (units, refusal) {
+            (Ok(units), None) => units,
+            (Err(reason), _) | (Ok(_), Some(reason)) => {
+                report.unmeasured.push((id.clone(), reason.clone()));
+                geometry = geometry.with_unmeasured(id, reason);
+                continue;
+            }
+        };
         let Some(entity) = entity_id(&id) else {
             report
                 .unmeasured
@@ -1494,14 +1522,10 @@ pub fn attach(
         if void.is_err()
             && applied_openings.contains(id)
             && let (Some(parsed), Some(entity)) = (parsed.get(&id.source), entity_id(id))
+            // A source without resolvable units keeps the void's refusal.
+            && let Ok(units) = parsed.units()
         {
-            *void = reference_void(
-                &backend,
-                &parsed.model,
-                &parsed.units,
-                &parsed.linear,
-                entity,
-            );
+            *void = reference_void(&backend, &parsed.model, units, &parsed.linear, entity);
         }
     }
 
@@ -2090,20 +2114,24 @@ impl WholeOpenings {
         }
         let void = match voids.get(&id) {
             Some(void) => (*void).clone(),
-            None => mesh(
-                backend,
-                &source.model,
-                &source.units,
-                &source.linear,
-                opening,
-                false,
-                NetOptions::default(),
-            )
-            .and_then(|meshed| {
-                meshed
-                    .map(|body| (body.mesh, body.fit))
-                    .ok_or_else(|| "no body representation".into())
-            }),
+            None => source
+                .units()
+                .and_then(|units| {
+                    mesh(
+                        backend,
+                        &source.model,
+                        units,
+                        &source.linear,
+                        opening,
+                        false,
+                        NetOptions::default(),
+                    )
+                })
+                .and_then(|meshed| {
+                    meshed
+                        .map(|body| (body.mesh, body.fit))
+                        .ok_or_else(|| "no body representation".into())
+                }),
         };
         let (void, fit) = match void {
             Ok(void) => void,
@@ -2188,17 +2216,21 @@ impl WholeOpenings {
                 .join(", ");
             let entities: Vec<EntityId> = ids.iter().filter_map(entity_id).collect();
             let cut = match (parsed.get(&part.source), entity_id(part)) {
-                (Some(source), Some(entity)) if entities.len() == ids.len() => mesh_less(
-                    backend,
-                    &source.model,
-                    &source.units,
-                    &source.linear,
-                    entity,
-                    boundary,
-                    source.net,
-                    &entities,
-                )
-                .and_then(|body| applied(part, body)),
+                (Some(source), Some(entity)) if entities.len() == ids.len() => source
+                    .units()
+                    .and_then(|units| {
+                        mesh_less(
+                            backend,
+                            &source.model,
+                            units,
+                            &source.linear,
+                            entity,
+                            boundary,
+                            source.net,
+                            &entities,
+                        )
+                    })
+                    .and_then(|body| applied(part, body)),
                 _ => Err("not a STEP instance id".to_owned()),
             };
             match cut {
@@ -3633,6 +3665,25 @@ type Height = Result<f64, String>;
 /// its band.
 type Parent = (SourceId, Option<EntityId>);
 
+/// A storey's world height, or why it has none: a placement that cannot be
+/// derived, one in a source whose units do not resolve, or a tilted one.
+fn storey_height(source: &Parsed, entity: EntityId) -> Height {
+    source
+        .linear
+        .refusal(&source.model, entity)
+        .map_or_else(|| Ok(()), Err)
+        .and_then(|()| source.units())
+        .and_then(|units| world_transform(&source.model, units, entity).map_err(|e| e.to_string()))
+        .and_then(|frame| {
+            let up = frame.basis[2];
+            if up[0].abs() > 1e-12 || up[1].abs() > 1e-12 || (up[2] - 1.0).abs() > 1e-12 {
+                Err("the storey's placement is tilted".to_owned())
+            } else {
+                Ok(frame.origin[2])
+            }
+        })
+}
+
 /// Declares every `IfcBuildingStorey` a level for `spans-level`: its band
 /// runs from its placement's height up to the next storey's of the same
 /// parent (open above for the highest). A storey whose placement cannot be
@@ -3650,34 +3701,14 @@ fn with_levels(
         .collect();
     let mut siblings: BTreeMap<Parent, Vec<(ObjectId, Height)>> = BTreeMap::new();
     for id in kinds.keys().filter(|id| is_a(id, "IfcBuildingStorey")) {
-        let (
-            Some(entity),
-            Some(Parsed {
-                model,
-                units,
-                linear,
-                ..
-            }),
-        ) = (entity_id(id), parsed.get(&id.source))
-        else {
+        let (Some(entity), Some(source)) = (entity_id(id), parsed.get(&id.source)) else {
             continue;
         };
         let parent = trees
             .get(&id.source)
             .and_then(|tree| tree.node(entity))
             .and_then(|node| node.parent);
-        let height = linear
-            .refusal(model, entity)
-            .map_or_else(|| Ok(()), Err)
-            .and_then(|()| world_transform(model, units, entity).map_err(|e| e.to_string()))
-            .and_then(|frame| {
-                let up = frame.basis[2];
-                if up[0].abs() > 1e-12 || up[1].abs() > 1e-12 || (up[2] - 1.0).abs() > 1e-12 {
-                    Err("the storey's placement is tilted".to_owned())
-                } else {
-                    Ok(frame.origin[2])
-                }
-            });
+        let height = storey_height(source, entity);
         siblings
             .entry((id.source.clone(), parent))
             .or_default()
@@ -3877,7 +3908,12 @@ fn boundary_service(
                 .map(object)
                 .filter(|id| kinds.contains_key(id));
             let id = object(boundary.id);
-            service = match boundary_surface(backend, model, units, linear, &boundary, &space) {
+            // A source without resolvable units has no surface to mesh: the
+            // boundary is unmeasured, so its space is refused.
+            let surface = units.as_ref().map_err(Clone::clone).and_then(|units| {
+                boundary_surface(backend, model, units, linear, &boundary, &space)
+            });
+            service = match surface {
                 Ok((mesh, Fit::Exact)) => service.with_boundary(space, id, element, mesh),
                 Ok((mesh, Fit::Within(deviation))) => {
                     service.with_tessellated_boundary(space, id, element, mesh, deviation)
@@ -5140,6 +5176,10 @@ mod tests {
              #3=IFCLOCALPLACEMENT($,#2);\n\
              #4=IFCDIRECTION((0.,0.,1.));\n\
              #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+             #9001=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+             #9002=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);\n\
+             #9003=IFCUNITASSIGNMENT((#9001,#9002));\n\
+             #9004=IFCPROJECT('0000000000000000009004',$,'P',$,$,$,$,(#5),#9003);\n\
              {}#16=IFCSPACE('0000000000000000000016',$,$,$,$,#3,#15,$,.ELEMENT.,$,$);\n\
              {}#26=IFCSPACE('0000000000000000000026',$,$,$,$,#3,#25,$,.ELEMENT.,$,$);\n\
              {}#40=IFCDOOR('0000000000000000000040',$,$,$,$,#3,#35,$,2.1,0.9,$,$,$);\n\
@@ -5201,6 +5241,117 @@ mod tests {
             routing.route(&route).unwrap(),
             MetricRouteOutcome::Blocked(_)
         ));
+    }
+
+    /// A model that declares no length unit is not read in metres: every
+    /// bodied object is unmeasured with the reason, and nothing is meshed.
+    #[test]
+    fn a_model_without_a_declared_length_unit_is_unmeasured() {
+        let declared = rooms_and_door();
+        let undeclared = declared.replace(",#9003);", ",$);");
+        assert_ne!(declared, undeclared);
+        let attached = |bytes: &str| {
+            let session = import_ifc_session("rooms.ifc", bytes.as_bytes()).unwrap();
+            let models: super::ModelBytes = session
+                .snapshots()
+                .map(|snapshot| (snapshot.source().clone(), bytes.as_bytes().to_vec()))
+                .collect();
+            let options = super::Options {
+                keep_meshes: true,
+                ..super::Options::default()
+            };
+            attach(session, &models, options).unwrap().1
+        };
+
+        let measured = attached(&declared);
+        assert_eq!((measured.exact, measured.unmeasured.len()), (3, 0));
+        assert_eq!(measured.meshes.len(), 3);
+
+        let refused = attached(&undeclared);
+        assert_eq!(refused.exact + refused.tessellated, 0, "{refused:?}");
+        assert!(refused.meshes.is_empty(), "{refused:?}");
+        assert_eq!(refused.unmeasured.len(), 3, "{refused:?}");
+        for (id, reason) in &refused.unmeasured {
+            assert!(
+                reason.contains("units cannot be resolved"),
+                "{id}: {reason}"
+            );
+        }
+    }
+
+    /// The services that read a unit-less source's storeys and space
+    /// boundaries hold them unmeasured with the units' reason, never absent
+    /// (an absent boundary or storey height would read as none).
+    #[test]
+    fn a_unit_less_sources_levels_and_boundaries_are_unmeasured_not_absent() {
+        let bytes = rooms_and_door()
+            .replace(",#9003);", ",$);")
+            .replace(
+                "ENDSEC;\nEND-ISO-10303-21;",
+                "#60=IFCBUILDINGSTOREY('0000000000000000000060',$,'0',$,$,#3,$,$,.ELEMENT.,0.);\n\
+                 #61=IFCRELSPACEBOUNDARY('0000000000000000000061',$,$,$,#16,#40,$,.PHYSICAL.,.INTERNAL.);\n\
+                 ENDSEC;\nEND-ISO-10303-21;",
+            );
+        let session = import_ifc_session("rooms.ifc", bytes.as_bytes()).unwrap();
+        let snapshots: Vec<_> = session.snapshots().cloned().collect();
+        let source = snapshots[0].source().clone();
+        let models: super::ModelBytes = [(source.clone(), bytes.as_bytes().to_vec())].into();
+        let parsed = super::parse(&snapshots, &models).unwrap();
+        assert!(parsed[&source].units.is_err());
+
+        let kinds: std::collections::BTreeMap<ObjectId, String> = session
+            .project()
+            .objects()
+            .map(|object| (object.id.clone(), object.kind().to_owned()))
+            .collect();
+        let is_a = |id: &ObjectId, ancestor: &str| {
+            kinds
+                .get(id)
+                .is_some_and(|kind| kind.eq_ignore_ascii_case(ancestor))
+        };
+        let geometry = axioval_axiolid::AxiolidGeometry::new();
+
+        let storey = super::storey_height(&parsed[&source], super::EntityId(60));
+        let reason = storey.unwrap_err();
+        assert!(reason.contains("units cannot be resolved"), "{reason}");
+
+        let backend = ifc_geometry::compile::default_backend();
+        let boundaries = super::boundary_service(&backend, &parsed, &geometry, &kinds, &is_a);
+        let boundaries = format!("{boundaries:?}");
+        assert!(boundaries.contains("#61"), "{boundaries}");
+        assert!(
+            boundaries.contains("units cannot be resolved"),
+            "{boundaries}"
+        );
+    }
+
+    /// A unit-less source's opening and its wall are unmeasured or bodiless,
+    /// never meshed in metres, and a second source with units is unaffected.
+    #[test]
+    fn a_unit_less_source_leaves_a_federated_one_measured() {
+        let declared = rooms_and_door();
+        let undeclared = declared.replace(",#9003);", ",$);");
+        let first = import_ifc_session("a.ifc", declared.as_bytes()).unwrap();
+        let second = axioval_ifc::import_ifc_session("b.ifc", undeclared.as_bytes()).unwrap();
+        let session = axioval_engine::EvidenceSession::federate([first, second]).unwrap();
+        let models: super::ModelBytes = session
+            .snapshots()
+            .map(|snapshot| {
+                let bytes = if snapshot.source().document == "a.ifc" {
+                    &declared
+                } else {
+                    &undeclared
+                };
+                (snapshot.source().clone(), bytes.as_bytes().to_vec())
+            })
+            .collect();
+        let (_, report) = attach(session, &models, super::Options::default()).unwrap();
+        assert_eq!(report.exact, 3, "{report:?}");
+        assert_eq!(report.unmeasured.len(), 3, "{report:?}");
+        for (id, reason) in &report.unmeasured {
+            assert_eq!(id.source.document, "b.ifc", "{id}");
+            assert!(reason.contains("units cannot be resolved"), "{reason}");
+        }
     }
 
     /// A section without fillets or rounded edges meshes to its exact
@@ -5348,7 +5499,7 @@ mod tests {
     /// How `top_box`'s body is meshed.
     fn top_fit(top: [f64; 4], faceted: bool) -> Result<super::Fit, String> {
         let model = axioval_ifc::read_ifc_step(top_box(top, faceted).as_bytes()).unwrap();
-        let units = ifc_geometry::units::resolve(&model);
+        let units = ifc_geometry::units::resolve(&model).unwrap();
         let backend = ifc_geometry::compile::default_backend();
         super::mesh(
             &backend,
@@ -5530,7 +5681,7 @@ mod tests {
         // pocket closes as the clear one does.
         let health = |rim: f64| {
             let model = axioval_ifc::read_ifc_step(pocket_box(rim).as_bytes()).unwrap();
-            let units = ifc_geometry::units::resolve(&model);
+            let units = ifc_geometry::units::resolve(&model).unwrap();
             let backend = ifc_geometry::compile::default_backend();
             let body = super::mesh(
                 &backend,
@@ -5719,7 +5870,7 @@ mod tests {
     #[test]
     fn a_small_bounded_clip_over_a_tall_wall_is_cut_through_and_measured() {
         let model = axioval_ifc::read_ifc_step(tall_wall_with_a_small_clip().as_bytes()).unwrap();
-        let units = ifc_geometry::units::resolve(&model);
+        let units = ifc_geometry::units::resolve(&model).unwrap();
         let backend = ifc_geometry::compile::default_backend();
         let exact = 3.5 * 0.35 * 16.0;
 
@@ -5858,7 +6009,7 @@ mod tests {
             let model =
                 axioval_ifc::read_ifc_step(curved_wall_with_an_opening(outer, inner).as_bytes())
                     .unwrap();
-            let units = ifc_geometry::units::resolve(&model);
+            let units = ifc_geometry::units::resolve(&model).unwrap();
             let backend = ifc_geometry::compile::default_backend();
             let body = super::mesh(
                 &backend,
@@ -5999,7 +6150,7 @@ mod tests {
                 curved_wall_with_a_row_of_openings(&openings).as_bytes(),
             )
             .unwrap();
-            let units = ifc_geometry::units::resolve(&model);
+            let units = ifc_geometry::units::resolve(&model).unwrap();
             let backend = ifc_geometry::compile::default_backend();
             let body = super::mesh(
                 &backend,
@@ -6042,6 +6193,10 @@ mod tests {
              #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
              #4=IFCDIRECTION((0.,0.,1.));\n\
              #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+             #9001=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+             #9002=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);\n\
+             #9003=IFCUNITASSIGNMENT((#9001,#9002));\n\
+             #9004=IFCPROJECT('0000000000000000009004',$,'P',$,$,$,$,(#5),#9003);\n\
              #90=IFCPOLYLINE((#1,#91));\n\
              #91=IFCCARTESIANPOINT((0.,20.,0.));\n\
              #92=IFCPOINTBYDISTANCEEXPRESSION(IFCLENGTHMEASURE(5.),2.,$,$,#90);\n\
@@ -6056,7 +6211,7 @@ mod tests {
              #101=IFCBUILDINGELEMENTPROXY('0000000000000000000101',$,$,$,$,#94,#100,$,$);\n\
              ENDSEC;\nEND-ISO-10303-21;\n";
         let model = axioval_ifc::read_ifc_step(model.as_bytes()).unwrap();
-        let units = ifc_geometry::units::resolve(&model);
+        let units = ifc_geometry::units::resolve(&model).unwrap();
         let linear = super::Linear::scan(&model, &units);
         assert!(linear.refused.is_empty(), "{linear:?}");
         let backend = ifc_geometry::compile::default_backend();
@@ -6117,6 +6272,10 @@ mod tests {
              #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
              #4=IFCDIRECTION((0.,0.,1.));\n\
              #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+             #9001=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+             #9002=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);\n\
+             #9003=IFCUNITASSIGNMENT((#9001,#9002));\n\
+             #9004=IFCPROJECT('0000000000000000009004',$,'P',$,$,$,$,(#5),#9003);\n\
              #6=IFCCARTESIANPOINT((0.,0.,2.));\n\
              #7=IFCAXIS2PLACEMENT3D(#6,$,$);\n\
              #8=IFCLOCALPLACEMENT($,#7);\n\
@@ -6132,7 +6291,7 @@ mod tests {
              #212=IFCOPENINGELEMENT('0000000000000000000212',$,$,$,$,#8,#211,$,.OPENING.);\n\
              ENDSEC;\nEND-ISO-10303-21;\n";
         let model = axioval_ifc::read_ifc_step(model.as_bytes()).unwrap();
-        let units = ifc_geometry::units::resolve(&model);
+        let units = ifc_geometry::units::resolve(&model).unwrap();
         let backend = ifc_geometry::compile::default_backend();
         let (mesh, fit) = super::reference_void(
             &backend,

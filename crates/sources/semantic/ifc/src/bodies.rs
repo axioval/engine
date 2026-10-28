@@ -10,9 +10,10 @@
 //! meshed body cannot disagree.
 //!
 //! Units come from the project's exact units (`ifc_properties::exact_unit`),
-//! never from `ifc_geometry::units::resolve`, which assumes metres and
-//! radians when a file states none. An unresolvable length unit refuses the
-//! whole body; an unresolvable plane-angle unit refuses the angles alone.
+//! never from `ifc_geometry::units::resolve`. An unresolvable length unit
+//! refuses the whole body; an unresolvable plane-angle unit refuses the
+//! angles this adapter reads alone, and the geometry description itself
+//! where the body holds one (a profile's slope).
 //!
 //! The description is all or nothing: an item it cannot read exactly refuses
 //! the whole body rather than answering for part of it.
@@ -128,7 +129,8 @@ impl Bodies {
             .get_or_init(|| units(model))
             .clone()
             .map_err(PropertyResolutionError::Incomplete)?;
-        let Some(body) = body_description(model, &units.scale, object).map_err(geometry_error)?
+        let Some(body) = body_description(model, &units.scale, object)
+            .map_err(|error| geometry_error(error, units.angle.as_deref()))?
         else {
             return Ok(None);
         };
@@ -152,9 +154,9 @@ fn units(model: &Model) -> Result<Units, String> {
     };
     let length = scale("IFCLENGTHMEASURE")?;
     let (angle_scale, angle) = match scale("IFCPLANEANGLEMEASURE") {
-        Ok(value) => (value, None),
-        // NaN marks every angle read under it, and each is refused alone.
-        Err(message) => (f64::NAN, Some(message)),
+        Ok(value) => (Some(value), None),
+        // No factor refuses every angle read under it, each alone.
+        Err(message) => (None, Some(message)),
     };
     Ok(Units {
         scale: UnitScale {
@@ -165,8 +167,16 @@ fn units(model: &Model) -> Result<Units, String> {
     })
 }
 
-fn geometry_error(error: GeometryError) -> PropertyResolutionError {
+/// `angle` is the adapter's own reason for an angle unit it cannot resolve,
+/// reported in place of the geometry crate's "declares no angle unit".
+fn geometry_error(error: GeometryError, angle: Option<&str>) -> PropertyResolutionError {
     match error {
+        GeometryError::AngleUnitUndeclared { .. } if angle.is_some() => {
+            PropertyResolutionError::Incomplete(format!(
+                "the body cannot be described: {}",
+                angle.unwrap_or_default()
+            ))
+        }
         GeometryError::Unsupported { .. } => {
             PropertyResolutionError::Unavailable(format!("the body cannot be described: {error}"))
         }

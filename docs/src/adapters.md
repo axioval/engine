@@ -522,11 +522,11 @@ IFC4X3 `IfcSectionedSolidHorizontal` is a `sectioned-spine` item
 (`ifc-geometry` 0.9, openbimrs/ifc#307), with no profile facts of its own.
 
 Lengths go through the project's exact length unit and angles through its
-plane-angle unit (`ifc_properties::exact_unit`), never through
-`ifc_geometry::units::resolve`, which assumes metres and radians when a
-file states none. A length unit that does not resolve refuses the whole
-body; a plane-angle unit that does not resolve refuses only the angles
-the file states in it (profile slopes, a revolution's angle). `PositionAngle`
+plane-angle unit (`ifc_properties::exact_unit`). A length unit that does
+not resolve refuses the whole body; a plane-angle unit that does not
+resolve refuses only the angles the file states in it (profile slopes, a
+revolution's angle), and the geometry description itself where the body
+holds one. `PositionAngle`
 and `Extrusion.Inclination` come from direction vectors and need no unit. The locator names the object, the representation, the mapped
 items followed and the item (`body:#30:#37:#35>#33`), and for a profile
 fact the profile entity (`body:#10:#19:#18:profile:#14`).

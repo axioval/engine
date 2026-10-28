@@ -6,6 +6,16 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **Breaking: openbim-ifc 0.39.0, ifc-geometry 0.32.0 and ifc-alignment
+  0.11.0** ([#467](https://github.com/axioval/engine/issues/467)). A model
+  with no declared length unit, or an unreadable or ambiguous one, is no
+  longer read in metres: every bodied object of its source is unmeasured
+  with the reason, and its opening voids, space boundaries, storey heights,
+  placements and alignments are refused with it. Its other models keep their
+  local origin; a first model like that gives none. A model with no
+  plane-angle unit refuses what depends on an angle, which for a body that
+  holds one is the whole body. The IFC types in the API move to these minor
+  versions.
 - **rheonda holds the copyright.** `LICENSE` names rheonda as the copyright
   holder, and the contributor licence terms in `CONTRIBUTING.md` grant their
   licence to rheonda. The licence expression is unchanged.

@@ -146,9 +146,12 @@ pub(super) fn alignment_service(
         let (Some(source), Some(entity)) = (parsed.get(&id.source), entity_id(id)) else {
             continue;
         };
-        let point = match source.linear.own_refusal(&source.model, entity) {
-            Some(reason) => Err(reason),
-            None => world_transform(&source.model, &source.units, entity)
+        let point = match (
+            source.units(),
+            source.linear.own_refusal(&source.model, entity),
+        ) {
+            (Err(reason), _) | (_, Some(reason)) => Err(reason),
+            (Ok(units), None) => world_transform(&source.model, units, entity)
                 .map(|placed| placed.origin)
                 .map_err(|error| error.to_string()),
         };
@@ -181,7 +184,7 @@ struct Centreline {
 
 impl Centreline {
     fn read(source: &Parsed, alignment: EntityId) -> Result<Self, String> {
-        let (model, units) = (&source.model, &source.units);
+        let (model, units) = (&source.model, source.units()?);
         let alignment_units = AlignmentUnits {
             length_to_metres: units.length_to_metres,
             angle_to_radians: units.angle_to_radians,
@@ -324,7 +327,7 @@ fn axis_curve(
                 items.len()
             ));
         };
-        return lower_curve(model, &source.units, *item)
+        return lower_curve(model, source.units()?, *item)
             .map(|curve| Some((curve, representation, *item)));
     }
     Ok(None)
@@ -1312,6 +1315,10 @@ mod tests {
              #3=IFCLOCALPLACEMENT($,#2);\n\
              #4=IFCDIRECTION((0.,0.,1.));\n\
              #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+             #9001=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+             #9002=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);\n\
+             #9003=IFCUNITASSIGNMENT((#9001,#9002));\n\
+             #9004=IFCPROJECT('0000000000000000009004',$,'P',$,$,$,$,(#5),#9003);\n\
              #60=IFCCARTESIANPOINT((0.,0.));\n\
              #61=IFCDIRECTION((1.,0.));\n\
              #62=IFCVECTOR(#61,1.);\n\

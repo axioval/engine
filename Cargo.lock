@@ -1589,9 +1589,9 @@ dependencies = [
 
 [[package]]
 name = "ifc-alignment"
-version = "0.10.2"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11ef8387069cc623497ff52649e4247ba489da4b4b05d05e0510aae4103fde0e"
+checksum = "e2af9a054be68a3f333ec5fd8e18c642299998b9a7dc8bade7d9fbc7d6ac68cd"
 dependencies = [
  "axiolid-core",
  "axiolid-curve",
@@ -1624,9 +1624,9 @@ dependencies = [
 
 [[package]]
 name = "ifc-geometry"
-version = "0.31.2"
+version = "0.32.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "88cfbe5918efd61b145da061385a8ccb768a4b4441d38086df728ff27ae20650"
+checksum = "7df8c4e20ae85e82845bd4abe86e95ec2405e4baac25c6c79515ef84cc3d5393"
 dependencies = [
  "axiolid-construct",
  "axiolid-contracts",
@@ -2116,9 +2116,9 @@ dependencies = [
 
 [[package]]
 name = "openbim-ifc"
-version = "0.38.2"
+version = "0.39.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c35f80fdad958a42e1636154dab0238755dc4dc96d02770c18816ddae7d33654"
+checksum = "d99df0b8a17c7bcd7b2f5f9e53db7ec6fa19374084306b6d45a8295ba0837df1"
 dependencies = [
  "getrandom 0.3.4",
  "ifc-classification",

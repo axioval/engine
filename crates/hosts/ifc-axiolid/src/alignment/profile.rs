@@ -866,6 +866,10 @@ mod tests {
              #4=IFCCARTESIANPOINT((0.,0.,0.));\n\
              #5=IFCAXIS2PLACEMENT3D(#4,$,$);\n\
              #7=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-6,#5,$);\n\
+             #9001=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+             #9002=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);\n\
+             #9003=IFCUNITASSIGNMENT((#9001,#9002));\n\
+             #9004=IFCPROJECT('0000000000000000009004',$,'P',$,$,$,$,(#7),#9003);\n\
              #100=IFCCARTESIANPOINT((0.,0.));\n\
              #101=IFCALIGNMENTHORIZONTALSEGMENT($,$,#100,0.,0.,0.,300.,$,.LINE.);\n\
              #104=IFCCARTESIANPOINT((300.,0.));\n\

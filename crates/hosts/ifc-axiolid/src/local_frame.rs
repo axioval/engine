@@ -55,14 +55,16 @@ const DIRECTION_RATIOS: usize = 0;
 /// The local origin every source is measured about, in metres, and each
 /// source's model with its placements moved there; `None`, with every
 /// model untouched, where the first source lies within [`EXACT_REACH`] of
-/// its origin or any source does not qualify.
+/// its origin or any source does not qualify, or where the first has no resolvable units.
 pub(super) fn localize(
     parsed: &mut BTreeMap<SourceId, Parsed>,
     first: &SourceId,
 ) -> Option<LocalOrigins> {
     let reference = parsed.get(first)?;
     let placed = roots(&reference.model)?;
-    let scale = reference.units.length_to_metres;
+    // A reference source whose units do not resolve has no scale to
+    // localize by, so no origin is derived from any of the sources.
+    let scale = reference.units().ok()?.length_to_metres;
     // The root reaching farthest out, the first in id order among equals.
     let reach = |[x, y]: [f64; 2]| x.abs().max(y.abs());
     let (_, [x, y]) = placed
@@ -75,6 +77,11 @@ pub(super) fn localize(
     let origin = LocalOrigin::new([x * scale, y * scale])?;
     let mut shifts = BTreeMap::new();
     for (source, model) in parsed.iter() {
+        // A source whose units do not resolve is never meshed, so it is
+        // not moved; the others keep their origin.
+        if source != first && model.units().is_err() {
+            continue;
+        }
         let roots = roots(&model.model)?;
         if !qualifies(&model.model) {
             return None;
@@ -84,7 +91,7 @@ pub(super) fn localize(
         let shift = if source == first {
             [x, y]
         } else {
-            let scale = model.units.length_to_metres;
+            let scale = model.units().ok()?.length_to_metres;
             let [east, north] = origin.metres();
             [east / scale, north / scale]
         };

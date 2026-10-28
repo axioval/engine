@@ -1297,7 +1297,7 @@ impl Expression {
         else {
             return Ok(());
         };
-        if !matches!(function, AggregateFunction::Count) != value.is_some() {
+        if matches!(function, AggregateFunction::Count) == value.is_some() {
             return Err(ExpressionError::AggregateValue {
                 function: *function,
             });
@@ -1452,7 +1452,7 @@ fn validate_aggregate(
     has_filter: bool,
     has_value: bool,
 ) -> Result<(), ExpressionError> {
-    if !matches!(function, AggregateFunction::Count) != has_value {
+    if matches!(function, AggregateFunction::Count) == has_value {
         return Err(ExpressionError::AggregateValue { function });
     }
     validate_source("aggregate", over, has_filter)

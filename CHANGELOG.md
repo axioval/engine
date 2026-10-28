@@ -4,6 +4,14 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-28
+
+Axioval moves to openbim-ifc 0.39.0, ifc-geometry 0.32.0 and ifc-alignment
+0.11.0, which no longer read a model without a resolvable length unit in
+metres: such a model has nothing measured from it and its geometric checks
+are not evaluated. Breaking: the IFC and geometry types in the API move to
+these minor versions. rheonda now holds the copyright.
+
 ### Changed
 
 - **Breaking: openbim-ifc 0.39.0, ifc-geometry 0.32.0 and ifc-alignment
@@ -7899,7 +7907,8 @@ meshes with `axiolid-mesh` 0.1.
 
 - Placement offset bounds no longer admit tolerance-expanded witnesses; supported found placements now require exact frame-bound whole-base support evidence.
 
-[Unreleased]: https://github.com/axioval/engine/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/axioval/engine/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/axioval/engine/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/axioval/engine/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/axioval/engine/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/axioval/engine/compare/v0.6.0...v0.6.1

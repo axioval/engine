@@ -207,6 +207,30 @@ version = "0.1.0"
                 with self.assertRaisesRegex(SystemExit, "archive mismatch"):
                     publish.reproduce_publish_dry_run(package, archive, {})
 
+    def test_publish_dry_run_archive_is_read_where_cargo_stages_it(self) -> None:
+        package = {"name": "crate", "version": "0.1.0"}
+        for dry_run_bytes, mismatch in ((b"package bytes", False), (b"other bytes", True)):
+            with tempfile.TemporaryDirectory() as temporary:
+                target = Path(temporary) / "target" / "package"
+                target.mkdir(parents=True)
+                archive = target / "crate-0.1.0.crate"
+                archive.write_bytes(b"package bytes")
+                staged = target / "tmp-crate" / "crate-0.1.0.crate"
+
+                def fake_run(command, **kwargs):
+                    staged.parent.mkdir(exist_ok=True)
+                    staged.write_bytes(dry_run_bytes)
+                    return SimpleNamespace(returncode=0, stdout="")
+
+                with mock.patch.object(publish.subprocess, "run", side_effect=fake_run):
+                    if mismatch:
+                        with self.assertRaisesRegex(SystemExit, "archive mismatch"):
+                            publish.reproduce_publish_dry_run(package, archive, {})
+                    else:
+                        self.assertEqual(
+                            publish.reproduce_publish_dry_run(package, archive, {}), staged
+                        )
+
     def test_prepare_archive_fails_closed_on_permanent_error(self) -> None:
         package = {"name": "leaf", "version": "0.1.0"}
         args = SimpleNamespace(max_attempts=1, dependency_wait=0, rate_limit_wait=0)

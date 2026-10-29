@@ -187,8 +187,10 @@ axiolid-evaluate = "0.3.17"
 # axiolid-evaluate releases it builds against (#337). 0.3.31 reports a
 # faceted face without a surface `Certified(w)`, its slab width, unless its
 # corners are exactly coplanar, so a zero bound there means planar
-# (#343, engine#452).
-axiolid-mesh-compile = "0.3.31"
+# (#343, engine#452). 0.3.40 certifies the deviation of a boolean the
+# exact boolean builds with revolution operands too, and names a refused
+# operand by its family (#378, engine#468).
+axiolid-mesh-compile = "0.3.40"
 axiolid-exact-compile-contract = "0.3.1"
 # 0.3.3 adds `MeshClosure::OpenSolid` (#265).
 axiolid-mesh-compile-contract = "0.3.4"

@@ -523,8 +523,11 @@ fn what_has_no_exact_construction_is_refused_with_the_reason() {
         )
     };
     assert!(union.contains("boolean union"), "{union}");
+    // The kernel's boolean leaves one region of a box less a torus
+    // undecided (axiolid/kernel#381); #469 expects the exact boundary once
+    // it builds.
     assert!(
-        revolved_tool.contains("not an extrusion"),
+        revolved_tool.contains("too close to a face boundary"),
         "{revolved_tool}"
     );
     assert!(several.contains("boolean union"), "{several}");

@@ -4,6 +4,14 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+### Changed
+
+- **axiolid-mesh-compile 0.3.40**
+  ([#468](https://github.com/axioval/engine/issues/468)). The deviation of
+  a boolean the exact boolean builds is certified with revolution operands
+  too, and a refused operand is named by its family. The public parity
+  models measure as before.
+
 ## [0.9.0] - 2026-10-28
 
 Axioval moves to openbim-ifc 0.39.0, ifc-geometry 0.32.0 and ifc-alignment

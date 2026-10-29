@@ -1138,8 +1138,10 @@ registry source, not the kernel checkout, before relying on an API.
   axiolid/kernel#190; it calls the skeleton directly, without a worker,
   timeout or retry spacings.
 - Exact booleans (axiolid/kernel#228, #234, #236): unions, intersections
-  other than a half-space clip, and operands that are no placed extrusions
-  keep the mesh alone; so do the general boolean's refusals. Round holes
+  other than a half-space clip, and operands the exact compiler does not
+  build (named by their family since axiolid-mesh-compile 0.3.40,
+  axiolid/kernel#378) keep the mesh alone; so do the general boolean's
+  refusals. Round holes
   touching a planar face, an I-beam's root fillets included, are built
   since axiolid-mesh-compile 0.3.13 (#243, #249); a hole a fraction of the
   tolerance off a filleted flange is still refused by name when it needs

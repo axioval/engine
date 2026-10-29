@@ -542,7 +542,8 @@ no exact rigid copy and is refused. Everything else keeps its mesh alone,
 with the reason: an ellipse revolved, a directrix with corners or curved
 other than by a circle, tapered sweeps and sweeps of a profile along a
 directrix, unions, intersections other than with a half-space, and
-operands that are no extrusions.
+operands the exact compiler does not build, each named by its family (such
+as a tapered revolution) since axiolid-mesh-compile 0.3.40.
 
 A difference or clip is built by the kernel's own exact compiler, which
 reports what its general boolean decided within the tolerance it is given

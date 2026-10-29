@@ -16,7 +16,7 @@ use crate::AxiolidGeometry;
 /// results can change.
 pub(crate) const AXIOLID_CORE: Kernel = Kernel {
     name: "axiolid-core",
-    version: "0.3.2",
+    version: "0.3.4",
 };
 pub(crate) const AXIOLID_INSPECT: Kernel = Kernel {
     name: "axiolid-inspect",
@@ -24,11 +24,11 @@ pub(crate) const AXIOLID_INSPECT: Kernel = Kernel {
 };
 pub(crate) const AXIOLID_MEASURE: Kernel = Kernel {
     name: "axiolid-measure",
-    version: "0.3.11",
+    version: "0.3.13",
 };
 pub(crate) const AXIOLID_MESH: Kernel = Kernel {
     name: "axiolid-mesh",
-    version: "0.3.3",
+    version: "0.3.5",
 };
 pub(crate) const AXIOLID_OVERLAY: Kernel = Kernel {
     name: "axiolid-overlay",
@@ -40,7 +40,7 @@ pub(crate) const AXIOLID_RAY_MESH: Kernel = Kernel {
 };
 pub(crate) const AXIOLID_SPATIAL: Kernel = Kernel {
     name: "axiolid-spatial",
-    version: "0.3.3",
+    version: "0.3.5",
 };
 
 /// A value's state, compared and hashed by its address: two keys over one

@@ -744,6 +744,7 @@ dependencies = [
  "ifc-geometry",
  "ifc-model",
  "ifc-spatial",
+ "openbim-ifc",
 ]
 
 [[package]]
@@ -2131,6 +2132,7 @@ dependencies = [
  "ifc-properties",
  "ifc-schema",
  "ifc-spatial",
+ "ifc-style",
  "ifc-systems",
  "ifc-template-catalog",
  "ifc-validate",

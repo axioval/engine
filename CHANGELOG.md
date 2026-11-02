@@ -4,15 +4,19 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
-### Documentation
+### Added
 
-- **Wall-mounted devices and `contained-in-space`**
-  ([#426](https://github.com/axioval/engine/issues/426)). A rule over
-  wall-mounted or flush devices must state `horizontal`, since the centre of
-  such a device lies outside every space: 0.2 m covers the 0.168 m observed
-  at most. The default offsets stay 0, so nothing is related by reach unless
-  a rule asks for it. A regression test covers it across an IFC2X3 and an
-  IFC4 model.
+- **Kept meshes carry the product's colour**
+  ([#380](https://github.com/axioval/engine/issues/380)). With
+  `Options::keep_meshes`, `KeptMesh::colour` gives the product's surface
+  colour and transparency (`KeptColour`), as `openbim-ifc`'s
+  `ColourResolver::product_colour` resolves it: the styled item, else the
+  presentation layer, else the material. It is `None`, never a guess, when
+  nothing colours the product, its items state different colours, it is a
+  composed whole, its material is ambiguous (most layered walls and slabs
+  without item styles), or the resolver fails for its source (one malformed
+  style leaves every mesh of that source without colour). `KeptMesh` has
+  private fields, so the new one is not a breaking change.
 
 ### Changed
 
@@ -29,6 +33,16 @@ All notable changes are documented here. This project follows Semantic Versionin
   a boolean the exact boolean builds is certified with revolution operands
   too, and a refused operand is named by its family. The public parity
   models measure as before.
+
+### Documentation
+
+- **Wall-mounted devices and `contained-in-space`**
+  ([#426](https://github.com/axioval/engine/issues/426)). A rule over
+  wall-mounted or flush devices must state `horizontal`, since the centre of
+  such a device lies outside every space: 0.2 m covers the 0.168 m observed
+  at most. The default offsets stay 0, so nothing is related by reach unless
+  a rule asks for it. A regression test covers it across an IFC2X3 and an
+  IFC4 model.
 
 ## [0.9.0] - 2026-10-28
 

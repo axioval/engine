@@ -14,7 +14,7 @@ benchmark) is its first consumer.
   it a sink (BCF, HTML, spreadsheets) or any command-line concern.
 - Its public API is what a host needs and nothing more: `attach`,
   `unattached`, `service_types`,
-  `Options` (with `Frame`), `ModelBytes`, `GeometryReport`, `KeptMesh`,
+  `Options` (with `Frame`), `ModelBytes`, `GeometryReport`, `KeptMesh`, `KeptColour`,
   `ModelData`, the model-data integrity codes, and the derived-source
   vocabulary (`Matching`, `MatchedBy`, `DerivedMatch`, `Unmatched`,
   `DEFAULT_TOLERANCE_METRES`). Everything else is
@@ -29,8 +29,17 @@ benchmark) is its first consumer.
   the result.
 - `GeometryReport::meshes` (with `Options::keep_meshes`) holds each meshed
   object's triangles in model coordinates (`KeptMesh`, moved back from any
-  local frame, finite and indexed), for display; the bridge never colours
-  them.
+  local frame, finite and indexed), for display. `KeptMesh::colour` is the
+  product's `ColourResolver::product_colour` (`openbim-ifc`, `colour`
+  feature: styled item, then presentation layer, then material), in an owned
+  `KeptColour` (rgb, transparency). The resolver is built once per model and
+  only when meshes are kept. `None` when nothing colours the product, its
+  items state different colours, it is a composed whole (no Body of its own,
+  even with a styled material), its material is ambiguous (a layer or
+  profile set naming several materials, which covers most layered walls and
+  slabs without item styles), or the resolver fails for its source (one
+  malformed styled item, layer assignment or shape aspect leaves every mesh
+  of that source without colour): never guessed, never a default.
 - Each model's bytes are parsed with the IFC adapter's `read_ifc_xml`
   (ifcXML, `is_ifc_xml`) or `read_ifc_step`, never a codec directly, so
   geometry sees the model the session proved.

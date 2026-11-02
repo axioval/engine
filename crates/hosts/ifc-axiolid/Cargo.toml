@@ -46,6 +46,8 @@ axiolid-evaluate.workspace = true
 # Each `IfcAlignment`'s centreline, station equations and cant, which the
 # alignment service locates products along (engine#252).
 ifc-alignment.workspace = true
+# Each kept mesh's surface colour, through the full style cascade (#380).
+openbim_ifc = { workspace = true, features = ["colour"] }
 ifc-model.workspace = true
 ifc-spatial.workspace = true
 

@@ -96,7 +96,14 @@ for one model or several federated ones (one geometry set, services bound to
 every snapshot, each source's coordinate system checked against the first).
 The command line's `--geometry` is its first consumer; a web service, a
 desktop application or a batch runner calls the same `attach`, so the
-geometry every host evaluates is the one the parity harness proves. Hosts
+geometry every host evaluates is the one the parity harness proves. With
+`Options::keep_meshes`, `GeometryReport::meshes` also holds each object's
+triangles in model coordinates for display, and the product's surface colour
+and transparency (`KeptMesh::colour`: its styled item, else its presentation
+layer, else its material; none, never a default, when the model states none,
+its items disagree, it is a composed whole, its material is ambiguous (most
+layered walls and slabs without item styles) or its source's styles cannot
+be read). Hosts
 take it through the facade's `ifc-geometry` feature, which also pins the
 Axiolid and IFC geometry versions it was proven with.
 

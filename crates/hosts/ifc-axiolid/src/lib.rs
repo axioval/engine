@@ -454,10 +454,14 @@ fn model_data_detail(code: &str) -> &str {
 /// measured in), and triangles indexing them.
 ///
 /// Every position is finite and every index names a position.
+///
+/// It carries the product's surface colour when the model gives it one
+/// ([`Self::colour`], #380).
 #[derive(Clone, Debug, PartialEq)]
 pub struct KeptMesh {
     positions: Vec<[f64; 3]>,
     triangles: Vec<[u32; 3]>,
+    colour: Option<KeptColour>,
 }
 
 impl KeptMesh {
@@ -471,10 +475,48 @@ impl KeptMesh {
         &self.triangles
     }
 
+    /// The product's surface colour, exactly what the model states for it:
+    /// `None` (never a guess, never a default) when:
+    ///
+    /// - nothing colours the product, or its items state different colours;
+    /// - the product is a composed whole (no Body of its own), even if its
+    ///   material has a styled representation;
+    /// - its material is ambiguous (a layer or profile set naming several
+    ///   materials, a constituent set without a shape aspect for the item),
+    ///   which covers most layered walls and slabs without item styles;
+    /// - the resolver fails for the product's source (for example one
+    ///   malformed styled item, layer assignment or shape aspect), which
+    ///   leaves every mesh of that source without a colour.
+    ///
+    /// See [`KeptColour`].
+    pub fn colour(&self) -> Option<KeptColour> {
+        self.colour
+    }
+
     /// The vertices and triangles, taken apart.
     pub fn into_parts(self) -> (Vec<[f64; 3]>, Vec<[u32; 3]>) {
         (self.positions, self.triangles)
     }
+}
+
+/// The surface colour of a [`KeptMesh`]'s product, as the model's styles
+/// state it.
+///
+/// One colour per product: what `openbim-ifc`'s `ColourResolver::product_colour`
+/// returns for it. The resolver's cascade is the item's own `IfcStyledItem`,
+/// then its styled presentation layer, then the styled representation of the
+/// product's material; the item's style wins over the layer's, and both win
+/// over the material's. A product whose Body items carry different colours
+/// (one painted, one not, or two colours) has no one colour: the resolver
+/// refuses it, so the mesh's colour is `None` rather than the first item's.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
+pub struct KeptColour {
+    /// Red, green and blue, each in `[0, 1]`.
+    pub rgb: [f64; 3],
+    /// Transparency in `[0, 1]`, 0 opaque. `None` when the model states
+    /// none, which the standard reads as opaque.
+    pub transparency: Option<f64>,
 }
 
 /// A fact about the model data the bridge found, for the host to report as
@@ -1544,6 +1586,10 @@ pub fn attach(
     }
     .compose_all(&wholes);
     geometry = composed;
+    if options.keep_meshes {
+        colour_meshes(&parsed, &mut report.meshes);
+        clock.lap("geometry: colours");
+    }
     geometry = with_voids(geometry, &voids, &mut report);
     report.applied_openings.sort();
     clock.lap("geometry: compose wholes");
@@ -4381,6 +4427,30 @@ fn applied(host: &ObjectId, body: Option<Body>) -> Meshed {
 /// One product's body, as [`mesh`] returns it.
 type Meshed = Result<Option<Body>, String>;
 
+/// Gives each kept mesh its product's colour (#380). One resolver per model,
+/// built only when meshes are kept; a model whose resolver cannot be built,
+/// or a product it refuses, leaves the colour `None`.
+fn colour_meshes(parsed: &BTreeMap<SourceId, Parsed>, meshes: &mut BTreeMap<ObjectId, KeptMesh>) {
+    let sources: BTreeSet<SourceId> = meshes.keys().map(|id| id.source.clone()).collect();
+    let resolvers: BTreeMap<SourceId, openbim_ifc::ColourResolver<'_>> = sources
+        .into_iter()
+        .filter_map(|source| {
+            let resolver = openbim_ifc::ColourResolver::new(&parsed.get(&source)?.model).ok()?;
+            Some((source, resolver))
+        })
+        .collect();
+    for (id, mesh) in meshes {
+        mesh.colour = resolvers
+            .get(&id.source)
+            .zip(entity_id(id))
+            .and_then(|(resolver, entity)| resolver.product_colour(entity).ok().flatten())
+            .map(|colour| KeptColour {
+                rgb: colour.rgb,
+                transparency: colour.transparency,
+            });
+    }
+}
+
 /// A mesh's triangles kept for display, in model coordinates: a mesh
 /// measured in a local frame is moved back by its `origin` (#372). `None`
 /// when a position is not finite or a triangle names a vertex that does
@@ -4400,6 +4470,7 @@ fn kept_mesh(mesh: &axiolid_mesh::TriMesh, origin: LocalOrigin) -> Option<KeptMe
     (finite && indexed).then_some(KeptMesh {
         positions,
         triangles,
+        colour: None,
     })
 }
 
@@ -5188,6 +5259,85 @@ mod tests {
             body(20, 6.2, 2.0, 4.0, 4.0, 3.0),
             body(30, 4.1, 2.0, 0.1, 0.9, 2.1),
         )
+    }
+
+    /// Each kept mesh carries its product's colour from the full style
+    /// cascade: styled item, presentation layer, material; an unstyled
+    /// product has none (#380).
+    #[test]
+    fn kept_meshes_carry_the_colour_the_styles_state() {
+        let extra = "\
+            #50=IFCCARTESIANPOINT((9.,9.));\n\
+            #51=IFCAXIS2PLACEMENT2D(#50,$);\n\
+            #52=IFCRECTANGLEPROFILEDEF(.AREA.,$,#51,1.,1.);\n\
+            #53=IFCEXTRUDEDAREASOLID(#52,#2,#4,1.);\n\
+            #54=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#53));\n\
+            #55=IFCPRODUCTDEFINITIONSHAPE($,$,(#54));\n\
+            #56=IFCWALL('0000000000000000000056',$,$,$,$,#3,#55,$,$);\n\
+            #60=IFCCOLOURRGB($,1.,0.,0.);\n\
+            #61=IFCSURFACESTYLERENDERING(#60,0.25,$,$,$,$,$,$,.FLAT.);\n\
+            #62=IFCSURFACESTYLE($,.BOTH.,(#61));\n\
+            #63=IFCSTYLEDITEM(#13,(#62),$);\n\
+            #64=IFCCOLOURRGB($,0.,1.,0.);\n\
+            #65=IFCSURFACESTYLERENDERING(#64,$,$,$,$,$,$,$,.FLAT.);\n\
+            #66=IFCSURFACESTYLE($,.BOTH.,(#65));\n\
+            #67=IFCPRESENTATIONLAYERWITHSTYLE('L',$,(#23),$,.T.,.F.,.F.,(#66));\n\
+            #70=IFCCOLOURRGB($,0.,0.,1.);\n\
+            #71=IFCSURFACESTYLERENDERING(#70,0.5,$,$,$,$,$,$,.FLAT.);\n\
+            #72=IFCSURFACESTYLE($,.BOTH.,(#71));\n\
+            #73=IFCSTYLEDITEM($,(#72),$);\n\
+            #74=IFCSTYLEDREPRESENTATION(#5,$,$,(#73));\n\
+            #75=IFCMATERIAL('Steel',$,$);\n\
+            #76=IFCMATERIALDEFINITIONREPRESENTATION($,$,(#74),#75);\n\
+            #77=IFCRELASSOCIATESMATERIAL('0000000000000000000077',$,$,$,(#40),#75);\n\
+            #80=IFCEXTRUDEDAREASOLID(#52,#2,#4,2.);\n\
+            #81=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#53,#80));\n\
+            #82=IFCPRODUCTDEFINITIONSHAPE($,$,(#81));\n\
+            #83=IFCWALL('0000000000000000000083',$,$,$,$,#3,#82,$,$);\n\
+            #84=IFCCOLOURRGB($,1.,1.,0.);\n\
+            #85=IFCSURFACESTYLESHADING(#84,$);\n\
+            #86=IFCSURFACESTYLE($,.BOTH.,(#85));\n\
+            #87=IFCSTYLEDITEM(#80,(#86),$);\n\
+            #90=IFCWALL('0000000000000000000090',$,$,$,$,$,$,$,$);\n\
+            #91=IFCRELAGGREGATES('0000000000000000000091',$,$,$,#90,(#56));\n\
+            #92=IFCRELASSOCIATESMATERIAL('0000000000000000000092',$,$,$,(#90),#75);\n";
+
+        let bytes =
+            rooms_and_door().replace("ENDSEC;\nEND-ISO", &format!("{extra}ENDSEC;\nEND-ISO"));
+        assert!(bytes.contains("#77="), "{bytes}");
+        let session = import_ifc_session("styled.ifc", bytes.as_bytes()).unwrap();
+        let models: super::ModelBytes = session
+            .snapshots()
+            .map(|snapshot| (snapshot.source().clone(), bytes.as_bytes().to_vec()))
+            .collect();
+        let options = super::Options {
+            keep_meshes: true,
+            ..super::Options::default()
+        };
+        let (session, report) = attach(session, &models, options).unwrap();
+        let source = session.snapshots().next().unwrap().source().clone();
+        let colour = |local: &str| {
+            let id = ObjectId {
+                source: source.clone(),
+                local_id: local.to_owned(),
+            };
+            report
+                .meshes
+                .get(&id)
+                .unwrap_or_else(|| panic!("{local}: {report:?}"))
+                .colour()
+        };
+        let kept = |rgb, transparency| Some(super::KeptColour { rgb, transparency });
+        assert_eq!(colour("#16"), kept([1.0, 0.0, 0.0], Some(0.25)));
+        assert_eq!(colour("#26"), kept([0.0, 1.0, 0.0], None));
+        assert_eq!(colour("#40"), kept([0.0, 0.0, 1.0], Some(0.5)));
+        assert_eq!(colour("#56"), None);
+        // Two Body items styled differently (one painted, one not) have no
+        // one colour.
+        assert_eq!(colour("#83"), None);
+        // A composed whole has no Body of its own, so no colour, even
+        // though its material is styled.
+        assert_eq!(colour("#90"), None);
     }
 
     #[test]

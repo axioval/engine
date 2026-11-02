@@ -6180,6 +6180,155 @@ mod tests {
         }
     }
 
+    /// An opening's profile on a wall's elevation (`x` right, `z` up).
+    #[derive(Clone, Copy)]
+    enum Cut {
+        /// The box over `x0..x1` and `z0..z1`.
+        Box(f64, f64, f64, f64),
+        /// The disk of radius `r` about `(x, z)`.
+        Disk(f64, f64, f64),
+    }
+
+    /// A wall #29 5 m long, 0.25 m thick and 3 m high (a corner at the
+    /// origin, its length along `x`) voided by one opening per
+    /// `(cut, back, depth)`: the cut extruded along `-y` from `y = back` by
+    /// `depth`, each its own `IfcOpeningElement` in the order given.
+    fn wall_with_openings(openings: &[(Cut, f64, f64)]) -> String {
+        use std::fmt::Write as _;
+        let mut data = String::from(
+            "#35=IFCCARTESIANPOINT((2.5,0.125));\n\
+             #36=IFCAXIS2PLACEMENT2D(#35,$);\n\
+             #34=IFCRECTANGLEPROFILEDEF(.AREA.,$,#36,5.,0.25);\n\
+             #40=IFCEXTRUDEDAREASOLID(#34,#2,#4,3.);\n\
+             #41=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#40));\n\
+             #42=IFCPRODUCTDEFINITIONSHAPE($,$,(#41));\n\
+             #29=IFCWALLSTANDARDCASE('0000000000000000000029',$,$,$,$,#3,#42,$,.STANDARD.);\n\
+             #43=IFCDIRECTION((0.,-1.,0.));\n\
+             #44=IFCDIRECTION((1.,0.,0.));\n",
+        );
+        for (index, &(cut, back, depth)) in openings.iter().enumerate() {
+            let first = 100 + 10 * u32::try_from(index).unwrap();
+            let [
+                at,
+                place,
+                centre,
+                at2d,
+                profile,
+                solid,
+                shape,
+                product,
+                opening,
+                rel,
+            ] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(|offset| first + offset);
+            let (x, z, profile_def) = match cut {
+                Cut::Box(x0, x1, z0, z1) => (
+                    f64::midpoint(x0, x1),
+                    f64::midpoint(z0, z1),
+                    format!(
+                        "IFCRECTANGLEPROFILEDEF(.AREA.,$,#{at2d},{:?},{:?})",
+                        x1 - x0,
+                        z1 - z0
+                    ),
+                ),
+                Cut::Disk(x, z, r) => {
+                    (x, z, format!("IFCCIRCLEPROFILEDEF(.AREA.,$,#{at2d},{r:?})"))
+                }
+            };
+            write!(
+                data,
+                "#{at}=IFCCARTESIANPOINT((0.,{back:?},0.));\n\
+                 #{place}=IFCAXIS2PLACEMENT3D(#{at},#43,#44);\n\
+                 #{centre}=IFCCARTESIANPOINT(({x:?},{z:?}));\n\
+                 #{at2d}=IFCAXIS2PLACEMENT2D(#{centre},$);\n\
+                 #{profile}={profile_def};\n\
+                 #{solid}=IFCEXTRUDEDAREASOLID(#{profile},#{place},#4,{depth:?});\n\
+                 #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{solid}));\n\
+                 #{product}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n\
+                 #{opening}=IFCOPENINGELEMENT('{opening:022}',$,$,$,$,#3,#{product},$,.OPENING.);\n\
+                 #{rel}=IFCRELVOIDSELEMENT('{rel:022}',$,$,$,#29,#{opening});\n",
+            )
+            .unwrap();
+        }
+        format!(
+            "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+             #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+             #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+             #3=IFCLOCALPLACEMENT($,#2);\n\
+             #4=IFCDIRECTION((0.,0.,1.));\n\
+             #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+             #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+             #7=IFCUNITASSIGNMENT((#6));\n\
+             #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+             {data}ENDSEC;\nEND-ISO-10303-21;\n"
+        )
+    }
+
+    /// engine#418 (axiolid/kernel#334): a wall less a door and a window
+    /// whose caps lie `e` outside and inside its faces, two windows
+    /// abutting `e` apart (the kernel's own configuration, `e` up to
+    /// `3e-8`) and a round window was unmeasured: the exact boolean the
+    /// deviation is measured against reads such faces as one surface
+    /// within tolerance, and its result's loops close only within those
+    /// readings, which the deviation measurement refused ("an exact face's
+    /// loops do not close in its parameters"), so the mesh had no
+    /// certified bound. A wall of flat faces only is planar, compiled
+    /// exact without a report, and never meets it; the round window takes
+    /// the report. Since axiolid-mesh-compile 0.3.30 the measurement
+    /// admits the readings the boolean took, and the wall is measured
+    /// within a certified bound under the millimetre. Its volume, within
+    /// the surface that bound allows, holds the closed form.
+    #[test]
+    fn a_wall_with_openings_coinciding_within_the_booleans_readings_is_measured() {
+        let t = 0.25;
+        // The door and the first window go through (their caps read as
+        // flush), the abutting windows remove `3.8..4.8` together, and the
+        // disk of radius 0.3 about x = 2.0, z = 1.5 goes through.
+        let flat = 1.0 * 2.2 + 1.0 * 1.0 + 1.0 * 0.5;
+        let disk = std::f64::consts::PI * 0.3 * 0.3;
+        let exact = (5.0 * 3.0 - flat - disk) * t;
+        for e in [0.0, 1e-8, 3e-8] {
+            let name = format!("e = {e:e}");
+            let openings = [
+                // A door on the bottom face, its caps `e` outside the wall's.
+                (Cut::Box(0.5, 1.5, 0.0, 2.2), t + e, t + 2.0 * e),
+                // A window, its caps `e` inside them.
+                (Cut::Box(2.5, 3.5, 1.0, 2.0), t - e, t - 2.0 * e),
+                // Two abutting windows through the wall, the shared side `e` apart.
+                (Cut::Box(3.8, 4.3, 0.5, 1.0), 0.3, 0.35),
+                (Cut::Box(4.3 - e, 4.8, 0.5, 1.0), 0.3, 0.35),
+                (Cut::Disk(2.0, 1.5, 0.3), t + 0.1, t + 0.2),
+            ];
+            let model =
+                axioval_ifc::read_ifc_step(wall_with_openings(&openings).as_bytes()).unwrap();
+            let units = ifc_geometry::units::resolve(&model).unwrap();
+            let backend = ifc_geometry::compile::default_backend();
+            let body = super::mesh(
+                &backend,
+                &model,
+                &units,
+                &super::Linear::default(),
+                ifc_model::EntityId(29),
+                false,
+                super::NetOptions::default(),
+            )
+            .unwrap_or_else(|reason| panic!("{name}: {reason}"))
+            .unwrap_or_else(|| panic!("{name}: no body"));
+            let super::Fit::Within(bound) = body.fit else {
+                panic!("{name}: a wall with a round window measured as exact");
+            };
+            assert!(
+                bound > 0.0 && bound < super::TOLERANCE.linear(),
+                "{name}: {bound}"
+            );
+            let (volume, area) = enclosed_volume_and_area(&body.mesh);
+            let slack = area * bound + 1e-9;
+            assert!(
+                (volume - exact).abs() <= slack,
+                "{name}: {volume} m3 against {exact} m3 within {slack}"
+            );
+        }
+    }
+
     /// engine#224, openbimrs/ifc#355: a product on a linear placement with
     /// a positive `OffsetLateral` lies to the LEFT of the basis curve's
     /// direction, and its local Z is up. The curve runs along +Y, so left

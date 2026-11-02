@@ -86,6 +86,8 @@ struct Scene {
     snapshots: Vec<SourceSnapshot>,
     /// The WC's right axis; forward is up × right.
     right: [f64; 3],
+    /// The WC's local Z.
+    up: [f64; 3],
     front: ObjectFront,
     edges: Vec<(ObjectId, ObjectId)>,
     /// The WC's stated `Door.ClearWidth`, standing in for a door's.
@@ -99,6 +101,7 @@ impl Scene {
             geometry: AxiolidGeometry::new(),
             snapshots: vec![SourceSnapshot::try_new(source(), "r1", "sha256:1").unwrap()],
             right: [1.0, 0.0, 0.0],
+            up: [0.0, 0.0, 1.0],
             front: ObjectFront::NotStated,
             edges: vec![(id("wc"), id("room"))],
             clear_width: None,
@@ -228,12 +231,17 @@ impl ObjectFrameService for Scene {
     }
 
     fn object_frame(&self, object: &ObjectId) -> Result<ObjectFrame, ObjectFrameError> {
-        let right = self.right;
+        let (right, up) = (self.right, self.up);
+        let forward = [
+            up[1] * right[2] - up[2] * right[1],
+            up[2] * right[0] - up[0] * right[2],
+            up[0] * right[1] - up[1] * right[0],
+        ];
         let frame = MetricFrame::try_new(
             MetricPoint::try_new(object.clone(), [1.2, 0.0, 0.0]).unwrap(),
             MetricDirection::try_new(right).unwrap(),
-            MetricDirection::try_new([-right[1], right[0], 0.0]).unwrap(),
-            MetricDirection::try_new([0.0, 0.0, 1.0]).unwrap(),
+            MetricDirection::try_new(forward).unwrap(),
+            MetricDirection::try_new(up).unwrap(),
         )
         .unwrap();
         ObjectFrame::try_new(
@@ -511,6 +519,130 @@ fn the_front_is_stated_by_the_rule_or_the_source_never_inferred() {
     // Facing south instead, the WC's left is east, where nothing stands.
     let outcome = basin(Scene::wc()).check(&[("front_axis", text("-forward"))]);
     assert!(clean(&outcome), "{outcome:#?}");
+}
+
+/// A device on the south wall whose local Z points out of the wall, north.
+fn wall_device(scene: Scene) -> Scene {
+    Scene {
+        up: [0.0, 1.0, 0.0],
+        ..scene
+    }
+}
+
+#[test]
+fn a_device_whose_local_z_points_out_of_its_wall_clears_in_front_of_that_face() {
+    // The volume lies north, the way local Z points, with height along world
+    // Z: the chair in front obstructs it, whatever the other axes do.
+    let chair =
+        |scene: Scene| scene.body("chair", "fixture", cuboid([1.1, 1.2, 0.0], [1.3, 1.4, 0.9]));
+    let outcome = chair(wall_device(Scene::wc())).check(&front_area("forward"));
+    assert_eq!(
+        findings(&outcome),
+        [(
+            "front clearance (0.8 m wide, 1.2 m deep, 2 m high) is obstructed by cad:model/chair"
+                .to_owned(),
+            vec!["chair".to_owned()]
+        )],
+        "{outcome:#?}"
+    );
+    assert!(unevaluated(&outcome).is_empty(), "{outcome:#?}");
+    // The upright frame facing the same way agrees.
+    let upright = chair(Scene::wc()).check(&front_area("forward"));
+    assert_eq!(findings(&upright), findings(&outcome), "{upright:#?}");
+    // Behind the face, south, nothing stands; a stool there obstructs.
+    let outcome = chair(wall_device(Scene::wc())).check(&front_area("-forward"));
+    assert!(clean(&outcome), "{outcome:#?}");
+    let behind = wall_device(Scene::wc()).body(
+        "stool",
+        "fixture",
+        cuboid([1.1, -1.0, 0.0], [1.3, -0.8, 0.9]),
+    );
+    let outcome = behind.check(&front_area("-forward"));
+    assert_eq!(findings(&outcome).len(), 1, "{outcome:#?}");
+    // The side is across the front with world Z overhead: left is west.
+    let outcome = basin(wall_device(Scene::wc())).check(&[]);
+    assert_eq!(findings(&outcome).len(), 1, "{outcome:#?}");
+}
+
+/// The related objects of the single finding of `front_area(front)`.
+fn obstructed_by(scene: Scene, front: &str) -> Vec<String> {
+    let outcome = scene.check(&front_area(front));
+    assert!(unevaluated(&outcome).is_empty(), "{outcome:#?}");
+    let mut found = findings(&outcome);
+    assert!(found.len() <= 1, "{outcome:#?}");
+    found.pop().map(|(_, related)| related).unwrap_or_default()
+}
+
+#[test]
+fn a_quarter_turn_names_the_axes_of_the_upright_frame_it_turns_back_to() {
+    let bodies = |scene: Scene| {
+        scene
+            .body("chair", "fixture", cuboid([1.1, 1.2, 0.0], [1.3, 1.4, 0.9]))
+            .body(
+                "stool",
+                "fixture",
+                cuboid([1.1, -1.0, 0.0], [1.3, -0.8, 0.9]),
+            )
+            .body("west", "fixture", cuboid([0.3, 0.1, 0.0], [0.6, 0.6, 1.0]))
+            .body("east", "fixture", cuboid([1.6, 0.1, 0.0], [2.4, 0.6, 1.0]))
+    };
+    // Turned about local X, local Y up: forward is down, right is west.
+    let about_x = || {
+        bodies(Scene {
+            right: [-1.0, 0.0, 0.0],
+            up: [0.0, 1.0, 0.0],
+            ..Scene::wc()
+        })
+    };
+    assert_eq!(obstructed_by(about_x(), "-forward"), ["chair"]);
+    assert_eq!(obstructed_by(about_x(), "forward"), ["stool"]);
+    assert_eq!(obstructed_by(about_x(), "right"), ["west"]);
+    // Turned about local Y: forward is east, right is up.
+    let about_y = || {
+        bodies(Scene {
+            right: [0.0, 0.0, 1.0],
+            up: [0.0, 1.0, 0.0],
+            ..Scene::wc()
+        })
+    };
+    assert_eq!(obstructed_by(about_y(), "forward"), ["east"]);
+    assert_eq!(obstructed_by(about_y(), "-right"), ["chair"]);
+}
+
+#[test]
+fn a_nearly_upright_frame_is_measured_as_upright() {
+    // 1e-6 off upright is within the upright tolerance: the rule takes its
+    // front as before, and only the geometry service, which wants an exactly
+    // upright frame, declines.
+    let tilted = Scene {
+        up: [0.0, 1e-6, 1.0],
+        ..Scene::wc()
+    };
+    let outcome = basin(tilted).check(&[]);
+    let reasons = unevaluated(&outcome);
+    assert_eq!(reasons.len(), 1, "{outcome:#?}");
+    assert!(
+        reasons[0].1.contains("clearance frames must be upright"),
+        "{outcome:#?}"
+    );
+}
+
+#[test]
+fn any_other_tilt_of_the_frame_is_refused() {
+    let tilted = Scene {
+        up: [0.0, 0.5, 3_f64.sqrt() / 2.0],
+        ..Scene::wc()
+    };
+    let outcome = tilted.check(&[]);
+    let reasons = unevaluated(&outcome);
+    assert_eq!(reasons.len(), 1, "{outcome:#?}");
+    assert_eq!(reasons[0].0, NotEvaluatedReason::IncompleteEvidence);
+    assert_eq!(
+        reasons[0].1,
+        "left clearance: the component's frame is tilted; clearances are measured in upright \
+         frames only",
+        "{outcome:#?}"
+    );
 }
 
 #[test]

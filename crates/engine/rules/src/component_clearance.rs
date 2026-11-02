@@ -42,7 +42,11 @@ use crate::wall_sides::Walls;
 /// which frame axis is the component's front (`front_axis`: `forward`,
 /// `-forward`, `right` or `-right`, or `stated` for the front the source
 /// states), because a placement axis says nothing about which way a
-/// component faces; the engine never infers one from its axes. With
+/// component faces; the engine never infers one from its axes. A frame
+/// turned a quarter about a horizontal axis (its local Z horizontal, as a
+/// device on a wall has it) is measured as the upright frame it turns back
+/// to, about the horizontal axis across its local Z, whose axes `forward`
+/// and `right` name; any other tilt is not evaluated. With
 /// `against-wall` the front is derived from the walls (`wall_selector`)
 /// beside the sides of the footprint's least-area rectangle, within
 /// `wall_reach` of its centre lines, each side's strip narrowed by
@@ -221,6 +225,57 @@ impl FrontAxis {
             },
             Self::Swing | Self::Push => unreachable!("a swing side comes from the leaves"),
             Self::AgainstWall => unreachable!("a wall's side comes from the footprint"),
+        }
+    }
+
+    /// The front and the up of the upright frame `frame` is measured as: its
+    /// own, or the one a frame turned a quarter about a horizontal axis
+    /// (local Z horizontal, within [`AXIS_TOLERANCE`]) turns back to. Any
+    /// other tilt is refused.
+    fn upright_with(self, frame: &ObjectFrame) -> Result<([f64; 3], [f64; 3]), Unavailable> {
+        let local_z = frame.frame().up().components();
+        let upright = (local_z[2] - 1.0).abs() <= AXIS_TOLERANCE;
+        if !upright && local_z[2].abs() > AXIS_TOLERANCE {
+            return Err((
+                NotEvaluatedReason::IncompleteEvidence,
+                "the component's frame is tilted; clearances are measured in upright \
+                 frames only"
+                    .into(),
+            ));
+        }
+        let up = if upright { local_z } else { [0.0, 0.0, 1.0] };
+        let front = if upright {
+            self.of(frame)?
+        } else {
+            self.of_quarter_turn(frame)?
+        };
+        if dot(front, up).abs() > AXIS_TOLERANCE {
+            return Err((
+                NotEvaluatedReason::InvalidEvidence,
+                "the stated front is not horizontal".into(),
+            ));
+        }
+        Ok((front, up))
+    }
+
+    /// The front of a frame turned a quarter about a horizontal axis: measured
+    /// as the upright frame it turns back to, by a quarter about the
+    /// horizontal axis across its local Z, which brings local Z to world Z.
+    /// `forward` and `right` name that frame's axes.
+    fn of_quarter_turn(self, frame: &ObjectFrame) -> Result<[f64; 3], Unavailable> {
+        let axes = frame.frame();
+        let local_z = axes.up().components();
+        let hinge = cross([0.0, 0.0, 1.0], local_z);
+        let back = |axis: [f64; 3]| {
+            let (along, lift) = (dot(axis, hinge), axis[2]);
+            [0, 1, 2].map(|i| along * hinge[i] - lift * local_z[i])
+        };
+        match self {
+            Self::Forward => Ok(back(axes.forward().components())),
+            Self::Backward => Ok(negate(back(axes.forward().components()))),
+            Self::Right => Ok(back(axes.right().components())),
+            Self::Left => Ok(negate(back(axes.right().components()))),
+            other => other.of(frame),
         }
     }
 
@@ -1605,22 +1660,7 @@ impl Placement {
                     .frames
                     .object_frame(&object.id)
                     .map_err(|error| frame_error(&error))?;
-                let up = frame.frame().up().components();
-                if (up[2] - 1.0).abs() > AXIS_TOLERANCE {
-                    return Err((
-                        NotEvaluatedReason::IncompleteEvidence,
-                        "the component's frame is tilted; clearances are measured in upright \
-                         frames only"
-                            .into(),
-                    ));
-                }
-                let front = config.front.of(&frame)?;
-                if dot(front, up).abs() > AXIS_TOLERANCE {
-                    return Err((
-                        NotEvaluatedReason::InvalidEvidence,
-                        "the stated front is not horizontal".into(),
-                    ));
-                }
+                let (front, up) = config.front.upright_with(&frame)?;
                 let mut evidence = vec![frame.evidence().clone()];
                 if let Some(leaves) = &leaves {
                     evidence.push(leaves.evidence().clone());

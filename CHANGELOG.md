@@ -20,6 +20,16 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **`component-clearance` accepts a device whose local Z is horizontal**
+  ([#459](https://github.com/axioval/engine/issues/459)). A wall-hosted
+  device that its exporter places with local Z out of the wall was refused
+  as tilted. A frame turned a quarter about a horizontal axis (local Z
+  horizontal within 1e-9) is measured now, as the upright frame it turns
+  back to about the horizontal axis across its local Z: `front_axis`
+  `forward` and `right` name that frame's axes, and the height runs along
+  world Z. Any other tilt is still not evaluated with the same message, and
+  upright frames are measured as before.
+
 - **Breaking: openbim-bcf 0.7.2**
   ([#464](https://github.com/axioval/engine/issues/464)). The last
   AGPL-only crate in the graph moves to its dual-licensed release, so every

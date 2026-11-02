@@ -6,6 +6,14 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **Breaking: openbim-bcf 0.7.2**
+  ([#464](https://github.com/axioval/engine/issues/464)). The last
+  AGPL-only crate in the graph moves to its dual-licensed release, so every
+  dependency now carries `AGPL-3.0-or-later OR LicenseRef-Commercial` or a
+  permissive licence. `axioval_bcf_api::Client::pull` and
+  `axioval_bcf::import_topics` take and return openbim-bcf 0.7 types. BCF
+  export, import and snapshots behave as before.
+
 - **axiolid-mesh-compile 0.3.40**
   ([#468](https://github.com/axioval/engine/issues/468)). The deviation of
   a boolean the exact boolean builds is certified with revolution operands

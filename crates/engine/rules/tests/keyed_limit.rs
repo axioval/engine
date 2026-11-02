@@ -2789,6 +2789,64 @@ mod as_expressions {
         assert_eq!(outcome(&clear(model(), door_keys(Some(0.1)))), expected);
     }
 
+    /// A door whose stated decimals leave its clear width exactly at the
+    /// bound (1.04 m less 2 × 0.05 m lining and 0.04 m of leaf is 0.9 m) meets
+    /// it in an expression as in `keyed-limit`, the unit in the last place
+    /// narrower one not (#386).
+    #[test]
+    fn a_leaf_derived_width_at_its_bound_meets_it_in_an_expression() {
+        use common::doors::{Doors, hinged};
+        let leaf = |width: f64| hinged([0.0; 3], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], width, false);
+        let narrow = 1.04_f64.next_down();
+        let model = || {
+            doors(&[
+                ("d1", "SINGLE_SWING_LEFT", Some(1.04), None),
+                ("d3", "SINGLE_SWING_LEFT", Some(narrow), None),
+            ])
+        };
+        let frames = || {
+            Doors::default()
+                .door("d1", vec![leaf(0.94)], 1.04, Some(0.05))
+                .door("d3", vec![leaf(0.94)], narrow, Some(0.05))
+                .handle()
+        };
+        let mut parameters = door_keys(None);
+        parameters.push(("clear_width_from_leaves", string("passage")));
+        let built_in = outcome(&model().evaluate_with(
+            &HELD,
+            &rule(ID, kind("door"), parameters),
+            |services| {
+                services.register(frames()).unwrap();
+            },
+        ));
+        let expression = outcome(&model().evaluate_measured(
+            &ExpressionRequirement,
+            &rule(
+                "axioval:capability.expression",
+                kind("door"),
+                vec![(
+                    "requirement",
+                    common::expression(compare(
+                        "greaterThanOrEquals",
+                        measured("door_clear_width;from_leaves=passage"),
+                        m(0.9),
+                    )),
+                )],
+            ),
+            |services| {
+                services.register(frames()).unwrap();
+            },
+        ));
+        assert_eq!(
+            built_in,
+            (
+                Vec::new(),
+                vec![("d3".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+            )
+        );
+        assert_eq!(expression, built_in);
+    }
+
     /// Clear widths from the lining and leaves, the passage and the widest
     /// leaf, every door of the leaf fixtures.
     #[test]

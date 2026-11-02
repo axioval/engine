@@ -493,6 +493,8 @@ impl<'a> DoorClearWidth<'a> {
 struct FromLeaves {
     from: &'static str,
     width: f64,
+    /// The deductions' plain sum, for wording a message only; the clear
+    /// width is never taken from it.
     deduction: f64,
     /// The lengths the deduction sums, as the door states them, so the
     /// clear width is derived from the stated decimals ([`stated_less`]).
@@ -2093,5 +2095,29 @@ mod tests {
         // A difference of more than fifteen digits too.
         assert_eq!(stated_difference(1e14, 1e-3), difference(1e14, 1e-3));
         assert!(stated_difference(f64::NAN, 0.1).0.is_nan());
+    }
+
+    /// A door's leaf deduction summed in binary can fall below the stated
+    /// decimals' sum (2 × 0.05 + 0.08 lands on the double just below the
+    /// decimal 0.18), so the clear
+    /// width is taken from the stated lengths, never from that sum (#386).
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn a_leaf_deduction_rounding_below_its_decimals_still_holds_the_width() {
+        use super::{stated_less, whole_passage};
+        let passage = whole_passage(1.0, 0.05, &[0.08]);
+        // The decimals: 1 m less 0.18 m is 0.82 m, exactly.
+        assert_eq!(
+            stated_less(passage.width, &passage.deductions),
+            (0.82, 0.82)
+        );
+        // Lengths that are no short decimals keep an interval holding the
+        // binary result of every subtraction.
+        let third = 1.0 / 3.0;
+        let passage = whole_passage(1.0, third, &[0.1]);
+        let (lower, upper) = stated_less(passage.width, &passage.deductions);
+        assert!(lower < upper);
+        let exact = difference(difference(difference(1.0, third).0, third).0, 0.1).0;
+        assert!(lower <= exact && exact <= upper);
     }
 }

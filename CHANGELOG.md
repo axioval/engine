@@ -4,6 +4,16 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+### Documentation
+
+- **Wall-mounted devices and `contained-in-space`**
+  ([#426](https://github.com/axioval/engine/issues/426)). A rule over
+  wall-mounted or flush devices must state `horizontal`, since the centre of
+  such a device lies outside every space: 0.2 m covers the 0.168 m observed
+  at most. The default offsets stay 0, so nothing is related by reach unless
+  a rule asks for it. A regression test covers it across an IFC2X3 and an
+  IFC4 model.
+
 ### Changed
 
 - **Breaking: openbim-bcf 0.7.2**

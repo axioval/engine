@@ -7505,6 +7505,30 @@ fn with_geometry_a_device_of_an_ifc2x3_model_lies_in_a_space_of_an_ifc4_one() {
 }
 
 #[test]
+fn with_geometry_a_wall_mounted_device_needs_the_horizontal_offset_to_lie_in_a_space() {
+    // Device 1 has its centre inside the room. Device 2 is mounted on the
+    // west wall: the centre of its extent lies 0.1 m outside the room in
+    // plan, as the centre of a wall-mounted device does by the wall's
+    // thickness.
+    let devices = [(30, 1.0, 2.0), (40, -0.1, 2.0)];
+    let (output, result) = devices_in_spaces(
+        "geometry-derived-wall-mounted-default",
+        &devices,
+        "axioval:derived.contained-in-space",
+    );
+    // The offsets default to 0, so only the device inside is found.
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(finding_ids(&result), ["#46"], "{result:#}");
+    let (output, result) = devices_in_spaces(
+        "geometry-derived-wall-mounted-horizontal",
+        &devices,
+        "axioval:derived.contained-in-space;horizontal=0.2",
+    );
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert!(finding_ids(&result).is_empty(), "{result:#}");
+}
+
+#[test]
 fn with_geometry_a_malformed_derived_relationship_is_not_evaluated() {
     let (output, result) = derived_count(
         "geometry-derived-malformed",

@@ -17926,6 +17926,191 @@ fn with_geometry_flush_openings_in_a_georeferenced_wall_are_subtracted() {
     }
 }
 
+/// Wall #30 under a placement turned `degrees` about the vertical, with the
+/// entities `wall` (their ids from #10 up). At 0 degrees nothing is turned.
+fn turned_wall(degrees: f64, wall: &str) -> String {
+    let (sin, cos) = degrees.to_radians().sin_cos();
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCDIRECTION(({cos:?},{sin:?},0.));\n\
+         #7=IFCAXIS2PLACEMENT3D(#1,#4,#6);\n\
+         #3=IFCLOCALPLACEMENT($,#7);\n\
+         #20=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #21=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);\n\
+         #22=IFCUNITASSIGNMENT((#20,#21));\n\
+         #23=IFCPROJECT('0000000000000000000023',$,'P',$,$,$,$,(#5),#22);\n\
+         {wall}\
+         ENDSEC;\nEND-ISO-10303-21;\n"
+    )
+}
+
+/// A 4 m x 0.05 m x 2.8 m partition wall (#30) with two 0.9 m x 2.26 m door
+/// openings (#120, #220) as deep as the wall is thick and flush with its
+/// base, turned `degrees`.
+fn partition_wall_with_door_openings(degrees: f64) -> String {
+    let opening = |id: u32, x: f64| {
+        format!(
+            "#{a}=IFCCARTESIANPOINT(({x:?},0.));\n\
+             #{b}=IFCAXIS2PLACEMENT2D(#{a},$);\n\
+             #{c}=IFCRECTANGLEPROFILEDEF(.AREA.,$,#{b},0.9,0.05);\n\
+             #{d}=IFCEXTRUDEDAREASOLID(#{c},#2,#4,2.26);\n\
+             #{e}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{d}));\n\
+             #{f}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{e}));\n\
+             #{id}=IFCOPENINGELEMENT('{id:022}',$,$,$,$,#3,#{f},$,.OPENING.);\n\
+             #{g}=IFCRELVOIDSELEMENT('{g:022}',$,$,$,#30,#{id});\n",
+            a = id + 1,
+            b = id + 2,
+            c = id + 3,
+            d = id + 4,
+            e = id + 5,
+            f = id + 6,
+            g = id + 7,
+        )
+    };
+    turned_wall(
+        degrees,
+        &format!(
+            "#10=IFCCARTESIANPOINT((0.,0.));\n\
+             #11=IFCAXIS2PLACEMENT2D(#10,$);\n\
+             #12=IFCRECTANGLEPROFILEDEF(.AREA.,$,#11,4.,0.05);\n\
+             #13=IFCEXTRUDEDAREASOLID(#12,#2,#4,2.8);\n\
+             #14=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#13));\n\
+             #15=IFCPRODUCTDEFINITIONSHAPE($,$,(#14));\n\
+             #30=IFCWALL('0000000000000000000030',$,$,$,$,#3,#15,$,$);\n\
+             {}{}",
+            opening(120, -1.0),
+            opening(220, 1.0),
+        ),
+    )
+}
+
+/// A 2.5 m x 0.125 m x 3.6 m wall (#30) with a 0.1 m slot (x 1.1 to 1.2 m)
+/// cut from its top down to 2.7 m by a polygonal bounded half space as
+/// thick as the wall, flush with both of its faces, and no opening; turned
+/// `degrees`.
+fn wall_with_a_flush_clipped_slot(degrees: f64) -> String {
+    turned_wall(
+        degrees,
+        "#10=IFCCARTESIANPOINT((1.25,0.));\n\
+         #11=IFCDIRECTION((-1.,0.));\n\
+         #12=IFCAXIS2PLACEMENT2D(#10,#11);\n\
+         #13=IFCRECTANGLEPROFILEDEF(.AREA.,$,#12,2.5,0.125);\n\
+         #14=IFCEXTRUDEDAREASOLID(#13,#2,#4,3.6);\n\
+         #15=IFCCARTESIANPOINT((1.1,0.0625,2.7));\n\
+         #16=IFCDIRECTION((0.,0.,-1.));\n\
+         #17=IFCDIRECTION((1.,0.,0.));\n\
+         #18=IFCAXIS2PLACEMENT3D(#15,#16,#17);\n\
+         #19=IFCPLANE(#18);\n\
+         #40=IFCCARTESIANPOINT((0.,0.));\n\
+         #41=IFCCARTESIANPOINT((0.1,0.));\n\
+         #42=IFCCARTESIANPOINT((0.1,0.125));\n\
+         #43=IFCCARTESIANPOINT((0.,0.125));\n\
+         #44=IFCPOLYLINE((#40,#41,#42,#43,#40));\n\
+         #45=IFCPOLYGONALBOUNDEDHALFSPACE(#19,.T.,#18,#44);\n\
+         #46=IFCBOOLEANCLIPPINGRESULT(.DIFFERENCE.,#14,#45);\n\
+         #47=IFCSHAPEREPRESENTATION(#5,'Body','Clipping',(#46));\n\
+         #48=IFCPRODUCTDEFINITIONSHAPE($,$,(#47));\n\
+         #30=IFCWALL('0000000000000000000030',$,$,$,$,#3,#48,$,$);\n",
+    )
+}
+
+/// The volume of wall #30 as a rule over walls reads it, in a case of its
+/// own: the result of `check --geometry`.
+fn wall_volume_read(name: &str, model: &str) -> Value {
+    let volume = json!({"kind": "property", "propertySet": "axioval:measured",
+                        "property": "volume"});
+    let positive = json!({"kind": "compare", "operator": "greaterThan", "label": "value",
+                          "left": volume,
+                          "right": {"kind": "literal",
+                                    "value": {"type": "quantity", "value": 0.0, "unit": "m3"}}});
+    let (_, result) = Case::new(name).geometry_rule(
+        model,
+        &[("wall", "IfcWall")],
+        "axioval:capability.expression",
+        &registry_signature("axioval:capability.expression"),
+        entity("wall"),
+        json!({"requirement": {"type": "expression", "value": positive}}),
+    );
+    result
+}
+
+/// engine#373: a 5 cm partition wall with two door-height openings flush
+/// with its base, and a wall less a slot as thick as itself, are measured
+/// where they stand along the axes and refused once the placement turns
+/// them, though the volume kernel receives a closed mesh that is the
+/// solid. Both cases were probed on a real model, where 20 of its 2,393
+/// walls are refused so.
+///
+/// The partition's mesh (axiolid-mesh-compile 0.3.40) is exact: its volume
+/// interval is the true one at 0 degrees, and at 10 degrees the faces
+/// around the openings are triangulated into triangles that are disjoint
+/// in their plane. The refusal is `axiolid_heal::self_intersections` (0.3.1)
+/// reporting two such triangles as intersecting once rounding has moved
+/// their corners off the plane: its overlap test of two non-coplanar
+/// triangles measures them along the float cross product of two
+/// near-parallel normals. Refused by that name until the kernel decides
+/// them exactly (axiolid/kernel#399).
+#[test]
+fn with_geometry_a_turned_partition_wall_with_flush_openings_is_refused_by_the_kernel() {
+    let measured = |result: &Value| result["report"]["not_evaluated"].as_array().unwrap().len();
+    let result = wall_volume_read(
+        "geometry-partition-upright",
+        &partition_wall_with_door_openings(0.0),
+    );
+    assert_eq!(measured(&result), 0, "{result:#}");
+    assert_eq!(result["geometry"]["exact"], 1, "{:#}", result["geometry"]);
+
+    let result = wall_volume_read(
+        "geometry-partition-turned",
+        &partition_wall_with_door_openings(10.0),
+    );
+    let refused = result["report"]["not_evaluated"].as_array().unwrap();
+    assert_eq!(refused.len(), 1, "{result:#}");
+    assert!(
+        refused[0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("the volume kernel refused a self-intersecting mesh (SelfIntersecting)"),
+        "{result:#}"
+    );
+}
+
+/// engine#373: the wall less a flush slot, no opening (see
+/// [`with_geometry_a_turned_partition_wall_with_flush_openings_is_refused_by_the_kernel`]).
+/// Without an opening the clip is lowered in world coordinates
+/// (`ifc-geometry` 0.32.0 lowers a host in its own frame only to subtract
+/// openings, #388): the turned wall's faces and the slot's are rounded
+/// apart, the kernel keeps the sliver between them as a lid over the slot
+/// on one face, and that mesh does intersect itself. Lowered in the host's
+/// frame, as with an opening, no lid is left (openbimrs/ifc#655).
+#[test]
+fn with_geometry_a_turned_wall_with_a_flush_clipped_slot_is_refused_by_the_kernel() {
+    let result = wall_volume_read(
+        "geometry-slot-upright",
+        &wall_with_a_flush_clipped_slot(0.0),
+    );
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+    assert_eq!(result["geometry"]["exact"], 1, "{:#}", result["geometry"]);
+
+    let result = wall_volume_read(
+        "geometry-slot-turned",
+        &wall_with_a_flush_clipped_slot(10.0),
+    );
+    let refused = result["report"]["not_evaluated"].as_array().unwrap();
+    assert_eq!(refused.len(), 1, "{result:#}");
+    assert!(
+        refused[0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("the volume kernel refused a self-intersecting mesh (SelfIntersecting)"),
+        "{result:#}"
+    );
+}
+
 /// engine#372: the #303 wall placed 5600 km out. Measured in model
 /// coordinates its mesh's coordinates round to about 1e-9 m there, so it is
 /// not the solid however exact its construction (engine#368: its volume

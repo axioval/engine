@@ -17897,6 +17897,90 @@ fn with_geometry_a_georeferenced_wall_is_measured_exactly_in_a_local_frame() {
     }
 }
 
+/// A wall 4 m long, 0.25 m thick and 3 m high (volume 3 m3), placed by a
+/// site 5600 km above the origin turned about the x axis (a 3-4-5 turn)
+/// and a building beneath it that cancels the lift: the wall's coordinates
+/// stay within metres of the origin while the placements compose through
+/// 5.6e6 m.
+fn wall_under_cancelling_placements() -> String {
+    "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+     #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+     #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+     #4=IFCDIRECTION((0.,0.,1.));\n\
+     #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+     #20=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+     #21=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);\n\
+     #22=IFCUNITASSIGNMENT((#20,#21));\n\
+     #23=IFCPROJECT('0000000000000000000023',$,'P',$,$,$,$,(#5),#22);\n\
+     #30=IFCCARTESIANPOINT((0.,0.,5600000.));\n\
+     #31=IFCDIRECTION((0.,-0.6,0.8));\n\
+     #32=IFCDIRECTION((1.,0.,0.));\n\
+     #33=IFCAXIS2PLACEMENT3D(#30,#31,#32);\n\
+     #34=IFCLOCALPLACEMENT($,#33);\n\
+     #35=IFCSITE('0000000000000000000035',$,$,$,$,#34,$,$,.ELEMENT.,$,$,$,$,$);\n\
+     #40=IFCCARTESIANPOINT((0.,-3360000.,-4480000.));\n\
+     #41=IFCDIRECTION((0.,0.6,0.8));\n\
+     #42=IFCAXIS2PLACEMENT3D(#40,#41,#32);\n\
+     #43=IFCLOCALPLACEMENT(#34,#42);\n\
+     #44=IFCBUILDING('0000000000000000000044',$,$,$,$,#43,$,$,.ELEMENT.,$,$,$);\n\
+     #73=IFCLOCALPLACEMENT(#43,#2);\n\
+     #77=IFCRECTANGLEPROFILEDEF(.AREA.,$,#78,4.,0.25);\n\
+     #78=IFCAXIS2PLACEMENT2D(#79,$);\n\
+     #79=IFCCARTESIANPOINT((0.,0.));\n\
+     #80=IFCEXTRUDEDAREASOLID(#77,#2,#4,3.);\n\
+     #81=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#80));\n\
+     #82=IFCPRODUCTDEFINITIONSHAPE($,$,(#81));\n\
+     #10=IFCWALLSTANDARDCASE('0000000000000000000010',$,$,$,$,#73,#82,$,.STANDARD.);\n\
+     ENDSEC;\nEND-ISO-10303-21;\n"
+        .to_owned()
+}
+
+/// engine#369: rounding comes from the placement chain, not the final
+/// coordinates alone. The wall's mesh lies within metres of the origin, but
+/// its placements compose through 5.6e6 m, which rounds its vertices at
+/// about 1e-9 m. Its volume interval holds the true 3 m3 and the body is
+/// not claimed exact.
+#[test]
+fn with_geometry_a_wall_under_cancelling_placements_is_not_claimed_exact() {
+    let case = Case::new("geometry-cancelling-placements");
+    let volume = json!({"kind": "property", "propertySet": "axioval:measured",
+                        "property": "volume"});
+    let cubic = |value: f64| json!({"kind": "literal", "value": {"type": "quantity", "value": value, "unit": "m3"}});
+    let model = wall_under_cancelling_placements();
+    let rule = |requirement: Value| {
+        case.geometry_rule(
+            &model,
+            &[("wall", "IfcWall")],
+            "axioval:capability.expression",
+            &registry_signature("axioval:capability.expression"),
+            entity("wall"),
+            json!({"requirement": {"type": "expression", "value": requirement}}),
+        )
+    };
+    let between = |half: f64| {
+        json!({"kind": "between", "operand": volume,
+               "low": cubic(3.0 - half), "high": cubic(3.0 + half)})
+    };
+    // The interval holds 3 m3 and stays within a millimetre-cube of it.
+    let (output, result) = rule(between(1e-4));
+    assert_eq!(output.status.code(), Some(0), "{result:#}");
+    assert_eq!(result["report"]["findings"], json!([]), "{result:#}");
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+    assert_eq!(result["geometry"]["exact"], 0, "{:#}", result["geometry"]);
+    assert_eq!(
+        result["geometry"]["tessellated"], 1,
+        "{:#}",
+        result["geometry"]
+    );
+    // And it is wider than an exact reading's, which a nanometre-cube holds.
+    let (_, result) = rule(between(1e-9));
+    assert_eq!(
+        result["report"]["not_evaluated"].as_array().map(Vec::len),
+        Some(1),
+        "{result:#}"
+    );
+}
+
 /// engine#356: the same openings placed 0.5 mm off the wall's face leave a
 /// skin 0.5 mm thin, which is authored geometry: the wall is measured with
 /// it, its volume the gross volume less openings 0.2495 m deep, under the

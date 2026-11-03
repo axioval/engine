@@ -1834,13 +1834,21 @@ construction, such a mesh is not the solid, and a volume, area or
 distance read from it is the rounded mesh's (#368: a planar wall less its
 openings measured 2.2075750000614 m3 there, an interval excluding its
 true 2.207575). A mesh whose coordinates reach beyond 4096 m is therefore
-declared within the rounding of its largest coordinate, 16 machine
+declared within the rounding of its largest magnitude, 16 machine
 epsilons of it (about 1.5e-11 m at the reach, 2e-8 m at 5600 km), and a
 tessellated one has that added to its bound, so every service widens what
 it reads as it widens a tessellation. Within the reach a body keeps its
 exactness: its coordinates round no more than the model's own do, and the
 proximity service still widens its own volume by the band of that
 rounding.
+
+The largest magnitude is the larger of the mesh's largest coordinate and the
+largest met composing its placement chain (#369): a site at +5.6e6 m with a
+building at -5.6e6 m beneath it yields a wall near the origin, but rounds at
+the scale of the intermediate translations. The chain's bound is the sum of
+the lengths of its placements' locations (a rotation keeps a translation's
+length); a placement that is not a local placement ends the walk, and the
+final coordinates still count.
 
 A model placed far out is therefore measured in a local frame (#372). When
 the outermost placement of the first model (a placement relative to

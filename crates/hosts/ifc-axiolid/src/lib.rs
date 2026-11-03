@@ -196,6 +196,7 @@ pub use derived::{DEFAULT_TOLERANCE_METRES, DerivedMatch, MatchedBy, Matching, U
 
 mod alignment;
 mod authored_faces;
+mod chain;
 mod derived;
 mod glazing;
 mod local_frame;
@@ -4074,11 +4075,12 @@ fn boundary_surface(
         Err(anomaly) => return Err(format!("unreadable connection geometry: {anomaly:?}")),
     };
     let frame = space_frame(model, units, linear, space)?;
+    let reach = entity_id(space).map_or(0.0, |space| chain::placement_reach(model, units, space));
     let mut session = session(model, units);
     let root = lower_connection_surface(&mut session, connection, frame)
         .map_err(|error| error.to_string())?;
     let lowered = session.finish(root).map_err(|error| error.to_string())?;
-    compile(backend, &lowered.graph, lowered.root)
+    compile(backend, &lowered.graph, lowered.root, reach)
 }
 
 /// How a compiled mesh stands for the surface it was compiled from.
@@ -4113,14 +4115,17 @@ enum Fit {
 /// cut by one unmeasured ([`authored_leaves`]).
 ///
 /// Either fit then counts the rounding of the mesh's coordinates
-/// ([`placed`]): a mesh placed far from the origin is no longer exact.
+/// ([`placed`]): a mesh placed far from the origin is no longer exact. `reach`
+/// is the largest magnitude met along its placement chain, `0.0` for a mesh
+/// not placed by one.
 fn compile(
     backend: &Compiler,
     graph: &GeometryGraph,
     root: NodeId,
+    reach: f64,
 ) -> Result<(axiolid_mesh::TriMesh, Fit), String> {
     let (mesh, fit) = compile_unplaced(backend, graph, root)?;
-    let fit = placed(&mesh, fit);
+    let fit = placed(&mesh, fit, reach);
     Ok((mesh, fit))
 }
 
@@ -4151,11 +4156,16 @@ fn placement_rounding(magnitude: f64) -> f64 {
 /// distance) is the rounded mesh's: a planar wall less its openings
 /// measured 2.2075750000614 m3 there, an interval excluding its true
 /// 2.207575. Beyond [`EXACT_REACH`] the mesh is declared within
-/// [`placement_rounding`] of its largest coordinate, added to any bound its
+/// [`placement_rounding`] of its largest magnitude, added to any bound its
 /// construction carries, so every service widens what it reads from it as
 /// it widens a tessellation. Within the reach the rounding is the one each
 /// coordinate of the model carries already, and the fit stands.
-fn placed(mesh: &axiolid_mesh::TriMesh, fit: Fit) -> Fit {
+///
+/// The magnitude is the larger of the mesh's largest coordinate and `reach`,
+/// the largest met composing its placement ([`chain::placement_reach`],
+/// engine#369): a chain cancelling a site at +5.6e6 m against a building at
+/// -5.6e6 m rounds at 5.6e6 m while its coordinates look small.
+fn placed(mesh: &axiolid_mesh::TriMesh, fit: Fit, reach: f64) -> Fit {
     let magnitude = mesh
         .positions
         .iter()
@@ -4165,6 +4175,9 @@ fn placed(mesh: &axiolid_mesh::TriMesh, fit: Fit) -> Fit {
     if !magnitude.is_finite() {
         return fit;
     }
+    // The placement composed through larger magnitudes than it yields
+    // rounded at them.
+    let magnitude = magnitude.max(reach);
     let rounding = placement_rounding(magnitude);
     match fit {
         Fit::Exact if magnitude <= EXACT_REACH => Fit::Exact,
@@ -4694,7 +4707,11 @@ fn mesh_less(
             .map_err(|error| format!("the opening #{} cannot be subtracted: {error}", opening.0))?;
     }
     let lowered = session.finish(root).map_err(|e| e.to_string())?;
-    let (mesh, fit) = match compile(backend, &lowered.graph, lowered.root) {
+    let reach = std::iter::once(&product)
+        .chain(openings)
+        .map(|object| chain::placement_reach(model, units, *object))
+        .fold(0.0_f64, f64::max);
+    let (mesh, fit) = match compile(backend, &lowered.graph, lowered.root, reach) {
         // Removed whole only by the openings of a whole it is part of (its
         // own net body was measured before): not its own openings' voided
         // body (#310); the caller names the whole's openings.
@@ -4753,7 +4770,9 @@ fn gross_has_triangles(
     let Ok(lowered) = session.finish(net.gross) else {
         return false;
     };
-    compile(backend, &lowered.graph, lowered.root).is_ok_and(|(mesh, _)| mesh.triangle_count() > 0)
+    let reach = chain::placement_reach(model, units, product);
+    compile(backend, &lowered.graph, lowered.root, reach)
+        .is_ok_and(|(mesh, _)| mesh.triangle_count() > 0)
 }
 
 /// The world box that `product`'s gross `Body`, before the openings voiding
@@ -4781,7 +4800,8 @@ fn gross_bound(
         return None;
     }
     let lowered = session.finish(net.gross).ok()?;
-    let (mesh, fit) = compile(backend, &lowered.graph, lowered.root).ok()?;
+    let reach = chain::placement_reach(model, units, product);
+    let (mesh, fit) = compile(backend, &lowered.graph, lowered.root, reach).ok()?;
     let grown = match fit {
         Fit::Exact => 0.0,
         Fit::Within(deviation) => deviation,
@@ -4826,12 +4846,13 @@ fn enclosure(
     let mut session = session(model, units);
     let net = lower_product_net_with(&mut session, product, net).ok()??;
     let lowered = session.finish(net.root).ok()?;
+    let reach = chain::placement_reach(model, units, product);
     let height = certified_vertical_extent(&lowered.graph, lowered.root).ok();
     for (subject, transform) in difference_subjects(&lowered.graph, lowered.root)
         .into_iter()
         .take(MOST_SUBJECTS)
     {
-        let Ok((mut mesh, fit)) = compile(backend, &lowered.graph, subject) else {
+        let Ok((mut mesh, fit)) = compile(backend, &lowered.graph, subject, reach) else {
             continue;
         };
         let fit = if transform == axiolid_core::Transform3::IDENTITY {
@@ -4850,9 +4871,9 @@ fn enclosure(
                 *point = transform.transform_point3(*point);
             }
             match fit {
-                Fit::Exact => placed(&mesh, Fit::Exact),
+                Fit::Exact => placed(&mesh, Fit::Exact, reach),
                 Fit::Within(deviation) => {
-                    placed(&mesh, Fit::Within((deviation * stretch).next_up()))
+                    placed(&mesh, Fit::Within((deviation * stretch).next_up()), reach)
                 }
             }
         };
@@ -4948,7 +4969,8 @@ fn reference_void(
             .map_err(|error| error.to_string())?,
     };
     let lowered = session.finish(root).map_err(|error| error.to_string())?;
-    compile(backend, &lowered.graph, lowered.root)
+    let reach = chain::placement_reach(model, units, opening);
+    compile(backend, &lowered.graph, lowered.root, reach)
 }
 
 /// The frame a representation's context places it in: the context's
@@ -6108,7 +6130,7 @@ mod tests {
         let backend = ifc_geometry::compile::default_backend();
         let fit = |transform, cut| {
             let (graph, root) = warped_graph(transform, cut);
-            super::compile(&backend, &graph, root).map(|(_, fit)| fit)
+            super::compile(&backend, &graph, root, 0.0).map(|(_, fit)| fit)
         };
         let within = |fit: Result<super::Fit, String>| match fit {
             Ok(super::Fit::Within(bound)) => bound,

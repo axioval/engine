@@ -37,8 +37,8 @@ use ifc_geometry::{RepresentationPurpose, Transform};
 use ifc_model::{EntityId, Model};
 
 use super::{
-    CACHED_POSITIONS, Compiler, EVALUATOR, Extent, Fit, Linear, NODE_BUDGET, TOLERANCE, compile,
-    mesh_box, planar, session,
+    CACHED_POSITIONS, Compiler, EVALUATOR, Extent, Fit, Linear, NODE_BUDGET, TOLERANCE, chain,
+    compile, mesh_box, planar, session,
 };
 
 /// Where an item's material can be: within the union of some boxes, none
@@ -147,6 +147,7 @@ pub(super) fn outer_bound(
         backend,
         model,
         units,
+        placement: chain::placement_reach(model, units, product),
     };
     let mut budget = NODE_BUDGET;
     let mut reach = Reach::default();
@@ -160,6 +161,8 @@ struct Reader<'a> {
     backend: &'a Compiler,
     model: &'a Model,
     units: &'a ifc_geometry::units::UnitScale,
+    /// The largest magnitude met along the product's placement chain.
+    placement: f64,
 }
 
 impl Reader<'_> {
@@ -170,7 +173,13 @@ impl Reader<'_> {
         let mut lowering = session(self.model, self.units);
         if let Ok(root) = lower_representation_item(&mut lowering, item, frame)
             && let Ok(lowered) = lowering.finish(root)
-            && let Some(reach) = graph(self.backend, &lowered.graph, lowered.root, budget)
+            && let Some(reach) = graph(
+                self.backend,
+                &lowered.graph,
+                lowered.root,
+                self.placement,
+                budget,
+            )
         {
             return Some(reach);
         }
@@ -235,22 +244,25 @@ fn graph(
     backend: &Compiler,
     graph_: &GeometryGraph,
     id: NodeId,
+    placement: f64,
     budget: &mut usize,
 ) -> Option<Reach> {
     *budget = budget.checked_sub(1)?;
     let node = graph_.get(id)?;
     match node {
-        GeometryNode::Instance(instance) => graph(backend, graph_, instance.source, budget)?
-            .mapped(|point| instance.transform.transform_point3(point.into()).to_array()),
+        GeometryNode::Instance(instance) => {
+            graph(backend, graph_, instance.source, placement, budget)?
+                .mapped(|point| instance.transform.transform_point3(point.into()).to_array())
+        }
         GeometryNode::Collection(children) => {
             let mut reach = Reach::default();
             for child in children {
-                reach = reach.join(graph(backend, graph_, *child, budget)?);
+                reach = reach.join(graph(backend, graph_, *child, placement, budget)?);
             }
             Some(reach)
         }
         _ => {
-            if let Some(reach) = compiled(backend, graph_, id) {
+            if let Some(reach) = compiled(backend, graph_, id, placement) {
                 return Some(reach);
             }
             match node {
@@ -260,12 +272,12 @@ fn graph(
                     operator,
                 }) => match operator {
                     BooleanOperator::Difference | BooleanOperator::Intersection => {
-                        graph(backend, graph_, *left, budget)
+                        graph(backend, graph_, *left, placement, budget)
                     }
                     // Both lie within the two operands.
                     BooleanOperator::Union | BooleanOperator::SymmetricDifference => Some(
-                        graph(backend, graph_, *left, budget)?
-                            .join(graph(backend, graph_, *right, budget)?),
+                        graph(backend, graph_, *left, placement, budget)?
+                            .join(graph(backend, graph_, *right, placement, budget)?),
                     ),
                     _ => None,
                 },
@@ -341,8 +353,13 @@ fn profile_region(graph: &GeometryGraph, id: NodeId) -> Option<Reach> {
 
 /// Node `id` compiled into a mesh, its box grown by its certified
 /// deviation; `None` when the compiler refuses it or it has no triangles.
-fn compiled(backend: &Compiler, graph: &GeometryGraph, id: NodeId) -> Option<Reach> {
-    let (mesh, fit) = compile(backend, graph, id).ok()?;
+fn compiled(
+    backend: &Compiler,
+    graph: &GeometryGraph,
+    id: NodeId,
+    placement: f64,
+) -> Option<Reach> {
+    let (mesh, fit) = compile(backend, graph, id, placement).ok()?;
     let (min, max) = mesh_box(&mesh)?;
     let grow = match fit {
         Fit::Exact => 0.0,

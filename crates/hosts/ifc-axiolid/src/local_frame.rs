@@ -129,7 +129,7 @@ fn roots(model: &Model) -> Option<Vec<(EntityId, [f64; 2])>> {
 }
 
 /// A local placement's relative placement and its location point.
-fn location(model: &Model, placement: EntityId) -> Option<(EntityId, EntityId)> {
+pub(super) fn location(model: &Model, placement: EntityId) -> Option<(EntityId, EntityId)> {
     let relative = model
         .get(placement)?
         .attribute(RELATIVE_PLACEMENT)?
@@ -142,7 +142,7 @@ fn location(model: &Model, placement: EntityId) -> Option<(EntityId, EntityId)> 
 }
 
 /// A Cartesian point's coordinates, in file units.
-fn coordinates(model: &Model, point: EntityId) -> Option<Vec<f64>> {
+pub(super) fn coordinates(model: &Model, point: EntityId) -> Option<Vec<f64>> {
     let entity = model.get(point)?;
     if !entity.is_type("IFCCARTESIANPOINT") {
         return None;

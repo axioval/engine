@@ -35,7 +35,7 @@ use axioval_ifc::{GlazingReader, ItemGlazing};
 use axioval_ir::{ObjectId, SourceId};
 use ifc_geometry::lower::lower_representation_item;
 
-use super::{Fit, NO_TRIANGLES, Parsed, compile, entity_id, session};
+use super::{Fit, NO_TRIANGLES, Parsed, chain, compile, entity_id, session};
 
 /// A door's items, or why they cannot be read; `None` for no body.
 type Items = Result<Option<Arc<Vec<GlazingItem>>>, String>;
@@ -89,6 +89,7 @@ impl Readers {
         else {
             return Ok(None);
         };
+        let reach = chain::placement_reach(&parsed.model, units, entity);
         let backend = ifc_geometry::compile::default_backend();
         let mut items = Vec::with_capacity(description.items.len());
         for item in &description.items {
@@ -99,7 +100,7 @@ impl Readers {
             let lowered = lowering
                 .finish(node)
                 .map_err(|error| format!("item {label} cannot be lowered: {error}"))?;
-            let (mesh, fit) = match compile(&backend, &lowered.graph, lowered.root) {
+            let (mesh, fit) = match compile(&backend, &lowered.graph, lowered.root, reach) {
                 Ok(compiled) => compiled,
                 Err(reason) if reason == NO_TRIANGLES => continue,
                 Err(reason) => return Err(format!("item {label} cannot be meshed: {reason}")),

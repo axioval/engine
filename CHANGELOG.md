@@ -37,6 +37,16 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **Placement rounding is bounded from the placement chain**
+  ([#369](https://github.com/axioval/engine/issues/369)). A chain that
+  cancels large translations (a site at +5.6e6 m, a building at -5.6e6 m
+  beneath it) rounds at the scale of the intermediate ones while the wall it
+  places lies near the origin, so bounding the rounding from the final
+  coordinates alone (#368) claimed such a wall exact. The host now carries
+  the largest magnitude met along each body's placement chain (the sum of
+  the lengths of its local placements' locations) and declares the mesh
+  within 16 machine epsilons of the larger of that and its largest
+  coordinate. A chain that stays within 4096 m changes nothing.
 - **Metric routes pass an unmeasured obstacle within its bound**
   ([#430](https://github.com/axioval/engine/issues/430)). A route
   (`accessible-route` with passing-space parameters) refused whenever any

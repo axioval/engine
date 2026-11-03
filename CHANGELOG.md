@@ -4,6 +4,21 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-03
+
+Geometry measures more of a real model and says why when it does not:
+
+- A federated check measures the sources that have IFC bytes and reports
+  the others unmeasured.
+- A product with no shape no longer blocks free space, and a metric route
+  passes an unmeasured obstacle that is bounded.
+- An opening authored only as a closed `Reference` is measured as its void.
+- Nanometre slivers no longer refuse a footprint's union.
+- Rounding is bounded from the whole placement chain.
+- A kept mesh carries its product's colour, or the reason it has none.
+
+Breaking: the BCF crates move to openbim-bcf 0.7.2.
+
 ### Added
 
 - **An opening authored only as a `Reference` representation is measured as
@@ -8036,7 +8051,8 @@ meshes with `axiolid-mesh` 0.1.
 
 - Placement offset bounds no longer admit tolerance-expanded witnesses; supported found placements now require exact frame-bound whole-base support evidence.
 
-[Unreleased]: https://github.com/axioval/engine/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/axioval/engine/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/axioval/engine/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/axioval/engine/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/axioval/engine/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/axioval/engine/compare/v0.6.1...v0.7.0

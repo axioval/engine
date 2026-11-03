@@ -6,6 +6,12 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **An opening used as an entrance is reached through its void**
+  ([#475](https://github.com/axioval/engine/issues/475)). An opening has
+  no body (#383), so an entrance reach or circulation map it served was
+  refused with "has no body". It now meets a path where a door filling it
+  would, through the void it keeps free. An unmeasured void refuses with
+  the host's reason, a curved one as `InexactPlacementEvidence`.
 - **A tessellated entrance or circulation subject is bracketed, not refused**
   ([#475](https://github.com/axioval/engine/issues/475)). A revolving door
   or round fitting used to refuse every entrance reach and circulation map

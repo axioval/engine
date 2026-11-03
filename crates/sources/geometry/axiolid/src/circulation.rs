@@ -38,11 +38,12 @@
 //!   them: the request drops it.
 
 use axiolid_core::{Point2, Point3, Tolerance, Vec2};
+use axiolid_mesh::TriMesh;
 use axiolid_overlay::{Polygon, Region};
 use axiolid_route::{NodeKind, Skeleton, skeleton};
 use axioval_engine::{
     CirculationContact, CirculationMap, CirculationNode, CirculationNodeKind, CirculationRequest,
-    EntranceReach, FreeSpaceError, LengthInterval,
+    EntranceReach, FreeSpaceError, GeometryFidelity, LengthInterval,
 };
 use axioval_ir::{Evidence, ObjectId};
 
@@ -514,26 +515,42 @@ impl AxiolidFreeSpaceService {
         subject: &ObjectId,
         tolerance: Tolerance,
     ) -> Result<SubjectFootprint, FreeSpaceError> {
-        if self.geometry().has_no_body(subject) {
-            return Err(FreeSpaceError::Unavailable(format!(
-                "{subject} has no body, so where a path meets it is unknown"
-            )));
-        }
-        let mesh = self
-            .geometry()
-            .mesh(subject)
-            .ok_or_else(|| FreeSpaceError::MissingGeometry(Box::new(subject.clone())))?;
         let missing = || FreeSpaceError::MissingGeometry(Box::new(subject.clone()));
-        if !self.geometry().is_tessellated(subject) {
+        let exact = |mesh: &TriMesh| {
             let (inside, around) = placement::bracketed_footprint(&triangles(mesh), tolerance)?;
             if around.as_ref().is_ok_and(Region::is_empty) {
                 return Err(missing());
             }
-            return Ok(SubjectFootprint {
+            Ok(SubjectFootprint {
                 inside,
                 around,
                 deviation: None,
-            });
+            })
+        };
+        if self.geometry().has_no_body(subject) {
+            // An opening is reached through its void (#383): the solid of
+            // space it keeps free, asked for by name as an extent is.
+            let void = match self.geometry().void(subject) {
+                Some(Ok(void)) => void,
+                Some(Err(reason)) => {
+                    return Err(FreeSpaceError::Unavailable(format!(
+                        "{subject}'s void is unmeasured ({reason}), so where a path meets it is unknown"
+                    )));
+                }
+                None => {
+                    return Err(FreeSpaceError::Unavailable(format!(
+                        "{subject} has no body, so where a path meets it is unknown"
+                    )));
+                }
+            };
+            if self.geometry().void_fidelity(subject) != Ok(GeometryFidelity::Exact) {
+                return Err(FreeSpaceError::InexactPlacementEvidence);
+            }
+            return exact(void);
+        }
+        let mesh = self.geometry().mesh(subject).ok_or_else(missing)?;
+        if !self.geometry().is_tessellated(subject) {
+            return exact(mesh);
         }
         let d = self
             .geometry()

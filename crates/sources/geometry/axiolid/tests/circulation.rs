@@ -133,6 +133,59 @@ fn a_gap_as_wide_as_the_path_is_neither_proven_nor_ruled_out() {
     assert!(!joined && !apart, "{map:#?}");
 }
 
+/// [`room`] with its door authored as an opening: no body, only the void
+/// it keeps free (#383), `void` registering it.
+fn opening(
+    partition: f64,
+    void: impl FnOnce(AxiolidGeometry, ObjectId) -> AxiolidGeometry,
+) -> AxiolidGeometry {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("room"), cuboid([0.0, 0.0, 0.0], [6.0, 4.0, 3.0]))
+        .with_mesh(
+            id("partition"),
+            cuboid([3.0, 0.0, 0.0], [3.1, partition, 3.0]),
+        )
+        .with_mesh(id("wc"), cuboid([5.3, 0.2, 0.0], [5.9, 0.9, 0.8]));
+    void(geometry, id("door"))
+}
+
+/// An opening is entered through its void: a path meets it where it would
+/// meet a door filling it (#475).
+#[test]
+fn an_opening_is_reached_through_its_void() {
+    let exact = |geometry: AxiolidGeometry, door| {
+        geometry.with_void(door, cuboid([0.5, -0.2, 0.0], [1.5, 0.0, 2.1]))
+    };
+    let joined = map(opening(2.5, exact), 0.9).expect("mapped");
+    let door = joined.contact(&id("door")).unwrap();
+    let wc = joined.contact(&id("wc")).unwrap();
+    assert!(wc.reaches(door.reached()[0].0), "{joined:#?}");
+    let apart = map(opening(3.3, exact), 0.9).expect("mapped");
+    let door = apart.contact(&id("door")).unwrap();
+    let wc = apart.contact(&id("wc")).unwrap();
+    assert!(
+        door.possible()
+            .iter()
+            .all(|piece| !wc.possible().contains(piece)),
+        "{apart:#?}"
+    );
+
+    let unmeasured =
+        |geometry: AxiolidGeometry, door| geometry.with_unmeasured_void(door, "not a closed solid");
+    assert!(matches!(
+        map(opening(2.5, unmeasured), 0.9),
+        Err(FreeSpaceError::Unavailable(message))
+            if message.contains("void is unmeasured (not a closed solid)")
+    ));
+    let curved = |geometry: AxiolidGeometry, door| {
+        geometry.with_tessellated_void(door, cuboid([0.5, -0.2, 0.0], [1.5, 0.0, 2.1]), 0.01)
+    };
+    assert_eq!(
+        map(opening(2.5, curved), 0.9),
+        Err(FreeSpaceError::InexactPlacementEvidence)
+    );
+}
+
 #[test]
 fn subjects_without_a_body_and_services_without_maps_refuse() {
     let geometry = room(2.5).with_no_body(id("door"));

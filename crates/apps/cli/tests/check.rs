@@ -2833,6 +2833,42 @@ const PROVISION_TYPES: &[(&str, &str)] = &[
     ("element", "IfcElement"),
 ];
 
+/// [`provision_for_a_void`] with the opening authored as the Reference View
+/// does (#473): only a `Reference` `IfcPolygonalFaceSet`, no `Body`, of the
+/// same box (x 1.5..2.5, y -0.2..0.2, z 0..2.1). With `closed` false the
+/// top face is left out, leaving the face set open.
+fn provision_for_a_reference_void(closed: bool) -> String {
+    let top = if closed {
+        "#206=IFCINDEXEDPOLYGONALFACE((5,6,7,8));\n"
+    } else {
+        ""
+    };
+    let faces = if closed {
+        "#201,#202,#203,#204,#205,#206"
+    } else {
+        "#201,#202,#203,#204,#205"
+    };
+    let reference = format!(
+        "#200=IFCCARTESIANPOINTLIST3D(((1.5,-0.2,0.),(2.5,-0.2,0.),(2.5,0.2,0.),(1.5,0.2,0.),\
+         (1.5,-0.2,2.1),(2.5,-0.2,2.1),(2.5,0.2,2.1),(1.5,0.2,2.1)));\n\
+         #201=IFCINDEXEDPOLYGONALFACE((1,4,3,2));\n\
+         #202=IFCINDEXEDPOLYGONALFACE((1,2,6,5));\n\
+         #203=IFCINDEXEDPOLYGONALFACE((3,4,8,7));\n\
+         #204=IFCINDEXEDPOLYGONALFACE((4,1,5,8));\n\
+         #205=IFCINDEXEDPOLYGONALFACE((2,3,7,6));\n\
+         {top}\
+         #207=IFCPOLYGONALFACESET(#200,{},({faces}),$);\n\
+         #208=IFCSHAPEREPRESENTATION(#5,'Reference','Tessellation',(#207));\n\
+         #209=IFCPRODUCTDEFINITIONSHAPE($,$,(#208));\n\
+         #29=IFCOPENINGELEMENT('0000000000000000000029',$,$,$,$,#3,#209,$,.OPENING.);\n",
+        if closed { ".T." } else { ".F." },
+    );
+    let model = provision_for_a_void();
+    let start = model.find("#20=IFCCARTESIANPOINT").unwrap();
+    let end = model.find("#30=IFCCARTESIANPOINT").unwrap();
+    format!("{}{reference}{}", &model[..start], &model[end..])
+}
+
 /// An opening is measured as the solid of its void where a rule names it
 /// (#383): a distance rule from the ducts to the opening finds the duct
 /// passing through it at no distance and the one beside it 0.9 m away, its
@@ -2877,6 +2913,81 @@ fn with_geometry_a_distance_to_an_opening_is_measured_to_its_void() {
     assert_eq!(findings.len(), 2, "{result:#}");
     assert_eq!(findings[1].0, "#49", "{result:#}");
     assert!(findings[1].1.contains("0.9000 m"), "{findings:?}");
+}
+
+/// An opening with only a closed `Reference` face set is measured as the
+/// solid of that void (#473): the duct through it is at no distance, the one
+/// beside it 0.9 m away, and its extent is the face set's.
+#[test]
+fn with_geometry_a_reference_only_openings_void_is_measured() {
+    let case = Case::new("geometry-reference-void");
+    let model = provision_for_a_reference_void(true);
+    let (output, result) = case.geometry_rule(
+        &model,
+        PROVISION_TYPES,
+        "axioval:capability.distance",
+        &registry_signature("axioval:capability.distance"),
+        entity("duct"),
+        json!({
+            "counterparts": {"type": "selector", "value": entity("opening")},
+            "minimum_metres": {"type": "number", "value": 1.0},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+    let findings = finding_messages(&result);
+    assert_eq!(findings.len(), 2, "{result:#}");
+    assert_eq!(findings[0].0, "#39", "{result:#}");
+    assert!(
+        findings[0].1.contains("#29 is at distance 0.0000 m"),
+        "{findings:?}"
+    );
+    assert!(findings[1].1.contains("0.9000 m"), "{findings:?}");
+
+    let (output, result) = Case::new("geometry-reference-void-extent").geometry_rule(
+        &model,
+        PROVISION_TYPES,
+        "axioval:capability.expression",
+        &registry_signature("axioval:capability.expression"),
+        entity("opening"),
+        json!({"requirement": {"type": "expression", "value": {
+            "kind": "compare", "operator": "lessThan", "label": "height",
+            "left": {"kind": "property", "propertySet": "axioval:measured",
+                     "property": "extent_z"},
+            "right": {"kind": "literal",
+                      "value": {"type": "quantity", "value": 1.8, "unit": "m"}}}}}),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = finding_messages(&result);
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert_eq!(findings[0].0, "#29", "{result:#}");
+}
+
+/// A `Reference` face set with an open edge is no solid (#473): the opening
+/// stays unmeasured as a void, naming what is missing.
+#[test]
+fn with_geometry_an_openings_open_reference_is_not_its_void() {
+    let case = Case::new("geometry-reference-void-open");
+    let (output, result) = case.geometry_rule(
+        &provision_for_a_reference_void(false),
+        PROVISION_TYPES,
+        "axioval:capability.distance",
+        &registry_signature("axioval:capability.distance"),
+        entity("duct"),
+        json!({
+            "counterparts": {"type": "selector", "value": entity("opening")},
+            "minimum_metres": {"type": "number", "value": 1.0},
+        }),
+    );
+    assert_ne!(output.status.code(), Some(2), "{}", stderr(&output));
+    let open = result["report"]["not_evaluated"].to_string();
+    assert!(open.contains("#29"), "{result:#}");
+    assert!(finding_messages(&result).is_empty(), "{result:#}");
 }
 
 /// A duct lies within an opening's void (#383): the duct passing through

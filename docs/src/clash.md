@@ -713,8 +713,10 @@ void** where a rule names it in its own right (#383):
   view: an opening they select is not evaluated as occupying no material,
   as before, so a material clash never pairs an opening.
 
-The void is the opening's own `Body` (its `Reference` solid where the file
-states the opening already applied), exact or tessellated within the
+The void is the opening's own `Body`; an opening with no `Body` has its
+`Reference` solid (as a Reference View export authors it, #473) when that
+is closed (the mesh audit says so, never the representation's label), and
+an open one is refused as unmeasured. Both are exact or tessellated within the
 compiler's certified deviation like any body; evidence about it carries
 `;void:<opening>`. An opening whose void could not be meshed is not
 evaluated as unmeasured, never as having no void. The opening's host is

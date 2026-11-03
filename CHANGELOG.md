@@ -6,6 +6,14 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **An opening authored only as a `Reference` representation is measured as
+  its void** ([#473](https://github.com/axioval/engine/issues/473)). An
+  `IfcOpeningElement` with no `Body` whose `Reference` representation is a
+  closed tessellation (an `IfcPolygonalFaceSet` of a Reference View export)
+  is measured as the solid of that void, as one with a `Body` is (#383):
+  `distance`, `containment` and the extents read it, and
+  `GeometryReport::voids` counts it. An open `Reference` is refused as
+  unmeasured, as is an opening with neither, naming what is missing.
 - **`attach` accepts a federated session with byte-less sources**
   ([#431](https://github.com/axioval/engine/issues/431)). A source with no
   entry in `ModelBytes` (one from another adapter, say) no longer fails

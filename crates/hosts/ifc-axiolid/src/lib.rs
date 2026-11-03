@@ -1450,10 +1450,23 @@ pub fn attach(
                             NetOptions::default(),
                         )
                     })
-                    .and_then(|meshed| {
-                        meshed
-                            .map(|body| (body.mesh, body.fit))
-                            .ok_or_else(|| "no body representation".into())
+                    .and_then(|meshed| match meshed {
+                        Some(body) => Ok((body.mesh, body.fit)),
+                        // No `Body`: the void is its `Reference` solid, when
+                        // that is closed (#473).
+                        None => units
+                            .clone()
+                            .and_then(|units| {
+                                entity_id(&id)
+                                    .ok_or_else(|| "not a STEP instance id".to_owned())
+                                    .map(|entity| {
+                                        reference_void(&backend, model, units, linear, entity)
+                                    })
+                            })
+                            .and_then(|void| void)
+                            .map_err(|reason| {
+                                format!("no body representation, and no closed Reference: {reason}")
+                            }),
                     });
                 voids.push((id.clone(), void));
             }
@@ -4911,7 +4924,8 @@ fn fit_deviation(fit: Fit) -> Option<f64> {
 /// solid, every item of every `Reference` representation placed as its
 /// representations are (the context's world coordinate system above the
 /// placement chain) and compiled as a body is. An opening with any other
-/// representation was never taken as applied, so one here is refused.
+/// representation was never taken as applied, so one here is refused, as
+/// is a `Reference` that is not a closed solid (#473).
 fn reference_void(
     backend: &Compiler,
     model: &Model,
@@ -4970,7 +4984,12 @@ fn reference_void(
     };
     let lowered = session.finish(root).map_err(|error| error.to_string())?;
     let reach = chain::placement_reach(model, units, opening);
-    compile(backend, &lowered.graph, lowered.root, reach)
+    let (mesh, fit) = compile(backend, &lowered.graph, lowered.root, reach)?;
+    // A void is a solid: the audit, never the label, says it is closed.
+    if !axiolid_mesh::audit_mesh(&mesh, TOLERANCE).is_closed_two_manifold() {
+        return Err("the opening's Reference representation is not a closed solid".into());
+    }
+    Ok((mesh, fit))
 }
 
 /// The frame a representation's context places it in: the context's
@@ -6831,6 +6850,52 @@ mod tests {
         )
         .unwrap_err();
         assert!(refusal.contains("not 'Reference'"), "{refusal}");
+    }
+
+    /// An opening authored only as a `Reference` `IfcPolygonalFaceSet` is
+    /// measured as the solid of its void when the face set is closed, and
+    /// refused, naming what is missing, when it is open (#473).
+    #[test]
+    fn a_reference_only_opening_is_a_void_when_its_face_set_is_closed() {
+        let model = |faces: &str, closed: &str| {
+            format!(
+                "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+                 #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+                 #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+                 #3=IFCLOCALPLACEMENT($,#2);\n\
+                 #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+                 #9001=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+                 #9003=IFCUNITASSIGNMENT((#9001));\n\
+                 #9004=IFCPROJECT('0000000000000000009004',$,'P',$,$,$,$,(#5),#9003);\n\
+                 #200=IFCCARTESIANPOINTLIST3D(((0.,0.,0.),(1.,0.,0.),(1.,1.,0.),(0.,1.,0.),\
+                 (0.,0.,1.),(1.,0.,1.),(1.,1.,1.),(0.,1.,1.)));\n\
+                 #201=IFCINDEXEDPOLYGONALFACE((1,4,3,2));\n\
+                 #202=IFCINDEXEDPOLYGONALFACE((1,2,6,5));\n\
+                 #203=IFCINDEXEDPOLYGONALFACE((3,4,8,7));\n\
+                 #204=IFCINDEXEDPOLYGONALFACE((4,1,5,8));\n\
+                 #205=IFCINDEXEDPOLYGONALFACE((2,3,7,6));\n\
+                 #206=IFCINDEXEDPOLYGONALFACE((5,6,7,8));\n\
+                 #207=IFCPOLYGONALFACESET(#200,{closed},({faces}),$);\n\
+                 #208=IFCSHAPEREPRESENTATION(#5,'Reference','Tessellation',(#207));\n\
+                 #209=IFCPRODUCTDEFINITIONSHAPE($,$,(#208));\n\
+                 #29=IFCOPENINGELEMENT('0000000000000000000029',$,$,$,$,#3,#209,$,.OPENING.);\n\
+                 ENDSEC;\nEND-ISO-10303-21;\n"
+            )
+        };
+        let attached = |bytes: &str| {
+            let session = import_ifc_session("opening.ifc", bytes.as_bytes()).unwrap();
+            let models: super::ModelBytes = session
+                .snapshots()
+                .map(|snapshot| (snapshot.source().clone(), bytes.as_bytes().to_vec()))
+                .collect();
+            attach(session, &models, super::Options::default())
+                .unwrap()
+                .1
+        };
+        let closed = attached(&model("#201,#202,#203,#204,#205,#206", ".T."));
+        assert_eq!(closed.voids, 1, "{closed:?}");
+        let open = attached(&model("#201,#202,#203,#204,#205", ".F."));
+        assert_eq!(open.voids, 0, "{open:?}");
     }
 
     /// A closed, outward box from `min` to `max`.

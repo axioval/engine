@@ -244,9 +244,9 @@ checksum = "0fd6a949aebeea3e50f27a48dd45c6b1fcfb552515317dc861fecce2485f6df4"
 
 [[package]]
 name = "axiolid-heal"
-version = "0.3.1"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ff2f52a76e3a187ccadd7dd6933e90dead6c0cde8ed563c87c761d759c56419"
+checksum = "7a541f375152e790bfec0604b0ad940c06e340dc69ee31aa0078ee6882d7e4c8"
 dependencies = [
  "axiolid-core",
  "axiolid-guarantees",

@@ -17,6 +17,14 @@
             "document": "bs-ifc2x3-building-structural.ifc",
             "system": "ifc-step"
           }
+        },
+        {
+          "exact": true,
+          "locator": "limited_values;limits=@limits;key_1=@key_1;key_1_path=@key_1_path;key_2=@key_2;key_2_path=@key_2_path;key_3=@key_3;key_3_path=@key_3_path;key_4=@key_4;key_4_path=@key_4_path;pair_key=@pair_key;case_sensitive=@case_sensitive;quantity=@quantity;quantity_property=@quantity_property;measured_value=@measured_value;floor_path=@floor_path;overall_width=@overall_width;width_deduction=@width_deduction;clear_width_from_leaves=@clear_width_from_leaves;overall_height=@overall_height;lining_thickness=@lining_thickness;threshold_thickness=@threshold_thickness;ramp_selector=@ramp_selector;ramp_reach=@ramp_reach;member_selector=@member_selector;relationship=@relationship;direction=@direction;follow_chain=@follow_chain;path=@path;skip_absent_relationship_ends=@skip_absent_relationship_ends;door_type_defaults=@door_type_defaults;glazing_ratio_per=@glazing_ratio_per#1",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
         }
       ],
       "id": "4d77953c-b91f-55a6-82d4-1db84641356b",
@@ -44,6 +52,14 @@
         {
           "exact": true,
           "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#153:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "limited_values;limits=@limits;key_1=@key_1;key_1_path=@key_1_path;key_2=@key_2;key_2_path=@key_2_path;key_3=@key_3;key_3_path=@key_3_path;key_4=@key_4;key_4_path=@key_4_path;pair_key=@pair_key;case_sensitive=@case_sensitive;quantity=@quantity;quantity_property=@quantity_property;measured_value=@measured_value;floor_path=@floor_path;overall_width=@overall_width;width_deduction=@width_deduction;clear_width_from_leaves=@clear_width_from_leaves;overall_height=@overall_height;lining_thickness=@lining_thickness;threshold_thickness=@threshold_thickness;ramp_selector=@ramp_selector;ramp_reach=@ramp_reach;member_selector=@member_selector;relationship=@relationship;direction=@direction;follow_chain=@follow_chain;path=@path;skip_absent_relationship_ends=@skip_absent_relationship_ends;door_type_defaults=@door_type_defaults;glazing_ratio_per=@glazing_ratio_per#1",
           "source": {
             "document": "bs-ifc2x3-building-structural.ifc",
             "system": "ifc-step"
@@ -79,6 +95,14 @@
             "document": "bs-ifc2x3-building-structural.ifc",
             "system": "ifc-step"
           }
+        },
+        {
+          "exact": true,
+          "locator": "limited_values;limits=@limits;key_1=@key_1;key_1_path=@key_1_path;key_2=@key_2;key_2_path=@key_2_path;key_3=@key_3;key_3_path=@key_3_path;key_4=@key_4;key_4_path=@key_4_path;pair_key=@pair_key;case_sensitive=@case_sensitive;quantity=@quantity;quantity_property=@quantity_property;measured_value=@measured_value;floor_path=@floor_path;overall_width=@overall_width;width_deduction=@width_deduction;clear_width_from_leaves=@clear_width_from_leaves;overall_height=@overall_height;lining_thickness=@lining_thickness;threshold_thickness=@threshold_thickness;ramp_selector=@ramp_selector;ramp_reach=@ramp_reach;member_selector=@member_selector;relationship=@relationship;direction=@direction;follow_chain=@follow_chain;path=@path;skip_absent_relationship_ends=@skip_absent_relationship_ends;door_type_defaults=@door_type_defaults;glazing_ratio_per=@glazing_ratio_per#1",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
         }
       ],
       "id": "62a07010-bd31-5b68-b161-5b1d538eaf11",
@@ -110,6 +134,14 @@
             "document": "bs-ifc2x3-building-structural.ifc",
             "system": "ifc-step"
           }
+        },
+        {
+          "exact": false,
+          "locator": "limited_values;limits=@limits;key_1=@key_1;key_1_path=@key_1_path;key_2=@key_2;key_2_path=@key_2_path;key_3=@key_3;key_3_path=@key_3_path;key_4=@key_4;key_4_path=@key_4_path;pair_key=@pair_key;case_sensitive=@case_sensitive;quantity=@quantity;quantity_property=@quantity_property;measured_value=@measured_value;floor_path=@floor_path;overall_width=@overall_width;width_deduction=@width_deduction;clear_width_from_leaves=@clear_width_from_leaves;overall_height=@overall_height;lining_thickness=@lining_thickness;threshold_thickness=@threshold_thickness;ramp_selector=@ramp_selector;ramp_reach=@ramp_reach;member_selector=@member_selector;relationship=@relationship;direction=@direction;follow_chain=@follow_chain;path=@path;skip_absent_relationship_ends=@skip_absent_relationship_ends;door_type_defaults=@door_type_defaults;glazing_ratio_per=@glazing_ratio_per#1",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
         }
       ],
       "id": "83e46492-26ec-598c-9408-0ae3ba34092d",
@@ -137,6 +169,14 @@
         {
           "exact": true,
           "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#685:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "limited_values;limits=@limits;key_1=@key_1;key_1_path=@key_1_path;key_2=@key_2;key_2_path=@key_2_path;key_3=@key_3;key_3_path=@key_3_path;key_4=@key_4;key_4_path=@key_4_path;pair_key=@pair_key;case_sensitive=@case_sensitive;quantity=@quantity;quantity_property=@quantity_property;measured_value=@measured_value;floor_path=@floor_path;overall_width=@overall_width;width_deduction=@width_deduction;clear_width_from_leaves=@clear_width_from_leaves;overall_height=@overall_height;lining_thickness=@lining_thickness;threshold_thickness=@threshold_thickness;ramp_selector=@ramp_selector;ramp_reach=@ramp_reach;member_selector=@member_selector;relationship=@relationship;direction=@direction;follow_chain=@follow_chain;path=@path;skip_absent_relationship_ends=@skip_absent_relationship_ends;door_type_defaults=@door_type_defaults;glazing_ratio_per=@glazing_ratio_per#1",
           "source": {
             "document": "bs-ifc2x3-building-structural.ifc",
             "system": "ifc-step"
@@ -1176,18 +1216,6 @@
       }
     },
     {
-      "message": "axioval:derived.intersects: whether ifc-step:bs-ifc2x3-building-structural.ifc/#1012 and ifc-step:bs-ifc2x3-building-structural.ifc/#153 share volume or only touch is undecided: they meet, the deepest witness reaches 0.000000000 m and the shared volume is not bounded away from rounding",
-      "object_id": {
-        "local_id": "#1012",
-        "source": {
-          "document": "bs-ifc2x3-building-structural.ifc",
-          "system": "ifc-step"
-        }
-      },
-      "reason": "backend_unavailable",
-      "rule_id": "oz-beams"
-    },
-    {
       "message": "the opening's body is a `brep`, not a straight extrusion",
       "object_id": {
         "local_id": "#1054",
@@ -1634,7 +1662,7 @@
     {
       "checked": 6,
       "failed": 0,
-      "not_evaluated": 6,
+      "not_evaluated": 5,
       "rule_id": "oz-beams",
       "status": "not_evaluated"
     },

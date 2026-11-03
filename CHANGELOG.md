@@ -4,6 +4,13 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+### Fixed
+
+- Walls turned in plan with openings or slots flush with their faces are
+  measured instead of refused as self-intersecting: the volume kernel's
+  triangle test now decides near-coplanar triangles exactly
+  (axiolid-heal 0.3.3). (#373)
+
 ## [0.10.0] - 2026-11-03
 
 Geometry measures more of a real model and says why when it does not:

@@ -18018,97 +18018,66 @@ fn wall_with_a_flush_clipped_slot(degrees: f64) -> String {
     )
 }
 
-/// The volume of wall #30 as a rule over walls reads it, in a case of its
-/// own: the result of `check --geometry`.
-fn wall_volume_read(name: &str, model: &str) -> Value {
+/// Wall #30's volume as a rule over walls reads it, required within
+/// 1e-6 m3 of `net`, in a case of its own: the result of
+/// `check --geometry`.
+fn wall_volume_read(name: &str, model: &str, net: f64) -> Value {
     let volume = json!({"kind": "property", "propertySet": "axioval:measured",
                         "property": "volume"});
-    let positive = json!({"kind": "compare", "operator": "greaterThan", "label": "value",
-                          "left": volume,
-                          "right": {"kind": "literal",
-                                    "value": {"type": "quantity", "value": 0.0, "unit": "m3"}}});
+    let cubic = |value: f64| json!({"kind": "literal", "value": {"type": "quantity", "value": value, "unit": "m3"}});
     let (_, result) = Case::new(name).geometry_rule(
         model,
         &[("wall", "IfcWall")],
         "axioval:capability.expression",
         &registry_signature("axioval:capability.expression"),
         entity("wall"),
-        json!({"requirement": {"type": "expression", "value": positive}}),
+        json!({"requirement": {"type": "expression", "value":
+            {"kind": "between", "operand": volume,
+             "low": cubic(net - 1e-6), "high": cubic(net + 1e-6)}}}),
     );
     result
 }
 
 /// engine#373: a 5 cm partition wall with two door-height openings flush
 /// with its base, and a wall less a slot as thick as itself, are measured
-/// where they stand along the axes and refused once the placement turns
-/// them, though the volume kernel receives a closed mesh that is the
-/// solid. Both cases were probed on a real model, where 20 of its 2,393
-/// walls are refused so.
-///
-/// The partition's mesh (axiolid-mesh-compile 0.3.40) is exact: its volume
-/// interval is the true one at 0 degrees, and at 10 degrees the faces
-/// around the openings are triangulated into triangles that are disjoint
-/// in their plane. The refusal is `axiolid_heal::self_intersections` (0.3.1)
-/// reporting two such triangles as intersecting once rounding has moved
-/// their corners off the plane: its overlap test of two non-coplanar
-/// triangles measures them along the float cross product of two
-/// near-parallel normals. Refused by that name until the kernel decides
-/// them exactly (axiolid/kernel#399).
+/// upright and turned 10 degrees. Both cases were probed on a real model,
+/// where 20 of its 2,393 walls were refused as self-intersecting: turned,
+/// the faces around the openings are triangulated into triangles disjoint
+/// in their plane, and `axiolid_heal::self_intersections` before 0.3.3
+/// reported two of them as intersecting once rounding moved their corners
+/// off the plane (axiolid/kernel#399).
 #[test]
-fn with_geometry_a_turned_partition_wall_with_flush_openings_is_refused_by_the_kernel() {
-    let measured = |result: &Value| result["report"]["not_evaluated"].as_array().unwrap().len();
-    let result = wall_volume_read(
-        "geometry-partition-upright",
-        &partition_wall_with_door_openings(0.0),
-    );
-    assert_eq!(measured(&result), 0, "{result:#}");
-    assert_eq!(result["geometry"]["exact"], 1, "{:#}", result["geometry"]);
-
-    let result = wall_volume_read(
-        "geometry-partition-turned",
-        &partition_wall_with_door_openings(10.0),
-    );
-    let refused = result["report"]["not_evaluated"].as_array().unwrap();
-    assert_eq!(refused.len(), 1, "{result:#}");
-    assert!(
-        refused[0]["message"]
-            .as_str()
-            .unwrap()
-            .contains("the volume kernel refused a self-intersecting mesh (SelfIntersecting)"),
-        "{result:#}"
-    );
-}
-
-/// engine#373: the wall less a flush slot, no opening (see
-/// [`with_geometry_a_turned_partition_wall_with_flush_openings_is_refused_by_the_kernel`]).
-/// Without an opening the clip is lowered in world coordinates
-/// (`ifc-geometry` 0.32.0 lowers a host in its own frame only to subtract
-/// openings, #388): the turned wall's faces and the slot's are rounded
-/// apart, the kernel keeps the sliver between them as a lid over the slot
-/// on one face, and that mesh does intersect itself. Lowered in the host's
-/// frame, as with an opening, no lid is left (openbimrs/ifc#655).
-#[test]
-fn with_geometry_a_turned_wall_with_a_flush_clipped_slot_is_refused_by_the_kernel() {
-    let result = wall_volume_read(
-        "geometry-slot-upright",
-        &wall_with_a_flush_clipped_slot(0.0),
-    );
-    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
-    assert_eq!(result["geometry"]["exact"], 1, "{:#}", result["geometry"]);
-
-    let result = wall_volume_read(
-        "geometry-slot-turned",
-        &wall_with_a_flush_clipped_slot(10.0),
-    );
-    let refused = result["report"]["not_evaluated"].as_array().unwrap();
-    assert_eq!(refused.len(), 1, "{result:#}");
-    assert!(
-        refused[0]["message"]
-            .as_str()
-            .unwrap()
-            .contains("the volume kernel refused a self-intersecting mesh (SelfIntersecting)"),
-        "{result:#}"
-    );
+fn with_geometry_turned_walls_with_flush_openings_or_slots_are_measured() {
+    let partition = 4.0 * 0.05 * 2.8 - 2.0 * 0.9 * 0.05 * 2.26;
+    let slotted = 2.5 * 0.125 * 3.6 - 0.1 * 0.125 * 0.9;
+    for degrees in [0.0, 10.0] {
+        for (name, model, net) in [
+            (
+                "partition",
+                partition_wall_with_door_openings(degrees),
+                partition,
+            ),
+            ("slot", wall_with_a_flush_clipped_slot(degrees), slotted),
+        ] {
+            let label = format!("{name} at {degrees} degrees");
+            let result = wall_volume_read(&format!("geometry-{name}-{degrees}"), &model, net);
+            assert_eq!(
+                result["report"]["not_evaluated"],
+                json!([]),
+                "{label}: {result:#}"
+            );
+            assert_eq!(
+                result["report"]["findings"],
+                json!([]),
+                "{label}: {result:#}"
+            );
+            assert_eq!(
+                result["geometry"]["exact"], 1,
+                "{label}: {:#}",
+                result["geometry"]
+            );
+        }
+    }
 }
 
 /// engine#372: the #303 wall placed 5600 km out. Measured in model

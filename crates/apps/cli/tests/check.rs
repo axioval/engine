@@ -12708,6 +12708,79 @@ fn with_geometry_an_accessible_route_past_an_unmeasured_obstacle_is_left_open() 
     );
 }
 
+/// With passing spaces asked for, the metric route used to refuse whenever
+/// any body was unmeasured (#430). Bounded by its authored corners the
+/// member is a possible obstacle: the room off the lobby, away from it, has
+/// its route and passing spaces decided and passes; the room beyond the
+/// member stays not evaluated.
+#[test]
+fn with_geometry_passing_spaces_away_from_an_unmeasured_obstacle_are_decided() {
+    let case = Case::new("geometry-passing-spaces-unmeasured");
+    let reference = |value: &str| {
+        json!({"kind": "allOf", "operands": [
+            entity("space"),
+            {"kind": "property", "propertySet": "axioval:example.ifc.pset-space-common",
+             "property": "axioval:example.ifc.reference", "operator": "equals",
+             "value": {"type": "string", "value": value}},
+        ]})
+    };
+    // Room #129 shares the lobby's north wall line (y 4), reached without a
+    // door, which the host's metric routes do not yet admit (no clear width).
+    let model = a_corridor_crossed_by_an_unmeasured_member()
+        .replace(
+            "#200=",
+            &format!(
+                "{}#200=",
+                placed_box(
+                    120,
+                    [2.0, 6.0, 0.0],
+                    [4.0, 4.0, 3.0],
+                    "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,$,$)"
+                )
+            ),
+        )
+        .replace("(#39,#89),#211", "(#39,#129),#211");
+    let (output, result) = case.geometry_rule(
+        &model,
+        &[
+            ("space", "IfcSpace"),
+            ("door", "IfcDoor"),
+            ("member", "IfcMember"),
+        ],
+        "axioval:capability.accessible-route",
+        &registry_signature("axioval:capability.accessible-route"),
+        reference("Room"),
+        json!({
+            "route_selector": {"type": "selector", "value": entity("space")},
+            "start_selector": {"type": "selector", "value": reference("Lobby")},
+            "portal_selector": {"type": "selector", "value": entity("door")},
+            "obstacle_selector": {"type": "selector", "value": entity("member")},
+            "width_metres": {"type": "number", "value": 0.8},
+            "door_width_metres": {"type": "number", "value": 0.8},
+            "clear_width_property": {"type": "propertyReference",
+                                     "property": "axioval:example.ifc.clear-width",
+                                     "propertySet": "axioval:example.ifc.pset-access"},
+            "clear_height_metres": {"type": "number", "value": 2.0},
+            "passing_width_metres": {"type": "number", "value": 1.2},
+            "passing_length_metres": {"type": "number", "value": 1.2},
+            "passing_spacing_metres": {"type": "number", "value": 4.0},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    assert!(finding_messages(&result).is_empty(), "{result:#}");
+    let not_evaluated = result["report"]["not_evaluated"].as_array().unwrap();
+    assert_eq!(not_evaluated.len(), 1, "{result:#}");
+    assert_eq!(
+        not_evaluated[0]["object_id"]["local_id"], "#39",
+        "{result:#}"
+    );
+    let message = not_evaluated[0]["message"].as_str().unwrap();
+    assert!(
+        message.contains("#308 could not be measured and may obstruct within its bound"),
+        "{message}"
+    );
+}
+
 /// Three 2.1 m doors in one wall line, 0.1 m thick at y 0: #19 at x 0..1
 /// (`OverallWidth` 1 m) and #29 at x 1.5..2.4 (0.9 m), both single swing;
 /// #39 at x 10..11, a double door stating a clear width of 1.15 m and a

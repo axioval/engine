@@ -27,6 +27,17 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **Metric routes pass an unmeasured obstacle within its bound**
+  ([#430](https://github.com/axioval/engine/issues/430)). A route
+  (`accessible-route` with passing-space parameters) refused whenever any
+  body was unmeasured, so routes the walkability snapshot proves stayed not
+  evaluated. An unmeasured obstacle the host bounds is now a possible
+  obstacle as in the snapshot (#422): the walk avoids its bound, neither the
+  lower bound nor a blocked verdict rests on it, and the route's locator
+  ends in `:bounded-not-measured=<ids>`. A route clear of every bound is
+  decided; one that cannot avoid them is not evaluated, never blocked. An
+  obstacle without a bound still refuses, as do the other metric queries.
+
 - **`component-clearance` accepts a device whose local Z is horizontal**
   ([#459](https://github.com/axioval/engine/issues/459)). A wall-hosted
   device that its exporter places with local Z out of the wall was refused

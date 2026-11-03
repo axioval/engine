@@ -664,7 +664,12 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   (`with_possible_obstacles`, locator `:bounded-not-measured=`). An
   unmeasured obstacle without a bound still refuses.
 - `src/metric_routing.rs` implements `MetricRoutingService` on the origin's
-  level. `Blocked` needs complete evidence (every declared surface and portal
+  level. A single-pair route treats an unmeasured obstacle the host bounds
+  as a possible obstacle (#430, `bounded_obstacles`, the snapshot's
+  machinery): `possible` is subtracted from the walk's domain only, never
+  from `open`, `narrow` or the lower bound, so no `Blocked` or separation
+  rests on it; never let it into them. Every other query (nearest, farthest,
+  forced, weighted, across levels) still refuses any unmeasured body. `Blocked` needs complete evidence (every declared surface and portal
   measured, no connector touching the level) and a separation of the free
   region less the chord-proven bands around narrow portals' mid-lines. The
   `axiolid-route` path is a lower bound only: it can cut across outside gaps

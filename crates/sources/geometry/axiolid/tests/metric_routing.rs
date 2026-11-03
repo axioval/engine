@@ -199,6 +199,62 @@ fn an_unmeasured_body_refuses() {
     );
 }
 
+/// An unmeasured body the host bounds is a possible obstacle (#430): a
+/// route clear of its bound is found, the bound named in the evidence.
+#[test]
+fn a_route_clear_of_an_unmeasured_bodys_bound_is_found() {
+    let geometry = model(0.9)
+        .with_unmeasured(id("pillar"), "no body representation")
+        .with_unmeasured_bound(id("pillar"), [0.2, 0.2, 0.0], [1.2, 0.8, 2.5]);
+    let outcome = route(
+        service(geometry).with_clear_width(id("door"), 0.85),
+        &request(0.4),
+    )
+    .unwrap();
+    let MetricRouteOutcome::Reachable(found) = outcome else {
+        panic!("expected a route, got {outcome:?}");
+    };
+    assert!(found.evidence().locator.contains("sweep=proven"));
+    assert!(
+        found.evidence().locator.contains(":bounded-not-measured="),
+        "{}",
+        found.evidence().locator
+    );
+}
+
+/// A bound across the whole room leaves no route proven, and it never turns
+/// into a blocked verdict: the body may stand anywhere inside it.
+#[test]
+fn a_bound_across_the_room_leaves_the_route_unproven_not_blocked() {
+    let geometry = model(0.9)
+        .with_unmeasured(id("pillar"), "no body representation")
+        .with_unmeasured_bound(id("pillar"), [2.0, -0.1, 0.0], [2.5, 4.1, 2.5]);
+    let outcome = route(
+        service(geometry).with_clear_width(id("door"), 0.85),
+        &request(0.4),
+    );
+    assert!(
+        matches!(outcome, Err(MetricRoutingError::Unavailable(ref reason))
+            if reason.contains("pillar") && reason.contains("may obstruct within its bound")),
+        "{outcome:?}"
+    );
+}
+
+/// A bound reaching no further than the band is out of the way, and an
+/// unmeasured body with no bound still refuses.
+#[test]
+fn a_bound_above_the_walking_band_is_not_in_the_way() {
+    let geometry = model(0.9)
+        .with_unmeasured(id("pillar"), "no body representation")
+        .with_unmeasured_bound(id("pillar"), [2.0, -0.1, 2.5], [2.5, 4.1, 2.9]);
+    let outcome = route(
+        service(geometry).with_clear_width(id("door"), 0.85),
+        &request(0.4),
+    )
+    .unwrap();
+    assert!(matches!(outcome, MetricRouteOutcome::Reachable(_)));
+}
+
 /// A corridor (x 0..20, y 0..2, 3 m high) between two walls, with an
 /// extinguisher hung on the north wall at x 11.9..12.1, its body 0.2 m deep
 /// from 0.9 m to 1.4 m above the floor; `partition`, when given, closes the

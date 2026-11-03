@@ -86,11 +86,11 @@ use axioval_ir::{Evidence, ObjectId, SourceId};
 use crate::geometry::{AxiolidGeometry, triangles};
 use crate::planar::projected_polygons;
 use crate::walkable::{
-    Clearance, Floor, MARGIN, ON_SURFACE, Obstacle, Plan, PortalFacts, PortalFrame, REACH,
-    ROUTE_BUDGET, Side, body, contains, corridor, crosses_mid_line, floor, intersect, join,
-    meets_barrier, mid_line, mid_line_barriers, obstacles, obstruction, plan_gap, polygon,
-    segment_cover, separated, sides, standing_points, subtract, touching, trapezoids, union,
-    witness,
+    BoundedObstacle, Clearance, Floor, MARGIN, ON_SURFACE, Obstacle, Plan, PortalFacts,
+    PortalFrame, REACH, ROUTE_BUDGET, Side, body, bounded_obstacles, bounded_obstructions,
+    contains, corridor, crosses_mid_line, floor, intersect, join, meets_barrier, mid_line,
+    mid_line_barriers, obstacles, obstruction, plan_gap, polygon, segment_cover, separated, sides,
+    standing_points, subtract, touching, trapezoids, union, witness,
 };
 
 /// Relative allowance for the rounding of a summed polyline length.
@@ -404,6 +404,82 @@ impl Routing {
                 .map(|(id, _)| id)
                 .filter(|id| !self.surfaces.contains(*id) && !self.portals.contains(*id)),
         )
+    }
+
+    /// As [`Self::obstacles`], except that an unmeasured body the host
+    /// bounds (an enclosure or authored boxes, #430) is returned apart, as
+    /// a possible obstacle. One without a bound still refuses.
+    fn bounded_obstacles(&self) -> Result<(Vec<Obstacle<'_>>, Vec<BoundedObstacle<'_>>), String> {
+        let others = |id: &&ObjectId| !self.surfaces.contains(*id) && !self.portals.contains(*id);
+        if let Some((id, reason)) = self.geometry.unmeasured().find(|(id, _)| {
+            others(id)
+                && self.geometry.enclosure(id).is_none()
+                && self
+                    .geometry
+                    .unmeasured_bound(id)
+                    .is_none_or(<[crate::geometry::Extent]>::is_empty)
+        }) {
+            return Err(format!(
+                "{id} has a body that was not measured, so free space is unknown: {reason}"
+            ));
+        }
+        bounded_obstacles(
+            &self.geometry,
+            self.geometry
+                .objects()
+                .map(|(id, _)| id)
+                .chain(self.geometry.unmeasured().map(|(id, _)| id))
+                .filter(|id| others(id)),
+        )
+    }
+
+    /// What the bounded obstacles may occupy in the band above any of the
+    /// level's floors and crossings, with their ids. Only the walk avoids
+    /// it: the lower bound and the separation never rest on it.
+    fn possible(
+        prepared: &Prepared,
+        level: &Level,
+        bounded: &[BoundedObstacle<'_>],
+        profile: MobilityProfile,
+    ) -> Result<(Plan, BTreeSet<ObjectId>), String> {
+        let (step, height) = (profile.maximum_step_metres(), profile.height_metres());
+        let mut region = Plan::empty();
+        let mut named = BTreeSet::new();
+        if bounded.is_empty() {
+            return Ok((region, named));
+        }
+        let floors = level
+            .floors
+            .iter()
+            .map(|index| &prepared.floors[*index])
+            .map(|floor| (floor.bounds, floor.z0));
+        let crossings = level.crossings.iter().map(|index| {
+            let frame = &prepared.portals[*index].0;
+            let reach = frame.half + REACH;
+            let corners = [
+                frame.point(frame.u0, -reach),
+                frame.point(frame.u1, reach),
+                frame.point(frame.u0, reach),
+                frame.point(frame.u1, -reach),
+            ];
+            let bounds = corners.iter().fold(
+                ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]),
+                |(min, max), p| {
+                    (
+                        [min[0].min(p.x), min[1].min(p.y)],
+                        [max[0].max(p.x), max[1].max(p.y)],
+                    )
+                },
+            );
+            (bounds, frame.z0)
+        });
+        for (bounds, z0) in floors.chain(crossings) {
+            for blocker in bounded_obstructions(bounded, &bounds, z0 + step, z0 + height)? {
+                named.insert(blocker.id.clone());
+                region = join(&region, &blocker.plan)?;
+            }
+        }
+        Ok((region, named))
     }
 
     /// The floor holding a point: its plan inside the footprint, its height
@@ -824,8 +900,8 @@ impl Routing {
         // the region its lower bound and separation are measured in: the
         // reach from where the body stands may cross it.
         let target = approach.then(|| request.destination().subject());
-        let (obstacles, own): (Vec<Obstacle<'_>>, Vec<Obstacle<'_>>) = self
-            .obstacles()?
+        let (measured, bounded) = self.bounded_obstacles()?;
+        let (obstacles, own): (Vec<Obstacle<'_>>, Vec<Obstacle<'_>>) = measured
             .into_iter()
             .partition(|obstacle| Some(obstacle.id) != target);
         let counted = obstacles.len() + own.len();
@@ -871,6 +947,15 @@ impl Routing {
             subtract(&open, &occupied)?
         };
         let narrow = Self::narrow(prepared, &level, &domain, radius);
+        // A bounded obstacle (#430) is avoided by the walk alone: `open`,
+        // `narrow` and so the lower bound and the separation stay as the
+        // measured obstacles leave them.
+        let (possible, named) = Self::possible(prepared, &level, &bounded, profile)?;
+        let walk = if possible.is_empty() {
+            domain.clone()
+        } else {
+            subtract(&domain, &possible)?
+        };
 
         let [ox, oy, _] = request.origin().coordinates_metres();
         let [dx, dy, _] = request.destination().coordinates_metres();
@@ -909,9 +994,9 @@ impl Routing {
         // An object out of the walking band is walked onto as any point is;
         // only one standing in its own way is walked up to.
         let (path, reach) = if occupied.is_empty() {
-            (witness(&domain, from, to, radius)?, None)
+            (witness(&walk, from, to, radius)?, None)
         } else {
-            match Self::approached(&domain, &open, &narrow, (from, to), radius)? {
+            match Self::approached(&walk, &open, &narrow, (from, to), radius)? {
                 Some((path, reach)) => (Some(path), Some(reach)),
                 None => (None, None),
             }
@@ -922,10 +1007,22 @@ impl Routing {
             } else {
                 format!("; the level is not closed: {}", level.incomplete.join("; "))
             };
+            let bounds = if named.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    "; {} could not be measured and may obstruct within its bound",
+                    named
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            };
             return Err(format!(
                 "no route wide enough for the body could be proven, and a blocking gap cannot \
                  be proven without one-sided erosion; shortest distance is at least \
-                 {lower:.6}{open}"
+                 {lower:.6}{open}{bounds}"
             ));
         };
         Self::admitted(prepared, &path, 2.0 * radius)?;
@@ -955,7 +1052,8 @@ impl Routing {
                     } else {
                         format!("straight-line={lower:.6}")
                     }
-                ) + &reach.map_or_else(String::new, |reach| format!(":approach-reach={reach:.6}")),
+                ) + &reach.map_or_else(String::new, |reach| format!(":approach-reach={reach:.6}"))
+                    + &crate::free_space::within_bounds(&named.into_iter().collect::<Vec<_>>()),
             ),
         )
         .map_err(|e| e.to_string())?;

@@ -190,7 +190,14 @@ walkable surfaces (closed exact bodies with one horizontal floor), portals
 (doors and bodiless openings with their voids) and vertical connectors. Every
 other body obstructs where it enters the band between the profile's maximum
 step and its clear height above a floor; an unmeasured body refuses every
-route. Lengths are measured in plan.
+route, except that a single-pair route treats one the host bounds (a closed
+solid it lies within, else authored boxes) as the walkability snapshot does
+(#430): a possible obstacle inside its bound. The walk avoids the bound, but
+neither the lower bound nor a `Blocked` verdict rests on it, so a route clear
+of every bound is `Reachable` (its locator ends in
+`:bounded-not-measured=<ids>`), and one that cannot avoid them refuses, never
+`Blocked`. The other queries still refuse any unmeasured body. Lengths are
+measured in plan.
 
 A route stays on the origin's **level**: the surfaces reachable from it
 through portals whose sill lies within a step of both floors, and through

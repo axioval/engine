@@ -13501,12 +13501,12 @@ fn washroom_with_unmeasured_product(at: Option<(f64, f64)>) -> String {
 
 /// A product whose body is unmeasured (a face crossing itself) leaves a
 /// clearance volume far from it clear, and one near it not evaluated, naming
-/// the product and why (#423); one with no shape representation at all still
-/// refuses, naming that.
+/// the product and why (#423); one with no shape representation at all obstructs
+/// nothing and is named as skipped (#458).
 #[test]
 fn with_geometry_an_unmeasured_product_refuses_only_where_it_could_reach() {
     let case = Case::new("geometry-clearance-unmeasured-product");
-    let run = |model: &str| {
+    let run_for = |model: &str, subject: &str| {
         case.geometry_rule(
             model,
             &[
@@ -13516,7 +13516,7 @@ fn with_geometry_an_unmeasured_product_refuses_only_where_it_could_reach() {
             ],
             "axioval:capability.component-clearance",
             &registry_signature("axioval:capability.component-clearance"),
-            entity("terminal"),
+            entity(subject),
             json!({
                 "side": {"type": "string", "value": "front"},
                 "front_axis": {"type": "string", "value": "against-wall"},
@@ -13531,6 +13531,7 @@ fn with_geometry_an_unmeasured_product_refuses_only_where_it_could_reach() {
             }),
         )
     };
+    let run = |model: &str| run_for(model, "terminal");
     let (output, result) = run(&washroom_with_unmeasured_product(Some((2.8, 2.8))));
     assert_eq!(
         output.status.code(),
@@ -13555,7 +13556,25 @@ fn with_geometry_an_unmeasured_product_refuses_only_where_it_could_reach() {
         "{result:#}"
     );
 
-    let (_, result) = run(&washroom_with_unmeasured_product(None));
+    // A product with no shape representation and no parts states no body to
+    // obstruct with (#458): the volume is decided.
+    let (output, result) = run(&washroom_with_unmeasured_product(None));
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}{result:#}",
+        stderr(&output)
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+
+    // Its own measurements still refuse: the product as the subject of the
+    // same rule has no body to measure a volume from.
+    let (_, result) = run_for(&washroom_with_unmeasured_product(None), "furniture");
     let not_evaluated = result["report"]["not_evaluated"].to_string();
     assert!(not_evaluated.contains("#79"), "{result:#}");
     assert!(
@@ -18604,6 +18623,66 @@ fn with_geometry_an_open_terminal_is_bounded_by_its_vertices() {
     );
     let evidence = result["report"]["findings"][0]["evidence"].to_string();
     assert!(evidence.contains(":bounded-not-measured="), "{evidence}");
+}
+
+/// A product with no shape representation and no parts obstructs no free
+/// floor (#458): a room that holds the circle is decided with it, and one
+/// that cannot fails naming the proxy as skipped, not as unmeasured.
+#[test]
+fn with_geometry_a_shapeless_proxy_obstructs_no_free_floor_and_is_named() {
+    let case = Case::new("geometry-free-floor-shapeless-proxy");
+    let space = "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,$,$)";
+    let room = |side: f64| {
+        model_with(&format!(
+            "{}#79=IFCBUILDINGELEMENTPROXY('0000000000000000000079',$,$,$,$,#3,$,$,$);\n",
+            placed_box(10, [side / 2.0, side / 2.0, 0.0], [side, side, 3.0], space),
+        ))
+    };
+    let (output, result) = turning_circle(&case, &room(3.0), &[]);
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert_eq!(finding_messages(&result), [], "{result:#}");
+    assert_eq!(not_evaluated_messages(&result), Vec::<String>::new());
+    // The warning stays: the product is unmeasured as a subject.
+    assert!(
+        result["integrity"]
+            .to_string()
+            .contains("shape.no-representation"),
+        "{result:#}"
+    );
+    let (output, result) = turning_circle(&case, &room(1.4), &[]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let evidence = result["report"]["findings"][0]["evidence"].to_string();
+    assert!(
+        evidence.contains(":skipped-no-shape-representation=") && evidence.contains("#79"),
+        "{evidence}"
+    );
+}
+
+/// A product with representations none of which is a body is not
+/// shapeless (#458): in a room too small for the circle it still leaves
+/// the rule not evaluated, naming it.
+#[test]
+fn with_geometry_an_axis_only_proxy_still_refuses_free_floor() {
+    let case = Case::new("geometry-free-floor-axis-only-proxy");
+    let space = "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,$,$)";
+    let axis = "#70=IFCPOLYLINE((#1,#1));\n\
+                #71=IFCSHAPEREPRESENTATION(#5,'Axis','Curve3D',(#70));\n\
+                #72=IFCPRODUCTDEFINITIONSHAPE($,$,(#71));\n\
+                #79=IFCBUILDINGELEMENTPROXY('0000000000000000000079',$,$,$,$,#3,#72,$,$);\n";
+    let model = model_with(&format!(
+        "{}{axis}",
+        placed_box(10, [0.7, 0.7, 0.0], [1.4, 1.4, 3.0], space),
+    ));
+    let (output, result) = turning_circle(&case, &model, &[]);
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    assert_eq!(finding_messages(&result), [], "{result:#}");
+    let messages = not_evaluated_messages(&result);
+    assert!(
+        messages.len() == 1
+            && messages[0].contains("#79")
+            && messages[0].contains("no body representation"),
+        "{messages:?}"
+    );
 }
 
 /// Quarter-ring wall #29 about the origin (radii 4.8 to 5, 0 to 90

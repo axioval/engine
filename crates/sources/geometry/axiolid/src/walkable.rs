@@ -922,6 +922,10 @@ pub(crate) fn bounded_obstacles<'g>(
     let mut measured = Vec::new();
     let mut bounded = Vec::new();
     for id in ids {
+        // A product that states no shape obstructs nothing (#458).
+        if geometry.is_shapeless(id) {
+            continue;
+        }
         if geometry.mesh(id).is_none() && geometry.is_unmeasured(id) {
             if let Some(enclosure) = geometry.enclosure(id)
                 && let Some((min, max)) = mesh_extent(&enclosure.mesh)

@@ -208,6 +208,8 @@ pub(crate) struct Scene {
     /// The obstacles bounded rather than measured (#401): in `obstacles`
     /// within their bounds, never in `sure`.
     pub(crate) bounded: Vec<axioval_ir::ObjectId>,
+    /// The obstacles left out because they state no shape (#458).
+    pub(crate) shapeless: Vec<axioval_ir::ObjectId>,
     /// `scope` less `obstacles` (`[0]`) and `room` less `sure` (`[1]`),
     /// each taken once a search first erodes it: every shape and angle
     /// erodes the same difference ([`Self::free_for`]).
@@ -2553,6 +2555,7 @@ mod tests {
             reach: None,
             bracketed: Vec::new(),
             bounded: Vec::new(),
+            shapeless: Vec::new(),
             clear: Default::default(),
             inscribed: Default::default(),
             simple: Default::default(),
@@ -2893,6 +2896,7 @@ mod tests {
             reach,
             bracketed: Vec::new(),
             bounded: Vec::new(),
+            shapeless: Vec::new(),
             clear: Default::default(),
             inscribed: Default::default(),
             simple: Default::default(),

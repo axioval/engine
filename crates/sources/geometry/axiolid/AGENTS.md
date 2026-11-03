@@ -39,6 +39,14 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   count overlaps twice. A whole's `union_volume` (a boolean per two of its
   pieces) is taken once per service and cached, never per pair it is in. `tests/composed_bodies.rs`,
   `tests/applied_openings.rs` and `tests/exact_bodies.rs` pin it.
+- Shapeless products (#458): `with_shapeless` declares an object that states
+  no shape (no representation, no parts). It is unmeasured with the host's
+  reason, so every measurement of it as a subject refuses as for
+  `with_unmeasured`; as an obstacle it obstructs nothing, so clearance,
+  free-area, placement, walkability and metric-routing loops skip it
+  (`is_shapeless`) and the evidence locator carries
+  `:skipped-no-shape-representation=` (`free_space::without_shape`). Never
+  declare it bodiless (#219) and never skip it where it is the subject.
 - Voids (#383): `with_void`, `with_tessellated_void` and
   `with_unmeasured_void` register the solid of space a bodiless object (an
   opening) keeps free, in their own map beside `meshes`; the object stays

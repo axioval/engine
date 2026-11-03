@@ -833,6 +833,29 @@ fn an_unmeasured_obstacle_bounded_in_front_of_the_door_leaves_only_that_route_op
     ));
 }
 
+/// A cabinet that states no shape (#458) obstructs nothing: every route is
+/// decided as without it, and the snapshot names it as skipped.
+#[test]
+fn a_shapeless_obstacle_is_left_out_of_the_snapshot_and_named() {
+    let geometry = model(0.9).with_shapeless(id("cabinet"), "no shape representation");
+    let service =
+        AxiolidWalkabilityService::new(geometry, source()).with_clear_width(id("door"), 0.85);
+    let snapshot = snapshot(service, &request_with("cabinet")).unwrap();
+    assert!(snapshot.possible_obstacles().is_empty());
+    assert!(
+        snapshot
+            .evidence()
+            .locator
+            .ends_with(":skipped-no-shape-representation=cad:model/cabinet"),
+        "{}",
+        snapshot.evidence().locator
+    );
+    assert!(matches!(
+        snapshot.route_between(&id("a"), &id("b")).unwrap(),
+        WalkabilityRouteOutcome::Reachable(_)
+    ));
+}
+
 /// The same bounded cabinet in `b`'s far corner blocks nothing a body
 /// needs: the route into `b` is proven round its bound.
 #[test]

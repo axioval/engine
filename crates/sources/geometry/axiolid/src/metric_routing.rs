@@ -381,36 +381,71 @@ impl Routing {
         Evidence::exact(self.source.clone(), locator)
     }
 
-    fn completeness(&self, locator: String) -> Result<CompleteMetricEvidence, String> {
-        CompleteMetricEvidence::try_new(self.evidence(locator)).map_err(|e| e.to_string())
+    /// Evidence from `source`, naming the products left out for stating no
+    /// shape (#458).
+    fn exact(&self, source: SourceId, locator: impl AsRef<str>) -> Evidence {
+        let skipped = self.skipped_shapeless();
+        Evidence::exact(
+            source,
+            format!(
+                "{}{}",
+                locator.as_ref(),
+                crate::free_space::without_shape(&skipped)
+            ),
+        )
     }
 
-    /// Every body that obstructs: all but the surfaces and portals. An
-    /// unmeasured one leaves free space unknown.
+    fn completeness(&self, locator: &str) -> Result<CompleteMetricEvidence, String> {
+        let skipped = self.skipped_shapeless();
+        CompleteMetricEvidence::try_new(self.evidence(format!(
+            "{locator}{}",
+            crate::free_space::without_shape(&skipped)
+        )))
+        .map_err(|e| e.to_string())
+    }
+
+    /// The products that state no shape, left out of the obstacles (#458).
+    fn skipped_shapeless(&self) -> Vec<ObjectId> {
+        self.geometry
+            .shapeless()
+            .filter(|id| !self.surfaces.contains(*id) && !self.portals.contains(*id))
+            .cloned()
+            .collect()
+    }
+
+    /// Every body that obstructs: all but the surfaces and portals and the
+    /// products that state no shape. An unmeasured one leaves free space
+    /// unknown.
     fn obstacles(&self) -> Result<Vec<Obstacle<'_>>, String> {
-        if let Some((id, reason)) = self
-            .geometry
-            .unmeasured()
-            .find(|(id, _)| !self.surfaces.contains(*id) && !self.portals.contains(*id))
-        {
+        if let Some((id, reason)) = self.geometry.unmeasured().find(|(id, _)| {
+            !self.surfaces.contains(*id)
+                && !self.portals.contains(*id)
+                && !self.geometry.is_shapeless(id)
+        }) {
             return Err(format!(
                 "{id} has a body that was not measured, so free space is unknown: {reason}"
             ));
         }
         obstacles(
             &self.geometry,
-            self.geometry
-                .objects()
-                .map(|(id, _)| id)
-                .filter(|id| !self.surfaces.contains(*id) && !self.portals.contains(*id)),
+            self.geometry.objects().map(|(id, _)| id).filter(|id| {
+                !self.surfaces.contains(*id)
+                    && !self.portals.contains(*id)
+                    && !self.geometry.is_shapeless(id)
+            }),
         )
     }
 
     /// As [`Self::obstacles`], except that an unmeasured body the host
     /// bounds (an enclosure or authored boxes, #430) is returned apart, as
-    /// a possible obstacle. One without a bound still refuses.
+    /// a possible obstacle. One without a bound still refuses; a product
+    /// that states no shape obstructs nothing (#458).
     fn bounded_obstacles(&self) -> Result<(Vec<Obstacle<'_>>, Vec<BoundedObstacle<'_>>), String> {
-        let others = |id: &&ObjectId| !self.surfaces.contains(*id) && !self.portals.contains(*id);
+        let others = |id: &&ObjectId| {
+            !self.surfaces.contains(*id)
+                && !self.portals.contains(*id)
+                && !self.geometry.is_shapeless(id)
+        };
         if let Some((id, reason)) = self.geometry.unmeasured().find(|(id, _)| {
             others(id)
                 && self.geometry.enclosure(id).is_none()
@@ -912,7 +947,7 @@ impl Routing {
         let complete = level.complete();
         let level_text = &level.text;
         let blocked = |reason: &str| -> Result<MetricRouteOutcome, String> {
-            let completeness = self.completeness(format!(
+            let completeness = self.completeness(&format!(
                 "axiolid:metric-route:blocked:{reason}:level=[{level_text}]:surfaces={}:\
                  portals={}:obstacles={}:connectors={}:radius={radius:.6}:step={step:.6}:\
                  height={height:.6}",
@@ -1042,7 +1077,7 @@ impl Routing {
             distance,
             waypoints,
             traversed,
-            Evidence::exact(
+            self.exact(
                 request.origin().subject().source.clone(),
                 format!(
                     "axiolid:metric-route:reachable:level=[{level_text}]:radius={radius:.6}:\
@@ -1159,7 +1194,7 @@ impl Routing {
             .collect::<Vec<_>>()
             .join(",");
         let unreachable = |reason: &str| -> Result<NearestTargetOutcome, String> {
-            let completeness = self.completeness(format!(
+            let completeness = self.completeness(&format!(
                 "axiolid:metric-route:nearest:unreachable:{reason}:level=[{}]:targets={}:\
                  avoided=[{avoided}]:surfaces={}:portals={}:obstacles={}:connectors={}:\
                  radius={radius:.6}:step={step:.6}:height={height:.6}",
@@ -1294,7 +1329,7 @@ impl Routing {
                 weighted::costs_text(request.costs())
             )
         });
-        let evidence = Evidence::exact(
+        let evidence = self.exact(
             request.origin().subject().source.clone(),
             format!(
                 "axiolid:metric-route:nearest:level=[{}]:targets={}:placed={}:avoided=[{}]{weighed}:\
@@ -1383,7 +1418,7 @@ impl Routing {
                 .map_err(|e| e.to_string())
         };
         let unreachable = |point: Point2, reason: &str| -> Result<FarthestPointOutcome, String> {
-            let completeness = self.completeness(format!(
+            let completeness = self.completeness(&format!(
                 "axiolid:metric-route:farthest:unreachable:{reason}:region={region_id}:\
                  level=[{}]:targets={}:surfaces={}:portals={}:obstacles={}:connectors={}:\
                  step={step:.6}:height={height:.6}:witness=({:.6},{:.6})",
@@ -1489,7 +1524,7 @@ impl Routing {
         let distance =
             LengthInterval::try_new(lower.min(upper), upper).map_err(|e| e.to_string())?;
         let converged = upper - distance.lower_metres() <= tolerance;
-        let evidence = Evidence::exact(
+        let evidence = self.exact(
             region_id.source.clone(),
             format!(
                 "axiolid:metric-route:farthest:region={region_id}:level=[{}]:targets={}:\
@@ -1539,7 +1574,7 @@ impl Routing {
                 LengthInterval::try_new(inside.min(over), over).map_err(|e| e.to_string())
             })
             .collect();
-        let evidence = Evidence::exact(
+        let evidence = self.exact(
             self.source.clone(),
             format!(
                 "axiolid:metric-route:trace:waypoints={}:length={:.6}:objects=[{}]",

@@ -277,6 +277,67 @@ fn an_unmeasured_obstacle_still_refuses() {
     );
 }
 
+/// A product that states no shape (#458) obstructs nothing: the volume is
+/// clear, and the evidence names the product it did not weigh. The same
+/// product measured as a subject stays unmeasured.
+#[test]
+fn a_shapeless_obstacle_obstructs_nothing_and_is_named() {
+    let geometry = AxiolidGeometry::new().with_shapeless(id("proxy"), "no shape representation");
+    assert!(geometry.is_unmeasured(&id("proxy")));
+    let service = AxiolidFreeSpaceService::new(geometry, source());
+    match service
+        .assess_clearance(&small_volume(&["proxy"]))
+        .expect("decided")
+    {
+        ClearanceOutcome::Clear(evidence) => assert!(
+            evidence
+                .evidence()
+                .locator
+                .ends_with(":skipped-no-shape-representation=cad:model/proxy"),
+            "{}",
+            evidence.evidence().locator
+        ),
+        ClearanceOutcome::Obstructed(_) => panic!("a shapeless product obstructs nothing"),
+    }
+}
+
+/// A shapeless product is skipped beside a measured blocker too, and an
+/// unmeasured product with a reason of its own still refuses.
+#[test]
+fn a_shapeless_obstacle_leaves_other_unmeasured_obstacles_refusing() {
+    let geometry = AxiolidGeometry::new()
+        .with_shapeless(id("proxy"), "no shape representation")
+        .with_unmeasured(id("column"), "unsupported representation");
+    let service = AxiolidFreeSpaceService::new(geometry, source());
+    let Err(FreeSpaceError::UnmeasuredObstacles(unresolved)) =
+        service.assess_clearance(&small_volume(&["proxy", "column"]))
+    else {
+        panic!("the unmeasured column must still refuse");
+    };
+    assert_eq!(
+        unresolved.obstacles(),
+        [(id("column"), "unsupported representation".to_owned())]
+    );
+}
+
+/// Free floor skips a shapeless product and names it.
+#[test]
+fn a_shapeless_obstacle_takes_no_free_area() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("room"), body(0.0, 10.0, 0.0, 10.0, 0.0, 0.1))
+        .with_shapeless(id("proxy"), "no shape representation");
+    let service = AxiolidFreeSpaceService::new(geometry, source());
+    let request = FreeAreaRequest::new(id("room"), profile(), vec![id("proxy")]);
+    let evidence = service.measure_free_area(&request).expect("measurable");
+    assert!((evidence.available_area().upper_square_metres() - 100.0).abs() < 1e-6);
+    assert!(
+        evidence
+            .evidence()
+            .locator
+            .ends_with(":skipped-no-shape-representation=cad:model/proxy")
+    );
+}
+
 fn small_volume(obstacles: &[&str]) -> ClearanceRequest {
     ClearanceRequest::new(
         frame_at(1.0, 1.0, 0.0),

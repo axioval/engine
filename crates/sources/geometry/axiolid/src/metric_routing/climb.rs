@@ -56,7 +56,7 @@ use axioval_engine::{
     MobilityProfile, NearestTargetEvidence, NearestTargetOutcome, NearestTargetRequest, TravelCost,
     UnreachableRegionEvidence, UnreachableTargetsEvidence,
 };
-use axioval_ir::{Evidence, ObjectId};
+use axioval_ir::ObjectId;
 
 use super::weighted::{Costed, Map, climb_factor, costs_text, describe};
 use super::{
@@ -806,7 +806,7 @@ impl Routing {
                     target,
                     distance,
                     waypoints,
-                    Evidence::exact(
+                    self.exact(
                         request.origin().subject().source.clone(),
                         format!("axiolid:metric-route:nearest:{locator}"),
                     ),
@@ -814,7 +814,7 @@ impl Routing {
                 .map_err(|e| e.to_string())?,
             )),
             Walked::Unreachable(reason) => {
-                let completeness = self.completeness(format!(
+                let completeness = self.completeness(&format!(
                     "axiolid:metric-route:nearest:unreachable:{reason}:targets={}",
                     request.targets().len()
                 ))?;
@@ -849,7 +849,7 @@ impl Routing {
                     distance,
                     waypoints,
                     traversed,
-                    Evidence::exact(
+                    self.exact(
                         request.origin().subject().source.clone(),
                         format!("axiolid:metric-route:reachable:{locator}"),
                     ),
@@ -858,7 +858,7 @@ impl Routing {
             )),
             Walked::Unreachable(reason) => {
                 let completeness =
-                    self.completeness(format!("axiolid:metric-route:blocked:{reason}"))?;
+                    self.completeness(&format!("axiolid:metric-route:blocked:{reason}"))?;
                 Ok(MetricRouteOutcome::Blocked(
                     axioval_engine::BlockedMetricRouteEvidence::new(request.clone(), completeness),
                 ))
@@ -944,7 +944,7 @@ impl Routing {
                 .map_err(|e| e.to_string())
         };
         let unreachable = |point: Point2, reason: &str| -> Result<FarthestPointOutcome, String> {
-            let completeness = self.completeness(format!(
+            let completeness = self.completeness(&format!(
                 "axiolid:metric-route:farthest:unreachable:{reason}:region={region_id}:{text}:\
                  targets={}:step={step:.6}:height={height:.6}:witness=({:.6},{:.6})",
                 targets.len(),
@@ -1157,7 +1157,7 @@ impl Routing {
         let distance =
             LengthInterval::try_new(lower.min(upper), upper).map_err(|e| e.to_string())?;
         let converged = upper - distance.lower_metres() <= tolerance;
-        let evidence = Evidence::exact(
+        let evidence = self.exact(
             region_id.source.clone(),
             format!(
                 "axiolid:metric-route:farthest:region={region_id}:{text}:targets={}:\

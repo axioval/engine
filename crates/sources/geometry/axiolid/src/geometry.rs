@@ -54,6 +54,9 @@ struct GeometryData {
     chord_deviations: BTreeMap<ObjectId, f64>,
     bodiless: BTreeSet<ObjectId>,
     unmeasured: BTreeMap<ObjectId, String>,
+    /// The unmeasured objects that state no shape at all
+    /// ([`Self::with_shapeless`]); a subset of `unmeasured`.
+    shapeless: BTreeSet<ObjectId>,
     /// The boxes an unmeasured object's body lies within the union of
     /// ([`Self::with_unmeasured_bounds`]); never empty.
     unmeasured_bounds: BTreeMap<ObjectId, Vec<Extent>>,
@@ -297,6 +300,7 @@ impl AxiolidGeometry {
     /// when every other object is a candidate obstacle.
     #[must_use]
     pub fn with_no_body(mut self, object: ObjectId) -> Self {
+        self.data_mut().shapeless.remove(&object);
         self.data_mut().bodiless.insert(object);
         self
     }
@@ -397,6 +401,34 @@ impl AxiolidGeometry {
     pub fn with_unmeasured(mut self, object: ObjectId, reason: impl Into<String>) -> Self {
         self.data_mut().unmeasured.insert(object, reason.into());
         self
+    }
+
+    /// Declares that an object states no shape: no representation and no
+    /// parts (#458). It is unmeasured with `reason`, so every measurement
+    /// whose subject it is refuses as for [`Self::with_unmeasured`]; it is
+    /// never bodiless (#219: nothing is measured as empty). As an *obstacle*
+    /// it obstructs nothing, since it states no body to obstruct with, and
+    /// free-space services leave it out and say so
+    /// ([`Self::is_shapeless`]).
+    #[must_use]
+    pub fn with_shapeless(mut self, object: ObjectId, reason: impl Into<String>) -> Self {
+        self.data_mut().shapeless.insert(object.clone());
+        self.with_unmeasured(object, reason)
+    }
+
+    /// Whether the host declared the object to state no shape
+    /// ([`Self::with_shapeless`]); still unmeasured as a subject.
+    #[must_use]
+    pub fn is_shapeless(&self, object: &ObjectId) -> bool {
+        self.ask(object);
+        self.data.shapeless.contains(object)
+    }
+
+    /// Every object declared to state no shape, in identity order
+    /// ([`Self::with_shapeless`]).
+    pub(crate) fn shapeless(&self) -> impl Iterator<Item = &ObjectId> {
+        self.ask_all();
+        self.data.shapeless.iter()
     }
 
     /// Declares a box an unmeasured object's body is known to lie within,
@@ -763,6 +795,7 @@ impl AxiolidGeometry {
     #[must_use]
     pub fn with_mesh(mut self, object: ObjectId, mesh: TriMesh) -> Self {
         self.data_mut().chord_deviations.remove(&object);
+        self.data_mut().shapeless.remove(&object);
         self.data_mut()
             .meshes
             .insert(object, crate::shell::welded_where_closed(mesh));
@@ -786,6 +819,7 @@ impl AxiolidGeometry {
         self.data_mut()
             .chord_deviations
             .insert(object.clone(), chord_deviation_metres);
+        self.data_mut().shapeless.remove(&object);
         self.data_mut()
             .meshes
             .insert(object, crate::shell::welded_where_closed(mesh));
@@ -1093,6 +1127,7 @@ impl AxiolidGeometry {
     #[must_use]
     pub fn with_composed_body(mut self, whole: ObjectId, body: ComposedBody) -> Self {
         self.data_mut().unmeasured.remove(&whole);
+        self.data_mut().shapeless.remove(&whole);
         self.data_mut().bodiless.remove(&whole);
         self = match body.deviation {
             None => self.with_mesh(whole.clone(), body.mesh),

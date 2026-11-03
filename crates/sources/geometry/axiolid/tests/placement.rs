@@ -439,6 +439,24 @@ fn an_unmeasured_obstacle_refuses() {
     ));
 }
 
+/// A product that states no shape (#458) obstructs nothing: the search is
+/// decided as without it, and the evidence names it.
+#[test]
+fn a_shapeless_obstacle_is_left_out_and_named() {
+    let geometry =
+        room(&[rect(0.0, 3.0, 0.0, 3.0)]).with_shapeless(id("proxy"), "no shape representation");
+    match place(geometry, rectangle(1.5, 1.5, along(1.0, 0.0)), &["proxy"]) {
+        Ok(PlacementOutcome::Found(witness)) => {
+            let locator = &witness.evidence().locator;
+            assert!(
+                locator.ends_with(":skipped-no-shape-representation=cad:model/proxy"),
+                "{locator}"
+            );
+        }
+        other => panic!("expected a placement, got {other:?}"),
+    }
+}
+
 /// Placement is supported by the scope's own floor; any other support is
 /// refused rather than approximated.
 #[test]

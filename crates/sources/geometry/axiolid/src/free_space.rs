@@ -105,8 +105,13 @@ impl AxiolidFreeSpaceService {
         }
     }
 
-    fn evidence(&self) -> Evidence {
-        Evidence::exact(self.source.clone(), "axiolid:free-space")
+    /// [`Self::evidence`], naming the obstacles left out for stating no
+    /// shape (#458).
+    fn evidence_without_shape(&self, shapeless: &[ObjectId]) -> Evidence {
+        Evidence::exact(
+            self.source.clone(),
+            format!("axiolid:free-space{}", without_shape(shapeless)),
+        )
     }
 
     pub(crate) fn geometry(&self) -> &AxiolidGeometry {
@@ -645,6 +650,8 @@ impl Measuring {
         let mut bracketed: Vec<(ObjectId, f64)> = Vec::new();
         // Obstacles bounded rather than measured (#401).
         let mut bounded: Vec<ObjectId> = Vec::new();
+        // Obstacles that state no shape, left out (#458).
+        let mut shapeless: Vec<ObjectId> = Vec::new();
         let mut floor = None;
         // How far the true floor may lie from the mesh's.
         let mut uncertainty: f64 = 0.0;
@@ -787,6 +794,7 @@ impl Measuring {
         let unresolved: Vec<(ObjectId, String)> = obstacles
             .iter()
             .filter(|obstacle| !self.geometry.has_no_body(obstacle))
+            .filter(|obstacle| !self.geometry.is_shapeless(obstacle))
             .filter(|obstacle| self.geometry.mesh(obstacle).is_none())
             .filter_map(|obstacle| {
                 let (_, reason) = self.geometry.unmeasured_of(obstacle)?;
@@ -809,6 +817,12 @@ impl Measuring {
         }
         for obstacle in obstacles {
             if self.geometry.has_no_body(obstacle) {
+                continue;
+            }
+            // A product that states no shape obstructs nothing; the
+            // outcome names it (#458).
+            if self.geometry.is_shapeless(obstacle) {
+                shapeless.push(obstacle.clone());
                 continue;
             }
             // An obstacle without geometry could stand anywhere, so neither a
@@ -1053,6 +1067,7 @@ impl Measuring {
             reach: None,
             bracketed,
             bounded,
+            shapeless,
             clear: Default::default(),
             inscribed: Default::default(),
             simple: Default::default(),
@@ -1237,6 +1252,17 @@ pub(crate) fn within_bounds(bounded: &[ObjectId]) -> String {
     format!(":bounded-not-measured={}", named.join(","))
 }
 
+/// The locator suffix naming the obstacles left out because they state no
+/// shape representation and no parts (#458): they obstruct nothing, and a
+/// reviewer sees which products the verdict did not weigh. Empty when none.
+pub(crate) fn without_shape(shapeless: &[ObjectId]) -> String {
+    if shapeless.is_empty() {
+        return String::new();
+    }
+    let named: Vec<String> = shapeless.iter().map(ToString::to_string).collect();
+    format!(":skipped-no-shape-representation={}", named.join(","))
+}
+
 /// Objects named in order, comma separated.
 fn names(objects: &[ObjectId]) -> String {
     let named: Vec<String> = objects.iter().map(ToString::to_string).collect();
@@ -1348,9 +1374,16 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
         let reachable = volume.outer.as_ref().unwrap_or(&volume.inner).extent;
         let mut blockers = Vec::new();
         let mut unresolved = Vec::new();
+        let mut shapeless = Vec::new();
         let mut undecided = false;
         for obstacle in request.obstacles() {
             if self.over.geometry.has_no_body(obstacle) {
+                continue;
+            }
+            // A product that states no shape obstructs nothing; the
+            // evidence names it (#458).
+            if self.over.geometry.is_shapeless(obstacle) {
+                shapeless.push(obstacle.clone());
                 continue;
             }
             // A named obstacle without geometry cannot be shown to be clear of
@@ -1388,13 +1421,13 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
             // completeness claim is earned rather than assumed.
             return Ok(ClearanceOutcome::Clear(CompleteClearanceEvidence::try_new(
                 request.clone(),
-                self.evidence(),
+                self.evidence_without_shape(&shapeless),
             )?));
         }
         Ok(ClearanceOutcome::Obstructed(ObstructionEvidence::try_new(
             request.clone(),
             blockers,
-            self.evidence(),
+            self.evidence_without_shape(&shapeless),
         )?))
     }
 
@@ -1479,6 +1512,7 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
         }
         locator.push_str(&within_deviation(&scene.bracketed));
         locator.push_str(&within_bounds(&scene.bounded));
+        locator.push_str(&without_shape(&scene.shapeless));
         derived.keep(&scene);
         let evidence = Evidence::exact(request.scope().source.clone(), locator);
         let (centre, right) = match search {
@@ -1632,6 +1666,7 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
         }
         locator.push_str(&within_deviation(&scene.bracketed));
         locator.push_str(&within_bounds(&scene.bounded));
+        locator.push_str(&without_shape(&scene.shapeless));
         FreeFloorEvidence::try_new(
             request.clone(),
             area,
@@ -1696,8 +1731,13 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
         // Obstacles are unioned too, so two overlapping obstacles do not
         // subtract their shared area twice and understate what is free.
         let mut obstacle_polygons = Vec::new();
+        let mut shapeless = Vec::new();
         for obstacle in request.obstacles() {
             if self.over.geometry.has_no_body(obstacle) {
+                continue;
+            }
+            if self.over.geometry.is_shapeless(obstacle) {
+                shapeless.push(obstacle.clone());
                 continue;
             }
             let mesh = self
@@ -1753,7 +1793,7 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
         FreeAreaEvidence::try_new(
             request.clone(),
             AreaInterval::try_new(0.0, free)?,
-            self.evidence(),
+            self.evidence_without_shape(&shapeless),
         )
     }
 

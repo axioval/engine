@@ -48,6 +48,17 @@ All notable changes are documented here. This project follows Semantic Versionin
   decided; one that cannot avoid them is not evaluated, never blocked. An
   obstacle without a bound still refuses, as do the other metric queries.
 
+- **A product with no shape representation obstructs no free space**
+  ([#458](https://github.com/axioval/engine/issues/458)). A physical product
+  with no representation and no parts (the `shape.no-representation`
+  warning) kept every clearance, free-floor and placement query it could
+  reach not evaluated, as `FreeSpaceError::UnmeasuredObstacles`. Now
+  `AxiolidGeometry::with_shapeless` marks it: as an obstacle it obstructs
+  nothing, the free-space, placement, walkability and metric-routing
+  obstacle loops skip it, and the evidence locator names it as
+  `:skipped-no-shape-representation=`. It is still unmeasured, never
+  bodiless (#219): clash, containment, extent and every other measurement of
+  the product itself are not evaluated as before.
 - **`component-clearance` accepts a device whose local Z is horizontal**
   ([#459](https://github.com/axioval/engine/issues/459)). A wall-hosted
   device that its exporter places with local Z out of the wall was refused

@@ -1442,9 +1442,19 @@ impl AxiolidWalkabilityService {
             |band| format!("{:.6}..{:.6}", band.lower_metres(), band.upper_metres()),
         );
         let possible: Vec<ObjectId> = possible.into_iter().collect();
+        let shapeless: Vec<ObjectId> = request
+            .obstacles()
+            .iter()
+            .filter(|object| {
+                request.surfaces().binary_search(object).is_err()
+                    && request.entrances().binary_search(object).is_err()
+                    && self.geometry.is_shapeless(object)
+            })
+            .cloned()
+            .collect();
         let evidence = self.evidence(format!(
             "axiolid:walkability:complete:surfaces={}:entrances={}:obstacles={}:connectors={}:\
-             swept={}:width={required:.6}:band={band_text}:portals-traversed={}{}",
+             swept={}:width={required:.6}:band={band_text}:portals-traversed={}{}{}",
             request.surfaces().len(),
             request.entrances().len(),
             request.obstacles().len(),
@@ -1452,6 +1462,7 @@ impl AxiolidWalkabilityService {
             request.swept_doors().len(),
             request.traverses_verified_portals(),
             crate::free_space::within_bounds(&possible),
+            crate::free_space::without_shape(&shapeless),
         ));
         WalkabilitySnapshot::try_new(request.clone(), regions, passages, evidence)
             .and_then(|snapshot| snapshot.with_possible_obstacles(possible))

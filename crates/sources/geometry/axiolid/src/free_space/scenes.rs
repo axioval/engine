@@ -233,7 +233,7 @@ impl DerivationKind for PlacementScenes {
     /// kernel crates changing what they return, so a value kept across
     /// checks (#409) is never read for another.
     const VERSION: DerivationVersion = DerivationVersion::new(
-        2,
+        3,
         &[AXIOLID_CORE, AXIOLID_MEASURE, AXIOLID_MESH, AXIOLID_OVERLAY],
     );
     type Key = SceneKey;
@@ -343,6 +343,7 @@ pub(crate) struct KeptScene {
     tolerance: axiolid_core::Tolerance,
     bracketed: Vec<(ObjectId, f64)>,
     bounded: Vec<ObjectId>,
+    shapeless: Vec<ObjectId>,
     pub(crate) floor: f64,
     /// The class it was built in (#438).
     precision: Precision,
@@ -395,6 +396,7 @@ impl KeptScene {
             tolerance: scene.tolerance,
             bracketed: scene.bracketed.clone(),
             bounded: scene.bounded.clone(),
+            shapeless: scene.shapeless.clone(),
             floor,
             precision,
             excess,
@@ -499,6 +501,7 @@ impl KeptScene {
             reach: None,
             bracketed: self.bracketed.clone(),
             bounded: self.bounded.clone(),
+            shapeless: self.shapeless.clone(),
             clear: Default::default(),
             inscribed: Default::default(),
             simple: Default::default(),
@@ -537,6 +540,7 @@ impl KeptScene {
             + searched.len() * std::mem::size_of::<placement::Asked>()
             + self.bracketed.len() * std::mem::size_of::<(ObjectId, f64)>()
             + self.bounded.len() * std::mem::size_of::<ObjectId>()
+            + self.shapeless.len() * std::mem::size_of::<ObjectId>()
     }
 }
 

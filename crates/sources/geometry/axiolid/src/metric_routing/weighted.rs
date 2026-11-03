@@ -33,7 +33,7 @@ use axiolid_route::{CostRegion, DistanceMap, Farthest, FarthestError, MapError, 
 use axioval_engine::{
     ForcedWalkEvidence, ForcedWalkOutcome, ForcedWalkRequest, NeverEnteredEvidence, TravelCost,
 };
-use axioval_ir::{Evidence, ObjectId};
+use axioval_ir::ObjectId;
 
 use super::{LENGTH_ROUNDING, Level, Prepared, Routing, plan, rounded_up};
 use crate::geometry::Extent;
@@ -421,7 +421,7 @@ impl Routing {
             sorted.placed.len(),
         );
         let never = |reason: &str| -> Result<ForcedWalkOutcome, String> {
-            let completeness = self.completeness(format!(
+            let completeness = self.completeness(&format!(
                 "axiolid:metric-route:forced:never:{reason}:{text}:surfaces={}:portals={}:\
                  obstacles={}:connectors={}",
                 self.surfaces.len(),
@@ -472,7 +472,7 @@ impl Routing {
             f64::INFINITY
         };
         let converged = converged && upper - lower <= tolerance;
-        let evidence = Evidence::exact(
+        let evidence = self.exact(
             request.origin().subject().source.clone(),
             format!(
                 "axiolid:metric-route:forced:{text}:origin=({:.6},{:.6}):tolerance={tolerance:.6}:\

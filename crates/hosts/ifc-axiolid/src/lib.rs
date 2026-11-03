@@ -69,7 +69,9 @@
 //! and no parts stays unmeasured: as `no shape representation` when it has
 //! no representation at all, which is model data its author can fix and is
 //! also reported once per object as the integrity warning
-//! [`NO_SHAPE_REPRESENTATION`], or as `no body representation; it has …`
+//! [`NO_SHAPE_REPRESENTATION`] (as an obstacle it obstructs nothing,
+//! `AxiolidGeometry::with_shapeless`, #458; every measurement of the
+//! product itself stays not evaluated), or as `no body representation; it has …`
 //! naming the identifiers of the representations it has, none of which the
 //! bridge measures as a body. The whole
 //! keeps its own identity, and a whole and its own parts share material, so
@@ -564,9 +566,15 @@ impl Bodiless {
         let Some(entity) = model.get(product) else {
             return Self::Shapes(Vec::new());
         };
-        let Some(shape) = ifc_geometry::Slots::new(product, entity).opt_ref(PRODUCT_REPRESENTATION)
+        // `$` or absent is no representation; a value that is no reference
+        // (text, a number, `*`) is a representation read wrongly, which
+        // refuses as having some, never as having none.
+        let Some(value) = ifc_geometry::Slots::new(product, entity).opt(PRODUCT_REPRESENTATION)
         else {
             return Self::Shapeless;
+        };
+        let Some(shape) = value.as_ref_id() else {
+            return Self::Shapes(Vec::new());
         };
         let Some(representations) = model.get(shape).and_then(|entity| {
             ifc_geometry::ProductShape::new(shape, entity)
@@ -2014,7 +2022,15 @@ impl Composer<'_> {
             }
         };
         if parts.is_empty() {
-            self.unmeasured(whole, bodiless, None);
+            // No representation and no parts: unmeasured as a subject, but
+            // no body for free space to avoid (#458), never bodiless.
+            if matches!(self.bodiless.get(whole), Some(Bodiless::Shapeless)) {
+                let geometry = std::mem::take(&mut self.geometry);
+                self.geometry = geometry.with_shapeless(whole.clone(), bodiless.clone());
+                self.report.unmeasured.push((whole.clone(), bodiless));
+            } else {
+                self.unmeasured(whole, bodiless, None);
+            }
             return;
         }
         for part in &parts {

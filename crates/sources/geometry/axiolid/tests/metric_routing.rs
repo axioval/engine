@@ -106,6 +106,36 @@ fn a_route_between_two_rooms_through_a_door_is_found_and_bounded() {
     assert!(found.evidence().locator.contains("point-path="));
 }
 
+/// A product that states no shape (#458) obstructs nothing: the route is
+/// found as without it, and the evidence names it. The same model with an
+/// unmeasured product of another kind still refuses.
+#[test]
+fn a_shapeless_product_is_skipped_and_named_on_a_route() {
+    let geometry = model(0.9).with_shapeless(id("proxy"), "no shape representation");
+    let outcome = route(
+        service(geometry).with_clear_width(id("door"), 0.85),
+        &request(0.4),
+    )
+    .unwrap();
+    let MetricRouteOutcome::Reachable(found) = outcome else {
+        panic!("expected a route, got {outcome:?}");
+    };
+    assert!(
+        found
+            .evidence()
+            .locator
+            .ends_with(":skipped-no-shape-representation=cad:model/proxy"),
+        "{}",
+        found.evidence().locator
+    );
+    let refused = route(
+        service(model(0.9).with_unmeasured(id("proxy"), "no body representation"))
+            .with_clear_width(id("door"), 0.85),
+        &request(0.4),
+    );
+    assert!(matches!(refused, Err(MetricRoutingError::Unavailable(_))));
+}
+
 #[test]
 fn a_door_narrower_than_the_body_blocks_the_route_with_complete_evidence() {
     let request = request(0.45);

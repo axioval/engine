@@ -660,3 +660,95 @@ fn public_models_are_judged_alike_whatever_the_order_threads_and_reuse() {
     differences.extend(differences_budgeted(&checks).0);
     assert!(differences.is_empty(), "{}", differences.join("\n"));
 }
+
+/// The report of `case` over `model` as a host links the libraries to
+/// make it: one session meshed through the bridge, a runtime on two
+/// threads, and `budget` when given.
+fn hosted_report(
+    case: &str,
+    model: &[u8],
+    budget: Option<&std::sync::Arc<axioval::engine::MemoryBudget>>,
+) -> Vec<u8> {
+    use axioval::engine::{Parallelism, Runtime};
+    let parity = Path::new(FIXTURES).join("cases").join(case);
+    let definitions =
+        serde_json::from_slice(&std::fs::read(parity.join("definitions.json")).unwrap()).unwrap();
+    let mut ruleset: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(case_ruleset(case)).unwrap()).unwrap();
+    ruleset["root"]["rules"]
+        .as_array_mut()
+        .expect("the case's rules")
+        .retain(|rule| !FIXTURE_LEFT_OUT.contains(&rule["id"].as_str().unwrap_or("")));
+    let ruleset = serde_json::from_value(ruleset).unwrap();
+    let registry = axioval::default_registry().unwrap();
+    let plan = axioval::engine::compile(&registry, &[definitions], &ruleset).unwrap();
+    let session = axioval::ifc::import_ifc_session("building.ifc", model).unwrap();
+    let source = session.snapshots().next().unwrap().source().clone();
+    let bytes = axioval::ifc_geometry::ModelBytes::from([(source, model.to_vec())]);
+    let (session, _) = axioval::ifc_geometry::attach(
+        session,
+        &bytes,
+        axioval::ifc_geometry::Options::meshes(false),
+    )
+    .unwrap();
+    let mut runtime = Runtime::new(registry)
+        .with_parallelism(Parallelism::new(std::num::NonZeroUsize::new(2).unwrap()))
+        .with_rules_at_once(true);
+    if let Some(budget) = budget {
+        runtime = runtime.with_memory_budget(budget.clone());
+    }
+    let report = runtime.run_session(&session, plan).unwrap();
+    serde_json::to_vec(&report).unwrap()
+}
+
+/// #407: a host running several checks at once shares one
+/// [`MemoryBudget`](axioval::engine::MemoryBudget) between their
+/// runtimes. Each check reports what it reports alone, byte for byte, and
+/// no step is refused while every one step's estimate fits the budget,
+/// however much the checks together would take.
+#[test]
+fn checks_sharing_one_memory_budget_report_what_each_reports_alone() {
+    use axioval::engine::MemoryBudget;
+    use std::sync::Arc;
+    let model = building(1).into_bytes();
+    // Each alone, under a budget of its own, which also tells how large
+    // its largest step is estimated.
+    let alone: Vec<(Vec<u8>, u64)> = CASES
+        .iter()
+        .map(|case| {
+            let budget = Arc::new(MemoryBudget::new(u64::MAX));
+            let report = hosted_report(case, &model, Some(&budget));
+            (report, budget.usage().largest)
+        })
+        .collect();
+    let largest = alone.iter().map(|(_, largest)| *largest).max().unwrap();
+    assert!(largest > 0, "no check built a step the budget admits");
+    // Room for the largest step and a little over, so steps of different
+    // checks wait for one another.
+    let shared = Arc::new(MemoryBudget::new(largest + largest / 2));
+    let together: Vec<Vec<u8>> = std::thread::scope(|scope| {
+        let threads: Vec<_> = CASES
+            .iter()
+            .map(|case| {
+                let (model, shared) = (&model, &shared);
+                scope.spawn(move || hosted_report(case, model, Some(shared)))
+            })
+            .collect();
+        threads.into_iter().map(|t| t.join().unwrap()).collect()
+    });
+    for ((case, (report, _)), together) in CASES.iter().zip(&alone).zip(&together) {
+        assert!(
+            report == together,
+            "{case}: {}",
+            first_difference(report, together)
+        );
+        let text = String::from_utf8_lossy(together);
+        assert!(
+            !text.contains("memory budget"),
+            "{case}: a step was refused for memory"
+        );
+    }
+    let usage = shared.usage();
+    assert_eq!(usage.largest, largest, "{usage:?}");
+    assert_eq!(shared.in_use(), 0, "every admission was returned");
+}

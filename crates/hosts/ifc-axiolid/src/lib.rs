@@ -273,6 +273,16 @@ pub struct GeometryReport {
     /// when asked for ([`Options::keep_meshes`]), for a host to draw
     /// without meshing a second time.
     pub meshes: BTreeMap<ObjectId, KeptMesh>,
+    /// Sources whose colour resolver refused them, with the reason, sorted
+    /// by source (#472): every kept mesh of such a source has no colour
+    /// because the colours could not be read, not because the model states
+    /// none. Empty unless meshes are kept ([`Options::keep_meshes`]).
+    pub colour_unreadable_sources: Vec<(SourceId, String)>,
+    /// Kept meshes whose own product's colour the resolver refused (items
+    /// stating different colours, an ambiguous material), with the reason,
+    /// sorted by object (#472). A product that states no colour is not
+    /// listed, nor is one of a source in [`Self::colour_unreadable_sources`].
+    pub colour_refused: Vec<(ObjectId, String)>,
     /// The origin of the local frame the models are measured in, in
     /// model metres (east, north), when they are placed far out (#372).
     pub local_origin: Option<[f64; 2]>,
@@ -487,6 +497,10 @@ impl KeptMesh {
     /// - the resolver fails for the product's source (for example one
     ///   malformed styled item, layer assignment or shape aspect), which
     ///   leaves every mesh of that source without a colour.
+    ///
+    /// A refusal (not an unstyled product) is recorded in
+    /// [`GeometryReport::colour_unreadable_sources`] or
+    /// [`GeometryReport::colour_refused`] (#472).
     ///
     /// See [`KeptColour`].
     pub fn colour(&self) -> Option<KeptColour> {
@@ -1587,7 +1601,12 @@ pub fn attach(
     .compose_all(&wholes);
     geometry = composed;
     if options.keep_meshes {
-        colour_meshes(&parsed, &mut report.meshes);
+        colour_meshes(
+            &parsed,
+            &mut report.meshes,
+            &mut report.colour_unreadable_sources,
+            &mut report.colour_refused,
+        );
         clock.lap("geometry: colours");
     }
     geometry = with_voids(geometry, &voids, &mut report);
@@ -4428,26 +4447,42 @@ fn applied(host: &ObjectId, body: Option<Body>) -> Meshed {
 type Meshed = Result<Option<Body>, String>;
 
 /// Gives each kept mesh its product's colour (#380). One resolver per model,
-/// built only when meshes are kept; a model whose resolver cannot be built,
-/// or a product it refuses, leaves the colour `None`.
-fn colour_meshes(parsed: &BTreeMap<SourceId, Parsed>, meshes: &mut BTreeMap<ObjectId, KeptMesh>) {
+/// built only when meshes are kept. A model whose resolver cannot be built,
+/// or a product it refuses, leaves the colour `None` and is recorded with
+/// the reason (#472); a product that states no colour is not.
+fn colour_meshes(
+    parsed: &BTreeMap<SourceId, Parsed>,
+    meshes: &mut BTreeMap<ObjectId, KeptMesh>,
+    unreadable: &mut Vec<(SourceId, String)>,
+    refused: &mut Vec<(ObjectId, String)>,
+) {
     let sources: BTreeSet<SourceId> = meshes.keys().map(|id| id.source.clone()).collect();
-    let resolvers: BTreeMap<SourceId, openbim_ifc::ColourResolver<'_>> = sources
-        .into_iter()
-        .filter_map(|source| {
-            let resolver = openbim_ifc::ColourResolver::new(&parsed.get(&source)?.model).ok()?;
-            Some((source, resolver))
-        })
-        .collect();
+    let mut resolvers: BTreeMap<SourceId, openbim_ifc::ColourResolver<'_>> = BTreeMap::new();
+    for source in sources {
+        let Some(parsed) = parsed.get(&source) else {
+            continue;
+        };
+        match openbim_ifc::ColourResolver::new(&parsed.model) {
+            Ok(resolver) => {
+                resolvers.insert(source, resolver);
+            }
+            Err(error) => unreadable.push((source, error.to_string())),
+        }
+    }
     for (id, mesh) in meshes {
-        mesh.colour = resolvers
-            .get(&id.source)
-            .zip(entity_id(id))
-            .and_then(|(resolver, entity)| resolver.product_colour(entity).ok().flatten())
-            .map(|colour| KeptColour {
+        let Some((resolver, entity)) = resolvers.get(&id.source).zip(entity_id(id)) else {
+            continue;
+        };
+        mesh.colour = match resolver.product_colour(entity) {
+            Ok(colour) => colour.map(|colour| KeptColour {
                 rgb: colour.rgb,
                 transparency: colour.transparency,
-            });
+            }),
+            Err(error) => {
+                refused.push((id.clone(), error.to_string()));
+                None
+            }
+        };
     }
 }
 
@@ -5338,6 +5373,65 @@ mod tests {
         // A composed whole has no Body of its own, so no colour, even
         // though its material is styled.
         assert_eq!(colour("#90"), None);
+        // Only the disagreeing product is reported as refused; the unstyled
+        // and the composed ones state no colour and the source reads fine.
+        assert!(report.colour_unreadable_sources.is_empty());
+        let refused: Vec<&str> = report
+            .colour_refused
+            .iter()
+            .map(|(id, _)| id.local_id.as_str())
+            .collect();
+        assert_eq!(refused, ["#83"], "{:?}", report.colour_refused);
+        assert!(
+            report.colour_refused[0].1.contains("differ"),
+            "{:?}",
+            report.colour_refused
+        );
+    }
+
+    /// A malformed styled item makes the resolver refuse the whole source;
+    /// the report names the source and the reason, and the meshes stay
+    /// uncoloured (#472).
+    #[test]
+    fn a_source_the_colour_resolver_refuses_is_reported() {
+        let extra = "#50=IFCSTYLEDITEM((#13),(),$);\n";
+        let bytes =
+            rooms_and_door().replace("ENDSEC;\nEND-ISO", &format!("{extra}ENDSEC;\nEND-ISO"));
+        let session = import_ifc_session("bad.ifc", bytes.as_bytes()).unwrap();
+        let models: super::ModelBytes = session
+            .snapshots()
+            .map(|snapshot| (snapshot.source().clone(), bytes.as_bytes().to_vec()))
+            .collect();
+        let options = super::Options {
+            keep_meshes: true,
+            ..super::Options::default()
+        };
+        let (session, report) = attach(session, &models, options).unwrap();
+        let source = session.snapshots().next().unwrap().source().clone();
+        assert!(!report.meshes.is_empty());
+        assert!(report.meshes.values().all(|mesh| mesh.colour().is_none()));
+        assert_eq!(report.colour_unreadable_sources.len(), 1, "{report:?}");
+        assert_eq!(report.colour_unreadable_sources[0].0, source);
+        assert!(report.colour_refused.is_empty());
+    }
+
+    /// Without any style nothing is reported: unstyled is not a refusal.
+    #[test]
+    fn unstyled_meshes_report_no_colour_refusal() {
+        let bytes = rooms_and_door();
+        let session = import_ifc_session("plain.ifc", bytes.as_bytes()).unwrap();
+        let models: super::ModelBytes = session
+            .snapshots()
+            .map(|snapshot| (snapshot.source().clone(), bytes.as_bytes().to_vec()))
+            .collect();
+        let options = super::Options {
+            keep_meshes: true,
+            ..super::Options::default()
+        };
+        let (_, report) = attach(session, &models, options).unwrap();
+        assert!(!report.meshes.is_empty());
+        assert!(report.colour_unreadable_sources.is_empty());
+        assert!(report.colour_refused.is_empty());
     }
 
     #[test]

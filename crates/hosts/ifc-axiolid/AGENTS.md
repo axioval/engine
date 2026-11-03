@@ -40,6 +40,10 @@ benchmark) is its first consumer.
   slabs without item styles), or the resolver fails for its source (one
   malformed styled item, layer assignment or shape aspect leaves every mesh
   of that source without colour): never guessed, never a default.
+  Why is recorded (#472), additively and sorted: `colour_unreadable_sources`
+  (a source the resolver refused, with its error) and `colour_refused` (a
+  product it refused, with its error; not for a source already listed). A
+  product that states no colour has no entry.
 - Each model's bytes are parsed with the IFC adapter's `read_ifc_xml`
   (ifcXML, `is_ifc_xml`) or `read_ifc_step`, never a codec directly, so
   geometry sees the model the session proved.

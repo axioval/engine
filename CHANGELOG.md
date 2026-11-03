@@ -17,6 +17,13 @@ All notable changes are documented here. This project follows Semantic Versionin
   without item styles), or the resolver fails for its source (one malformed
   style leaves every mesh of that source without colour). `KeptMesh` has
   private fields, so the new one is not a breaking change.
+- **The report says why a kept mesh has no colour**
+  ([#472](https://github.com/axioval/engine/issues/472)).
+  `GeometryReport::colour_unreadable_sources` lists each source whose colour
+  resolver refused it, with the reason, and `colour_refused` each kept mesh
+  whose product the resolver refused (items stating different colours, an
+  ambiguous material), with the reason, both sorted. A product that states
+  no colour has no entry, so a host can tell "unstyled" from "unreadable".
 
 ### Changed
 

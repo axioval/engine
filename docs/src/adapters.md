@@ -1237,7 +1237,16 @@ windows or openings (`with_opening`), and which are walls and slabs
 (`with_separating_element`); an opening the geometry declares
 bodiless is probed through a void shape given with `with_opening_void`
 (`with_tessellated_opening_void`, `with_unmeasured_opening_void`). Spaces must
-be closed solids, since containment is a winding-number test.
+be closed solids, since containment is a winding-number test. A declared space
+that is not (an open or degenerate mesh, no body, an unmeasured one) is kept as
+an unknown with its reason and the extent it may occupy, its mesh's extent
+widened by its chord deviation (#478). A read is decided from the other
+spaces only when it cannot meet any unknown one: an element's reference point
+or the sweep of an opening's probes, widened by the read's tolerances
+(`horizontal` and `vertical`, `reach`, `tolerance`) lies apart from the
+unknown space's widened extent. Otherwise the read refuses with the unknown
+space's reason, never as if the space did not hold it. A space with no mesh
+has no extent, so it refuses every read that probes spaces.
 
 - **contained-in-space.** The reference point is the centre of the element's
   mesh extent. It lies in every space whose winding number there reaches one

@@ -25,6 +25,15 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- **One space that is not a closed solid no longer refuses every
+  containment and adjacency read** ([#478](https://github.com/axioval/engine/issues/478)).
+  A declared space with an open mesh, degenerate triangles, no body or an
+  unmeasured one is kept as an unknown with its reason and the extent its
+  mesh may occupy (widened by its chord deviation). A contained-in-space,
+  adjacent-space, adjacent-across or overlapping-group-space read is decided
+  from the other spaces when its object, widened by the read's tolerances,
+  lies apart from every unknown space, and otherwise refuses naming it. A
+  space with no mesh has no extent and still refuses every such read.
 - Walls turned in plan with openings or slots flush with their faces are
   measured instead of refused as self-intersecting: the volume kernel's
   triangle test now decides near-coplanar triangles exactly

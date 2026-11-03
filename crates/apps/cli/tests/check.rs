@@ -7578,6 +7578,66 @@ fn ifc4_room() -> String {
     )
 }
 
+/// [`ifc4_room`] and, 48 m east, a hall of the same height whose faceted
+/// body is missing its ceiling: an open surface, not a closed solid (#478).
+fn ifc4_room_and_open_hall() -> String {
+    let corners = [
+        (48., 0., 0.),
+        (54., 0., 0.),
+        (54., 4., 0.),
+        (48., 4., 0.),
+        (48., 0., 3.),
+        (54., 0., 3.),
+        (54., 4., 3.),
+        (48., 4., 3.),
+    ];
+    let mut data = String::new();
+    for (index, (x, y, z)) in corners.iter().enumerate() {
+        let _ = writeln!(
+            data,
+            "#{}=IFCCARTESIANPOINT(({x:?},{y:?},{z:?}));",
+            21 + index
+        );
+    }
+    // Floor and four walls; the ceiling is left out.
+    let faces = [
+        [0, 3, 2, 1],
+        [0, 1, 5, 4],
+        [1, 2, 6, 5],
+        [2, 3, 7, 6],
+        [3, 0, 4, 7],
+    ];
+    let mut bounds = Vec::new();
+    for (index, face) in faces.iter().enumerate() {
+        let first = 30 + 3 * index;
+        let points: Vec<String> = face
+            .iter()
+            .map(|corner| format!("#{}", 21 + corner))
+            .collect();
+        let _ = write!(
+            data,
+            "#{first}=IFCPOLYLOOP(({}));\n\
+             #{}=IFCFACEOUTERBOUND(#{first},.T.);\n\
+             #{}=IFCFACE((#{}));\n",
+            points.join(","),
+            first + 1,
+            first + 2,
+            first + 1
+        );
+        bounds.push(format!("#{}", first + 2));
+    }
+    let _ = write!(
+        data,
+        "#50=IFCCLOSEDSHELL(({}));\n\
+         #51=IFCFACETEDBREP(#50);\n\
+         #52=IFCSHAPEREPRESENTATION(#5,'Body','Brep',(#51));\n\
+         #53=IFCPRODUCTDEFINITIONSHAPE($,$,(#52));\n\
+         #54=IFCSPACE('0000000000000000000054',$,$,$,$,#3,#53,$,.ELEMENT.,$,$);\n",
+        bounds.join(",")
+    );
+    ifc4_room().replace("ENDSEC;\nEND-ISO", &format!("{data}ENDSEC;\nEND-ISO"))
+}
+
 /// An IFC2X3 file of `IfcFlowTerminal`s, each `(first id, centre x, centre y)`
 /// a 0.5 m square body 0.9 m high.
 fn ifc2x3_devices(devices: &[(u32, f64, f64)]) -> String {
@@ -7631,6 +7691,16 @@ fn ifc_file_of(schema: &str, prelude: &str, owner: &str, data: &str) -> String {
 /// check.
 fn devices_in_spaces(
     name: &str,
+    devices: &[(u32, f64, f64)],
+    relationship: &str,
+) -> (Output, Value) {
+    devices_in_spaces_of(name, &ifc4_room(), devices, relationship)
+}
+
+/// [`devices_in_spaces`] over the spaces of `rooms`.
+fn devices_in_spaces_of(
+    name: &str,
+    rooms: &str,
     devices: &[(u32, f64, f64)],
     relationship: &str,
 ) -> (Output, Value) {
@@ -7688,7 +7758,7 @@ fn devices_in_spaces(
     });
     rule["applicability"]["groups"]["walls"]["selector"]["objectType"] =
         json!("axioval:example.ifc.device");
-    let rooms = case.write("rooms.ifc", &ifc4_room());
+    let rooms = case.write("rooms.ifc", rooms);
     let devices = case.write("devices.ifc", &ifc2x3_devices(devices));
     let definitions = case.write("definitions.json", &definitions.to_string());
     let ruleset = case.write("ruleset.json", &ruleset.to_string());
@@ -7737,6 +7807,30 @@ fn with_geometry_a_device_of_an_ifc2x3_model_lies_in_a_space_of_an_ifc4_one() {
     // Stating `horizontal` reaches the space beside the point.
     assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
     assert!(finding_ids(&result).is_empty(), "{result:#}");
+}
+
+#[test]
+fn with_geometry_an_open_space_refuses_only_the_devices_that_may_lie_in_it() {
+    let rooms = ifc4_room_and_open_hall();
+    // Device 1 lies in the closed room, 46 m from the open hall; device 2
+    // stands in the open hall, whose inside is undecided.
+    let (output, result) = devices_in_spaces_of(
+        "geometry-derived-open-space-far",
+        &rooms,
+        &[(30, 1.0, 2.0)],
+        "axioval:derived.contained-in-space",
+    );
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert!(finding_ids(&result).is_empty(), "{result:#}");
+    let (output, result) = devices_in_spaces_of(
+        "geometry-derived-open-space-in",
+        &rooms,
+        &[(30, 1.0, 2.0), (40, 51.0, 2.0)],
+        "axioval:derived.contained-in-space",
+    );
+    assert_ne!(output.status.code(), Some(0), "{}", stderr(&output));
+    let text = result.to_string();
+    assert!(text.contains("is not a closed solid"), "{result:#}");
 }
 
 #[test]

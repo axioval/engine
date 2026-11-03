@@ -21,7 +21,7 @@ use axioval_engine::{
 };
 use axioval_ir::ObjectId;
 
-use super::{Cached, Declared, Derived, KeptSpace, Pair};
+use super::{Cached, Declared, Derived, KeptSpace, KeptSpaces, Pair};
 use crate::derivations::{
     self, AXIOLID_CORE, AXIOLID_INSPECT, AXIOLID_MEASURE, AXIOLID_MESH, AXIOLID_OVERLAY,
     AXIOLID_RAY_MESH, AXIOLID_SPATIAL, Over,
@@ -84,16 +84,18 @@ pub(crate) struct SpacesKey {
 }
 
 /// The derivation kind of the declared spaces' bodies: each closed space's
-/// triangles, extent and exactness, or why one cannot be probed.
+/// triangles, extent and exactness, and each space that cannot be probed
+/// with why and the extent it may occupy.
 pub(crate) struct SpaceBodies;
 
 impl DerivationKind for SpaceBodies {
     const NAME: &'static str = "space bodies";
     /// Bumped whenever the same declarations could read other bodies: the
-    /// audit changing what it accepts.
-    const VERSION: DerivationVersion = DerivationVersion::new(1, &[AXIOLID_CORE, AXIOLID_MESH]);
+    /// audit changing what it accepts. 2: a space that cannot be probed is
+    /// kept as unknown beside the others, not one refusal for all (#478).
+    const VERSION: DerivationVersion = DerivationVersion::new(2, &[AXIOLID_CORE, AXIOLID_MESH]);
     type Key = SpacesKey;
-    type Value = Result<Vec<KeptSpace>, String>;
+    type Value = KeptSpaces;
 
     fn build(key: &SpacesKey, _: &Inputs<'_>) -> Result<Self::Value, DerivationError> {
         Ok(key.declared.0.space_bodies())
@@ -104,15 +106,21 @@ impl DerivationKind for SpaceBodies {
     }
 
     fn size_hint(value: &Self::Value) -> Option<usize> {
-        Some(value.as_ref().map_or(0, |spaces| {
-            spaces
+        Some(
+            value
+                .usable
                 .iter()
                 .map(|space| {
                     space.triangles.len() * std::mem::size_of::<Triangle>()
                         + std::mem::size_of::<KeptSpace>()
                 })
-                .sum()
-        }))
+                .sum::<usize>()
+                + value
+                    .unknown
+                    .iter()
+                    .map(|space| space.reason.len() + std::mem::size_of::<super::UnknownSpace>())
+                    .sum::<usize>(),
+        )
     }
 
     fn keep_bytes() -> Option<u64> {
@@ -158,9 +166,10 @@ impl DerivationKind for DerivedEdges {
     const NAME: &'static str = "derived edges";
     /// Bumped whenever the same key could derive other edges: the probes,
     /// the winding numbers, the ray casts or the plan overlaps changing
-    /// what they return.
+    /// what they return. 2: a read apart from every space that cannot be
+    /// probed is decided from the others (#478).
     const VERSION: DerivationVersion = DerivationVersion::new(
-        1,
+        2,
         &[
             AXIOLID_CORE,
             AXIOLID_MEASURE,
@@ -355,17 +364,20 @@ mod tests {
         }
     }
 
-    fn spaces(value: &Result<Vec<KeptSpace>, String>) -> String {
-        match value {
-            Ok(spaces) => format!(
-                "{:?}",
-                spaces
-                    .iter()
-                    .map(|space| (&space.id.local_id, space.extent))
-                    .collect::<Vec<_>>()
-            ),
-            Err(reason) => format!("refused: {reason}"),
-        }
+    fn spaces(value: &KeptSpaces) -> String {
+        format!(
+            "{:?} unknown {:?}",
+            value
+                .usable
+                .iter()
+                .map(|space| (&space.id.local_id, space.extent))
+                .collect::<Vec<_>>(),
+            value
+                .unknown
+                .iter()
+                .map(|space| (&space.id.local_id, &space.reason, space.extent))
+                .collect::<Vec<_>>()
+        )
     }
 
     fn pair(value: &Pair) -> String {

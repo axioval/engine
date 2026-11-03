@@ -6,7 +6,7 @@
 use std::sync::Arc;
 
 use axiolid_core::Point3;
-use axiolid_mesh::TriMesh;
+use axiolid_mesh::{TriMesh, TriangleMeshView};
 use axioval_axiolid::{AxiolidDerivedRelationshipService, AxiolidGeometry};
 use axioval_engine::{
     DerivedRelationshipServiceHandle, RelationshipQuery, RelationshipSelectionError,
@@ -829,4 +829,125 @@ fn an_opening_filling_its_layers_hole_does_not_intersect_it() {
             .any(|locator| locator.contains("penetration=0.050000")),
         "{evidence:?}"
     );
+}
+
+/// A box missing its ceiling: an open surface, never a closed solid.
+fn open_box(min: [f64; 3], max: [f64; 3]) -> TriMesh {
+    let closed = cuboid(min, max);
+    let points = (0..closed.position_count())
+        .map(|index| closed.position(index))
+        .collect();
+    let mut indices = Vec::new();
+    for (triangle, corners) in closed.indices.chunks(3).enumerate() {
+        if triangle != 2 && triangle != 3 {
+            indices.extend_from_slice(corners);
+        }
+    }
+    TriMesh::new(points, indices)
+}
+
+/// Rooms `a` and `b` as above, a far open-plan `hall` whose mesh is open,
+/// and objects in `a`, beside `hall` and inside it (#478).
+fn rooms_and_open_hall() -> AxiolidDerivedRelationshipService {
+    let geometry = rooms()
+        .with_mesh(id("hall"), open_box([50.0, 0.0, 0.0], [54.0, 4.0, 3.0]))
+        .with_mesh(id("far"), cuboid([100.0, 0.0, 0.0], [101.0, 1.0, 1.0]))
+        .with_mesh(id("in-hall"), cuboid([51.0, 1.0, 0.0], [52.0, 2.0, 1.0]))
+        .with_mesh(id("hall-door"), cuboid([53.9, 1.0, 0.0], [54.1, 1.9, 2.1]));
+    service(geometry)
+        .with_space(id("hall"))
+        .with_opening(id("hall-door"))
+}
+
+/// One space that is not a closed solid no longer refuses every read: an
+/// object or opening that cannot meet it is decided from the other spaces,
+/// and one that may meet it is refused, naming it (#478).
+#[test]
+fn an_open_space_refuses_only_the_reads_it_may_take_part_in() {
+    let handle = handle(rooms_and_open_hall());
+    let objects = [
+        "chair",
+        "far",
+        "in-hall",
+        "door",
+        "hall-door",
+        "a",
+        "b",
+        "hall",
+    ];
+    let (chair, _) = select(
+        &handle,
+        "chair",
+        &objects,
+        CONTAINED,
+        TraversalDirection::Forward,
+    )
+    .expect("the chair is far from the open space");
+    assert_eq!(chair, ["a"]);
+    let (far, evidence) = select(
+        &handle,
+        "far",
+        &objects,
+        CONTAINED,
+        TraversalDirection::Forward,
+    )
+    .expect("an object far from every space lies in none");
+    assert!(far.is_empty());
+    assert!(evidence.iter().any(|item| item.contains("in-no-space")));
+    let (door, _) = select(
+        &handle,
+        "door",
+        &objects,
+        ADJACENT,
+        TraversalDirection::Forward,
+    )
+    .expect("the door is far from the open space");
+    assert_eq!(door, ["a", "b"]);
+    for (subject, relationship) in [("in-hall", CONTAINED), ("hall-door", ADJACENT)] {
+        match select(
+            &handle,
+            subject,
+            &objects,
+            relationship,
+            TraversalDirection::Forward,
+        ) {
+            Err(RelationshipSelectionError::Unavailable(message)) => assert!(
+                message.contains("space cad:model:hall is not a closed solid")
+                    || message.contains("hall is not a closed solid"),
+                "{subject}: {message}"
+            ),
+            other => panic!("{subject} may lie in the open hall, got {other:?}"),
+        }
+    }
+    // Walking backward from a space asks every subject of the universe.
+    assert!(
+        select(
+            &handle,
+            "a",
+            &objects,
+            CONTAINED,
+            TraversalDirection::Backward
+        )
+        .is_err(),
+        "the universe holds an object that may lie in the open hall"
+    );
+    let (in_a, _) = select(
+        &handle,
+        "a",
+        &["chair", "far", "door"],
+        CONTAINED,
+        TraversalDirection::Backward,
+    )
+    .expect("none of these can lie in the open hall");
+    assert_eq!(in_a, ["chair"]);
+}
+
+/// A space with no mesh at all may be anywhere, so it refuses every read.
+#[test]
+fn a_space_without_a_mesh_refuses_every_read() {
+    let handle = handle(service(rooms()).with_space(id("ghost")));
+    assert!(matches!(
+        select(&handle, "chair", COMPONENTS, CONTAINED, TraversalDirection::Forward),
+        Err(RelationshipSelectionError::Unavailable(message)) if message.contains("ghost")
+    ));
 }

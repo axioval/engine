@@ -92,6 +92,43 @@ pub(crate) struct KeptSpace {
     tessellated: bool,
 }
 
+/// A declared space that cannot be probed (not a closed solid, no body, an
+/// unmeasured one), kept with why and the extent it may occupy, so a read
+/// that cannot meet it is still decided ([`unknown_meets`]).
+pub(crate) struct UnknownSpace {
+    id: ObjectId,
+    reason: String,
+    /// The mesh's extent widened by the chord deviation; `None` when the
+    /// space has no usable mesh, so it may be anywhere.
+    extent: Option<Extent>,
+}
+
+/// The declared spaces: those that can be probed and those that cannot.
+#[derive(Default)]
+pub(crate) struct KeptSpaces {
+    usable: Vec<KeptSpace>,
+    unknown: Vec<UnknownSpace>,
+}
+
+/// Refuses a read that an unknown space may take part in: `near` says
+/// whether a space's widened extent can meet what the read touches. Every
+/// unknown space that may is named with its reason, in identity order.
+fn unknown_meets(
+    unknown: &[UnknownSpace],
+    mut near: impl FnMut(&Extent) -> bool,
+) -> Result<(), String> {
+    let reasons: Vec<&str> = unknown
+        .iter()
+        .filter(|space| space.extent.as_ref().is_none_or(&mut near))
+        .map(|space| space.reason.as_str())
+        .collect();
+    if reasons.is_empty() {
+        Ok(())
+    } else {
+        Err(reasons.join("; "))
+    }
+}
+
 /// A declared space ready to be probed, read from what the store keeps.
 struct SpaceBody<'a> {
     id: &'a ObjectId,
@@ -313,37 +350,61 @@ impl Declared {
         Err(format!("{object} has no described geometry"))
     }
 
-    /// Every declared space with a closed exact-or-tessellated body.
-    fn space_bodies(&self) -> Result<Vec<KeptSpace>, String> {
-        self.spaces
-            .iter()
-            .map(|space| {
-                let Some(mesh) = self.geometry.mesh(space) else {
-                    return Err(if self.geometry.is_unmeasured(space) {
-                        format!("space {space} has a body that was not measured")
-                    } else {
-                        format!("space {space} has no body, so what lies in it is undecided")
-                    });
-                };
-                let health = audit_mesh(mesh, tolerance()?);
-                if !health.is_surface_usable()
-                    || health.degenerate_triangles != 0
-                    || !health.is_closed_two_manifold()
-                {
-                    return Err(format!(
-                        "space {space} is not a closed solid, so it has no inside"
-                    ));
-                }
-                let extent =
-                    mesh_extent(mesh).ok_or_else(|| format!("space {space} has an empty mesh"))?;
-                Ok(KeptSpace {
+    /// Every declared space: each with a closed body ready to probe, and
+    /// each other kept unknown with its reason and the extent it may occupy.
+    fn space_bodies(&self) -> KeptSpaces {
+        let mut kept = KeptSpaces::default();
+        for space in &self.spaces {
+            match self.usable_space(space) {
+                Ok(usable) => kept.usable.push(usable),
+                Err(reason) => kept.unknown.push(UnknownSpace {
                     id: space.clone(),
-                    triangles: triangles(mesh),
-                    extent,
-                    tessellated: self.geometry.is_tessellated(space),
-                })
-            })
-            .collect()
+                    reason,
+                    extent: self.possible_extent(space),
+                }),
+            }
+        }
+        kept
+    }
+
+    /// The extent a space without a usable body may occupy: its mesh's,
+    /// widened by its chord deviation. `None` without a finite mesh.
+    fn possible_extent(&self, space: &ObjectId) -> Option<Extent> {
+        let (min, max) = mesh_extent(self.geometry.mesh(space)?)?;
+        let deviation = self.geometry.fidelity(space).ok()?.deviation_metres();
+        let bounds = [min, max, [deviation; 3]];
+        if !bounds.iter().flatten().all(|value| value.is_finite()) || deviation < 0.0 {
+            return None;
+        }
+        Some((min.map(|v| v - deviation), max.map(|v| v + deviation)))
+    }
+
+    /// A declared space with a closed exact-or-tessellated body, or why it
+    /// has none.
+    fn usable_space(&self, space: &ObjectId) -> Result<KeptSpace, String> {
+        let Some(mesh) = self.geometry.mesh(space) else {
+            return Err(if self.geometry.is_unmeasured(space) {
+                format!("space {space} has a body that was not measured")
+            } else {
+                format!("space {space} has no body, so what lies in it is undecided")
+            });
+        };
+        let health = audit_mesh(mesh, tolerance()?);
+        if !health.is_surface_usable()
+            || health.degenerate_triangles != 0
+            || !health.is_closed_two_manifold()
+        {
+            return Err(format!(
+                "space {space} is not a closed solid, so it has no inside"
+            ));
+        }
+        let extent = mesh_extent(mesh).ok_or_else(|| format!("space {space} has an empty mesh"))?;
+        Ok(KeptSpace {
+            id: space.clone(),
+            triangles: triangles(mesh),
+            extent,
+            tessellated: self.geometry.is_tessellated(space),
+        })
     }
 
     /// The kept spaces as bodies to probe, each with its mesh.
@@ -381,7 +442,7 @@ impl Declared {
         &self,
         derivation: &Derivation,
         subject: &ObjectId,
-        spaces: impl FnOnce() -> Result<Arc<Result<Vec<KeptSpace>, String>>, String>,
+        spaces: impl FnOnce() -> Result<Arc<KeptSpaces>, String>,
     ) -> Cached {
         if let (true, Derivation::SpansLevel { overlap_metres }) =
             (self.is_subject(derivation, subject), derivation)
@@ -389,25 +450,35 @@ impl Declared {
             self.spans(subject, *overlap_metres).map(Arc::new)
         } else if self.is_subject(derivation, subject) {
             let kept = spaces()?;
-            let kept = kept.as_ref().as_ref().map_err(Clone::clone)?;
-            let spaces = self.bodies(kept)?;
+            let unknown = kept.unknown.as_slice();
+            let spaces = self.bodies(&kept.usable)?;
             let spaces = spaces.as_slice();
             match derivation {
                 Derivation::ContainedInSpace {
                     horizontal_metres,
                     vertical_metres,
-                } => self.contained(subject, spaces, *horizontal_metres, *vertical_metres),
+                } => self.contained(
+                    subject,
+                    (spaces, unknown),
+                    *horizontal_metres,
+                    *vertical_metres,
+                ),
                 Derivation::AdjacentSpace { reach_metres } => {
-                    self.adjacent(subject, spaces, *reach_metres)
+                    self.adjacent(subject, (spaces, unknown), *reach_metres)
                 }
                 Derivation::OverlappingGroupSpace {
                     minimum_ratio,
                     vertical_metres,
-                } => Self::group(subject, spaces, *minimum_ratio, *vertical_metres),
+                } => Self::group(subject, (spaces, unknown), *minimum_ratio, *vertical_metres),
                 Derivation::AdjacentAcross {
                     tolerance_metres,
                     overlap_metres,
-                } => self.across(subject, spaces, *tolerance_metres, *overlap_metres),
+                } => self.across(
+                    subject,
+                    (spaces, unknown),
+                    *tolerance_metres,
+                    *overlap_metres,
+                ),
                 Derivation::SpansLevel { .. } | Derivation::Intersects => {
                     unreachable!("levels are derived above, intersections pair by pair")
                 }
@@ -423,7 +494,7 @@ impl Declared {
     fn contained(
         &self,
         subject: &ObjectId,
-        spaces: &[SpaceBody<'_>],
+        (spaces, unknown): (&[SpaceBody<'_>], &[UnknownSpace]),
         horizontal: f64,
         vertical: f64,
     ) -> Result<Derived, String> {
@@ -441,6 +512,11 @@ impl Declared {
         let point = (Point3::from_array(min) + Point3::from_array(max)) * 0.5;
         let reach = horizontal.hypot(vertical);
         let probe: Extent = (point.to_array(), point.to_array());
+        // A space that cannot be probed may hold the point or lie within
+        // the tolerances of it.
+        unknown_meets(unknown, |extent| {
+            extent_gap(&probe, extent, false) <= reach + ON_SURFACE
+        })?;
         let mut containing = Vec::new();
         let mut near: Vec<(f64, f64, f64, &ObjectId)> = Vec::new();
         for space in spaces {
@@ -518,7 +594,7 @@ impl Declared {
     fn adjacent(
         &self,
         subject: &ObjectId,
-        spaces: &[SpaceBody<'_>],
+        (spaces, unknown): (&[SpaceBody<'_>], &[UnknownSpace]),
         reach: f64,
     ) -> Result<Derived, String> {
         let shape = self
@@ -559,6 +635,10 @@ impl Declared {
             let direction = normal * *sign;
             let end = *start + direction * reach;
             let segment: Extent = (start.min(end).to_array(), start.max(end).to_array());
+            // A space that cannot be probed may begin on the probe.
+            unknown_meets(unknown, |extent| {
+                extent_gap(&segment, extent, false) <= ON_SURFACE
+            })?;
             for space in spaces {
                 let gap = extent_gap(&segment, &space.extent, false);
                 if space.tessellated && gap <= ON_SURFACE {
@@ -628,7 +708,7 @@ impl Declared {
     fn across(
         &self,
         subject: &ObjectId,
-        spaces: &[SpaceBody<'_>],
+        (spaces, unknown): (&[SpaceBody<'_>], &[UnknownSpace]),
         tolerance: f64,
         overlap: f64,
     ) -> Result<Derived, String> {
@@ -650,6 +730,10 @@ impl Declared {
         let normal = separator.normal_text();
         let extent =
             mesh_extent(shape.mesh).ok_or_else(|| format!("{subject} has an empty mesh"))?;
+        // A space that cannot be probed may be beside a face.
+        unknown_meets(unknown, |space| {
+            extent_gap(&extent, space, false) <= tolerance + own + ON_SURFACE
+        })?;
         let mut derived = Derived::default();
         let mut sides = [false, false];
         for space in spaces.iter().filter(|space| space.id != subject) {
@@ -846,13 +930,26 @@ impl Declared {
     /// The larger spaces covering at least `ratio` of a space's footprint.
     fn group(
         subject: &ObjectId,
-        spaces: &[SpaceBody<'_>],
+        (spaces, unknown): (&[SpaceBody<'_>], &[UnknownSpace]),
         ratio: f64,
         vertical: f64,
     ) -> Result<Derived, String> {
         let Some(own) = spaces.iter().find(|space| space.id == subject) else {
-            return Err(format!("space {subject} has no body"));
+            return Err(unknown
+                .iter()
+                .find(|space| space.id == *subject)
+                .map_or_else(
+                    || format!("space {subject} has no body"),
+                    |space| space.reason.clone(),
+                ));
         };
+        // A space that cannot be probed may overlap the footprint.
+        unknown_meets(unknown, |extent| {
+            let rise = (extent.0[2] - own.extent.1[2])
+                .max(own.extent.0[2] - extent.1[2])
+                .max(0.0);
+            extent_gap(&own.extent, extent, true) <= ON_SURFACE && rise <= vertical
+        })?;
         if own.tessellated {
             return Err(format!(
                 "space {subject} is a tessellation, so its footprint is approximate"

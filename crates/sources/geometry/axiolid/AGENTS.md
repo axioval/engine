@@ -583,7 +583,13 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   host-declared `ObjectId`s; bodiless openings are probed through a
   host-supplied void. Undecided cases (unmeasured or bodiless spaces, points
   on a boundary, ties, tessellations within reach, an extent straddling a
-  level's needed reach, an unmeasured level) refuse the whole answer.
+  level's needed reach, an unmeasured level) refuse the whole answer. A
+  declared space that is not a closed solid (#478) is an `UnknownSpace`
+  (reason, mesh extent widened by its chord deviation, `None` without a
+  mesh), never a refusal of every read: a read refuses only when it may meet
+  one (`unknown_meets`: the point, probe sweep or face widened by the read's
+  tolerances reaches the widened extent, or the space has no extent). Never
+  treat an unknown space as not holding an object that may meet it.
   `spans-level` reads only vertical extents, so it widens a tessellated
   space by its chord deviation instead of refusing it; never decide a level
   from the mesh's own extent alone. `intersects` is symmetric and pairwise

@@ -19,8 +19,8 @@ use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, Polygon};
 
 use crate::free_space::{AREA_EPSILON_M2, shape_footprint, tolerance};
 use crate::geometry::{AxiolidGeometry, triangles};
-use crate::placement::sliver_box;
-use crate::planar::{plan_frame, plan_overlay, polygon_area, projected_polygons, refused_ring};
+use crate::placement::{sliver, sliver_box};
+use crate::planar::{plan_frame, plan_overlay, polygon_area, projected_polygons};
 
 /// Answers a containment request over `geometry`, citing `source`.
 ///
@@ -35,8 +35,9 @@ pub(crate) fn assess(
     let volume = ClearanceRequest::new(request.frame().clone(), request.shape(), Vec::new());
     let footprint = shape_footprint(&volume)?;
     let tolerance = tolerance()?;
-    // `sure` lies inside the scopes' footprint and `possible` holds it.
-    let (mut sure, mut possible) = (Vec::new(), Vec::new());
+    // `sure` lies inside the scopes' footprint; `possible` holds it, its
+    // slivers boxed only where a verdict needs the outer bound.
+    let (mut sure, mut kept, mut slivers) = (Vec::new(), Vec::new(), Vec::new());
     for scope in request.scopes() {
         if geometry.is_tessellated(scope) {
             return Err(FreeSpaceError::Unavailable(format!(
@@ -47,14 +48,11 @@ pub(crate) fn assess(
             .mesh(scope)
             .ok_or_else(|| FreeSpaceError::MissingGeometry(Box::new(scope.clone())))?;
         for polygon in projected_polygons(&triangles(mesh)) {
-            if refused_ring(&polygon.outer, tolerance) {
-                possible.push(Polygon {
-                    outer: sliver_box(&polygon.outer),
-                    holes: Vec::new(),
-                });
+            if sliver(&polygon.outer, tolerance) {
+                slivers.push(polygon.outer);
             } else {
                 sure.push(polygon.clone());
-                possible.push(polygon);
+                kept.push(polygon);
             }
         }
     }
@@ -74,6 +72,13 @@ pub(crate) fn assess(
     // some of it outside means some of the footprint is.
     if outside(&footprint.outer, &sure)? <= AREA_EPSILON_M2 {
         return Ok(ContainmentOutcome::Inside(evidence()?));
+    }
+    let mut possible = kept;
+    for ring in &slivers {
+        possible.push(Polygon {
+            outer: sliver_box(ring, tolerance)?,
+            holes: Vec::new(),
+        });
     }
     if outside(&footprint.inner, &possible)? > AREA_EPSILON_M2 {
         return Ok(ContainmentOutcome::Outside(evidence()?));

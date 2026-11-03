@@ -982,6 +982,52 @@ fn a_room_whose_walls_project_to_slivers_is_decided() {
     nowhere(place(geometry(), rectangle(4.1, 1.0, along(1.0, 0.0)), &[]));
 }
 
+/// An exact block leaning by 5 nm (#377): its side faces fold into its
+/// outline, which stays a polygon. A fit is found beside it, clear of it,
+/// and one through it is refuted. A 4 x 2 room holds a full-depth block
+/// from x 2.5 to 3.5, leaving 2.5 m to its left for a 1.5 m circle, and
+/// one from x 1 to 3, leaving 1 m either side.
+#[test]
+fn an_obstacle_leaning_by_nanometres_is_bracketed_around_its_slivers() {
+    let geometry = |x0: f64, x1: f64| {
+        let block = [(x0, 0.0), (x1, 0.0), (x1, 2.0), (x0, 2.0)];
+        room_at(&rect(0.0, 4.0, 0.0, 2.0)).with_mesh(
+            id("post"),
+            leaning_prism(&block, 0.0, 3.0, (5.0e-9, -3.0e-9)),
+        )
+    };
+    let circle = PlacementShape::Cylinder(CylinderClearance::try_new(0.75, 2.0).unwrap());
+    let ([x, _, _], _) = found(place(geometry(2.5, 3.5), circle.clone(), &["post"]));
+    assert!(x + 0.75 <= 2.5 && x >= 0.75, "centre x {x}");
+    nowhere(place(geometry(1.0, 3.0), circle.clone(), &["post"]));
+}
+
+/// A full-depth plate 1 nm thick, leaning by 5 nm (#377), in a 4 x 2 room:
+/// its whole plan is a sliver the overlay's union refuses. It is left out
+/// of what it surely occupies and boxed, 50 nm and more beyond, into what
+/// it may. A rectangle is found beside it clear of the box, and one with
+/// 20 nm to spare on either side, within the box's reach, is not found: a witness inside
+/// the box would pass through the plate.
+#[test]
+fn a_plate_of_nanometres_is_boxed_not_ignored() {
+    let geometry = |width: f64, x: f64| {
+        let plate = [(x, 0.0), (x + 1.0e-9, 0.0), (x + 1.0e-9, 2.0), (x, 2.0)];
+        room_at(&rect(0.0, width, 0.0, 2.0)).with_mesh(
+            id("plate"),
+            leaning_prism(&plate, 0.0, 3.0, (5.0e-9, -3.0e-9)),
+        )
+    };
+    let beside = rectangle(1.5, 1.0, along(1.0, 0.0));
+    let ([x, _, _], _) = found(place(geometry(4.0, 2.5), beside.clone(), &["plate"]));
+    assert!(x + 0.75 <= 2.5 - 4.0e-8 && x >= 0.75, "centre x {x}");
+    // Both sides of the plate leave the rectangle 20 nm to spare.
+    let outcome = place(geometry(3.0 + 4.0e-8, 1.5 + 2.0e-8), beside, &["plate"]);
+    assert!(
+        !matches!(outcome, Ok(PlacementOutcome::Found(_))),
+        "{outcome:?}"
+    );
+}
+
 /// A circle among more obstacle corners than are dilated by arcs (#393):
 /// the disc erodes the room less the obstacles instead, and still finds
 /// the free strip and refutes a circle wider than it. 160 posts (640

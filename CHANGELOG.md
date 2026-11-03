@@ -45,6 +45,23 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **Slivers a few nanometres wide no longer refuse a footprint's union**
+  ([#377](https://github.com/axioval/engine/issues/377)). A curved face
+  that stands upright up to rounding leaves a plan strip a few times wider
+  than the overlay's tolerance: it passes the overlay's ring tests, and the
+  union of footprints holding it failed (`SelfIntersection`), leaving the
+  space not evaluated. Such strips (under 0.1 µm across their longest edge)
+  are now left out of what a footprint surely covers and boxed into what it
+  may cover, for scopes, entrances, components, containment and the band
+  footprints of obstacles, so the verdict can only lose certainty,
+  never gain it. A curved, tessellated space over a curved slab decides a
+  circle both ways, with or without exact boundaries (the host certifies
+  the slab's height since #393).
+  The objects a free-floor finding names as "perhaps also taken by" are
+  those whose possible footprint shares more than 1 mm² with the room less
+  1 µm, so a wall flush with a bracketed scope is not named for its boxes.
+  A sliver's box that the overlay cannot take refuses only what needs the
+  outer footprint: containment tries `Inside` first.
 - **axiolid-mesh-compile 0.3.41**
   ([#469](https://github.com/axioval/engine/issues/469)). A solid less a
   revolved tool whose region the kernel's boolean left undecided, such as a

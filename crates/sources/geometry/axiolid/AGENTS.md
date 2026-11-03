@@ -422,6 +422,18 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   boxes), and so does `circulation.rs`'s `subject_footprint` for entrances
   and components (grown from inside from the kept shadows, from outside
   around the boxes).
+  A ring a few times wider than the overlay's tolerance passes its tests
+  and still fails a union (`SelfIntersection`: its corners snap onto each
+  other's), so `placement::sliver` takes every ring within
+  `SLIVER_WIDTH_METRES` across its longest edge, not only the refused
+  ones; and `placement::bracketed_rings` splits the trapezoids of an obstacle's
+  band footprint the same way (the strips a curved upright face leaves,
+  #377): its sure rings leave them out, its possible rings box them (a
+  tessellated body's core is its section inside less its shadow around).
+  The overlay refuses a thin box skew to its grid at a width that
+  depends on the skew, so `placement::sliver_box` doubles the margin from
+  `SLIVER_MARGIN_METRES` until the box is taken on its own, and refuses
+  the footprint past `KNIFE_EDGE_METRES`.
   Placement evidence cites the scope's source. Clearance tests each obstacle's solid
   against the volume's prism shrunk by `CONTACT_TOLERANCE_M`: a triangle
   meeting it (band-clipped, then plan separating axes) or the centre inside
@@ -436,7 +448,8 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   and `room − sure` from above; an object surely takes floor where its
   sure footprint shares more than `AREA_EPSILON_M2` with `scope`, possibly
   where its possible one shares more than `POSSIBLE_FLOOR_M2` (1 mm²) with
-  `room`. Never compare the sure footprint with `room` or the possible one
+  `room` eroded by `KNIFE_EDGE_METRES` (so a wall flush with a scope,
+  bracketed around its slivers, takes none). Never compare the sure footprint with `room` or the possible one
   with `scope`. `tests/free_floor.rs` pins a furnished room, a
   tessellated column and tessellated wedges with a corner an ulp off its
   chord, which overlay 0.3.16 refused as `ZeroArea` (#415,

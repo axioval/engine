@@ -18796,6 +18796,25 @@ fn room_over_a_curved_slab(side: f64, more: &str) -> String {
     ))
 }
 
+/// Space #19 on the floor at z = 3.7: [`curved_slab`]'s outline scaled
+/// by `scale` about the origin (an arc through (5, 0) scaled likewise),
+/// 2.5 m high, as instances `#10` to `#19`. Its arc is tessellated.
+fn curved_space(scale: f64) -> String {
+    let [a, b, c] = [4.0 * scale, 5.0 * scale, 0.0];
+    format!(
+        "#10=IFCCARTESIANPOINTLIST2D(((-{a:?},-{a:?}),({a:?},-{a:?}),({b:?},{c:?}),({a:?},{a:?}),(-{a:?},{a:?})),$);\n\
+         #11=IFCINDEXEDPOLYCURVE(#10,(IFCLINEINDEX((1,2)),IFCARCINDEX((2,3,4)),IFCLINEINDEX((4,5,1))),.F.);\n\
+         #12=IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,#11);\n\
+         #13=IFCCARTESIANPOINT((0.,0.,3.7));\n\
+         #14=IFCAXIS2PLACEMENT3D(#13,$,$);\n\
+         #15=IFCLOCALPLACEMENT($,#14);\n\
+         #16=IFCEXTRUDEDAREASOLID(#12,#2,#4,2.5);\n\
+         #17=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#16));\n\
+         #18=IFCPRODUCTDEFINITIONSHAPE($,$,(#17));\n\
+         #19=IFCSPACE('0000000000000000000019',$,$,$,$,#15,#18,$,.ELEMENT.,$,$);\n"
+    )
+}
+
 /// A free-floor circle of 1.5 m over a 2 m band in `model`'s space, with
 /// `args` for `check`.
 fn turning_circle(case: &Case, model: &str, args: &[&str]) -> (Output, Value) {
@@ -18847,6 +18866,44 @@ fn with_geometry_a_curved_slab_and_a_column_ending_at_the_floor_leave_it_free() 
             unmeasured_reasons(&result).is_empty(),
             "{:?}",
             unmeasured_reasons(&result)
+        );
+    }
+}
+
+/// #377: a curved space, itself tessellated and over the curved slab
+/// that is an obstacle under it, decides with or without exact
+/// boundaries: the slab's certified top keeps the floor where it is.
+#[test]
+fn with_geometry_a_curved_space_over_a_curved_slab_decides_the_circle() {
+    let case = Case::new("geometry-free-floor-curved-space");
+    for args in [&[][..], &["--no-exact-boundaries"][..]] {
+        let model = model_with(&format!("{}{}", curved_space(1.0), curved_slab()));
+        let (output, result) = turning_circle(&case, &model, args);
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "{args:?} {} {result:#}",
+            stderr(&output)
+        );
+        assert_eq!(finding_messages(&result), [], "{args:?} {result:#}");
+        assert!(
+            not_evaluated_messages(&result).is_empty(),
+            "{args:?} {result:#}"
+        );
+        let model = model_with(&format!("{}{}", curved_space(0.15), curved_slab()));
+        let (output, result) = turning_circle(&case, &model, args);
+        assert_eq!(
+            output.status.code(),
+            Some(3),
+            "{args:?} {} {result:#}",
+            stderr(&output)
+        );
+        assert!(
+            result["report"]["findings"][0]["message"]
+                .as_str()
+                .unwrap()
+                .starts_with("NO_FREE_FLOOR_SPACE_FOR_CIRCLE"),
+            "{args:?} {result:#}"
         );
     }
 }

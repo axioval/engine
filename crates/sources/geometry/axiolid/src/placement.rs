@@ -93,18 +93,22 @@ fn unavailable(context: &str, error: impl std::fmt::Debug) -> FreeSpaceError {
 
 /// How far a shadow the overlay refuses is grown before it joins an outer
 /// footprint: far above its linear tolerance and the rounding of the box's
-/// corners, far below [`KNIFE_EDGE_METRES`].
-const SLIVER_MARGIN_METRES: f64 = 1.0e-8;
+/// corners, far below [`KNIFE_EDGE_METRES`]; [`sliver_box`] doubles it where
+/// the overlay does not take the box.
+const SLIVER_MARGIN_METRES: f64 = 5.0e-8;
 
 /// The plan footprint of a triangle set, bracketed around the shadows the
 /// overlay refuses (#377): `(inner, outer)`, `inner` inside the union of
-/// every projected triangle and `outer` around it.
+/// every projected triangle and `outer` around it, an error where a sliver
+/// has no box ([`sliver_box`]): the inner footprint stands without it.
 ///
 /// A face standing upright up to rounding (a wall whose top corners lie
 /// some ulps off its bottom ones in plan) projects to a sliver whose short
 /// side is within the overlay's linear tolerance. The overlay refuses such
 /// a ring (`RepeatedVertex`), and its corners are not one point, so no
-/// exact cleaning removes it. `inner` leaves those slivers out, which only
+/// exact cleaning removes it; one a few times wider passes that test but
+/// snaps onto its neighbours' corners, and the union fails
+/// (`SelfIntersection`, [`sliver`]). `inner` leaves those slivers out, which only
 /// shrinks it; `outer` takes each as a box around it, the sliver's longest
 /// edge for one side and grown by [`SLIVER_MARGIN_METRES`] all round, which
 /// only grows it. Without such shadows both are the one union of every
@@ -112,25 +116,92 @@ const SLIVER_MARGIN_METRES: f64 = 1.0e-8;
 pub(crate) fn bracketed_footprint(
     triangles: &[Triangle],
     tolerance: Tolerance,
-) -> Result<(Region, Region), FreeSpaceError> {
-    let (kept, slivers): (Vec<Ring>, Vec<Ring>) = projected_polygons(triangles)
+) -> Result<(Region, Result<Region, FreeSpaceError>), FreeSpaceError> {
+    let (slivers, kept): (Vec<Ring>, Vec<Ring>) = projected_polygons(triangles)
         .into_iter()
         .map(|polygon| polygon.outer)
-        .partition(|ring| !refused_ring(ring, tolerance));
+        .partition(|ring| sliver(ring, tolerance));
     let inner = union(&kept, tolerance)?;
     if slivers.is_empty() {
-        return Ok((inner.clone(), inner));
+        return Ok((inner.clone(), Ok(inner)));
     }
-    let mut grown = kept;
-    grown.extend(slivers.iter().map(sliver_box));
-    Ok((inner, union(&grown, tolerance)?))
+    // A sliver with no box refuses only what needs the outer footprint.
+    let outer = slivers
+        .iter()
+        .map(|sliver| sliver_box(sliver, tolerance))
+        .collect::<Result<Vec<_>, _>>()
+        .and_then(|boxes| {
+            let mut grown = kept;
+            grown.extend(boxes);
+            union(&grown, tolerance)
+        });
+    Ok((inner, outer))
+}
+
+/// How wide a plan ring may be, across its longest edge, to count as a
+/// sliver: the width of the overlay's snapping noise, which merges corners
+/// a few of its linear tolerance apart ([`SLIVER_MARGIN_METRES`] grows a
+/// box over it, far below [`KNIFE_EDGE_METRES`]).
+const SLIVER_WIDTH_METRES: f64 = 1.0e-7;
+
+/// Whether the overlay cannot be trusted with a plan ring on its own: it
+/// refuses it ([`refused_ring`]), or its corners lie within
+/// [`SLIVER_WIDTH_METRES`] of its longest edge's line, where the overlay's
+/// snapping can fold them onto each other.
+pub(crate) fn sliver(ring: &Ring, tolerance: Tolerance) -> bool {
+    refused_ring(ring, tolerance) || {
+        let points = &ring.points;
+        let longest = (0..points.len())
+            .max_by(|&a, &b| {
+                let length = |i: usize| (points[(i + 1) % points.len()] - points[i]).length();
+                length(a).total_cmp(&length(b))
+            })
+            .unwrap_or(0);
+        let origin = points[longest];
+        let edge = points[(longest + 1) % points.len()] - origin;
+        let length = edge.length();
+        length > 0.0 && {
+            let across = (edge / length).perp();
+            let (low, high) = points.iter().fold((0.0_f64, 0.0_f64), |(low, high), p| {
+                let t = (*p - origin).dot(across);
+                (low.min(t), high.max(t))
+            });
+            high - low <= SLIVER_WIDTH_METRES
+        }
+    }
+}
+
+/// Rings split around the slivers among them (#377): `(inner, outer)`,
+/// `inner` the rings less the slivers, so inside what they cover, and
+/// `outer` those rings with a box ([`sliver_box`]) for each sliver, so
+/// around it. The union of each is the footprint it bounds; a ring that is
+/// no sliver is in both.
+///
+/// # Errors
+///
+/// When a sliver has no box ([`sliver_box`]).
+pub(crate) fn bracketed_rings(
+    rings: Vec<Ring>,
+    tolerance: Tolerance,
+) -> Result<(Vec<Ring>, Vec<Ring>), FreeSpaceError> {
+    let mut outer = Vec::with_capacity(rings.len());
+    let mut inner = Vec::with_capacity(rings.len());
+    for ring in rings {
+        if sliver(&ring, tolerance) {
+            outer.push(sliver_box(&ring, tolerance)?);
+        } else {
+            outer.push(ring.clone());
+            inner.push(ring);
+        }
+    }
+    Ok((inner, outer))
 }
 
 /// A counter-clockwise rectangle holding a projected triangle: along its
 /// longest edge, grown by [`SLIVER_MARGIN_METRES`] (or by the rounding of
 /// its coordinates where that is larger) on every side, so the rounding of
 /// its corners cannot leave a point of the triangle outside.
-pub(crate) fn sliver_box(ring: &Ring) -> Ring {
+fn box_over(ring: &Ring, margin: f64) -> Ring {
     let points = &ring.points;
     let longest = (0..points.len())
         .max_by(|&a, &b| {
@@ -152,7 +223,7 @@ pub(crate) fn sliver_box(ring: &Ring) -> Ring {
         .iter()
         .flat_map(|point| [point.x.abs(), point.y.abs()])
         .fold(0.0, f64::max);
-    let margin = SLIVER_MARGIN_METRES.max(64.0 * f64::EPSILON * magnitude);
+    let margin = margin.max(64.0 * f64::EPSILON * magnitude);
     let (mut s, mut t) = (
         (f64::INFINITY, f64::NEG_INFINITY),
         (f64::INFINITY, f64::NEG_INFINITY),
@@ -173,6 +244,30 @@ pub(crate) fn sliver_box(ring: &Ring) -> Ring {
             corner(s.0, t.1),
         ],
     }
+}
+
+/// The box over a sliver (`box_over`) the overlay takes on its own: it
+/// refuses a thin box whose edges are skew to its grid, at a width that
+/// depends on the skew, so the margin doubles from
+/// [`SLIVER_MARGIN_METRES`] until it does, as far as [`KNIFE_EDGE_METRES`].
+///
+/// # Errors
+///
+/// When no box within that is taken: the sliver is then not bracketed.
+pub(crate) fn sliver_box(ring: &Ring, tolerance: Tolerance) -> Result<Ring, FreeSpaceError> {
+    let mut margin = SLIVER_MARGIN_METRES;
+    while margin < KNIFE_EDGE_METRES {
+        let boxed = box_over(ring, margin);
+        if union(std::slice::from_ref(&boxed), tolerance).is_ok() {
+            return Ok(boxed);
+        }
+        margin *= 2.0;
+    }
+    Err(FreeSpaceError::Unavailable(
+        "a plan sliver of the footprint is within the overlay's snapping and no box over it is \
+         accepted"
+            .to_owned(),
+    ))
 }
 
 /// The union of counter-clockwise rings, as a validated region.
@@ -2386,6 +2481,98 @@ pub(crate) fn inscribed_disc(region: &Region, precision: f64) -> Option<Inscribe
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// #377: the overlay refuses a thin box whose edges are skew to its grid
+    /// at a width that depends on the skew, so the box over a sliver widens
+    /// until it is taken, and every box holds the sliver it is over.
+    #[test]
+    fn a_box_over_a_tilted_sliver_is_one_the_overlay_takes() {
+        let tolerance = crate::plan_area::tolerance().unwrap();
+        let mut widened = false;
+        for tilt in [0.0_f64, 1.0e-4, 1.0e-3, 0.04, 0.3, 1.2] {
+            for origin in [(1.165, 3.88), (-27.0, 6.1), (240.0, -180.0)] {
+                let (along, across) = (
+                    Point2::new(tilt.cos(), tilt.sin()),
+                    Point2::new(-tilt.sin(), tilt.cos()),
+                );
+                let start = Point2::new(origin.0, origin.1);
+                let sliver = Ring {
+                    points: vec![
+                        start,
+                        start + along * 2.7e-3,
+                        start + along * 2.7e-3 + across * 3.0e-10,
+                    ],
+                };
+                let boxed = sliver_box(&sliver, tolerance).unwrap();
+                widened |= union(&[box_over(&sliver, SLIVER_MARGIN_METRES)], tolerance).is_err();
+                assert!(
+                    union(std::slice::from_ref(&boxed), tolerance).is_ok(),
+                    "{tilt} {origin:?}"
+                );
+                // Each corner of the sliver lies within the box.
+                for corner in &sliver.points {
+                    for k in 0..4 {
+                        let (from, to) = (boxed.points[k], boxed.points[(k + 1) % 4]);
+                        assert!(
+                            (to - from).perp_dot(*corner - from) >= 0.0,
+                            "{tilt} {origin:?}"
+                        );
+                    }
+                }
+            }
+        }
+        assert!(widened, "no box needed widening");
+    }
+
+    /// A parallelogram `width` wide and 7.8 mm long some metres from the
+    /// origin, as the plan of a curved face upright up to rounding.
+    fn strip(width: f64) -> Ring {
+        Ring {
+            points: vec![
+                Point2::new(6.0, 6.0),
+                Point2::new(6.0078, 6.0008),
+                Point2::new(6.0078 + width, 6.0008),
+                Point2::new(6.0 + width, 6.0),
+            ],
+        }
+    }
+
+    /// #377: a strip a few nanometres wide passes the overlay's own tests
+    /// of a ring, and still fails its union (`SelfIntersection`), alone or
+    /// beside a room. It is left out of what is surely covered and
+    /// boxed into what may be, where the union holds.
+    #[test]
+    fn a_strip_within_the_overlays_snapping_is_bracketed_not_united() {
+        let tolerance = crate::plan_area::tolerance().unwrap();
+        let room = square(0.0, 0.0, 20.0).outer;
+        for width in [3.0e-9, 8.0e-9, 5.0e-8] {
+            let strip = strip(width);
+            assert!(!refused_ring(&strip, tolerance), "{width}");
+            assert!(sliver(&strip, tolerance), "{width}");
+            if width < 1.0e-8 {
+                assert!(
+                    union(std::slice::from_ref(&strip), tolerance).is_err(),
+                    "{width}"
+                );
+            }
+            let (inner, outer) =
+                bracketed_rings(vec![room.clone(), strip.clone()], tolerance).unwrap();
+            assert_eq!(inner, std::slice::from_ref(&room), "{width}");
+            let around = union(&outer, tolerance).unwrap();
+            let inside = union(&inner, tolerance).unwrap();
+            assert!(around.area() >= inside.area(), "{width}");
+            let (inner, outer) = bracketed_rings(vec![strip], tolerance).unwrap();
+            assert!(inner.is_empty(), "{width}");
+            let boxed = union(&outer, tolerance).unwrap();
+            // The box holds the strip, whose area is its width times 0.8 mm.
+            assert!(boxed.area() >= 8.0e-4 * width, "{width}");
+        }
+        // A ring wider than the snapping is kept as it is.
+        let wide = strip(2.0e-6);
+        assert!(!sliver(&wide, tolerance));
+        let (inner, outer) = bracketed_rings(vec![wide.clone()], tolerance).unwrap();
+        assert_eq!((inner, outer), (vec![wide.clone()], vec![wide]));
+    }
 
     fn square(x: f64, y: f64, side: f64) -> Polygon {
         Polygon {

@@ -164,6 +164,32 @@ fn a_room_whose_walls_project_to_slivers_decides_containment() {
     ));
 }
 
+/// As above with walls 5 nm off upright (#377): their slivers pass the
+/// overlay's ring tests and its union still refuses them, so they are left
+/// out of what the room surely covers and boxed into what it may.
+#[test]
+fn a_room_whose_walls_lean_by_nanometres_decides_containment() {
+    let mut room = cuboid([0.0, 0.0, 0.0], [2.0, 2.0, 2.5]);
+    for point in &mut room.positions {
+        if point.z > 0.0 {
+            point.x += 5.0e-9;
+            point.y -= 3.0e-9;
+        }
+    }
+    let service =
+        AxiolidFreeSpaceService::new(AxiolidGeometry::new().with_mesh(id("a"), room), source());
+    let inside = ContainmentRequest::new(frame_at(1.0, 1.0), square(1.9), vec![id("a")]);
+    assert!(matches!(
+        service.assess_containment(&inside),
+        Ok(ContainmentOutcome::Inside(_))
+    ));
+    let outside = ContainmentRequest::new(frame_at(1.5, 1.0), square(1.2), vec![id("a")]);
+    assert!(matches!(
+        service.assess_containment(&outside),
+        Ok(ContainmentOutcome::Outside(_))
+    ));
+}
+
 /// A scope whose 4,000 long, thin shadows lie over one another meets in
 /// more pairs of edges than one overlay is handed: it is refused by name
 /// before the overlay is built, never measured until memory runs out

@@ -383,6 +383,43 @@ fn a_fit_within_the_deviation_is_refused_not_decided() {
     nowhere(place(exact(0.995), "room", shape(), &["body"]));
 }
 
+/// A tessellated plate 1 nm thick, leaning by 5 nm (#377), whose height is
+/// certified: its plan is a sliver the overlay's union refuses. Its band
+/// footprint is boxed before it is grown by the deviation, so a rectangle
+/// is found beside it clear of the plate grown by that, never through it.
+#[test]
+fn a_tessellated_plate_of_nanometres_is_boxed_before_it_is_grown() {
+    let deviation = 0.01;
+    let mut plate = prisms(&[rect(2.5, 2.5 + 1.0e-9, 0.0, 2.0)], 0.0, 3.0);
+    for point in &mut plate.positions {
+        if point.z > 0.0 {
+            point.x += 5.0e-9;
+            point.y -= 3.0e-9;
+        }
+    }
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("room"), prisms(&[rect(0.0, 4.0, 0.0, 2.0)], 0.0, 3.0))
+        .with_tessellated_mesh(id("plate"), plate, deviation)
+        .with_vertical_extent_bounds(
+            id("plate"),
+            VerticalExtentBounds {
+                outer: (0.0, 3.0),
+                inner: Some((0.0, 3.0)),
+            },
+        );
+    let outcome = place(
+        geometry,
+        "room",
+        rectangle(1.5, 1.0, Some((1.0, 0.0))),
+        &["plate"],
+    );
+    let Ok(PlacementOutcome::Found(witness)) = outcome else {
+        panic!("expected a placement beside the plate, got {outcome:?}");
+    };
+    let [x, _, _] = witness.frame().origin().coordinates_metres();
+    assert!(x + 0.75 <= 2.5 - deviation && x >= 0.75, "centre x {x}");
+}
+
 /// A tessellated scope is searched eroded by its deviation for a witness
 /// and grown by it for a proof of absence.
 #[test]

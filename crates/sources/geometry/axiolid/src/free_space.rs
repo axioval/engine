@@ -723,14 +723,15 @@ impl Measuring {
         // around for absence.
         let footprint_of = |part: &[Triangle]| -> Result<(Region, Region), FreeSpaceError> {
             if !far {
-                return placement::bracketed_footprint(part, tolerance);
+                let (inner, outer) = placement::bracketed_footprint(part, tolerance)?;
+                return Ok((inner, outer?));
             }
             let moved: Vec<Triangle> = part
                 .iter()
                 .map(|face| face.map(|p| Point3::new(p.x - origin.x, p.y - origin.y, p.z)))
                 .collect();
             let (inner, outer) = placement::bracketed_footprint(&moved, tolerance)?;
-            Ok((world(inner)?, world(outer)?))
+            Ok((world(inner)?, world(outer?)?))
         };
 
         // The scope: one footprint when exact, else each part eroded
@@ -771,8 +772,10 @@ impl Measuring {
         let mut sure_rings = Vec::new();
         let mut possible = Region::empty();
         let mut certain = Region::empty();
-        // A band footprint as a region in the local frame.
-        let to_local = |plan: &Plan| {
+        // A band footprint as a region in the local frame, around the
+        // strips the overlay cannot hold (`around`) or inside them
+        // (`placement::bracketed_rings`).
+        let to_local = |plan: &Plan, around: bool| {
             let rings: Vec<Ring> = trapezoids(plan)
                 .into_iter()
                 .map(|piece| Ring {
@@ -784,7 +787,8 @@ impl Measuring {
                         .collect(),
                 })
                 .collect();
-            placement::union(&rings, tolerance)
+            let (inner, outer) = placement::bracketed_rings(rings, tolerance)?;
+            placement::union(if around { &outer } else { &inner }, tolerance)
         };
         // A body the host declared unmeasured, with no bound to place it
         // apart and no enclosure to take its place, could stand anywhere: the
@@ -870,7 +874,7 @@ impl Measuring {
                 let widened = self
                     .band_footprint(obstacle, Body::Enclosure, low - u - d, high + u + d)
                     .map_err(FreeSpaceError::Unavailable)?;
-                let mut may = to_local(&widened)?;
+                let mut may = to_local(&widened, true)?;
                 if d > 0.0 && !may.is_empty() {
                     may = may
                         .dilate_outer_with(d, tolerance, mode)
@@ -922,16 +926,16 @@ impl Measuring {
                         (top > bottom)
                             .then(|| band_footprint(obstacle, &closed, bottom, top).ok())
                             .flatten()
-                            .and_then(|plan| to_local(&plan).ok())
+                            .and_then(|plan| to_local(&plan, false).ok())
                     } else {
                         let level = low + u + 2.0 * d;
                         (level < high - u)
                             .then(|| solid_column(obstacle, &closed, level, d).ok())
                             .flatten()
                             .and_then(|(section, shadow)| {
-                                to_local(&section)
+                                to_local(&section, false)
                                     .ok()?
-                                    .difference(&to_local(&shadow).ok()?, tolerance)
+                                    .difference(&to_local(&shadow, true).ok()?, tolerance)
                                     .ok()?
                                     .erode_inner_with(d, tolerance, mode)
                                     .ok()
@@ -960,20 +964,25 @@ impl Measuring {
                 let witness = self
                     .band_footprint(obstacle, Body::Mesh, low - u, high + u)
                     .map_err(FreeSpaceError::Unavailable)?;
-                let may: Vec<Ring> = trapezoids(&witness)
-                    .into_iter()
-                    .map(|piece| piece.outer)
-                    .collect();
+                // The overlay cannot hold a band footprint's slivers (a
+                // curved face upright up to rounding leaves strips of its
+                // snapping noise, #377): the obstacle is taken around them
+                // and its sure part without them.
+                let pieces = |plan: &Plan| -> Vec<Ring> {
+                    trapezoids(plan)
+                        .into_iter()
+                        .map(|piece| piece.outer)
+                        .collect()
+                };
+                let (inner_of_witness, may) =
+                    placement::bracketed_rings(pieces(&witness), tolerance)?;
                 let surely: Vec<Ring> = if u == 0.0 {
-                    may.clone()
+                    inner_of_witness
                 } else if high - u > low + u {
                     let sure = self
                         .band_footprint(obstacle, Body::Mesh, low + u, high - u)
                         .map_err(FreeSpaceError::Unavailable)?;
-                    trapezoids(&sure)
-                        .into_iter()
-                        .map(|piece| piece.outer)
-                        .collect()
+                    placement::bracketed_rings(pieces(&sure), tolerance)?.0
                 } else {
                     Vec::new()
                 };
@@ -1002,7 +1011,7 @@ impl Measuring {
             let widened = self
                 .band_footprint(obstacle, Body::Mesh, low - u - d, high + u + d)
                 .map_err(FreeSpaceError::Unavailable)?;
-            let grown = to_local(&widened)?
+            let grown = to_local(&widened, true)?
                 .dilate_outer_with(d, tolerance, mode)
                 .map(noted)
                 .map_err(region_error)?;
@@ -1016,8 +1025,8 @@ impl Measuring {
                 let (section, shadow) = self
                     .solid_column(obstacle, Body::Mesh, level, d)
                     .map_err(FreeSpaceError::Unavailable)?;
-                let core = to_local(&section)?
-                    .difference(&to_local(&shadow)?, tolerance)
+                let core = to_local(&section, false)?
+                    .difference(&to_local(&shadow, true)?, tolerance)
                     .map_err(region_error)?;
                 if !core.is_empty() {
                     surely = core
@@ -1183,10 +1192,11 @@ fn hull_region(
 const HULL_GROWTH_METRES: f64 = 1.0e-6;
 
 /// The least floor an obstacle must possibly take to be named as possibly
-/// taking it: a wall flush with a scope bracketed around its slivers
-/// (`SLIVER_MARGIN_METRES`) shares some 1e-8 m² with the room, which is
-/// no floor anyone could stand on. A body bracketed by a chord deviation
-/// shares far more and stays possible.
+/// taking it, measured inside the room less [`placement::KNIFE_EDGE_METRES`]:
+/// a wall flush with a scope bracketed around its slivers (a box of at most
+/// that margin and sliver width, #377) lies within that edge of the room's
+/// boundary, so takes none of it, however long; a body bracketed by a chord
+/// deviation shares far more and stays possible.
 const POSSIBLE_FLOOR_M2: f64 = 1.0e-6;
 
 /// What one obstacle or swept door may and surely occupies in a scene's
@@ -1605,7 +1615,8 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
     /// or swept door surely takes floor where what it surely occupies
     /// shares area with the witnesses' scope (inside the true floor), and
     /// possibly where what it may occupy shares more than
-    /// `POSSIBLE_FLOOR_M2` (1 mm²) with the room.
+    /// `POSSIBLE_FLOOR_M2` (1 mm²) with the room less
+    /// `KNIFE_EDGE_METRES`.
     fn measure_free_floor(
         &self,
         request: &PlacementRequest,
@@ -1641,6 +1652,16 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
             }
             Ok(region.intersection(with, tolerance).map_err(fail)?.area() > least)
         };
+        // Inside the room by more than a sliver's box reaches (else the room
+        // itself, which names more objects possible, never fewer).
+        let inside = scene
+            .room
+            .erode_inner_with(
+                placement::KNIFE_EDGE_METRES,
+                tolerance,
+                MorphologyMode::Exact,
+            )
+            .unwrap_or_else(|_| scene.room.clone());
         let mut sure = Vec::new();
         let mut possible = Vec::new();
         for Taken {
@@ -1651,7 +1672,7 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
         {
             if shares(surely, &scene.scope, AREA_EPSILON_M2)? {
                 sure.push(object.clone());
-            } else if shares(may, &scene.room, POSSIBLE_FLOOR_M2)? {
+            } else if shares(may, &inside, POSSIBLE_FLOOR_M2)? {
                 possible.push(object.clone());
             }
         }

@@ -384,6 +384,7 @@ impl AxiolidFreeSpaceService {
         for subject in request.subjects() {
             let (footprint, around) = self.subject_footprint(&subject, t)?;
             let near = grown(&footprint, reach, true, t)?;
+            let around = around?;
             let far = grown(&around, reach, false, t)?;
             let mut reached = Vec::new();
             for (index, region) in pieces.iter().enumerate() {
@@ -451,7 +452,7 @@ impl AxiolidFreeSpaceService {
         for entrance in reach.entrances() {
             let (footprint, around) = self.subject_footprint(entrance, t)?;
             let grown_in = grown(&footprint, near, true, t)?;
-            let grown_out = grown(&around, near, false, t)?;
+            let grown_out = grown(&around?, near, false, t)?;
             for polygon in inner.polygons() {
                 if !sure.contains(polygon) && meets(&piece(polygon, t)?, &grown_in, t)? {
                     sure.push(polygon.clone());
@@ -479,12 +480,13 @@ impl AxiolidFreeSpaceService {
     /// The plan footprint of an entrance or component, bracketed around the
     /// shadows the overlay refuses (`placement::bracketed_footprint`,
     /// #377): `(inside, around)`, the first grown from inside for what it
-    /// surely meets, the second from outside for what it may.
+    /// surely meets, the second from outside for what it may (an error where a
+    /// sliver has no box: only what needs the outer footprint is refused).
     fn subject_footprint(
         &self,
         subject: &ObjectId,
         tolerance: Tolerance,
-    ) -> Result<(Region, Region), FreeSpaceError> {
+    ) -> Result<(Region, Result<Region, FreeSpaceError>), FreeSpaceError> {
         if self.geometry().has_no_body(subject) {
             return Err(FreeSpaceError::Unavailable(format!(
                 "{subject} has no body, so where a path meets it is unknown"
@@ -498,7 +500,7 @@ impl AxiolidFreeSpaceService {
             return Err(FreeSpaceError::InexactPlacementEvidence);
         }
         let (inside, around) = placement::bracketed_footprint(&triangles(mesh), tolerance)?;
-        if around.is_empty() {
+        if around.as_ref().is_ok_and(Region::is_empty) {
             return Err(FreeSpaceError::MissingGeometry(Box::new(subject.clone())));
         }
         Ok((inside, around))

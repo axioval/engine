@@ -468,7 +468,7 @@ fn what_has_no_exact_construction_is_refused_with_the_reason() {
     let flat = refusal(extrusion(circle(0.2), Vec3::X, 1.0, Transform3::IDENTITY));
     assert!(flat.contains("profile plane"), "{flat}");
 
-    let (union, revolved_tool, several) = {
+    let (union, several, graph, revolved_tool) = {
         let mut builder = GeometryGraphBuilder::new();
         let profile = push(&mut builder, GeometryNode::Profile(rectangle(1.0, 1.0)));
         let solid = |builder: &mut GeometryGraphBuilder| {
@@ -518,19 +518,16 @@ fn what_has_no_exact_construction_is_refused_with_the_reason() {
         let graph = builder.finish(vec![union, revolved_tool, several]).unwrap();
         (
             exact_boundary(&graph, union).unwrap_err(),
-            exact_boundary(&graph, revolved_tool).unwrap_err(),
             exact_boundary(&graph, several).unwrap_err(),
+            graph,
+            revolved_tool,
         )
     };
     assert!(union.contains("boolean union"), "{union}");
-    // The kernel's boolean leaves one region of a box less a torus
-    // undecided (axiolid/kernel#381); #469 expects the exact boundary once
-    // it builds.
-    assert!(
-        revolved_tool.contains("too close to a face boundary"),
-        "{revolved_tool}"
-    );
     assert!(several.contains("boolean union"), "{several}");
+    // A box less a torus is built exactly since mesh-compile 0.3.41
+    // (axiolid/kernel#381, #469), and agrees with its mesh.
+    agreeing(&graph, revolved_tool);
 }
 
 /// A disk a metre off the revolution axis, so its turn is a torus.

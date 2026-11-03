@@ -45,6 +45,11 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **axiolid-mesh-compile 0.3.41**
+  ([#469](https://github.com/axioval/engine/issues/469)). A solid less a
+  revolved tool whose region the kernel's boolean left undecided, such as a
+  box less a torus, is now built exactly.
+
 - **Placement rounding is bounded from the placement chain**
   ([#369](https://github.com/axioval/engine/issues/369)). A chain that
   cancels large translations (a site at +5.6e6 m, a building at -5.6e6 m

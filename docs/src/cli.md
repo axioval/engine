@@ -1533,19 +1533,29 @@ bodiless openings, is its `Reference` solid.
 lies within its chord deviation of the true surface, so read alone its flat
 top may lie that deviation higher: a curved building's slab whose top is a
 room's floor would reach into the room. Where the body's construction
-states its height exactly, the bridge certifies it from the graph the mesh
-is compiled from (`axioval_axiolid::certified_vertical_extent`, #393),
+states its height, the bridge certifies it from the graph the mesh
+is compiled from (`axioval_axiolid::certified_vertical_extent`, #393, #475),
 whatever the plan outline: an extrusion whose profile plane lies
 horizontal after its placements spans its two caps' elevations exactly,
-reached, for any direction with a vertical component; a difference or
+reached, for any direction with a vertical component; one whose profile
+plane is tilted (a pipe lying down, a profile stood upright) lies in the
+elevations of its profile's box swept along its direction, not reached,
+where the box is stated (a rectangle or ellipse about its origin, a
+circle, a contour of straight segments, and their placements and
+collections); a mesh authored as a triangulated or polygonal face set, or a
+faceted B-rep, spans its placed vertices, reached; a difference or
 clip lies within its subject's (an intersection within either operand's)
-without a claim to reach them; a union or several items span the hull of
+without a claim to reach them, so a face set less a round opening is
+bounded by its vertices; a union or several items span the hull of
 theirs; a whole measured through its parts spans its parts' vertical
 bounds. The elevations are widened by 64 units in the last place of their
 magnitude for rounding and registered only where they agree with the mesh
-within its deviation (`with_vertical_extent_bounds`); every other body (a
-tilted profile plane, a revolution, a swept disk, an authored mesh or
-B-rep) keeps the deviation-widened extent. The exact boundary's extent
+within its deviation (`with_vertical_extent_bounds`). Every other body
+keeps the deviation-widened extent and, touching a band, leaves the free
+floor beside it undecided: a revolution, a swept disk or profile, a
+tapered extrusion, a primitive, a B-rep with a curved edge or face, a
+tilted extrusion of a section family, a centre line or a contour with an
+arc or spline. The exact boundary's extent
 bounds (`with_extent_bounds`), where there is one, are combined with them:
 the tightest of each reading holds. Exact bodies need none.
 

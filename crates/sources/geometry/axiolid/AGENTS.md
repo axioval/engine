@@ -71,9 +71,17 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   tolerance) spans its caps, reached; a difference (walked along its
   subjects, never nested) lies within its subject's and an intersection
   within its operands', neither reached; a union or collection spans its
-  members' hull. Each elevation is widened by `ROUNDING_ULPS` of its
-  magnitude. Everything else refuses with the reason, and the body keeps
-  its deviation-widened extent. Add a family only where its elevations
+  members' hull. An extrusion whose profile plane is tilted (#475) lies in
+  the box of `u * x + v * y + 0..=along` over its profile's box (a
+  rectangle or ellipse about its origin, a circle, polyline contours,
+  their placements and collections), outer only, never reached; a section
+  family, a centre line or a curved contour segment states no box. A
+  triangulated or polygonal mesh, or a B-rep with no curved edge or face,
+  spans the vertices its faces use, placed, reached. Each elevation is
+  widened by `ROUNDING_ULPS` of its magnitude. Everything else refuses
+  with the reason (a revolution, a swept disk, a tapered extrusion, a
+  primitive, a curved B-rep), and the body keeps its deviation-widened
+  extent. Add a family only where its elevations
   are stated exactly by the construction; never read them from the mesh.
   `difference_subjects` (#401) lists the subjects a difference chain lies
   within, outermost first, each with the placement above it (instances

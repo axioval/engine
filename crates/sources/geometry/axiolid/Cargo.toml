@@ -47,6 +47,7 @@ axiolid-mesh-boolean-boolmesh.workspace = true
 axiolid-mesh-compile-contract.workspace = true
 # Roof planes clipping a wall (`HalfSpace`).
 axiolid-primitive.workspace = true
+axiolid-topology.workspace = true
 
 [lints]
 workspace = true

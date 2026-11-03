@@ -67,6 +67,22 @@ Breaking: the BCF crates move to openbim-bcf 0.7.2.
 
 ### Changed
 
+- **More tessellated bodies state their height**
+  ([#475](https://github.com/axioval/engine/issues/475)).
+  `certified_vertical_extent` now reads, beside #393's extrusions with
+  horizontal caps: an extrusion whose profile plane is tilted (a pipe lying
+  down, a profile stood upright) within the elevations of its profile's box
+  (a rectangle or ellipse about its origin, a circle, a contour of
+  polylines and arcs, their placements and collections); a triangulated or
+  polygonal mesh, or a B-rep with no curved edge or face, by the vertices
+  its faces use. A face set or faceted B-rep less a round opening is thus
+  bounded as a difference within its subject. A body whose profile is a
+  section family, a centre line or has any other contour segment, a
+  revolution, a swept disk, a tapered extrusion, a primitive and a curved
+  B-rep keep refusing. A tessellated entrance (a revolving door, say) is
+  still refused as `InexactPlacementEvidence` by the entrance reach and the
+  circulation map; heights do not bracket its footprint, which #475 keeps
+  open.
 - **Slivers a few nanometres wide no longer refuse a footprint's union**
   ([#377](https://github.com/axioval/engine/issues/377)). A curved face
   that stands upright up to rounding leaves a plan strip a few times wider

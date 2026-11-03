@@ -205,6 +205,8 @@ axiolid-model = "0.3.14"
 axiolid-primitive = "0.3.0"
 axiolid-profile = "0.3.0"
 axiolid-surface = "0.3.0"
+# Hand-built B-reps in the height certificate's tests.
+axiolid-topology = "0.3.2"
 openbim-bcf = "0.7.2"
 # `audit-schema` is the document audit against the IFC schemas (AGPL
 # `ifc-schema`). Never `audit`: it embeds the CC BY-ND template catalog.

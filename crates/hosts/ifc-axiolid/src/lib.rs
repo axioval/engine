@@ -92,8 +92,9 @@
 //!
 //! Every tessellated body also gets the height its construction states
 //! exactly, whatever its plan outline (`axioval_axiolid::certified_vertical_extent`:
-//! an extrusion with horizontal caps spans them, a difference lies within
-//! its subject's), read from the same graph and registered where it agrees
+//! an extrusion with horizontal caps spans them, a tilted one lies in its
+//! profile's box, a faceted mesh or B-rep spans its vertices, a difference
+//! lies within its subject's), read from the same graph and registered where it agrees
 //! with the mesh, so a curved slab whose flat top is a floor stays at it
 //! instead of rising its chord deviation into the room above (#393).
 //!

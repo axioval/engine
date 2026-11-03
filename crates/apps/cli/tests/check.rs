@@ -18923,13 +18923,14 @@ fn with_geometry_a_duct_through_the_floor_blocks_only_its_footprint() {
     }
 }
 
-/// A tessellated body whose height its construction does not state stays
-/// widened by its chord deviation (#393): a horizontal pipe under the
-/// floor whose round top touches it may rise into the band, and without
-/// its exact boundary nothing narrows that, so the room stays undecided.
+/// #475: a horizontal pipe whose round top meets the floor is tilted, so
+/// its caps do not bound its height; its profile does. The pipe's circle
+/// lies in a plane turned upright, so it spans its radius either side of
+/// its axis: the top stays at the floor, and the room decides, with or
+/// without its exact boundary.
 #[test]
-fn with_geometry_an_uncertified_round_top_touching_the_floor_stays_undecided() {
-    let case = Case::new("geometry-free-floor-uncertified");
+fn with_geometry_a_pipe_lying_with_its_top_at_the_floor_leaves_it_free() {
+    let case = Case::new("geometry-free-floor-lying-pipe");
     // Pipe #69, radius 0.1 along x at z = 3.6: its axis placement turns
     // the circle's plane upright.
     let pipe = "#60=IFCCARTESIANPOINT((-2.,0.,3.6));\n\
@@ -18943,6 +18944,35 @@ fn with_geometry_an_uncertified_round_top_touching_the_floor_stays_undecided() {
                 #68=IFCPRODUCTDEFINITIONSHAPE($,$,(#67));\n\
                 #69=IFCPIPESEGMENT('0000000000000000000069',$,$,$,$,#64,#68,$,$);\n";
     let model = room_over_a_curved_slab(3.0, pipe);
+    for args in [&[][..], &["--no-exact-boundaries"][..]] {
+        let (output, result) = turning_circle(&case, &model, args);
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "{args:?} {}",
+            stderr(&output)
+        );
+        assert_eq!(finding_messages(&result), [], "{args:?} {result:#}");
+    }
+}
+
+/// A tessellated body whose height its construction does not state stays
+/// widened by its chord deviation (#393): a swept disk whose round top
+/// meets the floor may rise into the band by that deviation, and without
+/// its exact boundary nothing narrows that, so the room stays undecided.
+#[test]
+fn with_geometry_an_uncertified_round_top_touching_the_floor_stays_undecided() {
+    let case = Case::new("geometry-free-floor-uncertified");
+    // Pipe #69: a disk of radius 0.1 swept along a straight directrix at
+    // z = 3.6.
+    let bend = "#60=IFCCARTESIANPOINT((-2.,0.,3.6));\n\
+                #61=IFCCARTESIANPOINT((2.,0.,3.6));\n\
+                #62=IFCPOLYLINE((#60,#61));\n\
+                #66=IFCSWEPTDISKSOLID(#62,0.1,$,$,$);\n\
+                #67=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#66));\n\
+                #68=IFCPRODUCTDEFINITIONSHAPE($,$,(#67));\n\
+                #69=IFCPIPESEGMENT('0000000000000000000069',$,$,$,$,#3,#68,$,$);\n";
+    let model = room_over_a_curved_slab(3.0, bend);
     let (output, result) = turning_circle(&case, &model, &["--no-exact-boundaries"]);
     assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
     assert_eq!(finding_messages(&result), [], "{result:#}");
@@ -19369,6 +19399,170 @@ fn with_geometry_a_curved_wall_with_abutting_openings_is_measured() {
                 },
                 "{args:?} {centre:?}: {findings:?}"
             );
+        }
+    }
+}
+
+/// How [`faceted_wall`] authors its body.
+#[derive(Clone, Copy, Debug)]
+enum Authored {
+    /// `IfcTriangulatedFaceSet`.
+    Triangulated,
+    /// `IfcPolygonalFaceSet`.
+    Polygonal,
+    /// `IfcFacetedBrep`.
+    FacetedBrep,
+}
+
+/// A closed box wall `#{first + 9}` spanning `min..max`, authored as
+/// `authored`, as instances `first` to `first + 9` and `first + 10` to
+/// `first + 40`, with a round opening through it at (`x`, `y`) from the
+/// bottom up past the top: a faceted body less a curved cutter, which the
+/// compiler tessellates.
+fn faceted_wall(first: u32, min: [f64; 3], max: [f64; 3], authored: Authored) -> String {
+    let [points, set, shape, definition, wall] = [0, 1, 2, 3, 9].map(|offset| first + offset);
+    let corner = |i: usize| {
+        let pick = |axis: usize| {
+            if i >> axis & 1 == 0 {
+                min[axis]
+            } else {
+                max[axis]
+            }
+        };
+        format!("({:?},{:?},{:?})", pick(0), pick(1), pick(2))
+    };
+    // Outward quads by corner number (bit 0 x, bit 1 y, bit 2 z).
+    let quads = [
+        [0, 2, 3, 1],
+        [4, 5, 7, 6],
+        [0, 1, 5, 4],
+        [2, 6, 7, 3],
+        [0, 4, 6, 2],
+        [1, 3, 7, 5],
+    ];
+    let coordinates: Vec<String> = (0..8).map(corner).collect();
+    let (body, representation) = match authored {
+        Authored::Triangulated => {
+            let triangles: Vec<String> = quads
+                .iter()
+                .flat_map(|q| {
+                    [
+                        format!("({},{},{})", q[0] + 1, q[1] + 1, q[2] + 1),
+                        format!("({},{},{})", q[0] + 1, q[2] + 1, q[3] + 1),
+                    ]
+                })
+                .collect();
+            (
+                format!(
+                    "#{points}=IFCCARTESIANPOINTLIST3D(({}),$);\n\
+                     #{set}=IFCTRIANGULATEDFACESET(#{points},$,.T.,({}),$);\n",
+                    coordinates.join(","),
+                    triangles.join(","),
+                ),
+                "Tessellation",
+            )
+        }
+        Authored::Polygonal => {
+            let faces: Vec<u32> = (0..6).map(|index| first + 10 + index).collect();
+            let lines: Vec<String> = quads
+                .iter()
+                .zip(&faces)
+                .map(|(quad, face)| {
+                    let ring: Vec<String> = quad.iter().map(|i| (i + 1).to_string()).collect();
+                    format!("#{face}=IFCINDEXEDPOLYGONALFACE(({}));\n", ring.join(","))
+                })
+                .collect();
+            let references: Vec<String> = faces.iter().map(|face| format!("#{face}")).collect();
+            (
+                format!(
+                    "#{points}=IFCCARTESIANPOINTLIST3D(({}),$);\n{}\
+                     #{set}=IFCPOLYGONALFACESET(#{points},.T.,({}),$);\n",
+                    coordinates.join(","),
+                    lines.concat(),
+                    references.join(","),
+                ),
+                "Tessellation",
+            )
+        }
+        Authored::FacetedBrep => {
+            let mut text = String::new();
+            let corners = |i: usize| first + 10 + u32::try_from(i).unwrap();
+            for i in 0..8 {
+                let point = corner(i);
+                writeln!(text, "#{}=IFCCARTESIANPOINT({point});", corners(i)).unwrap();
+            }
+            let mut faces = Vec::new();
+            for (index, quad) in quads.iter().enumerate() {
+                let index = u32::try_from(index).unwrap();
+                let ring: Vec<String> = quad.iter().map(|i| format!("#{}", corners(*i))).collect();
+                let (poly, bound, face) =
+                    (first + 20 + index, first + 26 + index, first + 32 + index);
+                write!(
+                    text,
+                    "#{poly}=IFCPOLYLOOP(({}));\n#{bound}=IFCFACEOUTERBOUND(#{poly},.T.);\n\
+                     #{face}=IFCFACE((#{bound}));\n",
+                    ring.join(",")
+                )
+                .unwrap();
+                faces.push(format!("#{face}"));
+            }
+            write!(
+                text,
+                "#{points}=IFCCLOSEDSHELL(({}));\n#{set}=IFCFACETEDBREP(#{points});\n",
+                faces.join(",")
+            )
+            .unwrap();
+            (text, "Brep")
+        }
+    };
+    format!(
+        "{body}\
+         #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','{representation}',(#{set}));\n\
+         #{definition}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n\
+         #{wall}=IFCWALL('{wall:022}',$,$,$,$,#3,#{definition},$,$);\n"
+    )
+}
+
+/// #475: a faceted body (a triangulated or polygonal face set, a faceted
+/// B-rep) less a round opening is tessellated, and its height is that of
+/// its authored vertices. A wall so authored under a room, its top at the
+/// floor, is out of the room's band: the room holds the circle, whereas a
+/// body whose height nothing certifies leaves it undecided (#393).
+#[test]
+fn with_geometry_a_faceted_wall_with_a_round_hole_ending_at_the_floor_leaves_it_free() {
+    let case = Case::new("geometry-free-floor-faceted-wall");
+    for authored in [
+        Authored::Triangulated,
+        Authored::Polygonal,
+        Authored::FacetedBrep,
+    ] {
+        let model = model_with(&format!(
+            "{}{}{}#99=IFCRELVOIDSELEMENT('0000000000000000000099',$,$,$,#109,#79);\n",
+            placed_box(
+                10,
+                [0.0, 0.0, 3.7],
+                [3.0, 3.0, 2.5],
+                "IFCSPACE('GID',$,$,$,$,PL,REP,$,.ELEMENT.,$,$)"
+            ),
+            faceted_wall(100, [-1.0, -1.0, 0.0], [1.0, 1.0, 3.7], authored),
+            round_body(
+                70,
+                [0.0, 0.0, -1.0],
+                0.3,
+                6.0,
+                "IFCOPENINGELEMENT('GID',$,$,$,$,PL,REP,$,.OPENING.)",
+            ),
+        ));
+        for args in [&[][..], &["--no-exact-boundaries"][..]] {
+            let (output, result) = turning_circle(&case, &model, args);
+            assert_eq!(
+                output.status.code(),
+                Some(0),
+                "{authored:?} {args:?} {}\n{:#}",
+                stderr(&output),
+                result["report"]
+            );
+            assert_eq!(finding_messages(&result), [], "{authored:?} {args:?}");
         }
     }
 }

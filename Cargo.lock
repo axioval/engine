@@ -624,6 +624,7 @@ dependencies = [
  "axiolid-route",
  "axiolid-spatial",
  "axiolid-surface",
+ "axiolid-topology",
  "axioval-engine",
  "axioval-ir",
  "thiserror",

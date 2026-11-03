@@ -609,7 +609,8 @@ impl AxiolidGeometry {
     /// high end. [`fn@crate::certified_vertical_extent`] reads them from the
     /// graph the mesh is compiled from, where the construction states the
     /// height exactly (an extrusion of any profile whose caps are
-    /// horizontal).
+    /// horizontal, or whose profile and tilt are read; a mesh or straight
+    /// B-rep by its vertices).
     ///
     /// They narrow the body's vertical bounds as
     /// [`Self::with_extent_bounds`]' do, and every certificate given for

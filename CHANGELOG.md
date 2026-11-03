@@ -6,6 +6,16 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **`attach` accepts a federated session with byte-less sources**
+  ([#431](https://github.com/axioval/engine/issues/431)). A source with no
+  entry in `ModelBytes` (one from another adapter, say) no longer fails
+  `ifc_geometry::attach`. The sources with bytes are meshed as before and
+  the services stay bound to every snapshot; each object of the other is
+  unmeasured with "source `<document>` has no geometry input", and its
+  storeys, space boundaries, openings and glazing are refusals, as for a
+  source whose units do not resolve. The first source with bytes is the
+  reference frame. `attach` still errors when no source has bytes or bytes
+  do not parse.
 - **Kept meshes carry the product's colour**
   ([#380](https://github.com/axioval/engine/issues/380)). With
   `Options::keep_meshes`, `KeptMesh::colour` gives the product's surface

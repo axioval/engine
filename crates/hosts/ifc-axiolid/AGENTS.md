@@ -55,6 +55,14 @@ benchmark) is its first consumer.
   `local_frame::localize` skips it (the others keep their origin) and takes
   none when it is the first source. A missing plane-angle unit refuses
   only the angle-dependent readings.
+- No geometry input (#431): a source with no entry in `ModelBytes` (one
+  from another adapter) is treated as a units-failed source with the
+  reason "source `<id>` has no geometry input": it parses to an empty
+  model, every service refuses it as above, and the services stay bound
+  to all snapshots. It is not in any frame: the reference of the
+  federation (`local_frame`, `alignment`, set-level evidence) is the
+  first source with bytes, and `attach` errors only when none has bytes
+  or bytes do not parse.
 - Federation: every source is meshed into one set only where it shares the
   first source's frame (`unaligned`, through
   `axioval_rules::compare_coordinate_systems(..).shares_frame()` with the

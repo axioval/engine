@@ -1221,9 +1221,21 @@ fn parse(
     let mut parsed = BTreeMap::new();
     for snapshot in snapshots {
         let source = snapshot.source();
-        let bytes = models
-            .get(source)
-            .ok_or_else(|| format!("no model bytes for source `{source}`"))?;
+        // A source with no bytes (one from another adapter, say) has no
+        // geometry input: it parses to an empty model with unresolvable
+        // units, so every service refuses it with this reason (#431).
+        let Some(bytes) = models.get(source) else {
+            parsed.insert(
+                source.clone(),
+                Parsed {
+                    model: Model::default(),
+                    units: Err(format!("source `{source}` has no geometry input")),
+                    net: NetOptions::default(),
+                    linear: Linear::default(),
+                },
+            );
+            continue;
+        };
         // An ifcXML source is read by the adapter's reader, with its
         // refusals, into the model its STEP form parses to.
         let model = if axioval_ifc::is_ifc_xml(bytes) {
@@ -1262,11 +1274,17 @@ fn parse(
 /// surfaces are walkable or which spaces bound the envelope, are the rules'
 /// own selections, carried in each request; the bridge declares none of them.
 ///
+/// A source with no entry in `models` has no geometry input (#431): the
+/// services stay bound to it, every one of its objects is unmeasured with a
+/// reason naming it, and its storeys, space boundaries, openings and
+/// glazing are refusals, as for a source whose units do not resolve. The
+/// first source with bytes is the reference frame of the others.
+///
 /// # Errors
 ///
-/// Returns an error when a source has no bytes, the bytes do not parse (the
-/// session already parsed them, so this means they changed) or a service
-/// cannot be registered.
+/// Returns an error when no source has bytes, the bytes of one do not parse
+/// (the session already parsed them, so this means they changed) or a
+/// service cannot be registered.
 // One pass over the objects, each ending in exactly one state; splitting
 // it would scatter that invariant.
 #[allow(clippy::too_many_lines)]
@@ -1276,8 +1294,16 @@ pub fn attach(
     options: Options,
 ) -> Result<(EvidenceSession, GeometryReport), Box<dyn Error + Send + Sync>> {
     let snapshots: Vec<SourceSnapshot> = session.snapshots().cloned().collect();
-    let Some(first) = snapshots.first() else {
+    if snapshots.is_empty() {
         return Err("geometry needs a session over at least one source".into());
+    }
+    // The reference frame is the first source that has bytes: one without
+    // cannot be in any frame.
+    let Some(first) = snapshots
+        .iter()
+        .find(|snapshot| models.contains_key(snapshot.source()))
+    else {
+        return Err("geometry needs model bytes for at least one source".into());
     };
     // Consumed here; every other option is a copy.
     let derived_from = options.derived_from;
@@ -1286,6 +1312,12 @@ pub fn attach(
     // cited under one source; evidence about one object cites its own.
     let source = first.source().clone();
     let mut clock = timings::Stopwatch::new(options.timings);
+    // Sources without bytes are refused per object, not compared to a frame.
+    let with_bytes: Vec<SourceSnapshot> = snapshots
+        .iter()
+        .filter(|snapshot| models.contains_key(snapshot.source()))
+        .cloned()
+        .collect();
     // A derived source is compared object by object with its original.
     let only = options.only.filter(|_| derived_from.is_empty());
     let mut parsed = parse(&snapshots, models)?;
@@ -1334,7 +1366,7 @@ pub fn attach(
     let Alignment {
         unaligned,
         declared: mut declared_frame_sources,
-    } = alignment(&session, &snapshots, options.declared_shared_frame);
+    } = alignment(&session, &with_bytes, options.declared_shared_frame);
     // A source whose units do not resolve is measured in no frame either;
     // it is refused per object below, with that reason.
     declared_frame_sources.retain(|source| parsed.get(source).is_some_and(|p| p.units.is_ok()));
@@ -5567,6 +5599,47 @@ mod tests {
             boundaries.contains("units cannot be resolved"),
             "{boundaries}"
         );
+    }
+
+    /// A source with no bytes (#431) leaves a federated one measured: its
+    /// objects are unmeasured with a reason naming it, whichever source it
+    /// is, and the first source with bytes is the reference frame.
+    #[test]
+    fn a_source_without_bytes_is_unmeasured_and_the_others_still_measure() {
+        let bytes = rooms_and_door();
+        for bytes_less in ["a.ifc", "b.ifc"] {
+            let first = import_ifc_session("a.ifc", bytes.as_bytes()).unwrap();
+            let second = axioval_ifc::import_ifc_session("b.ifc", bytes.as_bytes()).unwrap();
+            let session = axioval_engine::EvidenceSession::federate([first, second]).unwrap();
+            let models: super::ModelBytes = session
+                .snapshots()
+                .filter(|snapshot| snapshot.source().document != bytes_less)
+                .map(|snapshot| (snapshot.source().clone(), bytes.as_bytes().to_vec()))
+                .collect();
+            let (_, report) = attach(session, &models, super::Options::default()).unwrap();
+            assert_eq!(report.exact, 3, "{bytes_less}: {report:?}");
+            assert_eq!(report.unmeasured.len(), 3, "{bytes_less}: {report:?}");
+            for (id, reason) in &report.unmeasured {
+                assert_eq!(id.source.document, bytes_less, "{id}");
+                assert!(reason.contains("has no geometry input"), "{reason}");
+                assert!(reason.contains(bytes_less), "{reason}");
+            }
+        }
+    }
+
+    /// With no bytes at all there is nothing to mesh: an error, not a report.
+    #[test]
+    fn a_session_with_no_bytes_at_all_is_an_error() {
+        let bytes = rooms_and_door();
+        let session = import_ifc_session("a.ifc", bytes.as_bytes()).unwrap();
+        let Err(error) = attach(
+            session,
+            &super::ModelBytes::new(),
+            super::Options::default(),
+        ) else {
+            panic!("attach over no bytes succeeded");
+        };
+        assert!(error.to_string().contains("at least one source"), "{error}");
     }
 
     /// A unit-less source's opening and its wall are unmeasured or bodiless,

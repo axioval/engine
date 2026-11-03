@@ -26919,8 +26919,9 @@ fn escape_routes_over_repeated_steps_keep_their_report_in_bounded_time() {
     );
     // Before #428 the repeated step took a minute in release. Each chain is
     // now asked once per relationship and object at most: seconds in a test
-    // build; the bound leaves room for a loaded machine.
-    assert!(elapsed < std::time::Duration::from_secs(30), "{elapsed:?}");
+    // build. The bound leaves room for a machine under heavy load, where
+    // this run has taken 50 s, and still catches the old minutes.
+    assert!(elapsed < std::time::Duration::from_secs(120), "{elapsed:?}");
 }
 
 /// Room #19 (x 0..3, y 0..3, 3 m high) with wardrobe #39 along its north

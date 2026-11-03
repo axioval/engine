@@ -2143,6 +2143,130 @@ fn with_geometry_a_face_set_left_open_is_model_data() {
     );
 }
 
+/// A wall `#{first + 30}` whose `Body` is an `IfcShellBasedSurfaceModel` of
+/// one `IfcOpenShell` spanning `min..max`, as instances `first..first + 31`.
+/// The faces share their corner points; `top` leaves the top face in or out
+/// and `inward` winds every face against its outward normal.
+fn open_shell_box(first: u32, min: [f64; 3], max: [f64; 3], top: bool, inward: bool) -> String {
+    let corner = |i: u32| {
+        let pick = |axis: u32| {
+            if i >> axis & 1 == 0 {
+                min[axis as usize]
+            } else {
+                max[axis as usize]
+            }
+        };
+        format!("({:?},{:?},{:?})", pick(0), pick(1), pick(2))
+    };
+    // Outward quads by corner number (bit 0 x, bit 1 y, bit 2 z): bottom,
+    // top, front, back, left, right.
+    let quads = [
+        [0, 2, 3, 1],
+        [4, 5, 7, 6],
+        [0, 1, 5, 4],
+        [2, 6, 7, 3],
+        [0, 4, 6, 2],
+        [1, 3, 7, 5],
+    ];
+    let mut lines: Vec<String> = (0..8)
+        .map(|i| format!("#{}=IFCCARTESIANPOINT({});\n", first + i, corner(i)))
+        .collect();
+    let mut faces = Vec::new();
+    for (index, quad) in quads.iter().enumerate() {
+        if index == 1 && !top {
+            continue;
+        }
+        let at = first + 8 + 3 * u32::try_from(index).unwrap();
+        let mut ring: Vec<String> = quad.iter().map(|i| format!("#{}", first + i)).collect();
+        if inward {
+            ring.reverse();
+        }
+        lines.push(format!("#{at}=IFCPOLYLOOP(({}));\n", ring.join(",")));
+        lines.push(format!("#{}=IFCFACEOUTERBOUND(#{at},.T.);\n", at + 1));
+        lines.push(format!("#{}=IFCFACE((#{}));\n", at + 2, at + 1));
+        faces.push(format!("#{}", at + 2));
+    }
+    let [shell, model, shape, definition, wall] = [26, 27, 28, 29, 30].map(|offset| first + offset);
+    format!(
+        "{}#{shell}=IFCOPENSHELL(({}));\n\
+         #{model}=IFCSHELLBASEDSURFACEMODEL((#{shell}));\n\
+         #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','SurfaceModel',(#{model}));\n\
+         #{definition}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n\
+         #{wall}=IFCWALL('00000000000000000000{wall}',$,$,$,$,#3,#{definition},$,$);\n",
+        lines.concat(),
+        faces.join(","),
+    )
+}
+
+/// Two crossing walls, each an `IfcOpenShell` box built by [`open_shell_box`]:
+/// `#70` along x, `#110` along y.
+fn crossing_open_shell_walls(top: bool, inward: bool) -> String {
+    let along_x = open_shell_box(40, [10.0, -0.1, 0.0], [14.0, 0.1, 3.0], top, inward);
+    let along_y = open_shell_box(80, [11.9, -2.0, 0.0], [12.1, 2.0, 3.0], top, inward);
+    crossing_walls_with(&format!("{along_x}{along_y}"))
+}
+
+/// An `IfcOpenShell` whose faces close up and are consistently wound is
+/// measured as the solid it is, whichever way it faces: the clash is found
+/// and nothing is reported about the shell (#421). Closure is read from the
+/// mesh, never from the entity that states the body.
+#[test]
+fn with_geometry_a_closed_open_shell_is_measured_as_a_solid() {
+    for inward in [false, true] {
+        let case = Case::new("geometry-closed-open-shell");
+        let (output, result) =
+            case.wall_clash(&crossing_open_shell_walls(true, inward), &json!({}));
+        let pair = result["report"]["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|finding| {
+                finding["object_id"]["local_id"] == "#110"
+                    && finding["related"][0]["local_id"] == "#70"
+            })
+            .unwrap_or_else(|| panic!("{}\n{result:#}", stderr(&output)));
+        assert!(
+            pair["message"]
+                .as_str()
+                .unwrap()
+                .starts_with("hard clash with ifc-step:model.ifc/#70: penetration 0.1000 m"),
+            "{pair:#}"
+        );
+        let not_evaluated = result["report"]["not_evaluated"].to_string();
+        assert!(!not_evaluated.contains("closed solid"), "{not_evaluated}");
+        assert!(
+            !result["integrity"]
+                .to_string()
+                .contains("shape.open-surface"),
+            "{:#}",
+            result["integrity"]
+        );
+    }
+}
+
+/// An `IfcOpenShell` whose top is left out is an open surface: two such
+/// walls meeting stay not evaluated, and each is reported as the integrity
+/// warning `shape.open-surface`.
+#[test]
+fn with_geometry_an_open_shell_left_open_stays_refused() {
+    let case = Case::new("geometry-open-shell-open");
+    let (output, result) = case.wall_clash(&crossing_open_shell_walls(false, false), &json!({}));
+    let refused = result["report"]["not_evaluated"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|outcome| {
+            outcome["message"]
+                .as_str()
+                .unwrap()
+                .contains("neither body is a closed solid")
+        })
+        .count();
+    assert_eq!(refused, 1, "{}\n{result:#}", stderr(&output));
+    let integrity = result["integrity"].to_string();
+    assert!(integrity.contains("shape.open-surface"), "{integrity}");
+}
+
 /// A box `lx` by `ly` centred on `(cx, cy)`, 3 m high, as instances
 /// `first..first + 5`; `product` is the product line with `REP` for its
 /// shape.

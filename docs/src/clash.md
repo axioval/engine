@@ -448,6 +448,14 @@ whose faces, as authored, leave edges bounding one face only (an
 `IfcOpenShell`, a face set left open) remain open surfaces; the CLI names
 them as model data (`shape.open-surface`, #311).
 
+**Shells stated open.** Closure is read from the mesh, never from the
+entity that states the body. An `IfcOpenShell` whose faces close up into a
+consistently wound two-manifold is measured as the solid it is, whichever
+way its faces look (the kernel takes either winding); nothing marks it. One
+that leaves edges bounding one face only stays an open surface, as an
+exporter's tube without end caps does, and its pairs stay not evaluated
+(#421): capping it would be inventing geometry.
+
 **Zero-area triangles.** A mesh may hold triangles whose corners lie on one
 line: a warped face's triangulation leaves them, and so does a T-junction
 closed with a sliver. The kernel's triangle primitives refuse such a

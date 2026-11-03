@@ -37,7 +37,7 @@
 //!   the free area less the latter. An entrance's own swing is never among
 //!   them: the request drops it.
 
-use axiolid_core::{Point2, Tolerance};
+use axiolid_core::{Point2, Point3, Tolerance, Vec2};
 use axiolid_overlay::{Polygon, Region};
 use axiolid_route::{NodeKind, Skeleton, skeleton};
 use axioval_engine::{
@@ -47,7 +47,8 @@ use axioval_engine::{
 use axioval_ir::{Evidence, ObjectId};
 
 use crate::free_space::AxiolidFreeSpaceService;
-use crate::geometry::triangles;
+use crate::free_space::plan_region;
+use crate::geometry::{mesh_extent, triangles};
 use crate::placement::{self, KNIFE_EDGE_METRES, Reached, Scene};
 use crate::planar::budget::{Cost, Work, disc_cost, overlay_cost};
 use crate::planar::{self, Morphology, PlanarRefusal};
@@ -381,9 +382,19 @@ impl AxiolidFreeSpaceService {
         }
 
         let mut contacts = Vec::new();
+        let mut bracketed = scene.bracketed.clone();
         for subject in request.subjects() {
-            let (footprint, around) = self.subject_footprint(&subject, t)?;
-            let near = grown(&footprint, reach, true, t)?;
+            let SubjectFootprint {
+                inside,
+                around,
+                deviation,
+            } = self.subject_footprint(&subject, t)?;
+            if let Some(d) = deviation
+                && !bracketed.iter().any(|(object, _)| *object == subject)
+            {
+                bracketed.push((subject.clone(), d));
+            }
+            let near = grown(&inside, reach, true, t)?;
             let around = around?;
             let far = grown(&around, reach, false, t)?;
             let mut reached = Vec::new();
@@ -416,7 +427,7 @@ impl AxiolidFreeSpaceService {
             locator.push('+');
             locator.push_str(&merged.to_string());
         }
-        locator.push_str(&crate::free_space::within_deviation(&scene.bracketed));
+        locator.push_str(&crate::free_space::within_deviation(&bracketed));
         locator.push_str(&crate::free_space::within_bounds(&scene.bounded));
         locator.push_str(&crate::free_space::without_shape(&scene.shapeless));
         let evidence = Evidence::exact(request.scope().source.clone(), locator);
@@ -449,9 +460,17 @@ impl AxiolidFreeSpaceService {
         let (inner, outer) = eroded_free(scene, radius, &scene.work)?;
         let mut sure = Vec::new();
         let mut maybe = Vec::new();
+        let mut bracketed = Vec::new();
         for entrance in reach.entrances() {
-            let (footprint, around) = self.subject_footprint(entrance, t)?;
-            let grown_in = grown(&footprint, near, true, t)?;
+            let SubjectFootprint {
+                inside,
+                around,
+                deviation,
+            } = self.subject_footprint(entrance, t)?;
+            if let Some(d) = deviation {
+                bracketed.push((entrance.clone(), d));
+            }
+            let grown_in = grown(&inside, near, true, t)?;
             let grown_out = grown(&around?, near, false, t)?;
             for polygon in inner.polygons() {
                 if !sure.contains(polygon) && meets(&piece(polygon, t)?, &grown_in, t)? {
@@ -474,19 +493,27 @@ impl AxiolidFreeSpaceService {
         Ok(Reached {
             inner: region(sure)?,
             outer: region(maybe)?,
+            bracketed,
         })
     }
 
     /// The plan footprint of an entrance or component, bracketed around the
     /// shadows the overlay refuses (`placement::bracketed_footprint`,
-    /// #377): `(inside, around)`, the first grown from inside for what it
-    /// surely meets, the second from outside for what it may (an error where a
-    /// sliver has no box: only what needs the outer footprint is refused).
+    /// #377): `inside` grown from inside for what it surely meets,
+    /// `around` from outside for what it may (an error where a sliver has
+    /// no box: only what needs the outer footprint is refused).
+    ///
+    /// A tessellated subject is also bracketed by its chord deviation `d`,
+    /// as a tessellated obstacle is (#302, [`Measuring::floor_scene`]):
+    /// `around` is the mesh's footprint grown by `d`, and `inside` the
+    /// eroded core of the plan points whose vertical column of height `2d`
+    /// about the body's middle lies in the mesh, empty where the body is
+    /// no taller than that (nothing is then surely reached through it).
     fn subject_footprint(
         &self,
         subject: &ObjectId,
         tolerance: Tolerance,
-    ) -> Result<(Region, Result<Region, FreeSpaceError>), FreeSpaceError> {
+    ) -> Result<SubjectFootprint, FreeSpaceError> {
         if self.geometry().has_no_body(subject) {
             return Err(FreeSpaceError::Unavailable(format!(
                 "{subject} has no body, so where a path meets it is unknown"
@@ -496,15 +523,83 @@ impl AxiolidFreeSpaceService {
             .geometry()
             .mesh(subject)
             .ok_or_else(|| FreeSpaceError::MissingGeometry(Box::new(subject.clone())))?;
-        if self.geometry().is_tessellated(subject) {
-            return Err(FreeSpaceError::InexactPlacementEvidence);
+        let missing = || FreeSpaceError::MissingGeometry(Box::new(subject.clone()));
+        if !self.geometry().is_tessellated(subject) {
+            let (inside, around) = placement::bracketed_footprint(&triangles(mesh), tolerance)?;
+            if around.as_ref().is_ok_and(Region::is_empty) {
+                return Err(missing());
+            }
+            return Ok(SubjectFootprint {
+                inside,
+                around,
+                deviation: None,
+            });
         }
-        let (inside, around) = placement::bracketed_footprint(&triangles(mesh), tolerance)?;
-        if around.as_ref().is_ok_and(Region::is_empty) {
-            return Err(FreeSpaceError::MissingGeometry(Box::new(subject.clone())));
+        let d = self
+            .geometry()
+            .deviation(subject)
+            .filter(|d| *d > 0.0)
+            .ok_or(FreeSpaceError::InexactPlacementEvidence)?;
+        let (low, high) = mesh_extent(mesh).ok_or_else(missing)?;
+        // Morphology runs in a plan frame at the body's corner, as a
+        // tessellated obstacle's does: at georeferenced coordinates the
+        // overlay refuses the slivers its own rounding makes.
+        let far = low[0].abs().max(low[1].abs()) >= 1.0e5;
+        let origin = if far {
+            Vec2::new(low[0].floor(), low[1].floor())
+        } else {
+            Vec2::new(0.0, 0.0)
+        };
+        let moved: Vec<_> = triangles(mesh)
+            .into_iter()
+            .map(|face| face.map(|p| Point3::new(p.x - origin.x, p.y - origin.y, p.z)))
+            .collect();
+        let region_error = |e| unavailable("bracketed footprint", e);
+        let back = |region: Region| {
+            if region.is_empty() || !far {
+                Ok(region)
+            } else {
+                region.translate(origin).map_err(region_error)
+            }
+        };
+        let (_, around) = placement::bracketed_footprint(&moved, tolerance)?;
+        let around = around.and_then(|footprint| {
+            if footprint.is_empty() {
+                return Err(missing());
+            }
+            let grown = planar::morphology(&footprint, Morphology::DilateOuter, d, tolerance)
+                .map_err(|e| refused("disc morphology", e))?;
+            back(grown)
+        });
+        let level = f64::midpoint(low[2], high[2]);
+        let mut inside = Region::empty();
+        if level - d > low[2] && level + d < high[2] {
+            let (section, shadow) = self
+                .mesh_column(subject, level, d)
+                .map_err(FreeSpaceError::Unavailable)?;
+            let core = plan_region(&section, origin, false, tolerance)?
+                .difference(&plan_region(&shadow, origin, true, tolerance)?, tolerance)
+                .map_err(region_error)?;
+            if !core.is_empty() {
+                let eroded = planar::morphology(&core, Morphology::ErodeInner, d, tolerance)
+                    .map_err(|e| refused("disc morphology", e))?;
+                inside = back(eroded)?;
+            }
         }
-        Ok((inside, around))
+        Ok(SubjectFootprint {
+            inside,
+            around,
+            deviation: Some(d),
+        })
     }
+}
+
+/// A subject's plan footprint bracketed ([`AxiolidFreeSpaceService::subject_footprint`]).
+struct SubjectFootprint {
+    inside: Region,
+    around: Result<Region, FreeSpaceError>,
+    /// The chord deviation it was bracketed by, for a tessellated subject.
+    deviation: Option<f64>,
 }
 
 #[cfg(test)]

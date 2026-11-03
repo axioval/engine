@@ -6,9 +6,9 @@ use axiolid_core::Point3;
 use axiolid_mesh::TriMesh;
 use axioval_axiolid::{AxiolidFreeSpaceService, AxiolidGeometry, VerticalExtentBounds};
 use axioval_engine::{
-    BoxClearance, CylinderClearance, FreeSpaceError, FreeSpaceService, MetricDirection,
-    MetricFrame, MetricPoint, PlacementDomain, PlacementOrientation, PlacementOutcome,
-    PlacementRequest, PlacementShape, SupportedPlacement,
+    BoxClearance, CylinderClearance, EntranceReach, FreeSpaceError, FreeSpaceService,
+    MetricDirection, MetricFrame, MetricPoint, PlacementDomain, PlacementOrientation,
+    PlacementOutcome, PlacementRequest, PlacementShape, SupportedPlacement,
 };
 use axioval_ir::{ObjectId, SourceId};
 
@@ -952,4 +952,63 @@ fn a_large_room_with_curved_furniture_holds_a_shape_with_room_to_spare() {
         );
     }
     nowhere(place(geometry(), "room", circle(2.6), &obstacles));
+}
+
+/// A room 6 m by 3 m entered through a round door of radius 0.5 m
+/// straddling its south wall at x 0.75, tessellated within `deviation` and
+/// `height` high; a bed 0.5 m high stands from the south wall at x 1.4..3.4
+/// up to y 2.2, leaving 0.8 m north of it.
+fn round_entrance(height: f64, deviation: f64) -> AxiolidGeometry {
+    AxiolidGeometry::new()
+        .with_mesh(id("room"), prisms(&[rect(0.0, 6.0, 0.0, 3.0)], 0.0, 3.0))
+        .with_mesh(id("bed"), prisms(&[rect(1.4, 3.4, 0.0, 2.2)], 0.0, 0.5))
+        .with_tessellated_mesh(
+            id("door"),
+            convex_prism(&round_corners((0.75, 0.0), 0.5), 0.0, height),
+            deviation,
+        )
+}
+
+fn reached_from(geometry: AxiolidGeometry, path: f64) -> Result<PlacementOutcome, FreeSpaceError> {
+    let circle = PlacementShape::Cylinder(CylinderClearance::try_new(0.75, 2.0).unwrap());
+    let request = PlacementRequest::new_in_domain(
+        id("room"),
+        circle,
+        vec![id("bed"), id("door")],
+        PlacementDomain::Supported(SupportedPlacement::try_new(id("room"), 0.0).unwrap()),
+    )
+    .unwrap()
+    .with_entrance_reach(EntranceReach::try_new(vec![id("door")], path, 0.05).unwrap());
+    AxiolidFreeSpaceService::new(geometry, source()).find_placement(&request)
+}
+
+/// A tessellated entrance is bracketed by its chord deviation (#475): a
+/// path that clears the bed by far more than it is decided, both ways, and
+/// the verdict names the entrance it was decided around.
+#[test]
+fn a_round_entrance_is_bracketed_by_its_deviation() {
+    let geometry = || round_entrance(2.1, round_sagitta(0.5));
+    let named = |locator: &str| {
+        assert!(
+            locator.contains(":within-chord-deviation=cad:model/door="),
+            "{locator}"
+        );
+    };
+    // A 1.2 m path does not pass the 0.8 m north of the bed.
+    named(&nowhere(reached_from(geometry(), 1.2)));
+    // A 0.7 m one does.
+    named(&found(reached_from(geometry(), 0.7)));
+}
+
+/// A body no taller than twice its deviation surely contains no column, so
+/// nothing is surely reached through it: a fit that needs the reach is
+/// refused, never proven; one no path can reach even if it may is still
+/// refuted.
+#[test]
+fn an_entrance_too_thin_to_hold_a_column_is_refused() {
+    assert_eq!(
+        reached_from(round_entrance(0.05, 0.03), 0.7),
+        Err(FreeSpaceError::InexactPlacementEvidence)
+    );
+    nowhere(reached_from(round_entrance(0.05, 0.03), 1.2));
 }

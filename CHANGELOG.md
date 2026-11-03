@@ -4,6 +4,19 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+### Changed
+
+- **A tessellated entrance or circulation subject is bracketed, not refused**
+  ([#475](https://github.com/axioval/engine/issues/475)). A revolving door
+  or round fitting used to refuse every entrance reach and circulation map
+  it served as `InexactPlacementEvidence`. It is now bracketed by its chord
+  deviation as a tessellated obstacle is: possibly where its mesh footprint
+  grown by the deviation lies, surely where a column of height twice the
+  deviation about its middle lies in the mesh, eroded by the deviation. The
+  evidence stays exact and its locator names the subject
+  (`:within-chord-deviation=`); what the deviation leaves open is still
+  refused.
+
 ### Fixed
 
 - Walls turned in plan with openings or slots flush with their faces are

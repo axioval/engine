@@ -118,6 +118,18 @@ impl AxiolidFreeSpaceService {
         &self.over.geometry
     }
 
+    /// The solid column of a tessellated body's mesh about `level` (the
+    /// check's, built once): `(section, shadow)`, as a scene's sure
+    /// footprint of a bracketed obstacle takes it.
+    pub(crate) fn mesh_column(
+        &self,
+        object: &ObjectId,
+        level: f64,
+        half: f64,
+    ) -> Result<(Plan, Plan), String> {
+        self.over.solid_column(object, Body::Mesh, level, half)
+    }
+
     /// The placement scene of `scope` (with `merged`) less `obstacles` and
     /// the `swept` doors' sectors in `band`: the check's, built once for
     /// every rule and thread asking for it ([`scenes::PlacementScenes`],
@@ -239,6 +251,30 @@ impl Measuring {
                 })
         }
     }
+}
+
+/// A band footprint as a region in the plan frame at `origin`, around the
+/// strips the overlay cannot hold (`around`) or inside them
+/// (`placement::bracketed_rings`).
+pub(crate) fn plan_region(
+    plan: &Plan,
+    origin: Vec2,
+    around: bool,
+    tolerance: axiolid_core::Tolerance,
+) -> Result<Region, FreeSpaceError> {
+    let rings: Vec<Ring> = trapezoids(plan)
+        .into_iter()
+        .map(|piece| Ring {
+            points: piece
+                .outer
+                .points
+                .iter()
+                .map(|p| Point2::new(p.x - origin.x, p.y - origin.y))
+                .collect(),
+        })
+        .collect();
+    let (inner, outer) = placement::bracketed_rings(rings, tolerance)?;
+    placement::union(if around { &outer } else { &inner }, tolerance)
 }
 
 /// Sides of the polygons that bound a cylinder's disc from inside and outside.
@@ -775,21 +811,7 @@ impl Measuring {
         // A band footprint as a region in the local frame, around the
         // strips the overlay cannot hold (`around`) or inside them
         // (`placement::bracketed_rings`).
-        let to_local = |plan: &Plan, around: bool| {
-            let rings: Vec<Ring> = trapezoids(plan)
-                .into_iter()
-                .map(|piece| Ring {
-                    points: piece
-                        .outer
-                        .points
-                        .iter()
-                        .map(|p| Point2::new(p.x - origin.x, p.y - origin.y))
-                        .collect(),
-                })
-                .collect();
-            let (inner, outer) = placement::bracketed_rings(rings, tolerance)?;
-            placement::union(if around { &outer } else { &inner }, tolerance)
-        };
+        let to_local = |plan: &Plan, around: bool| plan_region(plan, origin, around, tolerance);
         // A body the host declared unmeasured, with no bound to place it
         // apart and no enclosure to take its place, could stand anywhere: the
         // scene is undecided. They are classified first, before any band
@@ -1520,7 +1542,15 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
                 reach.width_metres()
             );
         }
-        locator.push_str(&within_deviation(&scene.bracketed));
+        let mut bracketed = scene.bracketed.clone();
+        if let Some(reach) = &scene.reach {
+            for subject in &reach.bracketed {
+                if !bracketed.contains(subject) {
+                    bracketed.push(subject.clone());
+                }
+            }
+        }
+        locator.push_str(&within_deviation(&bracketed));
         locator.push_str(&within_bounds(&scene.bounded));
         locator.push_str(&without_shape(&scene.shapeless));
         derived.keep(&scene);
@@ -1544,7 +1574,7 @@ impl FreeSpaceService for AxiolidFreeSpaceService {
             }
             // What a chord deviation leaves open is not exact evidence
             // either way.
-            Search::Undecided(_) if !scene.bracketed.is_empty() => {
+            Search::Undecided(_) if !bracketed.is_empty() => {
                 return Err(FreeSpaceError::InexactPlacementEvidence);
             }
             Search::Undecided(why) => return Err(FreeSpaceError::Unavailable(why.into())),

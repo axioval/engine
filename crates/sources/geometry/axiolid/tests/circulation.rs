@@ -350,3 +350,67 @@ fn a_band_starting_above_a_skirting_leaves_the_path_free() {
         FreeSpaceError::InvalidElevationBand
     );
 }
+
+/// The room of [`room`] with a round WC of radius 0.3 m, tessellated into
+/// 32 sides within their sagitta.
+fn round_wc_room(partition: f64) -> AxiolidGeometry {
+    const SIDES: u32 = 32;
+    let corners: Vec<(f64, f64)> = (0..SIDES)
+        .map(|k| {
+            let angle = 2.0 * std::f64::consts::PI * f64::from(k) / f64::from(SIDES);
+            (5.5 + 0.3 * angle.cos(), 0.55 + 0.3 * angle.sin())
+        })
+        .collect();
+    let mut positions: Vec<Point3> = corners
+        .iter()
+        .map(|(x, y)| Point3::new(*x, *y, 0.0))
+        .collect();
+    positions.extend(corners.iter().map(|(x, y)| Point3::new(*x, *y, 0.8)));
+    let mut indices = Vec::new();
+    for i in 1..SIDES - 1 {
+        indices.extend([0, i + 1, i, SIDES, SIDES + i, SIDES + i + 1]);
+    }
+    for i in 0..SIDES {
+        let j = (i + 1) % SIDES;
+        indices.extend([i, j, SIDES + j, i, SIDES + j, SIDES + i]);
+    }
+    let sagitta = 0.3 * (1.0 - (std::f64::consts::PI / f64::from(SIDES)).cos());
+    room(partition).with_tessellated_mesh(id("wc"), TriMesh::new(positions, indices), sagitta)
+}
+
+/// A tessellated subject is bracketed by its chord deviation (#475), never
+/// refused: the map decides what its clearance exceeds, both ways, and
+/// names the subject in its locator.
+#[test]
+fn a_round_subject_is_bracketed_by_its_deviation() {
+    let named = |map: &CirculationMap| {
+        assert!(
+            map.evidence()
+                .locator
+                .contains(":within-chord-deviation=cad:model/wc="),
+            "{map:#?}"
+        );
+    };
+    let open = map(round_wc_room(2.5), 0.9).expect("mapped");
+    named(&open);
+    let (door, wc) = (
+        open.contact(&id("door")).unwrap(),
+        open.contact(&id("wc")).unwrap(),
+    );
+    assert!(wc.reaches(door.reached()[0].0), "{open:#?}");
+    // 0.7 m are left north of the partition: the WC is cut off.
+    let cut = map(round_wc_room(3.3), 0.9).expect("mapped");
+    named(&cut);
+    let (door, wc) = (
+        cut.contact(&id("door")).unwrap(),
+        cut.contact(&id("wc")).unwrap(),
+    );
+    assert_eq!(wc.reached().len(), 1, "{cut:#?}");
+    assert_ne!(door.reached()[0].0, wc.reached()[0].0, "{cut:#?}");
+    assert!(
+        door.possible()
+            .iter()
+            .all(|piece| !wc.possible().contains(piece)),
+        "{cut:#?}"
+    );
+}

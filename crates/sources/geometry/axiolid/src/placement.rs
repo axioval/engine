@@ -458,6 +458,9 @@ fn overlay(a: &Region, b: &Region) -> Cost {
 pub(crate) struct Reached {
     pub(crate) inner: Region,
     pub(crate) outer: Region,
+    /// The tessellated entrances the reach was bracketed by, each with its
+    /// chord deviation.
+    pub(crate) bracketed: Vec<(axioval_ir::ObjectId, f64)>,
 }
 
 /// A box of centres in an anchor frame: offsets along its right axis in
@@ -3071,6 +3074,7 @@ mod tests {
             Reached {
                 inner: strip(0.0),
                 outer: strip(0.01),
+                bracketed: Vec::new(),
             }
         });
         Scene {

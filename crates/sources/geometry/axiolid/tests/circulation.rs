@@ -177,12 +177,23 @@ fn an_opening_is_reached_through_its_void() {
         Err(FreeSpaceError::Unavailable(message))
             if message.contains("void is unmeasured (not a closed solid)")
     ));
+    // A tessellated void is bracketed by its chord deviation, as a
+    // tessellated door would be.
     let curved = |geometry: AxiolidGeometry, door| {
         geometry.with_tessellated_void(door, cuboid([0.5, -0.2, 0.0], [1.5, 0.0, 2.1]), 0.01)
     };
-    assert_eq!(
-        map(opening(2.5, curved), 0.9),
-        Err(FreeSpaceError::InexactPlacementEvidence)
+    let joined = map(opening(2.5, curved), 0.9).expect("mapped");
+    let door = joined.contact(&id("door")).unwrap();
+    let wc = joined.contact(&id("wc")).unwrap();
+    assert!(wc.reaches(door.reached()[0].0), "{joined:#?}");
+    let apart = map(opening(3.3, curved), 0.9).expect("mapped");
+    let door = apart.contact(&id("door")).unwrap();
+    let wc = apart.contact(&id("wc")).unwrap();
+    assert!(
+        door.possible()
+            .iter()
+            .all(|piece| !wc.possible().contains(piece)),
+        "{apart:#?}"
     );
 }
 

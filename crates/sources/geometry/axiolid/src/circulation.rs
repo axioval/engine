@@ -53,6 +53,7 @@ use crate::geometry::{mesh_extent, triangles};
 use crate::placement::{self, KNIFE_EDGE_METRES, Reached, Scene};
 use crate::planar::budget::{Cost, Work, disc_cost, overlay_cost};
 use crate::planar::{self, Morphology, PlanarRefusal};
+use crate::walkable::{self, Plan};
 
 /// The free area eroded by a path's half width `radius`, from both sides:
 /// pieces inside the exact erosion (`erode_inner` of the scope less the
@@ -510,6 +511,8 @@ impl AxiolidFreeSpaceService {
     /// eroded core of the plan points whose vertical column of height `2d`
     /// about the body's middle lies in the mesh, empty where the body is
     /// no taller than that (nothing is then surely reached through it).
+    /// An opening is measured by its void (#383), bracketed alike when that
+    /// is tessellated.
     fn subject_footprint(
         &self,
         subject: &ObjectId,
@@ -543,10 +546,18 @@ impl AxiolidFreeSpaceService {
                     )));
                 }
             };
-            if self.geometry().void_fidelity(subject) != Ok(GeometryFidelity::Exact) {
-                return Err(FreeSpaceError::InexactPlacementEvidence);
+            // A tessellated void is bracketed by its chord deviation as a
+            // tessellated body is, its column read from the void itself.
+            let d = match self.geometry().void_fidelity(subject) {
+                Ok(GeometryFidelity::Exact) => return exact(void),
+                Ok(fidelity) => Some(fidelity.deviation_metres()),
+                Err(_) => None,
             }
-            return exact(void);
+            .filter(|d| *d > 0.0)
+            .ok_or(FreeSpaceError::InexactPlacementEvidence)?;
+            return Self::tessellated_footprint(subject, void, d, tolerance, |level, half| {
+                walkable::solid_column(subject, void, level, half)
+            });
         }
         let mesh = self.geometry().mesh(subject).ok_or_else(missing)?;
         if !self.geometry().is_tessellated(subject) {
@@ -557,6 +568,23 @@ impl AxiolidFreeSpaceService {
             .deviation(subject)
             .filter(|d| *d > 0.0)
             .ok_or(FreeSpaceError::InexactPlacementEvidence)?;
+        Self::tessellated_footprint(subject, mesh, d, tolerance, |level, half| {
+            self.mesh_column(subject, level, half)
+        })
+    }
+
+    /// The footprint of a subject tessellated within `d` of its true shape
+    /// (`mesh`), bracketed as [`Self::subject_footprint`] describes, with
+    /// `column` the plan section and shadow of the mesh's solid column of
+    /// half height `half` about `level`.
+    fn tessellated_footprint(
+        subject: &ObjectId,
+        mesh: &TriMesh,
+        d: f64,
+        tolerance: Tolerance,
+        column: impl FnOnce(f64, f64) -> Result<(Plan, Plan), String>,
+    ) -> Result<SubjectFootprint, FreeSpaceError> {
+        let missing = || FreeSpaceError::MissingGeometry(Box::new(subject.clone()));
         let (low, high) = mesh_extent(mesh).ok_or_else(missing)?;
         // Morphology runs in a plan frame at the body's corner, as a
         // tessellated obstacle's does: at georeferenced coordinates the
@@ -591,9 +619,7 @@ impl AxiolidFreeSpaceService {
         let level = f64::midpoint(low[2], high[2]);
         let mut inside = Region::empty();
         if level - d > low[2] && level + d < high[2] {
-            let (section, shadow) = self
-                .mesh_column(subject, level, d)
-                .map_err(FreeSpaceError::Unavailable)?;
+            let (section, shadow) = column(level, d).map_err(FreeSpaceError::Unavailable)?;
             let core = plan_region(&section, origin, false, tolerance)?
                 .difference(&plan_region(&shadow, origin, true, tolerance)?, tolerance)
                 .map_err(region_error)?;

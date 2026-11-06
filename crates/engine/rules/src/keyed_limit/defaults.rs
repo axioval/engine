@@ -18,7 +18,7 @@ use axioval_ir::{Evidence, Object, QuantityDimension};
 
 use crate::plan_area::shown;
 use crate::selection::{Selection, selector_matches};
-use crate::support::table::{Matched, RowSelection, RowTest, TextPattern, match_rows};
+use crate::support::table::{Compile, Matched, RowSelection, RowTest, TextPattern, match_rows};
 use crate::support::{Parameters, Unavailable, invalid, si_quantity};
 
 /// The columns of `door_type_defaults`.
@@ -101,13 +101,14 @@ impl DoorDefaults {
     pub(crate) fn parse(
         parameters: &Parameters<'_>,
         case_sensitive: bool,
+        compile: Compile,
     ) -> Result<Option<Self>, Unavailable> {
         let Some(table) = parameters.table("door_type_defaults")? else {
             return Ok(None);
         };
         let mut rows = Vec::with_capacity(table.len());
         for (index, row) in table.iter().enumerate() {
-            let operation = row.pattern("operation", case_sensitive)?;
+            let operation = row.pattern_by("operation", case_sensitive, compile)?;
             let applies_to = row.selector("applies_to")?.cloned();
             let mut values = [None; 4];
             for (slot, which) in [

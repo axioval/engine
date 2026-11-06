@@ -40,7 +40,7 @@ use crate::level_spacing::{extent, extents};
 use crate::light_area::{LightArea, length};
 use crate::opening_spaces::is_adjacency;
 use crate::plan_area::{Measure, Verdict, footprint, judge, member_areas, shown};
-use crate::support::table::{Matched, RowSelection, RowTest, TextPattern, match_rows};
+use crate::support::table::{Compile, Matched, RowSelection, RowTest, TextPattern, match_rows};
 use crate::support::{
     Parameters, PropertyRef, Traversal, Unavailable, display, exact_f64, invalid, resolve,
     traversal_parameters, undefined,
@@ -1132,18 +1132,21 @@ pub(crate) fn check_arguments(
     stated: &BTreeMap<String, ParameterValue>,
 ) -> Result<(), Unavailable> {
     let rule = crate::light_area::synthesised(stated.clone());
-    parse(&Parameters(&rule)).map(|_| ())
+    // A literal pattern never changes, so the check compiles it once per
+    // process, as the template's evaluation does (`TextPattern::kept`). A
+    // computed `limits` cell is the model's text and shares the same cap.
+    parse(&Parameters(&rule), TextPattern::kept).map(|_| ())
 }
 
 type Parsed<'a> = (Declared<'a>, Vec<Limit>, Quantity<'a>);
 
-fn parse<'a>(parameters: &Parameters<'a>) -> Result<Parsed<'a>, Unavailable> {
+fn parse<'a>(parameters: &Parameters<'a>, compile: Compile) -> Result<Parsed<'a>, Unavailable> {
     let declared = declared(parameters)?;
-    let limits = limits(parameters, &declared)?;
+    let limits = limits(parameters, &declared, compile)?;
     Ok((
         declared,
         limits,
-        quantity(parameters, || door_defaults(parameters))?,
+        quantity(parameters, || door_defaults(parameters, compile))?,
     ))
 }
 
@@ -1176,7 +1179,11 @@ fn declared<'a>(parameters: &Parameters<'a>) -> Result<Declared<'a>, Unavailable
 
 /// The rows of `limits`, their patterns compiled, checked against the
 /// declared keys.
-fn limits(parameters: &Parameters<'_>, declared: &Declared<'_>) -> Result<Vec<Limit>, Unavailable> {
+fn limits(
+    parameters: &Parameters<'_>,
+    declared: &Declared<'_>,
+    compile: Compile,
+) -> Result<Vec<Limit>, Unavailable> {
     let (keys, pair) = (&declared.sources, declared.pair);
     let case_sensitive = parameters.boolean("case_sensitive")?.unwrap_or(true);
     let rows = parameters
@@ -1186,14 +1193,14 @@ fn limits(parameters: &Parameters<'_>, declared: &Declared<'_>) -> Result<Vec<Li
     for (index, row) in rows.iter().enumerate() {
         let mut patterns: [Option<TextPattern>; KEYS] = Default::default();
         for (slot, column) in KEY_COLUMNS.iter().enumerate() {
-            patterns[slot] = row.pattern(column, case_sensitive)?;
+            patterns[slot] = row.pattern_by(column, case_sensitive, compile)?;
             if patterns[slot].is_some() && keys[slot].is_none() {
                 return Err(invalid(format!(
                     "limit row {index} keys `{column}`, which the rule does not declare"
                 )));
             }
         }
-        let other = row.pattern("other_side", case_sensitive)?;
+        let other = row.pattern_by("other_side", case_sensitive, compile)?;
         if other.is_some() && pair.is_none() {
             return Err(invalid(format!(
                 "limit row {index} keys `other_side`, which needs `pair_key`"
@@ -1296,9 +1303,12 @@ fn measured_quantity<'a>(parameters: &Parameters<'a>) -> Result<Quantity<'a>, Un
 }
 
 /// The rule's `door_type_defaults` table, if it states one.
-fn door_defaults(parameters: &Parameters<'_>) -> Result<Option<Arc<DoorDefaults>>, Unavailable> {
+fn door_defaults(
+    parameters: &Parameters<'_>,
+    compile: Compile,
+) -> Result<Option<Arc<DoorDefaults>>, Unavailable> {
     let case_sensitive = parameters.boolean("case_sensitive")?.unwrap_or(true);
-    Ok(DoorDefaults::parse(parameters, case_sensitive)?.map(Arc::new))
+    Ok(DoorDefaults::parse(parameters, case_sensitive, compile)?.map(Arc::new))
 }
 
 /// The declared quantity's name, each parameter that applies only to
@@ -2119,5 +2129,79 @@ mod tests {
         assert!(lower < upper);
         let exact = difference(difference(difference(1.0, third).0, third).0, 0.1).0;
         assert!(lower <= exact && exact <= upper);
+    }
+
+    /// The template's argument check compiles a rule's patterns once per
+    /// process (`TextPattern::kept`), the reference afresh; both refuse a
+    /// pattern in the same words, every time.
+    #[test]
+    fn the_argument_check_refuses_a_bad_pattern_as_the_reference_does() {
+        use super::{Parameters, check_arguments, parse};
+        use crate::support::table::TextPattern;
+        use axioval_ir::contract::ParameterValue;
+        use std::collections::BTreeMap;
+        let text = |value: &str| ParameterValue::String {
+            value: value.to_owned(),
+        };
+        let row = BTreeMap::from([("key_1".to_owned(), text("a\\"))]);
+        let stated = BTreeMap::from([
+            (
+                "key_1".to_owned(),
+                ParameterValue::PropertyReference {
+                    property: "Class".to_owned(),
+                    property_set: None,
+                },
+            ),
+            (
+                "limits".to_owned(),
+                ParameterValue::Table { value: vec![row] },
+            ),
+        ]);
+        let rule = crate::light_area::synthesised(stated.clone());
+        let reference = parse(&Parameters(&rule), TextPattern::new).map(|_| ());
+        let (_, message) = reference.clone().unwrap_err();
+        assert!(message.contains("ends with a backslash"), "{message}");
+        for _ in 0..2 {
+            assert_eq!(check_arguments(&stated), reference);
+        }
+        assert!(!TextPattern::is_kept("a\\"));
+    }
+
+    /// The template's check keeps a pattern it compiled; the reference's
+    /// parse does not, and its source never asks to, so the benchmark
+    /// compares a kept template with a reference compiling every run.
+    #[test]
+    fn only_the_template_keeps_a_pattern() {
+        use super::{Parameters, check_arguments, parse};
+        use crate::support::table::TextPattern;
+        use axioval_ir::contract::ParameterValue;
+        use std::collections::BTreeMap;
+        let stated = |pattern: &str| {
+            let row = BTreeMap::from([(
+                "key_1".to_owned(),
+                ParameterValue::String {
+                    value: pattern.to_owned(),
+                },
+            )]);
+            BTreeMap::from([
+                (
+                    "key_1".to_owned(),
+                    ParameterValue::PropertyReference {
+                        property: "Class".to_owned(),
+                        property_set: None,
+                    },
+                ),
+                (
+                    "limits".to_owned(),
+                    ParameterValue::Table { value: vec![row] },
+                ),
+            ])
+        };
+        let rule = crate::light_area::synthesised(stated("keyed-limit-by-reference*"));
+        let _ = parse(&Parameters(&rule), TextPattern::new);
+        assert!(!TextPattern::is_kept("keyed-limit-by-reference*"));
+        let _ = check_arguments(&stated("keyed-limit-by-template*"));
+        assert!(TextPattern::is_kept("keyed-limit-by-template*"));
+        assert!(!include_str!("keyed_limit/reference.rs").contains("TextPattern::kept"));
     }
 }

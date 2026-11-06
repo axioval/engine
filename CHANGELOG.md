@@ -64,6 +64,12 @@ Breaking: the BCF crates move to openbim-bcf 0.7.2.
 
 ### Changed
 
+- `keyed-limit` and `clash-matrix` compile a rule's wildcard patterns once per
+  process in the template's argument check and evaluation
+  (`TextPattern::kept`), as `table-allocation` does; the check no longer
+  compiles them a second time beside the evaluation (#466). Outcomes and
+  messages are unchanged.
+
 - **An opening used as an entrance is reached through its void**
   ([#475](https://github.com/axioval/engine/issues/475)). An opening has
   no body (#383), so an entrance reach or circulation map it served was

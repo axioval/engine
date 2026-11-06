@@ -704,6 +704,15 @@ the descriptors are unchanged. Three exclusive gates gave the pair
 0.35× (0.31 to 0.40), 0.35× (0.16 to 0.75) and 0.36× (0.16 to 0.82), and
 every other `table-allocation` input 0.41 to 0.72×.
 
+`keyed-limit` and `clash-matrix` compiled each pattern twice, in the
+template's argument check and again in its evaluation
+([#466](https://github.com/axioval/engine/issues/466)). Both templates now
+keep their patterns the same way, and their references still compile every
+run. A `keyed-limit` `limits` cell may be computed per object, so its
+pattern is the model's text: such cells share the cap, and more than 256
+distinct values drop every kept pattern of that case. That costs only the
+saving, never an outcome.
+
 ### A faster reference, a reference over the floor
 
 Three inputs passed when #296 landed and failed on main twelve days later

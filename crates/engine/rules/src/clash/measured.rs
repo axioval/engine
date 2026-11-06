@@ -38,7 +38,7 @@ use crate::clash_severity::{Severities, label};
 use crate::pairs::{Unevaluated, Voids, fidelity_note, prepare_among, reason};
 use crate::selection::{Selection, selector_matches};
 use crate::support::Unavailable;
-use crate::support::table::{Matched, RowSelection, match_rows};
+use crate::support::table::{Matched, RowSelection, TextPattern, match_rows};
 
 /// Measures the member lists `clash_pairs` and `clash_matrix_pairs`.
 pub struct ClashPairs;
@@ -612,7 +612,7 @@ fn matrix_pairs(
     context: &RuleContext<'_>,
 ) -> Result<Vec<MeasuredMember>, PropertyResolutionError> {
     let rule = super::synthesised(stated(call));
-    let declared = crate::clash_matrix::declaration(&rule).map_err(refused)?;
+    let declared = crate::clash_matrix::declaration(&rule, TextPattern::kept).map_err(refused)?;
     let margin = declared
         .cells
         .iter()

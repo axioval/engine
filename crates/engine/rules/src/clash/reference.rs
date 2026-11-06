@@ -24,7 +24,7 @@ use crate::clash_matrix::Categories;
 use crate::clash_severity::{Severities, label};
 use crate::pairs::{Unevaluated, Voids, fidelity_note, prepare, refuse_declaration, severity};
 use crate::support::Unavailable;
-use crate::support::table::{Matched, RowSelection, match_rows};
+use crate::support::table::{Matched, RowSelection, TextPattern, match_rows};
 
 /// Whether a tolerance case excuses a pair's intersection, asked only when
 /// it can change the outcome, and why that is open when it is.
@@ -727,7 +727,7 @@ impl RuleCapability for ClashMatrix {
 
     #[allow(clippy::too_many_lines)]
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
-        let declared = match crate::clash_matrix::declaration(rule) {
+        let declared = match crate::clash_matrix::declaration(rule, TextPattern::new) {
             Ok(declared) => declared,
             Err((_, message)) => return refuse_declaration(context, rule, &message),
         };

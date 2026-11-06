@@ -16,6 +16,7 @@ use crate::counts::Population;
 use crate::level_spacing::{extent, extents};
 use crate::plan_area::{Verdict, deviation, judge, shown};
 use crate::selection::select_objects;
+use crate::support::table::TextPattern;
 use crate::support::{Parameters, Traversal, Unavailable, finding};
 
 /// Checks a quantity of each object against the limits of the single row
@@ -39,7 +40,7 @@ impl RuleCapability for KeyedLimit {
         if crate::object_parameters::has_object_parameters(rule) {
             return crate::object_parameters::per_object(self, context, rule);
         }
-        let (keys, limits, quantity) = match parse(&Parameters(rule)) {
+        let (keys, limits, quantity) = match parse(&Parameters(rule), TextPattern::new) {
             Ok(parsed) => parsed,
             Err((reason, message)) => {
                 return CapabilityEvaluation::not_evaluated(

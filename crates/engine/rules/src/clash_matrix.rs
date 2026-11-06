@@ -31,7 +31,7 @@ use crate::clash_cases::{Cases, case_parameter, cases};
 use crate::clash_groups::{Grouping, grouping, grouping_parameters};
 use crate::clash_severity::{Severities, parse_severity, severities, severity_parameters};
 use crate::selection::{Selection, discipline_of, selector_matches};
-use crate::support::table::{Row, RowTest, TextPattern};
+use crate::support::table::{Compile, Row, RowTest, TextPattern};
 use crate::support::{Parameters, PropertyRef, Traversal, Unavailable, invalid};
 use crate::table_allocation::{KEY_COUNT, KEYS, Key, KeyProperties, key_properties, read_keys};
 
@@ -41,7 +41,13 @@ use crate::table_allocation::{KEY_COUNT, KEYS, Key, KeyProperties, key_propertie
 pub(crate) fn check_arguments(
     stated: &BTreeMap<String, ParameterValue>,
 ) -> Result<(), Unavailable> {
-    declaration(&crate::clash::synthesised(stated.clone())).map(|_| ())
+    // A rule's patterns never change, so the check compiles them once per
+    // process, as the template's evaluation does (`TextPattern::kept`).
+    declaration(
+        &crate::clash::synthesised(stated.clone()),
+        TextPattern::kept,
+    )
+    .map(|_| ())
 }
 
 /// The two sides of a pair, as the cell columns name them.
@@ -122,12 +128,12 @@ impl Side<'_> {
         row: Row<'a>,
         side: &str,
         properties: &KeyProperties<'_>,
-        case_sensitive: bool,
+        (case_sensitive, compile): (bool, Compile),
     ) -> Result<Side<'a>, Unavailable> {
         let mut keys = [None, None, None, None];
         for ((slot, key), property) in keys.iter_mut().zip(&KEYS[..3]).zip(properties) {
             let column = format!("{side}_{key}");
-            *slot = row.pattern(&column, case_sensitive)?;
+            *slot = row.pattern_by(&column, case_sensitive, compile)?;
             if slot.is_some() && property.is_none() {
                 return Err(invalid(format!(
                     "`{column}` is filled, but no `{key}` property is declared"
@@ -135,7 +141,7 @@ impl Side<'_> {
             }
         }
         Ok(Side {
-            discipline: row.pattern(&format!("{side}_discipline"), case_sensitive)?,
+            discipline: row.pattern_by(&format!("{side}_discipline"), case_sensitive, compile)?,
             selector: row.selector(&format!("{side}_selector"))?,
             keys,
         })
@@ -170,7 +176,10 @@ fn row_severity(row: Row<'_>) -> Result<Option<Severity>, Unavailable> {
 
 /// Reads a `clash-matrix` rule's declaration, refusing it in the
 /// capability's order and words.
-pub(crate) fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
+pub(crate) fn declaration(
+    rule: &CompiledRule,
+    compile: Compile,
+) -> Result<Declaration<'_>, Unavailable> {
     let parameters = Parameters(rule);
     let properties = key_properties(&parameters)?;
     let case_sensitive = parameters.boolean("case_sensitive")?.unwrap_or(true);
@@ -186,8 +195,8 @@ pub(crate) fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavai
                 Ok(Cell {
                     label: row.text("label")?,
                     sides: [
-                        Side::read(*row, SIDES[0], &properties, case_sensitive)?,
-                        Side::read(*row, SIDES[1], &properties, case_sensitive)?,
+                        Side::read(*row, SIDES[0], &properties, (case_sensitive, compile))?,
+                        Side::read(*row, SIDES[1], &properties, (case_sensitive, compile))?,
                     ],
                     profile: Profile::read(&|name| row.number(name), &|name| row.boolean(name))?,
                     severity: row_severity(*row)?,
@@ -489,4 +498,38 @@ pub(crate) fn parameters() -> Vec<ParameterDescriptor> {
     parameters.extend(severity_parameters());
     parameters.push(case_parameter());
     parameters
+}
+
+#[cfg(test)]
+mod kept_patterns {
+    use std::collections::BTreeMap;
+
+    use axioval_ir::contract::ParameterValue;
+
+    use super::{check_arguments, declaration};
+    use crate::support::table::TextPattern;
+
+    /// The template's check keeps a pattern it compiled; the reference's
+    /// declaration does not, and its source never asks to.
+    #[test]
+    fn only_the_template_keeps_a_pattern() {
+        let stated = |pattern: &str| {
+            let row = BTreeMap::from([(
+                format!("{}_discipline", super::SIDES[0]),
+                ParameterValue::String {
+                    value: pattern.to_owned(),
+                },
+            )]);
+            BTreeMap::from([(
+                "cells".to_owned(),
+                ParameterValue::Table { value: vec![row] },
+            )])
+        };
+        let rule = crate::clash::synthesised(stated("clash-by-reference*"));
+        let _ = declaration(&rule, TextPattern::new);
+        assert!(!TextPattern::is_kept("clash-by-reference*"));
+        let _ = check_arguments(&stated("clash-by-template*"));
+        assert!(TextPattern::is_kept("clash-by-template*"));
+        assert!(!include_str!("clash/reference.rs").contains("TextPattern::kept"));
+    }
 }

@@ -1212,6 +1212,13 @@ pub(crate) mod table {
             Ok(compiled)
         }
 
+        /// Whether `pattern` is kept ([`Self::kept`]) in either case.
+        #[cfg(test)]
+        pub(crate) fn is_kept(pattern: &str) -> bool {
+            KEPT.lock()
+                .is_ok_and(|kept| kept.iter().any(|patterns| patterns.contains_key(pattern)))
+        }
+
         /// How many literal characters the pattern holds: none for a bare
         /// wildcard.
         pub(crate) fn literals(&self) -> u32 {

@@ -42,6 +42,7 @@ use super::{
     Limit, Measuring, PerLeaf, Quantity, Selected, declared, limits, quantity, selected, sills,
 };
 use crate::measured_kinds::{interval, resolution_error};
+use crate::support::table::TextPattern;
 use crate::support::{Parameters, Unavailable, invalid};
 
 const LIMIT_ROW: &str = "limit_row";
@@ -76,7 +77,8 @@ fn prepared(call: &MeasuredCall, context: &RuleContext<'_>) -> Result<Arc<Prepar
             let limits = compiled(&rule, &rows, context)?;
             let parameters = Parameters(&rule);
             let case_sensitive = parameters.boolean("case_sensitive")?.unwrap_or(true);
-            let defaults = DoorDefaults::parse(&parameters, case_sensitive)?.map(Arc::new);
+            let defaults =
+                DoorDefaults::parse(&parameters, case_sensitive, TextPattern::kept)?.map(Arc::new);
             Ok(Arc::new(Prepared {
                 rule,
                 limits,
@@ -100,7 +102,7 @@ fn compiled(
     MeasuredMemo::of_rule(context.services, RowsKey(rows.clone()), || {
         let parameters = Parameters(rule);
         let declared = declared(&parameters)?;
-        limits(&parameters, &declared).map(Arc::new)
+        limits(&parameters, &declared, TextPattern::kept).map(Arc::new)
     })
 }
 

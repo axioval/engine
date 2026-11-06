@@ -4,43 +4,7 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
-### Changed
-
-- **An opening used as an entrance is reached through its void**
-  ([#475](https://github.com/axioval/engine/issues/475)). An opening has
-  no body (#383), so an entrance reach or circulation map it served was
-  refused with "has no body". It now meets a path where a door filling it
-  would, through the void it keeps free. An unmeasured void refuses with
-  the host's reason; a curved one is bracketed by its chord deviation, as
-  a tessellated subject is.
-- **A tessellated entrance or circulation subject is bracketed, not refused**
-  ([#475](https://github.com/axioval/engine/issues/475)). A revolving door
-  or round fitting used to refuse every entrance reach and circulation map
-  it served as `InexactPlacementEvidence`. It is now bracketed by its chord
-  deviation as a tessellated obstacle is: possibly where its mesh footprint
-  grown by the deviation lies, surely where a column of height twice the
-  deviation about its middle lies in the mesh, eroded by the deviation. The
-  evidence stays exact and its locator names the subject
-  (`:within-chord-deviation=`); what the deviation leaves open is still
-  refused.
-
-### Fixed
-
-- **One space that is not a closed solid no longer refuses every
-  containment and adjacency read** ([#478](https://github.com/axioval/engine/issues/478)).
-  A declared space with an open mesh, degenerate triangles, no body or an
-  unmeasured one is kept as an unknown with its reason and the extent its
-  mesh may occupy (widened by its chord deviation). A contained-in-space,
-  adjacent-space, adjacent-across or overlapping-group-space read is decided
-  from the other spaces when its object, widened by the read's tolerances,
-  lies apart from every unknown space, and otherwise refuses naming it. A
-  space with no mesh has no extent and still refuses every such read.
-- Walls turned in plan with openings or slots flush with their faces are
-  measured instead of refused as self-intersecting: the volume kernel's
-  triangle test now decides near-coplanar triangles exactly
-  (axiolid-heal 0.3.3). (#373)
-
-## [0.10.0] - 2026-11-03
+## [0.10.0] - 2026-11-06
 
 Geometry measures more of a real model and says why when it does not:
 
@@ -52,6 +16,10 @@ Geometry measures more of a real model and says why when it does not:
 - Nanometre slivers no longer refuse a footprint's union.
 - Rounding is bounded from the whole placement chain.
 - A kept mesh carries its product's colour, or the reason it has none.
+- Revolving doors, openings and curved recesses used as entrances are
+  reached, bracketed by their chord deviation.
+- A space that is not a closed solid refuses only the reads near it.
+- Turned walls with flush openings or slots are measured.
 
 Breaking: the BCF crates move to openbim-bcf 0.7.2.
 
@@ -95,6 +63,24 @@ Breaking: the BCF crates move to openbim-bcf 0.7.2.
   no colour has no entry, so a host can tell "unstyled" from "unreadable".
 
 ### Changed
+
+- **An opening used as an entrance is reached through its void**
+  ([#475](https://github.com/axioval/engine/issues/475)). An opening has
+  no body (#383), so an entrance reach or circulation map it served was
+  refused with "has no body". It now meets a path where a door filling it
+  would, through the void it keeps free. An unmeasured void refuses with
+  the host's reason; a curved one is bracketed by its chord deviation, as
+  a tessellated subject is.
+- **A tessellated entrance or circulation subject is bracketed, not refused**
+  ([#475](https://github.com/axioval/engine/issues/475)). A revolving door
+  or round fitting used to refuse every entrance reach and circulation map
+  it served as `InexactPlacementEvidence`. It is now bracketed by its chord
+  deviation as a tessellated obstacle is: possibly where its mesh footprint
+  grown by the deviation lies, surely where a column of height twice the
+  deviation about its middle lies in the mesh, eroded by the deviation. The
+  evidence stays exact and its locator names the subject
+  (`:within-chord-deviation=`); what the deviation leaves open is still
+  refused.
 
 - **More tessellated bodies state their height**
   ([#475](https://github.com/axioval/engine/issues/475)).
@@ -189,6 +175,22 @@ Breaking: the BCF crates move to openbim-bcf 0.7.2.
   a boolean the exact boolean builds is certified with revolution operands
   too, and a refused operand is named by its family. The public parity
   models measure as before.
+
+### Fixed
+
+- **One space that is not a closed solid no longer refuses every
+  containment and adjacency read** ([#478](https://github.com/axioval/engine/issues/478)).
+  A declared space with an open mesh, degenerate triangles, no body or an
+  unmeasured one is kept as an unknown with its reason and the extent its
+  mesh may occupy (widened by its chord deviation). A contained-in-space,
+  adjacent-space, adjacent-across or overlapping-group-space read is decided
+  from the other spaces when its object, widened by the read's tolerances,
+  lies apart from every unknown space, and otherwise refuses naming it. A
+  space with no mesh has no extent and still refuses every such read.
+- Walls turned in plan with openings or slots flush with their faces are
+  measured instead of refused as self-intersecting: the volume kernel's
+  triangle test now decides near-coplanar triangles exactly
+  (axiolid-heal 0.3.3). (#373)
 
 ### Documentation
 

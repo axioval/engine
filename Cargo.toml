@@ -190,8 +190,11 @@ axiolid-evaluate = "0.3.17"
 # (#343, engine#452). 0.3.40 certifies the deviation of a boolean the
 # exact boolean builds with revolution operands too, and names a refused
 # operand by its family (#378, engine#468). 0.3.41 builds a box less a
-# torus exactly within the tolerance (#381, engine#469).
-axiolid-mesh-compile = "0.3.41"
+# torus exactly within the tolerance (#381, engine#469). 0.3.44 meshes a
+# profile corner next to collinear ones without a sliver cap, through
+# axiolid-construct 0.3.29 (#415, engine#477); 0.3.47 decides a fold of
+# stationed sections exactly (#406).
+axiolid-mesh-compile = "0.3.47"
 axiolid-exact-compile-contract = "0.3.1"
 # 0.3.3 adds `MeshClosure::OpenSolid` (#265).
 axiolid-mesh-compile-contract = "0.3.4"

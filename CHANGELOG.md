@@ -4,6 +4,20 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+### Fixed
+
+- A space whose extruded profile has a corner next to collinear ones reads as
+  a closed solid, so containment and adjacency read it (`axiolid-mesh-compile`
+  0.3.47, #477).
+
+### Changed
+
+- With `axiolid-mesh-compile` 0.3.47, a boolean whose mesh has more shells
+  than its exact result is unmeasured by that name, where it was bounded
+  without checking them, and a section run along a curve whose frame is read
+  by quadrature is measured once a fold is excluded exactly: a deck beside
+  the mitre of an offset by distances along an ellipse is now measured.
+
 ## [0.10.0] - 2026-11-06
 
 Geometry measures more of a real model and says why when it does not:

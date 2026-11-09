@@ -6649,11 +6649,14 @@ mod tests {
     /// certified bound. A wall of flat faces only is planar, compiled
     /// exact without a report, and never meets it; the round window takes
     /// the report. Since axiolid-mesh-compile 0.3.30 the measurement
-    /// admits the readings the boolean took, and the wall is measured
-    /// within a certified bound under the millimetre. Its volume, within
-    /// the surface that bound allows, holds the closed form.
+    /// admits the readings the boolean took, and a wall whose caps lie on
+    /// its faces is measured within a certified bound under the
+    /// millimetre. Its volume, within the surface that bound allows,
+    /// holds the closed form. Since 0.3.44 a mesh with more shells than
+    /// the exact result is not bounded (axiolid/kernel#392): caps `e` off
+    /// the faces leave such a shell, unmeasured by that name.
     #[test]
-    fn a_wall_with_openings_coinciding_within_the_booleans_readings_is_measured() {
+    fn a_wall_with_openings_coinciding_within_the_booleans_readings_names_an_extra_shell() {
         let t = 0.25;
         // The door and the first window go through (their caps read as
         // flush), the abutting windows remove `3.8..4.8` together, and the
@@ -6677,7 +6680,7 @@ mod tests {
                 axioval_ifc::read_ifc_step(wall_with_openings(&openings).as_bytes()).unwrap();
             let units = ifc_geometry::units::resolve(&model).unwrap();
             let backend = ifc_geometry::compile::default_backend();
-            let body = super::mesh(
+            let compiled = super::mesh(
                 &backend,
                 &model,
                 &units,
@@ -6685,9 +6688,20 @@ mod tests {
                 ifc_model::EntityId(29),
                 false,
                 super::NetOptions::default(),
-            )
-            .unwrap_or_else(|reason| panic!("{name}: {reason}"))
-            .unwrap_or_else(|| panic!("{name}: no body"));
+            );
+            if e > 0.0 {
+                let reason = compiled
+                    .err()
+                    .unwrap_or_else(|| panic!("{name}: measured with its extra shell"));
+                assert!(
+                    reason.contains("more shells than the exact result"),
+                    "{name}: {reason}"
+                );
+                continue;
+            }
+            let body = compiled
+                .unwrap_or_else(|reason| panic!("{name}: {reason}"))
+                .unwrap_or_else(|| panic!("{name}: no body"));
             let super::Fit::Within(bound) = body.fit else {
                 panic!("{name}: a wall with a round window measured as exact");
             };

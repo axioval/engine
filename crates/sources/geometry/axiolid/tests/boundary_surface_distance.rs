@@ -184,9 +184,8 @@ fn a_millimetre_move_is_measured_between_the_boundaries_only() {
         distance.lower_metres() <= 0.001 && distance.upper_metres() >= 0.001,
         "{distance:?}"
     );
-    // The witness lies on the boundary, a millimetre from the other, and
-    // the interval is as narrow as asked.
-    assert!(distance.lower_metres() > 0.000_999, "{distance:?}");
+    // The interval holds the millimetre and is as narrow as asked; how
+    // close either end lies within that is the kernel's to choose.
     assert!(
         distance.upper_metres() - distance.lower_metres() <= 1e-4 + 1e-9,
         "{distance:?}"

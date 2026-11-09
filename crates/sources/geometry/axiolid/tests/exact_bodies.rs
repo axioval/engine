@@ -226,11 +226,13 @@ fn a_wall_less_a_door_and_a_window_along_the_axes_is_exact() {
     // nothing within a tolerance (axiolid/kernel#236), so the body is the
     // exact difference of the operands as given. Its two booleans may
     // still merge constructed points within 2^-40 of the operands' largest
-    // coordinate (a few metres here), which widens its distances.
+    // coordinate (a few metres here), which widens its distances, and
+    // operands sharing a placement are cut in its frame, a snap there
+    // adding the placement's rounding (axiolid/kernel#356).
     assert!(boundary.body().is_exact());
     let rounding = boundary.body().rounding_metres();
     assert!(
-        rounding > 0.0 && rounding <= 2.0 * 10.0 / 1_099_511_627_776.0,
+        rounding > 0.0 && rounding <= 4.0 * 10.0 / 1_099_511_627_776.0,
         "{rounding}"
     );
     assert_close(volume(boundary.brep().unwrap()), WALL_VOLUME, 1e-9);

@@ -1941,8 +1941,10 @@ ellipse or a B-spline, and along an offset beside a line, a circle, an
 ellipse or a B-spline, constant or by distances. Elsewhere it stays
 unmeasured with the reason that the compiler certifies no bound: along
 spirals and other intrinsic curves, chains and offsets beside them, skewed
-circles and steep tangents, and in a cell beside a mitre on a curved piece
-or with a section that changes across a mitre. Since `ifc-geometry` 0.18 (openbimrs/ifc#346) stations also
+circles and steep tangents. A cell beside a mitre on a curved piece, or
+with a section that changes across a mitre, was unmeasured too until
+axiolid-mesh-compile 0.3.47 decided a fold of such sections exactly
+(axiolid/kernel#406); the pinned decks there are measured. Since `ifc-geometry` 0.18 (openbimrs/ifc#346) stations also
 lower on a plain `IfcCompositeCurve`, an `IfcTrimmedCurve` and a
 station-placed composite basis, and one on a joint or tangent
 discontinuity reads the incoming segment, as IFC4.3 ADD2 8.9.3.48.3
@@ -1963,7 +1965,8 @@ its certified joint (openbimrs/ifc#423). Since `ifc-geometry` 0.23 a run of
 sections along such a basis lowers with seam windows, mitred at its joints
 (openbimrs/ifc#429; `tests/check.rs`
 `with_geometry_a_run_along_an_offset_ellipse_lowers`, measured since
-axiolid-mesh-compile 0.3.28), and a linear
+axiolid-mesh-compile 0.3.47 decides a fold on a frame read by quadrature
+exactly, axiolid/kernel#406), and a linear
 placement derived on one works through open-ended path pieces
 (openbimrs/ifc#427). Since `ifc-geometry` 0.24 an
 `IfcOffsetCurveByDistances` along such a basis lowers as a curve, continued
@@ -1975,8 +1978,8 @@ with seam windows (openbimrs/ifc#443), and since axiolid-mesh-compile
 0.3.25 the kernel certifies the length of a varying offset along an ellipse
 or B-spline (axiolid/kernel#307); the solid then reaches the mesh compiler,
 which since 0.3.28 certifies its frames too (axiolid/kernel#316). The
-pinned deck there stays unmeasured only for the cell beside the mitre at
-the corner its widening offset makes at station 2 (`tests/check.rs`
+pinned deck there is measured since 0.3.47, the cell beside its mitre
+included (axiolid/kernel#406; `tests/check.rs`
 `with_geometry_a_run_along_offsets_by_distances_of_an_ellipse_reaches_the_mesh_compiler`).
 Still refused by name: a station given as `IfcParameterValue`, a station
 basis that is an offset of an offset curve (axiolid/kernel#289), a relation mixing

@@ -7809,6 +7809,87 @@ fn with_geometry_a_device_of_an_ifc2x3_model_lies_in_a_space_of_an_ifc4_one() {
     assert!(finding_ids(&result).is_empty(), "{result:#}");
 }
 
+/// The plan x axis of [`ifc4_turned_space`]'s placement.
+const TURNED_AXIS: (f64, f64) = (0.999_215_271_103_513, 0.039_608_610_093_419_1);
+
+/// A 3 m high `IfcSpace` at a turned placement, its polyline profile
+/// holding runs of collinear corners, one of them 2e-13 m off the line
+/// through its neighbours: the shape whose cap slivers once read as an
+/// open mesh (#477, axiolid/kernel#415).
+fn ifc4_turned_space() -> String {
+    let profile = [
+        ("132.8", "-8.0"),
+        ("132.4", "-8.0"),
+        ("132.4", "-7.60000000000037"),
+        ("132.8", "-7.60000000000037"),
+        ("132.8", "-3.96250000000036"),
+        ("127.4", "-3.96250000000034"),
+        ("127.3375", "-3.96250000000034"),
+        ("127.2622304", "-3.96250000000034"),
+        ("125.549671244606", "-3.96250000000034"),
+        ("125.549671244606", "-5.36699040000169"),
+        ("125.549671244606", "-5.52000000000169"),
+        ("125.549671244606", "-9.98250000000169"),
+        ("125.549671244606", "-10.1355096000017"),
+        ("125.549671244606", "-12.2419904000017"),
+        ("125.549671244606", "-12.3950000000017"),
+        ("125.549671244606", "-14.2200000000018"),
+        ("125.549671244606", "-14.9450000000018"),
+        ("125.549671244606", "-15.6000000000008"),
+        ("127.4", "-15.6000000000008"),
+        ("127.4", "-14.4530096000007"),
+        ("127.4", "-14.2375000000007"),
+        ("127.5377696", "-14.2375000000007"),
+        ("132.8", "-14.2375000000008"),
+    ];
+    let mut data = String::new();
+    let mut ring = Vec::new();
+    for (index, (x, y)) in profile.iter().enumerate() {
+        let id = 100 + index;
+        let _ = writeln!(data, "#{id}=IFCCARTESIANPOINT(({x},{y}));");
+        ring.push(format!("#{id}"));
+    }
+    ring.push("#100".to_owned());
+    let (ax, ay) = TURNED_AXIS;
+    let _ = write!(
+        data,
+        "#10=IFCPOLYLINE(({}));\n\
+         #11=IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,#10);\n\
+         #12=IFCEXTRUDEDAREASOLID(#11,#2,#4,3.);\n\
+         #13=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#12));\n\
+         #14=IFCPRODUCTDEFINITIONSHAPE($,$,(#13));\n\
+         #16=IFCDIRECTION(({ax:?},{ay:?},0.));\n\
+         #17=IFCAXIS2PLACEMENT3D(#1,#4,#16);\n\
+         #18=IFCLOCALPLACEMENT($,#17);\n\
+         #19=IFCSPACE('0000000000000000000019',$,$,$,$,#18,#14,$,.ELEMENT.,$,$);\n",
+        ring.join(",")
+    );
+    ifc_file_of("IFC4", "", "$", &data)
+}
+
+#[test]
+fn with_geometry_a_space_with_collinear_corners_at_a_turned_placement_holds_its_devices() {
+    // Where a point of the space's own plan is placed.
+    let placed = |px: f64, py: f64| {
+        let (ax, ay) = TURNED_AXIS;
+        (ax * px - ay * py, ay * px + ax * py)
+    };
+    let (inside_x, inside_y) = placed(129.0, -10.0);
+    let (outside_x, outside_y) = placed(129.0, -20.0);
+    let (output, result) = devices_in_spaces_of(
+        "geometry-derived-turned-collinear-space",
+        &ifc4_turned_space(),
+        &[(30, inside_x, inside_y), (40, outside_x, outside_y)],
+        "axioval:derived.contained-in-space",
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert!(
+        !result.to_string().contains("is not a closed solid"),
+        "{result:#}"
+    );
+    assert_eq!(finding_ids(&result), ["#46"], "{result:#}");
+}
+
 #[test]
 fn with_geometry_an_open_space_refuses_only_the_devices_that_may_lie_in_it() {
     let rooms = ifc4_room_and_open_hall();
@@ -24741,8 +24822,10 @@ fn with_geometry_stations_on_an_offset_basis_lower() {
 /// Since ifc-geometry 0.23 a run of sections along such a basis lowers with
 /// seam windows (openbimrs/ifc#429), where it was refused by name, and
 /// since axiolid-mesh-compile 0.3.28 the mesh compiler bounds its cells
-/// against the exact frame law read by quadrature (axiolid/kernel#316):
-/// the deck is measured as tessellated.
+/// against the exact frame law read by quadrature (axiolid/kernel#316).
+/// Since axiolid-mesh-compile 0.3.47 it also rules out a fold there
+/// exactly (axiolid/kernel#406, #407): the deck is measured as
+/// tessellated.
 #[test]
 fn with_geometry_a_run_along_an_offset_ellipse_lowers() {
     let deck = "#86=IFCCARTESIANPOINT((30.,0.));\n\
@@ -24781,9 +24864,10 @@ fn with_geometry_a_run_along_an_offset_ellipse_lowers() {
 /// offset along an ellipse (axiolid/kernel#307), so the deck reaches the
 /// mesh compiler. Since axiolid-mesh-compile 0.3.28 it certifies frames
 /// read by quadrature on an ellipse and offsets by distances beside it
-/// (axiolid/kernel#316); what it still certifies no bound for is the cell
-/// beside the mitre at the corner the widening offset makes at station 2,
-/// on a curved piece: unmeasured by that name, never bounded.
+/// (axiolid/kernel#316), and since 0.3.47 it rules out a fold there
+/// exactly (axiolid/kernel#406, #407), the cell beside the mitre at the
+/// corner the widening offset makes at station 2 included: the deck is
+/// measured as tessellated.
 #[test]
 fn with_geometry_a_run_along_offsets_by_distances_of_an_ellipse_reaches_the_mesh_compiler() {
     let deck = "#86=IFCCARTESIANPOINT((30.,0.));\n\
@@ -24810,13 +24894,12 @@ fn with_geometry_a_run_along_offsets_by_distances_of_an_ellipse_reaches_the_mesh
         crossing_walls_with(deck).replace("FILE_SCHEMA(('IFC4'))", "FILE_SCHEMA(('IFC4X3_ADD2'))");
     let (output, result) = case.wall_clash(&model, &json!({}));
     assert!(output.status.code().is_some(), "{}", stderr(&output));
-    let reason = unmeasured_reasons(&result)
-        .remove("#53")
-        .unwrap_or_else(|| panic!("{result:#}"));
-    assert!(
-        reason.contains("certifies no bound") && reason.contains("mitred seam"),
-        "{reason}"
+    assert_eq!(
+        unmeasured_reasons(&result).remove("#53"),
+        None,
+        "{result:#}"
     );
+    assert_eq!(result["geometry"]["tessellated"], 1, "{result:#}");
 }
 
 /// The same deck with the offsets beside an `IfcOffsetCurve2D` of the
@@ -24864,9 +24947,10 @@ fn with_geometry_a_run_along_offsets_by_distances_of_an_offset_is_refused_by_nam
 /// stations lower on such a basis, the joint's on the incoming segment,
 /// where they were refused by name. Since axiolid-mesh-compile 0.3.24
 /// (axiolid/kernel#247) the mesh compiler certifies the bound between
-/// stations along polylines: the straight deck is measured, while the turned
-/// one, whose section changes across the mitre at the joint, is unmeasured
-/// by that name.
+/// stations along polylines: the straight deck is measured. The turned
+/// one, whose section changes across the mitre at the joint, was unmeasured
+/// by that name until axiolid-mesh-compile 0.3.47 decided a fold of turned
+/// sections exactly (axiolid/kernel#406): both are measured.
 #[test]
 fn with_geometry_stations_on_a_composite_basis_lower() {
     let deck = |corner: &str| {
@@ -24902,16 +24986,8 @@ fn with_geometry_stations_on_a_composite_basis_lower() {
         let (output, result) = case.wall_clash(&model, &json!({}));
         assert!(output.status.code().is_some(), "{}", stderr(&output));
         let reason = unmeasured_reasons(&result).remove("#53");
-        if corner == "(30.,0.,0.)" {
-            assert_eq!(reason, None, "{result:#}");
-            assert_eq!(result["geometry"]["tessellated"], 1, "{result:#}");
-        } else {
-            let reason = reason.unwrap_or_else(|| panic!("{corner}: {result:#}"));
-            assert!(
-                reason.contains("certifies no bound") && reason.contains("mitred seam"),
-                "{corner}: {reason}"
-            );
-        }
+        assert_eq!(reason, None, "{corner}: {result:#}");
+        assert_eq!(result["geometry"]["tessellated"], 1, "{corner}: {result:#}");
     }
 }
 

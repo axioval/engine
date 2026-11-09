@@ -291,7 +291,7 @@ ifc-alignment = "0.11.0"
 # resolves units fail-closed: no declared, an unreadable or an ambiguous
 # length unit refuses, and a missing angle unit refuses angles
 # (openbimrs/ifc#585).
-ifc-geometry = { version = "0.32.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
+ifc-geometry = { version = "0.33.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
 # Map conversions only: without the default `transform` feature it links no
 # geometry crate (never Axiolid). 0.7 resolves IFC2X3's
 # ePSet_MapConversion and ePSet_ProjectedCRS (openbimrs/ifc#451), where

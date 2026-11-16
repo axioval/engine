@@ -219,8 +219,11 @@ openbim-ids = { version = "0.2.2", features = ["audit-schema"] }
 # compiles no geometry kernel.
 # 0.24 re-exports `ifc-geometry` 0.18 (0.35 re-exports 0.28, 0.36 re-exports
 # 0.29); its `authoring` feature stays off. 0.39 re-exports `ifc-geometry` 0.32:
-# units resolve fails closed (openbimrs/ifc#585).
-openbim_ifc = { package = "openbim-ifc", version = "0.39.0", default-features = false, features = ["geometry-select", "properties", "ifc2x3", "ifc4", "ifc4x3"] }
+# units resolve fails closed (openbimrs/ifc#585). 0.40 re-exports 0.33, which
+# lowers an opening-less Body holding a boolean, clip or IfcCsgSolid in the
+# product's frame (openbimrs/ifc#655). 0.42 re-exports 0.34.1 and requires
+# `ifc-style` 0.7, the one the workspace names (never two copies of it).
+openbim_ifc = { package = "openbim-ifc", version = "0.42.0", default-features = false, features = ["geometry-select", "properties", "ifc2x3", "ifc4", "ifc4x3"] }
 ifc-classification = "0.5.2"
 # The CLI reads each `IfcAlignment`'s centreline, stationing and cant to
 # locate products along it (engine#252). 0.7 evaluates Viennese bends for
@@ -293,26 +296,31 @@ ifc-alignment = "0.11.0"
 # straight edges watertight (#528), with axiolid-mesh-compile 0.3.31. 0.32
 # resolves units fail-closed: no declared, an unreadable or an ambiguous
 # length unit refuses, and a missing angle unit refuses angles
-# (openbimrs/ifc#585).
-ifc-geometry = { version = "0.32.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
+# (openbimrs/ifc#585). 0.33 lowers an opening-less Body holding a boolean,
+# clip or IfcCsgSolid in the product's frame (#655). 0.34 returns a scaled or
+# mirrored mapped swept item with no swept solid instead of refusing it
+# (#640; `bodies.rs` refuses such a body), and 0.34.1 refuses swept disks it
+# cannot lower exactly (#661).
+ifc-geometry = { version = "0.34.1", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
 # Map conversions only: without the default `transform` feature it links no
 # geometry crate (never Axiolid). 0.7 resolves IFC2X3's
 # ePSet_MapConversion and ePSet_ProjectedCRS (openbimrs/ifc#451), where
 # IFC2X3 was refused.
-ifc-georef = { version = "0.8.2", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
-ifc-material = "0.6.2"
+ifc-georef = { version = "0.8.3", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
+ifc-material = "0.6.4"
 ifc-spatial = "0.6.2"
-ifc-model = "0.4.2"
-ifc-properties = "0.10.2"
-ifc-schema = "0.3.5"
-ifc-step = "0.6.2"
+ifc-model = "0.4.8"
+ifc-properties = "0.10.7"
+ifc-schema = "0.3.7"
+ifc-step = "0.6.5"
 # ifcXML: the codec's own layout and the buildingSMART XSD configuration,
 # both read schema-strict.
 ifc-xml = "0.5.2"
 # `xml.rs` bounds an ifcXML document's start tags and reads its root with it;
 # `axioval-engine` reads xlsx rule parameter tables with it.
 quick-xml = "0.42"
-ifc-style = "0.6.2"
+# 0.7 adds `ColourSource::MaterialSet` and makes `ColourSource` non-`Copy`.
+ifc-style = "0.7.0"
 ifc-systems = "0.6.2"
 regex = "1.11.2"
 sha2 = "0.11.0"

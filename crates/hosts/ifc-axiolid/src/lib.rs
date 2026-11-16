@@ -5479,11 +5479,12 @@ mod tests {
         );
     }
 
-    /// A malformed styled item makes the resolver refuse the whole source;
-    /// the report names the source and the reason, and the meshes stay
-    /// uncoloured (#472).
+    /// A malformed styled item refuses the colour of the product whose
+    /// lookup reaches it, by name, and no source as a whole (since
+    /// ifc-style 0.6.3 a malformed assignment refuses only those lookups);
+    /// no mesh gets a guessed colour (#472).
     #[test]
-    fn a_source_the_colour_resolver_refuses_is_reported() {
+    fn a_product_reaching_a_malformed_styled_item_is_refused_its_colour() {
         let extra = "#50=IFCSTYLEDITEM((#13),(),$);\n";
         let bytes =
             rooms_and_door().replace("ENDSEC;\nEND-ISO", &format!("{extra}ENDSEC;\nEND-ISO"));
@@ -5500,9 +5501,13 @@ mod tests {
         let source = session.snapshots().next().unwrap().source().clone();
         assert!(!report.meshes.is_empty());
         assert!(report.meshes.values().all(|mesh| mesh.colour().is_none()));
-        assert_eq!(report.colour_unreadable_sources.len(), 1, "{report:?}");
-        assert_eq!(report.colour_unreadable_sources[0].0, source);
-        assert!(report.colour_refused.is_empty());
+        assert!(report.colour_unreadable_sources.is_empty(), "{report:?}");
+        let [(object, reason)] = report.colour_refused.as_slice() else {
+            panic!("{:?}", report.colour_refused);
+        };
+        assert_eq!(object.source, source);
+        assert_eq!(object.local_id, "#16");
+        assert!(reason.contains("#50"), "{reason}");
     }
 
     /// Without any style nothing is reported: unstyled is not a refusal.

@@ -134,6 +134,22 @@ impl Bodies {
         else {
             return Ok(None);
         };
+        // `ifc-geometry` 0.34 describes a swept solid that a mapping scales
+        // or mirrors with no `swept` (its profile parameters would not be the
+        // authored ones) instead of refusing the body. Answering it would
+        // state `Kind = extrusion` with no profile or placement, so the body
+        // stays refused, as the description refused it before.
+        if let Some(item) = body
+            .items
+            .iter()
+            .find(|item| item.kind.is_swept_area() && item.swept.is_none())
+        {
+            return Err(PropertyResolutionError::Unavailable(format!(
+                "the body cannot be described: {} ({}) is a swept solid that a mapping \
+                 scales or mirrors, so its profile parameters would not be the authored ones",
+                item.item, item.type_name
+            )));
+        }
         Ok(Some(Facts::of(model, object, &body, &units)))
     }
 }

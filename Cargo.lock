@@ -1683,9 +1683,9 @@ dependencies = [
 
 [[package]]
 name = "ifc-geometry"
-version = "0.32.0"
+version = "0.34.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7df8c4e20ae85e82845bd4abe86e95ec2405e4baac25c6c79515ef84cc3d5393"
+checksum = "f0d2895583b81ccb1de98c4fb496881f8aeb68d5547b9c18676218a500a9bedc"
 dependencies = [
  "axiolid-construct 0.3.29",
  "axiolid-contracts",
@@ -1697,6 +1697,7 @@ dependencies = [
  "axiolid-mesh-compile",
  "axiolid-mesh-compile-contract",
  "axiolid-model",
+ "axiolid-predicates",
  "axiolid-primitive",
  "axiolid-profile",
  "axiolid-surface",
@@ -1709,9 +1710,9 @@ dependencies = [
 
 [[package]]
 name = "ifc-georef"
-version = "0.8.2"
+version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "44c416dc2e4942577f83df157f0cb7a877fb886a76ee53c68c85f76826891f54"
+checksum = "7c0d837b0f376335bbdb7faeab70893d2a9e8253fb6c5c7d936f738b4b1f9782"
 dependencies = [
  "axiolid-core",
  "ifc-model",
@@ -1720,9 +1721,9 @@ dependencies = [
 
 [[package]]
 name = "ifc-material"
-version = "0.6.2"
+version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e0029d35c2b77549210f24826bf31a39c4f43f6a5b956edca489a708cfb6107c"
+checksum = "6af9b218160f587ab12f6eeda7915a4ec32e6fd32c0ff743d560922b6f53d70e"
 dependencies = [
  "ifc-model",
  "ifc-schema",
@@ -1731,9 +1732,9 @@ dependencies = [
 
 [[package]]
 name = "ifc-model"
-version = "0.4.2"
+version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "104343cb614293efc72f05eb3aaac1623bed2004e40ae49a9dc8aba3bd8ad865"
+checksum = "aaebea241c3ad4f855087a8891701766dcadce565f2fb4e23443c233b6530fd4"
 dependencies = [
  "ahash",
  "thiserror",
@@ -1741,9 +1742,9 @@ dependencies = [
 
 [[package]]
 name = "ifc-properties"
-version = "0.10.2"
+version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b649b3cc3ff14a2f53e35de5375f68eb8a443f5975273078de7cef66a893a689"
+checksum = "fe93cefd9730d08d3cb22ad2c8a420c40522c688448f5e392910b44d0c12b2ce"
 dependencies = [
  "ifc-model",
  "ifc-schema",
@@ -1751,9 +1752,9 @@ dependencies = [
 
 [[package]]
 name = "ifc-schema"
-version = "0.3.5"
+version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c5e721be6635bb5fa9968eaa880c82d96b10f67c53438caf207cc0b4ef2414b"
+checksum = "0eb1094bf20003e67503927533615893fd68f5a6f9558f6efdbf4ad605be5255"
 dependencies = [
  "ahash",
  "bincode",
@@ -1772,10 +1773,11 @@ dependencies = [
 
 [[package]]
 name = "ifc-step"
-version = "0.6.2"
+version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "208eb00402140025cd77f5cd16a8f4c3422ac64a4088a876db7cf553cf006f51"
+checksum = "3fc0a5192e3c4217aa6c558eb70250eea55c2b70aab6a28472a3769eb6ba3cd4"
 dependencies = [
+ "ahash",
  "ifc-model",
  "memmap2",
  "openbim-step",
@@ -1784,9 +1786,9 @@ dependencies = [
 
 [[package]]
 name = "ifc-style"
-version = "0.6.2"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df840f7b93f4f2393301a5bd0a682392977fd1c7b7087cf68362b25f697470e0"
+checksum = "8d0ca323a8bf5a95bbbe0a6afa253ca70712b2598bb74b764fd742f83e1aa29c"
 dependencies = [
  "ifc-model",
  "ifc-schema",
@@ -1805,9 +1807,9 @@ dependencies = [
 
 [[package]]
 name = "ifc-template-catalog"
-version = "0.4.0"
+version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3c7494de1065e2fd0c784fd92371b3394b18b7586d0342dfc3259abf230054b"
+checksum = "622a7f4302be36b139eb656f6326cc21f1d6ad70677e93a071b7cc7f1aecc265"
 dependencies = [
  "bincode",
  "ifc-schema",
@@ -2175,9 +2177,9 @@ dependencies = [
 
 [[package]]
 name = "openbim-ifc"
-version = "0.39.0"
+version = "0.42.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d99df0b8a17c7bcd7b2f5f9e53db7ec6fa19374084306b6d45a8295ba0837df1"
+checksum = "b79ccc77ef8ced7c12399309a4b493dfb5407877899ff3f83be3ca9ca15df2e9"
 dependencies = [
  "getrandom 0.3.4",
  "ifc-classification",
@@ -2197,9 +2199,9 @@ dependencies = [
 
 [[package]]
 name = "openbim-step"
-version = "0.11.2"
+version = "0.11.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c0deb031445d124b03446a571b62b40dd0573c50faf2820ae389a5765d4f050"
+checksum = "27b2bd5375c2ea4755f4ce12dfe5827f9c644c9a3be275c2178c9f35babd97b0"
 dependencies = [
  "encoding_rs",
  "memchr",

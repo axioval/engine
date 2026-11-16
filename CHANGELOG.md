@@ -12,6 +12,23 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **Raised `openbim-ifc` to 0.42, `ifc-geometry` to 0.34.1 and the
+  `ifc-*` crates they require** (`ifc-model` 0.4.8, `ifc-step` 0.6.5,
+  `ifc-schema` 0.3.7, `ifc-properties` 0.10.7, `ifc-georef` 0.8.3,
+  `ifc-material` 0.6.4, `ifc-style` 0.7.0), so the build links one
+  `ifc-style` ([#485](https://github.com/axioval/engine/issues/485)).
+  `ifc-geometry` 0.34 describes a swept solid that a mapping scales or
+  mirrors instead of refusing it
+  ([openbimrs/ifc#640](https://github.com/openbimrs/ifc/issues/640)); the
+  adapter still refuses such a body for every `axioval:body` name, never
+  answering `Kind = extrusion` without its profile and placement. A swept
+  disk with a non-positive radius, a bore as wide as its radius, a half-open
+  range or a non-positive fillet
+  ([openbimrs/ifc#661](https://github.com/openbimrs/ifc/issues/661)) is
+  refused with the disk named. `ifc-style` 0.7 names a colour the materials
+  of a layer, profile or constituent set agree on `MaterialSet`; a kept
+  mesh's colour carries no source, so it reads as before. The door-items
+  derivation key names `ifc-geometry` 0.34.1.
 - With `axiolid-mesh-compile` 0.3.47, a boolean whose mesh has more shells
   than its exact result is unmeasured by that name, where it was bounded
   without checking them, and a section run along a curve whose frame is read
@@ -22,7 +39,7 @@ All notable changes are documented here. This project follows Semantic Versionin
   refusal `HoleOutsideOuter`, `HolesOverlap` or `PolygonsOverlap`, and a
   report names them like the other overlay errors (#480).
 
-## [0.10.0] - 2026-11-06
+## [0.10.0] - 2026-11-16
 
 Geometry measures more of a real model and says why when it does not:
 

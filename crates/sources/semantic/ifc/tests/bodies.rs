@@ -571,6 +571,132 @@ fn a_mapping_states_whether_it_mirrors_any_item_kind() {
     ));
 }
 
+/// One 300 mm x 400 mm column of 3 m, mapped three ways: #110 by a scale of
+/// 2, #120 by an operator mirroring it (`Axis2` opposing `Axis3 × Axis1`),
+/// #130 by the identity.
+const MAPPED_EXTRUSIONS: &str = "\
+#90=IFCSIUNIT(*,.LENGTHUNIT.,.MILLI.,.METRE.);
+#91=IFCUNITASSIGNMENT((#90));
+#92=IFCPROJECT('000000000000000000000P',$,'P',$,$,$,$,(#5),#91);
+#1=IFCCARTESIANPOINT((0.,0.,0.));
+#2=IFCAXIS2PLACEMENT3D(#1,$,$);
+#4=IFCDIRECTION((0.,0.,1.));
+#5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);
+#34=IFCRECTANGLEPROFILEDEF(.AREA.,'C300x400',$,300.,400.);
+#33=IFCEXTRUDEDAREASOLID(#34,#2,#4,3000.);
+#32=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#33));
+#79=IFCREPRESENTATIONMAP(#2,#32);
+#81=IFCDIRECTION((1.,0.,0.));
+#82=IFCDIRECTION((0.,-1.,0.));
+#83=IFCDIRECTION((0.,0.,1.));
+#84=IFCCARTESIANTRANSFORMATIONOPERATOR3D(#81,#82,#1,$,#83);
+#85=IFCCARTESIANTRANSFORMATIONOPERATOR3D($,$,#1,$,$);
+#86=IFCCARTESIANTRANSFORMATIONOPERATOR3D($,$,#1,2.,$);
+#88=IFCLOCALPLACEMENT($,#2);
+#101=IFCMAPPEDITEM(#79,#86);
+#102=IFCMAPPEDITEM(#79,#84);
+#103=IFCMAPPEDITEM(#79,#85);
+#111=IFCSHAPEREPRESENTATION(#5,'Body','MappedRepresentation',(#101));
+#112=IFCPRODUCTDEFINITIONSHAPE($,$,(#111));
+#110=IFCCOLUMN('0000000000000000000110',$,'S',$,$,#88,#112,$,.COLUMN.);
+#121=IFCSHAPEREPRESENTATION(#5,'Body','MappedRepresentation',(#102));
+#122=IFCPRODUCTDEFINITIONSHAPE($,$,(#121));
+#120=IFCCOLUMN('0000000000000000000120',$,'M',$,$,#88,#122,$,.COLUMN.);
+#131=IFCSHAPEREPRESENTATION(#5,'Body','MappedRepresentation',(#103));
+#132=IFCPRODUCTDEFINITIONSHAPE($,$,(#131));
+#130=IFCCOLUMN('0000000000000000000130',$,'R',$,$,#88,#132,$,.COLUMN.);
+";
+
+/// `ifc-geometry` 0.34 describes a swept solid that a mapping scales or
+/// mirrors with no `swept` (its profile and placement would not be the
+/// authored ones). The body must stay refused for every name, never answer
+/// `Kind = extrusion` without its profile and placement.
+#[test]
+fn a_scaled_or_mirrored_mapped_extrusion_is_refused_never_partly_answered() {
+    for local in ["#110", "#120"] {
+        for name in [
+            "Count",
+            "Kind",
+            "Mapped",
+            "Mirrored",
+            "Profile.Type",
+            "Extrusion.Depth",
+        ] {
+            assert!(
+                matches!(
+                    resolve_in("IFC4", MAPPED_EXTRUSIONS, local, name),
+                    Err(PropertyResolutionError::Unavailable(_))
+                ),
+                "{local} {name}: {:?}",
+                resolve_in("IFC4", MAPPED_EXTRUSIONS, local, name)
+            );
+        }
+    }
+    // The same column mapped rigidly states all of it.
+    let rigid = |name| value_in("IFC4", MAPPED_EXTRUSIONS, "#130", name);
+    assert_eq!(
+        rigid("Kind"),
+        Some(PropertyValue::String("extrusion".into()))
+    );
+    assert_eq!(rigid("Mirrored"), Some(PropertyValue::Boolean(false)));
+    assert_eq!(
+        rigid("Profile.Type"),
+        Some(PropertyValue::String("rectangle".into()))
+    );
+}
+
+/// Four pipes along one 2 m polyline: #110 a sound swept disk, #120 a bore as
+/// wide as its radius, #130 a disk with a start parameter and no end, #140 a
+/// polygonal disk with a negative fillet.
+const SWEPT_DISKS: &str = "\
+#90=IFCSIUNIT(*,.LENGTHUNIT.,.MILLI.,.METRE.);
+#91=IFCUNITASSIGNMENT((#90));
+#92=IFCPROJECT('000000000000000000000P',$,'P',$,$,$,$,(#5),#91);
+#1=IFCCARTESIANPOINT((0.,0.,0.));
+#2=IFCAXIS2PLACEMENT3D(#1,$,$);
+#5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);
+#6=IFCCARTESIANPOINT((2000.,0.,0.));
+#7=IFCPOLYLINE((#1,#6));
+#88=IFCLOCALPLACEMENT($,#2);
+#101=IFCSWEPTDISKSOLID(#7,50.,$,$,$);
+#102=IFCSWEPTDISKSOLID(#7,50.,50.,$,$);
+#103=IFCSWEPTDISKSOLID(#7,50.,$,0.,$);
+#104=IFCSWEPTDISKSOLIDPOLYGONAL(#7,50.,$,$,$,-10.);
+#111=IFCSHAPEREPRESENTATION(#5,'Body','AdvancedSweptSolid',(#101));
+#112=IFCPRODUCTDEFINITIONSHAPE($,$,(#111));
+#110=IFCPIPESEGMENT('0000000000000000000110',$,'A',$,$,#88,#112,$,.RIGIDSEGMENT.);
+#121=IFCSHAPEREPRESENTATION(#5,'Body','AdvancedSweptSolid',(#102));
+#122=IFCPRODUCTDEFINITIONSHAPE($,$,(#121));
+#120=IFCPIPESEGMENT('0000000000000000000120',$,'B',$,$,#88,#122,$,.RIGIDSEGMENT.);
+#131=IFCSHAPEREPRESENTATION(#5,'Body','AdvancedSweptSolid',(#103));
+#132=IFCPRODUCTDEFINITIONSHAPE($,$,(#131));
+#130=IFCPIPESEGMENT('0000000000000000000130',$,'C',$,$,#88,#132,$,.RIGIDSEGMENT.);
+#141=IFCSHAPEREPRESENTATION(#5,'Body','AdvancedSweptSolid',(#104));
+#142=IFCPRODUCTDEFINITIONSHAPE($,$,(#141));
+#140=IFCPIPESEGMENT('0000000000000000000140',$,'D',$,$,#88,#142,$,.RIGIDSEGMENT.);
+";
+
+/// `ifc-geometry` 0.34.1 refuses a swept disk it cannot read exactly when it
+/// describes the body; the refusal reaches every name of the body, with the
+/// disk named, and never leaves a partial answer.
+#[test]
+fn a_swept_disk_the_description_refuses_is_refused_by_name() {
+    assert_eq!(
+        value_in("IFC4", SWEPT_DISKS, "#110", "Kind"),
+        Some(PropertyValue::String("swept-disk".into()))
+    );
+    for (local, disk) in [("#120", "#102"), ("#130", "#103"), ("#140", "#104")] {
+        for name in ["Count", "Kind"] {
+            match resolve_in("IFC4", SWEPT_DISKS, local, name) {
+                Err(PropertyResolutionError::Incomplete(reason)) => {
+                    assert!(reason.contains(disk), "{local} {name}: {reason}");
+                }
+                other => panic!("{local} {name}: {other:?}"),
+            }
+        }
+    }
+}
+
 /// Site #200 is a 100 m x 50 m plot 1 m thick; site #210 states no shape;
 /// site #220 states a footprint alone; site #230 an open profile swept as a
 /// solid, which cannot be described.

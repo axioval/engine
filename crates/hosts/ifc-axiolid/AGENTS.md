@@ -32,14 +32,18 @@ benchmark) is its first consumer.
   local frame, finite and indexed), for display. `KeptMesh::colour` is the
   product's `ColourResolver::product_colour` (`openbim-ifc`, `colour`
   feature: styled item, then presentation layer, then material), in an owned
-  `KeptColour` (rgb, transparency). The resolver is built once per model and
+  `KeptColour` (rgb, transparency; it carries no `ColourSource`, so a colour
+  the materials of a set agree on, `ColourSource::MaterialSet` since
+  `ifc-style` 0.7, reads as any other). The resolver is built once per model and
   only when meshes are kept. `None` when nothing colours the product, its
   items state different colours, it is a composed whole (no Body of its own,
   even with a styled material), its material is ambiguous (a layer or
   profile set naming several materials, which covers most layered walls and
-  slabs without item styles), or the resolver fails for its source (one
-  malformed styled item, layer assignment or shape aspect leaves every mesh
-  of that source without colour): never guessed, never a default.
+  slabs without item styles), its lookup reaches a malformed styled item,
+  layer assignment or shape aspect (refused for that product alone since
+  ifc-style 0.6.3), or the resolver fails for its source (an unsupported
+  schema leaves every mesh of that source without colour): never guessed,
+  never a default.
   Why is recorded (#472), additively and sorted: `colour_unreadable_sources`
   (a source the resolver refused, with its error) and `colour_refused` (a
   product it refused, with its error; not for a source already listed). A

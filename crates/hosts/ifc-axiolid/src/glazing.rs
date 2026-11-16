@@ -178,7 +178,7 @@ pub(super) struct ItemsKey {
 /// versions the workspace locks.
 const IFC_GEOMETRY: Kernel = Kernel {
     name: "ifc-geometry",
-    version: "0.32.0",
+    version: "0.34.1",
 };
 const AXIOLID_MESH_COMPILE: Kernel = Kernel {
     name: "axiolid-mesh-compile",

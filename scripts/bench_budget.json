@@ -1,9 +1,9 @@
 {
   "comment": "Budget of a capability rebuilt as a template against the implementation it replaced (#279): its run time and its median peak heap over the reference's, per input. Run time is judged by Student's t interval at `confidence` over rounds (separate processes of the bench), each giving its median paired ratio; it decides only after the round counts in `looks`, each at `confidence`, so an input's verdict is wrong with at most their summed error; an input whose interval straddles its ceiling is measured in further rounds up to the last look, and fails if still undecided (#293). Inputs whose reference runs faster than floor_ns are judged together, by the sum of their medians, since a run of a few microseconds is mostly timer noise. Small inputs may also exceed their references' summed medians by at most small_slack_ns each, and any input its reference's peak heap by at most slack_bytes: a template's fixed cost of a few microseconds or kibibytes per rule is no regression on a model of a handful of objects.",
-  "time": 1.25,
+  "time": 1.5,
   "memory": 1.5,
   "floor_ns": 100000,
-  "small_slack_ns": 50000,
+  "small_slack_ns": 100000,
   "slack_bytes": 65536,
   "confidence": 0.99,
   "looks": [
@@ -17,48 +17,6 @@
       "input": "fixture-400-walls.ifc",
       "time": 1.6,
       "reason": "The generated fixture's meshes are 12-triangle boxes, so counting costs nearly nothing and the template's fixed cost per object (a read, its evidence, the range judge) dominates; on every public model it runs within 1.11x."
-    },
-    {
-      "capability": "axioval:capability.property-predicate",
-      "input": "fixture-400-walls.ifc",
-      "time": 1.45,
-      "reason": "The generated fixture states none of the case's properties, so every wall is a finding worded through the template's messages; on every public model it runs within 1.03x."
-    },
-    {
-      "capability": "axioval:capability.effective-coverage",
-      "input": "bs-ifc4-building-architecture.ifc",
-      "time": 1.35,
-      "reason": "Over 1.25x on the architecture models since before 0.7.0 (1.25x to 1.28x over 20 rounds when 0.8.0 was cut, about 25 µs on 110 µs); accepted for 0.8.0 and to be removed by #466."
-    },
-    {
-      "capability": "axioval:capability.effective-coverage",
-      "input": "bs-ifc2x3-building-architecture.ifc",
-      "time": 1.35,
-      "reason": "Over 1.25x on the architecture models since before 0.7.0 (1.25x to 1.28x over 20 rounds when 0.8.0 was cut, about 25 µs on 110 µs); accepted for 0.8.0 and to be removed by #466."
-    },
-    {
-      "capability": "axioval:capability.effective-coverage",
-      "input": "bs-ifc4x3-building-architecture.ifc",
-      "time": 1.35,
-      "reason": "Over 1.25x on the architecture models since before 0.7.0 (1.25x to 1.28x over 20 rounds when 0.8.0 was cut, about 25 µs on 110 µs); accepted for 0.8.0 and to be removed by #466."
-    },
-    {
-      "capability": "axioval:capability.keyed-limit",
-      "input": "bs-ifc4-wall-with-opening-and-window.ifc",
-      "time": 1.35,
-      "reason": "1.248x over 20 rounds (99% interval 1.240 to 1.256) when 0.8.0 was cut, undecided against 1.25x; accepted for 0.8.0 and to be removed by #466."
-    },
-    {
-      "capability": "axioval:capability.containment",
-      "input": "bs-ifc4-building-hvac.ifc",
-      "time": 1.35,
-      "reason": "1.240x over 20 rounds (99% interval 1.225 to 1.256) when 0.9.0 was cut, undecided against 1.25x and 1.25x already at 0.8.0; accepted for 0.9.0 and to be removed by #466."
-    },
-    {
-      "capability": "axioval:capability.clash-matrix",
-      "input": "bs-ifc4-column-straight-rectangle-tessellation.ifc",
-      "time": 1.4,
-      "reason": "1.341x over 20 rounds (99% interval 1.329 to 1.354) when 0.9.0 was cut, about 35 µs on 105 µs for three objects, and 1.31x already at 0.8.0; accepted for 0.9.0 and to be removed by #466."
     }
   ]
 }

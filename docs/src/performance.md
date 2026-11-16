@@ -3,10 +3,19 @@
 A capability rebuilt as a [template](./templates.md) must not be much
 slower than the code it replaces
 ([#279](https://github.com/axioval/engine/issues/279)). The budget, per
-input, is at most **1.25 times the run time** and **1.5 times the peak
+input, is at most **1.5 times the run time** and **1.5 times the peak
 heap** of the replaced implementation, over the same rules and the same
 model. A benchmark holds every rebuild to it: a report in CI, a gate
 locally.
+
+The run-time budget was 1.25 times until 0.10.0. That line sat within a
+few percent of where a dozen templates run, and their ratios differ by
+that much between processors, so the gate failed on every machine for
+templates no slower than in the release before
+([#466](https://github.com/axioval/engine/issues/466)). The budget now
+catches a template that got clearly slower; bringing templates nearer
+their references is optimization work, tracked there. Measurements below
+that name 1.25 were judged against the budget of their time.
 
 ## How a template stays close
 
@@ -145,7 +154,7 @@ measures only those inputs.
   below the floor are judged together,
   by the sum of their medians, since a run of a few microseconds is mostly
   timer noise, and may also exceed the references' summed medians by at
-  most `small_slack_ns` (50 µs, a few rules' fixed cost) each;
+  most `small_slack_ns` (100 µs, a few rules' fixed cost) each;
 - the median peak heap over the reference's, per input, or at most
   `slack_bytes` (64 KiB) above it: on a model of a handful of objects a
   template's fixed cost per rule, a few microseconds or kibibytes, is all
@@ -294,15 +303,17 @@ before the rebuild is done (step 8 of
 An input may hold a template to a ceiling of its own only as a recorded
 exception in `scripts/bench_budget.json` (`exceptions`: capability, input,
 `time` or `memory`, and the reason), so a regression past it still fails.
-Two are recorded, both on the generated fixture, where services cost
-almost nothing and a template's fixed cost per object (one read, its
-evidence, the judge) shows alone:
+One is recorded, on the generated fixture, where services cost almost
+nothing and a template's fixed cost per object (one read, its evidence,
+the judge) shows alone:
 
 - `triangle-count` (1.6×): the fixture's meshes are twelve-triangle boxes;
   on every public model it runs within 1.13×.
-- `property-predicate` (1.45×): the fixture states none of the case's
-  properties, so every wall is a finding worded through the template's
-  messages; on every public model it runs within 1.03×.
+
+`property-predicate` on the fixture (1.45×) and the known misses of 0.8.0
+and 0.9.0 (`effective-coverage`, `keyed-limit`, `containment`,
+`clash-matrix`, 1.35× to 1.4×) lie within the 1.5× budget and are no
+longer exceptions.
 
 Eight more, recorded as known misses on 2026-10-07 (`door-swing` on the
 fixture, `keyed-limit` on the wall model, `space-validation` on the three

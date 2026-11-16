@@ -16,7 +16,7 @@ mod bounded;
 pub(crate) mod budget;
 
 #[cfg(test)]
-pub(crate) use bounded::tests::{sliver_polygons, sliver_triangles, slivers};
+pub(crate) use bounded::tests::{crowded_polygons, sliver_polygons, sliver_triangles, slivers};
 pub(crate) use bounded::{Morphology, difference, intersection, morphology, soup_union, union};
 
 /// Why a plan measurement was not built: the overlay refused its operands,
@@ -610,6 +610,17 @@ pub(crate) fn overlay_refusal(error: &OverlayError) -> &'static str {
         }
         OverlayError::RingTooShort => {
             "the plan overlay refused a footprint ring of fewer than three points (RingTooShort)"
+        }
+        OverlayError::HoleOutsideOuter => {
+            "the plan overlay refused a footprint with a hole that lies outside its outer ring \
+             or crosses it (HoleOutsideOuter)"
+        }
+        OverlayError::HolesOverlap => {
+            "the plan overlay refused a footprint whose holes overlap (HolesOverlap)"
+        }
+        OverlayError::PolygonsOverlap => {
+            "the plan overlay refused footprints that overlap one another in one region \
+             (PolygonsOverlap)"
         }
         _ => "the plan overlay refused the footprints",
     }

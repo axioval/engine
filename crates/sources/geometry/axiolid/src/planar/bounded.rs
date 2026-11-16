@@ -273,9 +273,40 @@ pub(crate) mod tests {
             .collect()
     }
 
-    /// [`slivers`] as polygons without holes.
+    /// `count` long, thin strips along one slanted line, `1e-4` apart and
+    /// `5e-5` wide, so no two touch (a [`Region`] refuses rings that
+    /// cross) and every edge's box still meets those of the others.
+    fn strips(count: u32) -> Vec<Polygon> {
+        let rings = (0..count)
+            .map(|index| {
+                let y = f64::from(index) * 1e-4;
+                Ring {
+                    points: vec![
+                        Point2::new(0.0, y),
+                        Point2::new(10.0, y + 0.5),
+                        Point2::new(10.0, y + 0.5 + 5e-5),
+                        Point2::new(0.0, y + 5e-5),
+                    ],
+                }
+            })
+            .collect();
+        polygons(rings)
+    }
+
+    /// The crowd of [`slivers`] as disjoint polygons without holes (16,000
+    /// edges in 4,000 strips): past the overlay budget on their own, as
+    /// operands that are not built into a [`Region`], which checks them
+    /// pair by pair.
     pub(crate) fn sliver_polygons() -> Vec<Polygon> {
-        polygons(slivers())
+        strips(4000)
+    }
+
+    /// Disjoint polygons a [`Region`] holds, as crowded as the region
+    /// budgets need (6,000 edges, past [`DISC_PAIRS`]) and no more: a
+    /// region checks its polygons pair by pair, and takes minutes over
+    /// the 4,000 strips of [`sliver_polygons`].
+    pub(crate) fn crowded_polygons() -> Vec<Polygon> {
+        strips(1500)
     }
 
     fn polygons(rings: Vec<Ring>) -> Vec<Polygon> {
@@ -309,7 +340,7 @@ pub(crate) mod tests {
     #[test]
     fn region_operations_past_the_budget_are_refused_by_name() {
         let t = tolerance();
-        let crowded = Region::new(polygons(slivers()), t).unwrap();
+        let crowded = Region::new(crowded_polygons(), t).unwrap();
         let refused = soup_union(&slivers(), t).unwrap_err();
         assert!(
             matches!(refused, PlanarRefusal::OverBudget(over) if over.pairs > OVERLAY_PAIRS),

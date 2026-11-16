@@ -652,7 +652,7 @@ mod budget_tests {
     use axioval_engine::FreeSpaceError;
 
     use crate::planar::budget::{DISC_PAIRS, REGION_PAIRS};
-    use crate::planar::sliver_polygons;
+    use crate::planar::crowded_polygons;
 
     /// A subject's footprint grown by the reach, and a contact or free
     /// area between regions, past their budgets are refused by name before
@@ -660,7 +660,7 @@ mod budget_tests {
     #[test]
     fn contacts_past_their_budgets_are_refused_by_name() {
         let t = Tolerance::new(1e-9, 1e-9).unwrap();
-        let crowded = Region::new(sliver_polygons(), t).unwrap();
+        let crowded = Region::new(crowded_polygons(), t).unwrap();
         let p = Point2::new;
         let room = Region::new(
             vec![Polygon {

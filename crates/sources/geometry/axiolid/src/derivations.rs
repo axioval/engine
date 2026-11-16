@@ -32,7 +32,7 @@ pub(crate) const AXIOLID_MESH: Kernel = Kernel {
 };
 pub(crate) const AXIOLID_OVERLAY: Kernel = Kernel {
     name: "axiolid-overlay",
-    version: "0.3.22",
+    version: "0.4.2",
 };
 pub(crate) const AXIOLID_RAY_MESH: Kernel = Kernel {
     name: "axiolid-ray-mesh",

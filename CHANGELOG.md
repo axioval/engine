@@ -17,6 +17,10 @@ All notable changes are documented here. This project follows Semantic Versionin
   without checking them, and a section run along a curve whose frame is read
   by quadrature is measured once a fold is excluded exactly: a deck beside
   the mitre of an offset by distances along an ellipse is now measured.
+- The plan overlay is `axiolid-overlay` 0.4 (with `axiolid-route` 0.4 and
+  `axiolid-construct` 0.4): a region refuses rings that cross, naming the
+  refusal `HoleOutsideOuter`, `HolesOverlap` or `PolygonsOverlap`, and a
+  report names them like the other overlay errors (#480).
 
 ## [0.10.0] - 2026-11-06
 

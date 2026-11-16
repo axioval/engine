@@ -584,7 +584,7 @@ mod budget_tests {
     use axiolid_overlay::Region;
 
     use crate::planar::budget::{DISC_PAIRS, OVERLAY_PAIRS};
-    use crate::planar::{sliver_polygons, slivers};
+    use crate::planar::{crowded_polygons, slivers};
 
     /// Travel cells, and a source's footprint grown by its range, past
     /// their budgets leave the effect unmeasured with the budget named,
@@ -597,7 +597,7 @@ mod budget_tests {
             refused.ends_with(&format!("past the overlay budget of {OVERLAY_PAIRS} pairs")),
             "{refused}"
         );
-        let crowded = Region::new(sliver_polygons(), tolerance).unwrap();
+        let crowded = Region::new(crowded_polygons(), tolerance).unwrap();
         let refused = crate::planar::morphology(
             &crowded,
             crate::planar::Morphology::DilateInner,

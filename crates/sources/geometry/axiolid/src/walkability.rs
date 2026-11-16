@@ -1651,7 +1651,7 @@ mod budget_tests {
 
     use super::{Morphology, morphed, united};
     use crate::planar::budget::{DISC_PAIRS, OVERLAY_PAIRS};
-    use crate::planar::{sliver_polygons, slivers};
+    use crate::planar::{crowded_polygons, slivers};
 
     /// A footprint, an obstacle union and a disc morphology of a surface
     /// past their budgets are refused by name before they are built (#432).
@@ -1663,7 +1663,7 @@ mod budget_tests {
             refused.ends_with(&format!("past the overlay budget of {OVERLAY_PAIRS} pairs")),
             "{refused}"
         );
-        let crowded = Region::new(sliver_polygons(), t).unwrap();
+        let crowded = Region::new(crowded_polygons(), t).unwrap();
         for kind in [
             Morphology::ErodeOuter,
             Morphology::ErodeInner,

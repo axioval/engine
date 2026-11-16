@@ -2979,6 +2979,9 @@ mod tests {
             (OverlayError::RepeatedVertex, "RepeatedVertex"),
             (OverlayError::SelfIntersection, "SelfIntersection"),
             (OverlayError::ZeroArea, "ZeroArea"),
+            (OverlayError::HoleOutsideOuter, "HoleOutsideOuter"),
+            (OverlayError::HolesOverlap, "HolesOverlap"),
+            (OverlayError::PolygonsOverlap, "PolygonsOverlap"),
         ] {
             let refused = ProximityError::Refused(crate::planar::overlay_refusal(&error));
             let message = refused.to_string();
